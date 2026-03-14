@@ -121,14 +121,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: ALICE-LOL
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - name: Create SDF dependency stubs
+        run: |
+          for crate_info in "ALICE-Physics:alice-physics" "ALICE-Codec:alice-codec" "ALICE-Streaming-Protocol:libasp" "ALICE-Cache:alice-cache"; do
+            dir=$(echo "$crate_info" | cut -d: -f1); pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "$dir/src"
+            printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\n' "$pkg" > "$dir/Cargo.toml"
+            echo "" > "$dir/src/lib.rs"
+          done
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
-      - name: Check formatting (alice-lol-macro)
-        run: cargo fmt --manifest-path alice-lol-macro/Cargo.toml -- --check
-
-      - name: Check formatting (alice-lol)
-        run: cargo fmt --manifest-path alice-lol/Cargo.toml -- --check
+      - name: Check formatting
+        working-directory: ALICE-LOL
+        run: cargo fmt -- --check
