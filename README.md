@@ -24,7 +24,7 @@ let glsl = alice_lol::to_glsl(&scene);
 
 ## Features
 
-- **76 DSL 構文** — 27 プリミティブ、23 CSG オペレーション、4 トランスフォーム、19 モディファイア、2 時間制御、3 法則制約
+- **120 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、2 時間制御、3 法則制約
 - **3 シェーダ出力** — GLSL (default), WGSL, HLSL（Hardcoded / Dynamic 両モード）
 - **空間枝刈りコンパイラ** — 区間演算で評価不要領域を除外、IFS フラクタルで最大 10x 高速化
 - **法則制約チェッカー** — `NonOverlap`, `Containment`, `MinThickness`、ハード/ソフト優先度、空間座標レポート
@@ -69,7 +69,7 @@ let glsl = alice_lol::to_glsl(&scene);
 # ビルド
 cargo build
 
-# テスト (133 tests)
+# テスト (216 tests)
 cargo test
 
 # 基本デモ
@@ -79,17 +79,30 @@ cargo run --example basic
 cargo run --example showcase
 ```
 
-## DSL Syntax (v0.5)
+## DSL Syntax (v1.0)
 
-### Primitives (27)
+### Primitives (71)
 
 ```
 sphere(r)  box3d(x,y,z)  rounded_box(x,y,z,r)  cylinder(h,r)  torus(R,r)
 cone(h,r1,r2)  capsule(h,r)  ellipsoid(rx,ry,rz)  plane(nx,ny,nz,d)  octahedron(s)
-rounded_cone(r1,r2,h)  pyramid(h,base)  hex_prism(h,r)  link(le,r1,r2)
-capped_cone(h,r1,r2)  capped_torus(r_major,r_minor,angle)  rounded_cylinder(r,rr,h)
-tube(r_outer,r_inner,h)  barrel(r1,r2,h)  heart(s)  egg(r1,r2)  helix(r,pitch,thickness)
-tetrahedron(s)  box_frame(x,y,z,e)  diamond(s)  star_polygon(r,n,m)  cross_shape(x,y,z,r)
+rounded_cone(r1,r2,h)  pyramid(h)  hex_prism(r,h)  link(l,r1,r2)
+capped_cone(h,r1,r2)  capped_torus(R,r,angle)  rounded_cylinder(r,rr,h)
+tube(r,t,h)  barrel(r,h,b)  heart(s)  egg(ra,rb)  helix(R,r,pitch,h)
+tetrahedron(s)  box_frame(x,y,z,e)  diamond(r,h)  star_polygon(r,n,m,h)  cross_shape(l,t,r,h)
+triangle(ax,ay,az,bx,by,bz,cx,cy,cz)  bezier(ax,ay,az,bx,by,bz,cx,cy,cz,r)
+triangular_prism(w,d)  cut_sphere(r,h)  cut_hollow_sphere(r,h,t)  death_star(ra,rb,d)
+solid_angle(a,r)  rhombus(la,lb,h,r)  horseshoe(a,r,l,w,t)  vesica(r,d)
+infinite_cylinder(r)  infinite_cone(a)  gyroid(s,t)  chamfered_cube(x,y,z,c)
+schwarz_p(s,t)  superellipsoid(x,y,z,e1,e2)  rounded_x(w,r,h)  pie(a,r,h)
+trapezoid(r1,r2,th,d)  parallelogram(w,h,s,d)  tunnel(w,h,d)  uneven_capsule(r1,r2,h,d)
+arc_shape(a,r,t,h)  moon(d,ra,rb,h)  blobby_cross(s,h)  parabola_segment(w,h,d)
+regular_polygon(r,n,h)  stairs_prim(sw,sh,n,d)
+dodecahedron(r)  icosahedron(r)  truncated_octahedron(r)  truncated_icosahedron(r)
+diamond_surface(s,t)  neovius(s,t)  lidinoid(s,t)  iwp(s,t)  frd(s,t)
+fischer_koch_s(s,t)  pmy(s,t)
+circle_2d(r,h)  rect_2d(x,y,h)  segment_2d(ax,ay,bx,by,t,h)
+rounded_rect_2d(x,y,r,h)  annular_2d(r,t,h)
 ```
 
 ### CSG Operations (23)
@@ -109,13 +122,14 @@ xor  pipe(r)  engrave(r)  groove(ra,rb)  tongue(ra,rb)
 translate(x,y,z, child)  rotate(rx,ry,rz, child)  scale(s, child)  scale_non_uniform(x,y,z, child)
 ```
 
-### Modifiers (19)
+### Modifiers (20)
 
 ```
 round(r)  onion(t)  twist(k)  bend(k)  mirror(axis)  repeat(sx,sy,sz)
 elongate(hx,hy,hz)  revolution(o)  extrude(h)  taper(k)  displacement(amp,freq)
 polar_repeat(n)  shear(kxy,kxz,kyz)  noise(amp,freq,oct)  repeat_finite(sx,sy,sz,nx,ny,nz)
 octant_mirror  icosahedral_symmetry  with_material(id)  surface_roughness(amp,freq)
+sweep_bezier(p0x,p0y,p1x,p1y,p2x,p2y, child)
 ```
 
 ### Time (2)
@@ -144,7 +158,7 @@ let node = lol! { sphere({r * 2.0}) };     // 算術式
 | Example | Description |
 |---------|-------------|
 | `basic` | 基本構文 — sphere, box, union, smooth_union |
-| `showcase` | 全76構文のショーケース |
+| `showcase` | 全120構文のショーケース |
 | `pruning_demo` | 空間枝刈りコンパイラの効果比較 |
 | `law_demo` | 法則制約 — NonOverlap, Containment, MinThickness |
 | `autodiff_demo` | 自動微分 — 勾配、曲率解析 |
@@ -188,7 +202,7 @@ let report = laws.check();
 | Metric | Value |
 |--------|-------|
 | clippy (pedantic+nursery) | 0 warnings |
-| Tests | 211 |
+| Tests | 216 |
 | fmt | clean |
 
 ## License
