@@ -51,6 +51,9 @@ jobs:
           edition = "2021"
           [lib]
           path = "src/lib.rs"
+          [features]
+          default = []
+          std = []
           TOML
             echo "" > "$dir/src/lib.rs"
           done
@@ -102,6 +105,9 @@ jobs:
           edition = "2021"
           [lib]
           path = "src/lib.rs"
+          [features]
+          default = []
+          std = []
           TOML
             echo "" > "$dir/src/lib.rs"
           done
@@ -121,5 +127,8 @@ jobs:
         with:
           components: rustfmt
 
-      - name: Check formatting
-        run: cargo fmt -- --check
+      - name: Check formatting (alice-lol-macro)
+        run: cargo fmt --manifest-path alice-lol-macro/Cargo.toml -- --check
+
+      - name: Check formatting (alice-lol)
+        run: cargo fmt --manifest-path alice-lol/Cargo.toml -- --check
