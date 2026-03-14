@@ -68,8 +68,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.input.len() && self.input[self.pos].is_ascii_whitespace() {
-            self.pos += 1;
+        while self.pos < self.input.len() {
+            if self.input[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            } else if self.pos + 1 < self.input.len()
+                && self.input[self.pos] == b'/'
+                && self.input[self.pos + 1] == b'/'
+            {
+                // 行コメント: 行末までスキップ
+                while self.pos < self.input.len() && self.input[self.pos] != b'\n' {
+                    self.pos += 1;
+                }
+            } else {
+                break;
+            }
         }
     }
 
