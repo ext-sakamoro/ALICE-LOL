@@ -96,8 +96,7 @@ pub fn to_hlsl_dynamic(node: &SdfNode) -> String {
 #[cfg(feature = "glsl")]
 pub fn to_glsl_full(node: &SdfNode, config: &RenderConfig) -> String {
     use alice_sdf::compiled::glsl::{GlslShader, GlslTranspileMode};
-    GlslShader::transpile(node, GlslTranspileMode::Hardcoded)
-        .to_fragment_shader_full(config)
+    GlslShader::transpile(node, GlslTranspileMode::Hardcoded).to_fragment_shader_full(config)
 }
 
 // ── RenderConfig re-export ──
