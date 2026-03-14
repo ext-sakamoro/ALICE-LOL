@@ -371,54 +371,86 @@ impl<'a> Parser<'a> {
     /// 5 floats
     #[allow(clippy::many_single_char_names)]
     fn parse_5f(&mut self) -> Result<(f32, f32, f32, f32, f32), ParseError> {
-        let a = self.expect_number()?; self.expect_comma()?;
-        let b = self.expect_number()?; self.expect_comma()?;
-        let c = self.expect_number()?; self.expect_comma()?;
-        let d = self.expect_number()?; self.expect_comma()?;
-        let e = self.expect_number()?; self.expect_rparen()?;
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let e = self.expect_number()?;
+        self.expect_rparen()?;
         Ok((a, b, c, d, e))
     }
 
     /// 6 floats (no child)
     #[allow(clippy::many_single_char_names)]
     fn parse_6f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32), ParseError> {
-        let a = self.expect_number()?; self.expect_comma()?;
-        let b = self.expect_number()?; self.expect_comma()?;
-        let c = self.expect_number()?; self.expect_comma()?;
-        let d = self.expect_number()?; self.expect_comma()?;
-        let e = self.expect_number()?; self.expect_comma()?;
-        let f = self.expect_number()?; self.expect_rparen()?;
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let e = self.expect_number()?;
+        self.expect_comma()?;
+        let f = self.expect_number()?;
+        self.expect_rparen()?;
         Ok((a, b, c, d, e, f))
     }
 
     /// 9 floats
     #[allow(clippy::many_single_char_names)]
     fn parse_9f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32, f32, f32, f32), ParseError> {
-        let a = self.expect_number()?; self.expect_comma()?;
-        let b = self.expect_number()?; self.expect_comma()?;
-        let c = self.expect_number()?; self.expect_comma()?;
-        let d = self.expect_number()?; self.expect_comma()?;
-        let e = self.expect_number()?; self.expect_comma()?;
-        let f = self.expect_number()?; self.expect_comma()?;
-        let g = self.expect_number()?; self.expect_comma()?;
-        let h = self.expect_number()?; self.expect_comma()?;
-        let i = self.expect_number()?; self.expect_rparen()?;
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let e = self.expect_number()?;
+        self.expect_comma()?;
+        let f = self.expect_number()?;
+        self.expect_comma()?;
+        let g = self.expect_number()?;
+        self.expect_comma()?;
+        let h = self.expect_number()?;
+        self.expect_comma()?;
+        let i = self.expect_number()?;
+        self.expect_rparen()?;
         Ok((a, b, c, d, e, f, g, h, i))
     }
 
     /// 10 floats
     #[allow(clippy::many_single_char_names)]
-    fn parse_10f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32), ParseError> {
-        let a = self.expect_number()?; self.expect_comma()?;
-        let b = self.expect_number()?; self.expect_comma()?;
-        let c = self.expect_number()?; self.expect_comma()?;
-        let d = self.expect_number()?; self.expect_comma()?;
-        let e = self.expect_number()?; self.expect_comma()?;
-        let f = self.expect_number()?; self.expect_comma()?;
-        let g = self.expect_number()?; self.expect_comma()?;
-        let h = self.expect_number()?; self.expect_comma()?;
-        let i = self.expect_number()?; self.expect_comma()?;
-        let j = self.expect_number()?; self.expect_rparen()?;
+    fn parse_10f(
+        &mut self,
+    ) -> Result<(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32), ParseError> {
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let e = self.expect_number()?;
+        self.expect_comma()?;
+        let f = self.expect_number()?;
+        self.expect_comma()?;
+        let g = self.expect_number()?;
+        self.expect_comma()?;
+        let h = self.expect_number()?;
+        self.expect_comma()?;
+        let i = self.expect_number()?;
+        self.expect_comma()?;
+        let j = self.expect_number()?;
+        self.expect_rparen()?;
         Ok((a, b, c, d, e, f, g, h, i, j))
     }
 
@@ -1095,27 +1127,45 @@ impl<'a> Parser<'a> {
                 })
             }
 
-
             // ── v1.0 プリミティブ (44) ──
             "triangle" => {
-                let (ax,ay,az,bx,by,bz,cx,cy,cz) = self.parse_9f()?;
-                Ok(SdfNode::Triangle { point_a: Vec3::new(ax,ay,az), point_b: Vec3::new(bx,by,bz), point_c: Vec3::new(cx,cy,cz) })
+                let (ax, ay, az, bx, by, bz, cx, cy, cz) = self.parse_9f()?;
+                Ok(SdfNode::Triangle {
+                    point_a: Vec3::new(ax, ay, az),
+                    point_b: Vec3::new(bx, by, bz),
+                    point_c: Vec3::new(cx, cy, cz),
+                })
             }
             "bezier" => {
-                let (ax,ay,az,bx,by,bz,cx,cy,cz,r) = self.parse_10f()?;
-                Ok(SdfNode::Bezier { point_a: Vec3::new(ax,ay,az), point_b: Vec3::new(bx,by,bz), point_c: Vec3::new(cx,cy,cz), radius: r })
+                let (ax, ay, az, bx, by, bz, cx, cy, cz, r) = self.parse_10f()?;
+                Ok(SdfNode::Bezier {
+                    point_a: Vec3::new(ax, ay, az),
+                    point_b: Vec3::new(bx, by, bz),
+                    point_c: Vec3::new(cx, cy, cz),
+                    radius: r,
+                })
             }
             "triangular_prism" => {
                 let (w, d) = self.parse_2f()?;
-                Ok(SdfNode::TriangularPrism { width: w, half_depth: d })
+                Ok(SdfNode::TriangularPrism {
+                    width: w,
+                    half_depth: d,
+                })
             }
             "cut_sphere" => {
                 let (r, h) = self.parse_2f()?;
-                Ok(SdfNode::CutSphere { radius: r, cut_height: h })
+                Ok(SdfNode::CutSphere {
+                    radius: r,
+                    cut_height: h,
+                })
             }
             "cut_hollow_sphere" => {
                 let (r, h, t) = self.parse_3f()?;
-                Ok(SdfNode::CutHollowSphere { radius: r, cut_height: h, thickness: t })
+                Ok(SdfNode::CutHollowSphere {
+                    radius: r,
+                    cut_height: h,
+                    thickness: t,
+                })
             }
             "death_star" => {
                 let (ra, rb, d) = self.parse_3f()?;
@@ -1123,19 +1173,36 @@ impl<'a> Parser<'a> {
             }
             "solid_angle" => {
                 let (a, r) = self.parse_2f()?;
-                Ok(SdfNode::SolidAngle { angle: a, radius: r })
+                Ok(SdfNode::SolidAngle {
+                    angle: a,
+                    radius: r,
+                })
             }
             "rhombus" => {
                 let (la, lb, h, r) = self.parse_4f()?;
-                Ok(SdfNode::Rhombus { la, lb, half_height: h, round_radius: r })
+                Ok(SdfNode::Rhombus {
+                    la,
+                    lb,
+                    half_height: h,
+                    round_radius: r,
+                })
             }
             "horseshoe" => {
                 let (a, r, l, w, t) = self.parse_5f()?;
-                Ok(SdfNode::Horseshoe { angle: a, radius: r, half_length: l, width: w, thickness: t })
+                Ok(SdfNode::Horseshoe {
+                    angle: a,
+                    radius: r,
+                    half_length: l,
+                    width: w,
+                    thickness: t,
+                })
             }
             "vesica" => {
                 let (r, d) = self.parse_2f()?;
-                Ok(SdfNode::Vesica { radius: r, half_dist: d })
+                Ok(SdfNode::Vesica {
+                    radius: r,
+                    half_dist: d,
+                })
             }
             "infinite_cylinder" => {
                 let r = self.parse_1f()?;
@@ -1147,67 +1214,133 @@ impl<'a> Parser<'a> {
             }
             "gyroid" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::Gyroid { scale: s, thickness: t })
+                Ok(SdfNode::Gyroid {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "chamfered_cube" => {
                 let (hx, hy, hz, c) = self.parse_4f()?;
-                Ok(SdfNode::ChamferedCube { half_extents: Vec3::new(hx, hy, hz), chamfer: c })
+                Ok(SdfNode::ChamferedCube {
+                    half_extents: Vec3::new(hx, hy, hz),
+                    chamfer: c,
+                })
             }
             "schwarz_p" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::SchwarzP { scale: s, thickness: t })
+                Ok(SdfNode::SchwarzP {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "superellipsoid" => {
                 let (hx, hy, hz, e1, e2) = self.parse_5f()?;
-                Ok(SdfNode::Superellipsoid { half_extents: Vec3::new(hx, hy, hz), e1, e2 })
+                Ok(SdfNode::Superellipsoid {
+                    half_extents: Vec3::new(hx, hy, hz),
+                    e1,
+                    e2,
+                })
             }
             "rounded_x" => {
                 let (w, r, h) = self.parse_3f()?;
-                Ok(SdfNode::RoundedX { width: w, round_radius: r, half_height: h })
+                Ok(SdfNode::RoundedX {
+                    width: w,
+                    round_radius: r,
+                    half_height: h,
+                })
             }
             "pie" => {
                 let (a, r, h) = self.parse_3f()?;
-                Ok(SdfNode::Pie { angle: a, radius: r, half_height: h })
+                Ok(SdfNode::Pie {
+                    angle: a,
+                    radius: r,
+                    half_height: h,
+                })
             }
             "trapezoid" => {
                 let (r1, r2, th, d) = self.parse_4f()?;
-                Ok(SdfNode::Trapezoid { r1, r2, trap_height: th, half_depth: d })
+                Ok(SdfNode::Trapezoid {
+                    r1,
+                    r2,
+                    trap_height: th,
+                    half_depth: d,
+                })
             }
             "parallelogram" => {
                 let (w, h, s, d) = self.parse_4f()?;
-                Ok(SdfNode::Parallelogram { width: w, para_height: h, skew: s, half_depth: d })
+                Ok(SdfNode::Parallelogram {
+                    width: w,
+                    para_height: h,
+                    skew: s,
+                    half_depth: d,
+                })
             }
             "tunnel" => {
                 let (w, h, d) = self.parse_3f()?;
-                Ok(SdfNode::Tunnel { width: w, height_2d: h, half_depth: d })
+                Ok(SdfNode::Tunnel {
+                    width: w,
+                    height_2d: h,
+                    half_depth: d,
+                })
             }
             "uneven_capsule" => {
                 let (r1, r2, h, d) = self.parse_4f()?;
-                Ok(SdfNode::UnevenCapsule { r1, r2, cap_height: h, half_depth: d })
+                Ok(SdfNode::UnevenCapsule {
+                    r1,
+                    r2,
+                    cap_height: h,
+                    half_depth: d,
+                })
             }
             "arc_shape" => {
                 let (a, r, t, h) = self.parse_4f()?;
-                Ok(SdfNode::ArcShape { aperture: a, radius: r, thickness: t, half_height: h })
+                Ok(SdfNode::ArcShape {
+                    aperture: a,
+                    radius: r,
+                    thickness: t,
+                    half_height: h,
+                })
             }
             "moon" => {
                 let (d, ra, rb, h) = self.parse_4f()?;
-                Ok(SdfNode::Moon { d, ra, rb, half_height: h })
+                Ok(SdfNode::Moon {
+                    d,
+                    ra,
+                    rb,
+                    half_height: h,
+                })
             }
             "blobby_cross" => {
                 let (s, h) = self.parse_2f()?;
-                Ok(SdfNode::BlobbyCross { size: s, half_height: h })
+                Ok(SdfNode::BlobbyCross {
+                    size: s,
+                    half_height: h,
+                })
             }
             "parabola_segment" => {
                 let (w, h, d) = self.parse_3f()?;
-                Ok(SdfNode::ParabolaSegment { width: w, para_height: h, half_depth: d })
+                Ok(SdfNode::ParabolaSegment {
+                    width: w,
+                    para_height: h,
+                    half_depth: d,
+                })
             }
             "regular_polygon" => {
                 let (r, n, h) = self.parse_3f()?;
-                Ok(SdfNode::RegularPolygon { radius: r, n_sides: n, half_height: h })
+                Ok(SdfNode::RegularPolygon {
+                    radius: r,
+                    n_sides: n,
+                    half_height: h,
+                })
             }
             "stairs_prim" => {
                 let (sw, sh, n, d) = self.parse_4f()?;
-                Ok(SdfNode::Stairs { step_width: sw, step_height: sh, n_steps: n, half_depth: d })
+                Ok(SdfNode::Stairs {
+                    step_width: sw,
+                    step_height: sh,
+                    n_steps: n,
+                    half_depth: d,
+                })
             }
             "dodecahedron" => {
                 let r = self.parse_1f()?;
@@ -1227,60 +1360,108 @@ impl<'a> Parser<'a> {
             }
             "diamond_surface" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::DiamondSurface { scale: s, thickness: t })
+                Ok(SdfNode::DiamondSurface {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "neovius" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::Neovius { scale: s, thickness: t })
+                Ok(SdfNode::Neovius {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "lidinoid" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::Lidinoid { scale: s, thickness: t })
+                Ok(SdfNode::Lidinoid {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "iwp" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::IWP { scale: s, thickness: t })
+                Ok(SdfNode::IWP {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "frd" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::FRD { scale: s, thickness: t })
+                Ok(SdfNode::FRD {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "fischer_koch_s" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::FischerKochS { scale: s, thickness: t })
+                Ok(SdfNode::FischerKochS {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "pmy" => {
                 let (s, t) = self.parse_2f()?;
-                Ok(SdfNode::PMY { scale: s, thickness: t })
+                Ok(SdfNode::PMY {
+                    scale: s,
+                    thickness: t,
+                })
             }
             "circle_2d" => {
                 let (r, h) = self.parse_2f()?;
-                Ok(SdfNode::Circle2D { radius: r, half_height: h })
+                Ok(SdfNode::Circle2D {
+                    radius: r,
+                    half_height: h,
+                })
             }
             "rect_2d" => {
                 let (hx, hy, h) = self.parse_3f()?;
-                Ok(SdfNode::Rect2D { half_extents: Vec2::new(hx, hy), half_height: h })
+                Ok(SdfNode::Rect2D {
+                    half_extents: Vec2::new(hx, hy),
+                    half_height: h,
+                })
             }
             "segment_2d" => {
                 let (ax, ay, bx, by, t, h) = self.parse_6f()?;
-                Ok(SdfNode::Segment2D { a: Vec2::new(ax, ay), b: Vec2::new(bx, by), thickness: t, half_height: h })
+                Ok(SdfNode::Segment2D {
+                    a: Vec2::new(ax, ay),
+                    b: Vec2::new(bx, by),
+                    thickness: t,
+                    half_height: h,
+                })
             }
             "rounded_rect_2d" => {
                 let (hx, hy, r, h) = self.parse_4f()?;
-                Ok(SdfNode::RoundedRect2D { half_extents: Vec2::new(hx, hy), round_radius: r, half_height: h })
+                Ok(SdfNode::RoundedRect2D {
+                    half_extents: Vec2::new(hx, hy),
+                    round_radius: r,
+                    half_height: h,
+                })
             }
             "annular_2d" => {
                 let (r, t, h) = self.parse_3f()?;
-                Ok(SdfNode::Annular2D { outer_radius: r, thickness: t, half_height: h })
+                Ok(SdfNode::Annular2D {
+                    outer_radius: r,
+                    thickness: t,
+                    half_height: h,
+                })
             }
             "terrain" => {
                 let (s, a) = self.parse_2f()?;
-                Ok(SdfNode::Terrain { scale: s, amplitude: a })
+                Ok(SdfNode::Terrain {
+                    scale: s,
+                    amplitude: a,
+                })
             }
             // ── v1.0 モディファイア ──
             "sweep_bezier" => {
-                let (p0x,p0y,p1x,p1y,p2x,p2y, child) = self.parse_6f_child()?;
-                Ok(SdfNode::SweepBezier { child: Arc::new(child), p0: Vec2::new(p0x,p0y), p1: Vec2::new(p1x,p1y), p2: Vec2::new(p2x,p2y) })
+                let (p0x, p0y, p1x, p1y, p2x, p2y, child) = self.parse_6f_child()?;
+                Ok(SdfNode::SweepBezier {
+                    child: Arc::new(child),
+                    p0: Vec2::new(p0x, p0y),
+                    p1: Vec2::new(p1x, p1y),
+                    p2: Vec2::new(p2x, p2y),
+                })
             }
 
             other => Err(ParseError {
@@ -1959,6 +2140,8 @@ mod tests {
 
     #[test]
     fn test_v10_sweep_bezier() {
-        assert!(parse_lol("sweep_bezier(0.0, 0.0, 0.5, 1.0, 1.0, 0.0, circle_2d(0.2, 0.5))").is_ok());
+        assert!(
+            parse_lol("sweep_bezier(0.0, 0.0, 0.5, 1.0, 1.0, 0.0, circle_2d(0.2, 0.5))").is_ok()
+        );
     }
 }
