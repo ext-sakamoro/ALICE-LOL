@@ -1,0 +1,36 @@
+[package]
+name = "alice-lol"
+version = "0.1.0"
+edition = "2021"
+description = "ALICE-LOL: Law-Oriented Language — DSL for the ALICE-SDF ecosystem"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+alice-lol-macro = { path = "../alice-lol-macro" }
+alice-sdf = { path = "../../ALICE-SDF", default-features = false, features = ["glsl"] }
+glam = "0.29"
+
+[features]
+default = ["glsl"]
+glsl = []
+wgsl = ["alice-sdf/gpu"]
+hlsl = ["alice-sdf/hlsl"]
+physics = ["alice-sdf/physics"]
+
+[[example]]
+name = "basic"
+
+[[example]]
+name = "showcase"
+
+[[example]]
+name = "pruning_demo"
+
+[[example]]
+name = "law_demo"
+
+[[example]]
+name = "autodiff_demo"
+
+[[example]]
+name = "compiled_demo"
