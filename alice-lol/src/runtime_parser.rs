@@ -1261,6 +1261,10 @@ impl<'a> Parser<'a> {
                 let (r, t, h) = self.parse_3f()?;
                 Ok(SdfNode::Annular2D { outer_radius: r, thickness: t, half_height: h })
             }
+            "terrain" => {
+                let (s, a) = self.parse_2f()?;
+                Ok(SdfNode::Terrain { scale: s, amplitude: a })
+            }
             // ── v1.0 モディファイア ──
             "sweep_bezier" => {
                 let (p0x,p0y,p1x,p1y,p2x,p2y, child) = self.parse_6f_child()?;

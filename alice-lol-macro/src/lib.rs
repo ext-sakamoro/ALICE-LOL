@@ -219,6 +219,7 @@ enum Expr {
     Annular2DPrim { outer_radius: V, thickness: V, half_height: V },
     // ── v1.0 追加モディファイア ──
     SweepBezierMod { p0x: V, p0y: V, p1x: V, p1y: V, p2x: V, p2y: V, child: Box<Self> },
+    TerrainPrim { scale: V, amplitude: V },
 
     // ── Operations (23) ──
     Union {
@@ -1460,6 +1461,10 @@ fn parse_expr(input: ParseStream) -> Result<Expr> {
             let (r, t, h) = parse_3f(&content)?;
             Ok(Expr::Annular2DPrim { outer_radius: r, thickness: t, half_height: h })
         }
+        "terrain" => {
+            let (s, a) = parse_2f(&content)?;
+            Ok(Expr::TerrainPrim { scale: s, amplitude: a })
+        }
         // ── v1.0 モディファイア ──
         "sweep_bezier" => {
             let (p0x,p0y,p1x,p1y,p2x,p2y, child) = parse_6f_child(&content)?;
@@ -1755,6 +1760,9 @@ fn codegen(expr: &Expr) -> TokenStream2 {
         }
         Expr::Annular2DPrim { outer_radius, thickness, half_height } => {
             quote! { ::alice_lol::SdfNode::Annular2D { outer_radius: #outer_radius, thickness: #thickness, half_height: #half_height } }
+        }
+        Expr::TerrainPrim { scale, amplitude } => {
+            quote! { ::alice_lol::SdfNode::Terrain { scale: #scale, amplitude: #amplitude } }
         }
         // ── v1.0 モディファイア ──
         Expr::SweepBezierMod { p0x,p0y,p1x,p1y,p2x,p2y, child } => {

@@ -88,6 +88,22 @@ pub fn to_hlsl_dynamic(node: &SdfNode) -> String {
     HlslShader::transpile(node, HlslTranspileMode::Dynamic).source
 }
 
+/// フルレンダリングパイプライン付きGLSLを生成
+///
+/// PBR (Cook-Torrance), 大気散乱, 昼夜サイクル, 天候, ポストプロセスを含む
+/// 完全なフラグメントシェーダーを出力する。
+#[must_use]
+#[cfg(feature = "glsl")]
+pub fn to_glsl_full(node: &SdfNode, config: &RenderConfig) -> String {
+    use alice_sdf::compiled::glsl::{GlslShader, GlslTranspileMode};
+    GlslShader::transpile(node, GlslTranspileMode::Hardcoded)
+        .to_fragment_shader_full(config)
+}
+
+// ── RenderConfig re-export ──
+#[cfg(feature = "glsl")]
+pub use alice_sdf::compiled::glsl::RenderConfig;
+
 /// Evaluate the SDF distance at a single point (CPU).
 #[must_use]
 pub fn eval(node: &SdfNode, point: Vec3) -> f32 {
