@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ALICE-LOL
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Create SDF dependency stubs
+        run: |
+          for crate_info in \
+            "ALICE-Physics:alice-physics" \
+            "ALICE-Codec:alice-codec" \
+            "ALICE-Streaming-Protocol:libasp" \
+            "ALICE-Cache:alice-cache"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "$dir/src"
+            cat > "$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "0.1.0"
+          edition = "2021"
+          [lib]
+          path = "src/lib.rs"
+          TOML
+            echo "" > "$dir/src/lib.rs"
+          done
+
+      - name: Build
+        working-directory: ALICE-LOL
+        run: cargo build
+
+      - name: Test
+        working-directory: ALICE-LOL
+        run: cargo test
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ALICE-LOL
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Create SDF dependency stubs
+        run: |
+          for crate_info in \
+            "ALICE-Physics:alice-physics" \
+            "ALICE-Codec:alice-codec" \
+            "ALICE-Streaming-Protocol:libasp" \
+            "ALICE-Cache:alice-cache"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            mkdir -p "$dir/src"
+            cat > "$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "0.1.0"
+          edition = "2021"
+          [lib]
+          path = "src/lib.rs"
+          TOML
+            echo "" > "$dir/src/lib.rs"
+          done
+
+      - name: Clippy
+        working-directory: ALICE-LOL
+        run: cargo clippy -- -W clippy::pedantic -W clippy::nursery
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt -- --check
