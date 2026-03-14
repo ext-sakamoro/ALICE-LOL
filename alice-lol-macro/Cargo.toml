@@ -1,0 +1,14 @@
+[package]
+name = "alice-lol-macro"
+version = "0.1.0"
+edition = "2021"
+description = "LOL (Law-Oriented Language) proc_macro — parses LOL DSL, emits SdfNode construction code"
+license = "MIT OR Apache-2.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
