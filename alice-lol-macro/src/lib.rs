@@ -171,6 +171,55 @@ enum Expr {
         half_height: V,
     },
 
+
+    // ── v1.0 追加プリミティブ (45) ──
+    Triangle { ax: V, ay: V, az: V, bx: V, by: V, bz: V, cx: V, cy: V, cz: V },
+    BezierPrim { ax: V, ay: V, az: V, bx: V, by: V, bz: V, cx: V, cy: V, cz: V, radius: V },
+    TriangularPrism { width: V, half_depth: V },
+    CutSphere { radius: V, cut_height: V },
+    CutHollowSphere { radius: V, cut_height: V, thickness: V },
+    DeathStar { ra: V, rb: V, d: V },
+    SolidAngle { angle: V, radius: V },
+    Rhombus { la: V, lb: V, half_height: V, round_radius: V },
+    Horseshoe { angle: V, radius: V, half_length: V, width: V, thickness: V },
+    Vesica { radius: V, half_dist: V },
+    InfiniteCylinder { radius: V },
+    InfiniteCone { angle: V },
+    GyroidPrim { scale: V, thickness: V },
+    ChamferedCube { hx: V, hy: V, hz: V, chamfer: V },
+    SchwarzPPrim { scale: V, thickness: V },
+    SuperellipsoidPrim { hx: V, hy: V, hz: V, e1: V, e2: V },
+    RoundedXPrim { width: V, round_radius: V, half_height: V },
+    PiePrim { angle: V, radius: V, half_height: V },
+    TrapezoidPrim { r1: V, r2: V, trap_height: V, half_depth: V },
+    ParallelogramPrim { width: V, para_height: V, skew: V, half_depth: V },
+    TunnelPrim { width: V, height_2d: V, half_depth: V },
+    UnevenCapsulePrim { r1: V, r2: V, cap_height: V, half_depth: V },
+    ArcShapePrim { aperture: V, radius: V, thickness: V, half_height: V },
+    MoonPrim { d: V, ra: V, rb: V, half_height: V },
+    BlobbyCrossPrim { size: V, half_height: V },
+    ParabolaSegmentPrim { width: V, para_height: V, half_depth: V },
+    RegularPolygonPrim { radius: V, n_sides: V, half_height: V },
+    StairsPrim { step_width: V, step_height: V, n_steps: V, half_depth: V },
+    DodecahedronPrim { radius: V },
+    IcosahedronPrim { radius: V },
+    TruncatedOctahedronPrim { radius: V },
+    TruncatedIcosahedronPrim { radius: V },
+    DiamondSurfacePrim { scale: V, thickness: V },
+    NeoviusPrim { scale: V, thickness: V },
+    LidinoidPrim { scale: V, thickness: V },
+    IWPPrim { scale: V, thickness: V },
+    FRDPrim { scale: V, thickness: V },
+    FischerKochSPrim { scale: V, thickness: V },
+    PMYPrim { scale: V, thickness: V },
+    Circle2DPrim { radius: V, half_height: V },
+    Rect2DPrim { hx: V, hy: V, half_height: V },
+    Segment2DPrim { ax: V, ay: V, bx: V, by: V, thickness: V, half_height: V },
+    RoundedRect2DPrim { hx: V, hy: V, round_radius: V, half_height: V },
+    Annular2DPrim { outer_radius: V, thickness: V, half_height: V },
+    // ── v1.0 追加モディファイア ──
+    SweepBezierMod { p0x: V, p0y: V, p1x: V, p1y: V, p2x: V, p2y: V, child: Box<Self> },
+
     // ── Operations (23) ──
     Union {
         children: Vec<Self>,
@@ -607,6 +656,19 @@ fn parse_2f_ab(input: ParseStream) -> Result<(V, V, Expr, Expr)> {
     Ok((v1, v2, a, b))
 }
 
+
+/// 6 floats (no child)
+#[allow(clippy::many_single_char_names)]
+fn parse_6f(input: ParseStream) -> Result<(V, V, V, V, V, V)> {
+    let a = parse_val(input)?; eat_comma(input)?;
+    let b = parse_val(input)?; eat_comma(input)?;
+    let c = parse_val(input)?; eat_comma(input)?;
+    let d = parse_val(input)?; eat_comma(input)?;
+    let e = parse_val(input)?; eat_comma(input)?;
+    let f = parse_val(input)?; check_empty(input)?;
+    Ok((a, b, c, d, e, f))
+}
+
 /// 6 floats + 1 child (for `repeat_finite`)
 #[allow(clippy::many_single_char_names)]
 fn parse_6f_child(input: ParseStream) -> Result<(V, V, V, V, V, V, Expr)> {
@@ -625,6 +687,49 @@ fn parse_6f_child(input: ParseStream) -> Result<(V, V, V, V, V, V, Expr)> {
     let child = parse_expr(input)?;
     check_empty(input)?;
     Ok((a, b, c, d, e, f, child))
+}
+
+
+/// 5 floats
+#[allow(clippy::many_single_char_names)]
+fn parse_5f(input: ParseStream) -> Result<(V, V, V, V, V)> {
+    let a = parse_val(input)?; eat_comma(input)?;
+    let b = parse_val(input)?; eat_comma(input)?;
+    let c = parse_val(input)?; eat_comma(input)?;
+    let d = parse_val(input)?; eat_comma(input)?;
+    let e = parse_val(input)?; check_empty(input)?;
+    Ok((a, b, c, d, e))
+}
+
+/// 9 floats
+#[allow(clippy::many_single_char_names)]
+fn parse_9f(input: ParseStream) -> Result<(V, V, V, V, V, V, V, V, V)> {
+    let a = parse_val(input)?; eat_comma(input)?;
+    let b = parse_val(input)?; eat_comma(input)?;
+    let c = parse_val(input)?; eat_comma(input)?;
+    let d = parse_val(input)?; eat_comma(input)?;
+    let e = parse_val(input)?; eat_comma(input)?;
+    let f = parse_val(input)?; eat_comma(input)?;
+    let g = parse_val(input)?; eat_comma(input)?;
+    let h = parse_val(input)?; eat_comma(input)?;
+    let i = parse_val(input)?; check_empty(input)?;
+    Ok((a, b, c, d, e, f, g, h, i))
+}
+
+/// 10 floats
+#[allow(clippy::many_single_char_names)]
+fn parse_10f(input: ParseStream) -> Result<(V, V, V, V, V, V, V, V, V, V)> {
+    let a = parse_val(input)?; eat_comma(input)?;
+    let b = parse_val(input)?; eat_comma(input)?;
+    let c = parse_val(input)?; eat_comma(input)?;
+    let d = parse_val(input)?; eat_comma(input)?;
+    let e = parse_val(input)?; eat_comma(input)?;
+    let f = parse_val(input)?; eat_comma(input)?;
+    let g = parse_val(input)?; eat_comma(input)?;
+    let h = parse_val(input)?; eat_comma(input)?;
+    let i = parse_val(input)?; eat_comma(input)?;
+    let j = parse_val(input)?; check_empty(input)?;
+    Ok((a, b, c, d, e, f, g, h, i, j))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1177,6 +1282,190 @@ fn parse_expr(input: ParseStream) -> Result<Expr> {
             })
         }
 
+
+        // ── v1.0 プリミティブ ──
+        "triangle" => {
+            let (ax,ay,az,bx,by,bz,cx,cy,cz) = parse_9f(&content)?;
+            Ok(Expr::Triangle { ax,ay,az,bx,by,bz,cx,cy,cz })
+        }
+        "bezier" => {
+            let (ax,ay,az,bx,by,bz,cx,cy,cz,r) = parse_10f(&content)?;
+            Ok(Expr::BezierPrim { ax,ay,az,bx,by,bz,cx,cy,cz, radius: r })
+        }
+        "triangular_prism" => {
+            let (w, d) = parse_2f(&content)?;
+            Ok(Expr::TriangularPrism { width: w, half_depth: d })
+        }
+        "cut_sphere" => {
+            let (r, h) = parse_2f(&content)?;
+            Ok(Expr::CutSphere { radius: r, cut_height: h })
+        }
+        "cut_hollow_sphere" => {
+            let (r, h, t) = parse_3f(&content)?;
+            Ok(Expr::CutHollowSphere { radius: r, cut_height: h, thickness: t })
+        }
+        "death_star" => {
+            let (ra, rb, d) = parse_3f(&content)?;
+            Ok(Expr::DeathStar { ra, rb, d })
+        }
+        "solid_angle" => {
+            let (a, r) = parse_2f(&content)?;
+            Ok(Expr::SolidAngle { angle: a, radius: r })
+        }
+        "rhombus" => {
+            let (la, lb, h, r) = parse_4f(&content)?;
+            Ok(Expr::Rhombus { la, lb, half_height: h, round_radius: r })
+        }
+        "horseshoe" => {
+            let (a, r, l, w, t) = parse_5f(&content)?;
+            Ok(Expr::Horseshoe { angle: a, radius: r, half_length: l, width: w, thickness: t })
+        }
+        "vesica" => {
+            let (r, d) = parse_2f(&content)?;
+            Ok(Expr::Vesica { radius: r, half_dist: d })
+        }
+        "infinite_cylinder" => {
+            let r = parse_1f(&content)?;
+            Ok(Expr::InfiniteCylinder { radius: r })
+        }
+        "infinite_cone" => {
+            let a = parse_1f(&content)?;
+            Ok(Expr::InfiniteCone { angle: a })
+        }
+        "gyroid" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::GyroidPrim { scale: s, thickness: t })
+        }
+        "chamfered_cube" => {
+            let (hx, hy, hz, c) = parse_4f(&content)?;
+            Ok(Expr::ChamferedCube { hx, hy, hz, chamfer: c })
+        }
+        "schwarz_p" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::SchwarzPPrim { scale: s, thickness: t })
+        }
+        "superellipsoid" => {
+            let (hx, hy, hz, e1, e2) = parse_5f(&content)?;
+            Ok(Expr::SuperellipsoidPrim { hx, hy, hz, e1, e2 })
+        }
+        "rounded_x" => {
+            let (w, r, h) = parse_3f(&content)?;
+            Ok(Expr::RoundedXPrim { width: w, round_radius: r, half_height: h })
+        }
+        "pie" => {
+            let (a, r, h) = parse_3f(&content)?;
+            Ok(Expr::PiePrim { angle: a, radius: r, half_height: h })
+        }
+        "trapezoid" => {
+            let (r1, r2, th, d) = parse_4f(&content)?;
+            Ok(Expr::TrapezoidPrim { r1, r2, trap_height: th, half_depth: d })
+        }
+        "parallelogram" => {
+            let (w, h, s, d) = parse_4f(&content)?;
+            Ok(Expr::ParallelogramPrim { width: w, para_height: h, skew: s, half_depth: d })
+        }
+        "tunnel" => {
+            let (w, h, d) = parse_3f(&content)?;
+            Ok(Expr::TunnelPrim { width: w, height_2d: h, half_depth: d })
+        }
+        "uneven_capsule" => {
+            let (r1, r2, h, d) = parse_4f(&content)?;
+            Ok(Expr::UnevenCapsulePrim { r1, r2, cap_height: h, half_depth: d })
+        }
+        "arc_shape" => {
+            let (a, r, t, h) = parse_4f(&content)?;
+            Ok(Expr::ArcShapePrim { aperture: a, radius: r, thickness: t, half_height: h })
+        }
+        "moon" => {
+            let (d, ra, rb, h) = parse_4f(&content)?;
+            Ok(Expr::MoonPrim { d, ra, rb, half_height: h })
+        }
+        "blobby_cross" => {
+            let (s, h) = parse_2f(&content)?;
+            Ok(Expr::BlobbyCrossPrim { size: s, half_height: h })
+        }
+        "parabola_segment" => {
+            let (w, h, d) = parse_3f(&content)?;
+            Ok(Expr::ParabolaSegmentPrim { width: w, para_height: h, half_depth: d })
+        }
+        "regular_polygon" => {
+            let (r, n, h) = parse_3f(&content)?;
+            Ok(Expr::RegularPolygonPrim { radius: r, n_sides: n, half_height: h })
+        }
+        "stairs_prim" => {
+            let (sw, sh, n, d) = parse_4f(&content)?;
+            Ok(Expr::StairsPrim { step_width: sw, step_height: sh, n_steps: n, half_depth: d })
+        }
+        "dodecahedron" => {
+            let r = parse_1f(&content)?;
+            Ok(Expr::DodecahedronPrim { radius: r })
+        }
+        "icosahedron" => {
+            let r = parse_1f(&content)?;
+            Ok(Expr::IcosahedronPrim { radius: r })
+        }
+        "truncated_octahedron" => {
+            let r = parse_1f(&content)?;
+            Ok(Expr::TruncatedOctahedronPrim { radius: r })
+        }
+        "truncated_icosahedron" => {
+            let r = parse_1f(&content)?;
+            Ok(Expr::TruncatedIcosahedronPrim { radius: r })
+        }
+        "diamond_surface" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::DiamondSurfacePrim { scale: s, thickness: t })
+        }
+        "neovius" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::NeoviusPrim { scale: s, thickness: t })
+        }
+        "lidinoid" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::LidinoidPrim { scale: s, thickness: t })
+        }
+        "iwp" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::IWPPrim { scale: s, thickness: t })
+        }
+        "frd" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::FRDPrim { scale: s, thickness: t })
+        }
+        "fischer_koch_s" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::FischerKochSPrim { scale: s, thickness: t })
+        }
+        "pmy" => {
+            let (s, t) = parse_2f(&content)?;
+            Ok(Expr::PMYPrim { scale: s, thickness: t })
+        }
+        "circle_2d" => {
+            let (r, h) = parse_2f(&content)?;
+            Ok(Expr::Circle2DPrim { radius: r, half_height: h })
+        }
+        "rect_2d" => {
+            let (hx, hy, h) = parse_3f(&content)?;
+            Ok(Expr::Rect2DPrim { hx, hy, half_height: h })
+        }
+        "segment_2d" => {
+            let (ax,ay,bx,by,t,h) = parse_6f(&content)?;
+            Ok(Expr::Segment2DPrim { ax,ay,bx,by, thickness: t, half_height: h })
+        }
+        "rounded_rect_2d" => {
+            let (hx, hy, r, h) = parse_4f(&content)?;
+            Ok(Expr::RoundedRect2DPrim { hx, hy, round_radius: r, half_height: h })
+        }
+        "annular_2d" => {
+            let (r, t, h) = parse_3f(&content)?;
+            Ok(Expr::Annular2DPrim { outer_radius: r, thickness: t, half_height: h })
+        }
+        // ── v1.0 モディファイア ──
+        "sweep_bezier" => {
+            let (p0x,p0y,p1x,p1y,p2x,p2y, child) = parse_6f_child(&content)?;
+            Ok(Expr::SweepBezierMod { p0x,p0y,p1x,p1y,p2x,p2y, child: Box::new(child) })
+        }
+
         other => Err(syn::Error::new(
             name.span(),
             format!("unknown LOL expression: `{other}`"),
@@ -1331,6 +1620,146 @@ fn codegen(expr: &Expr) -> TokenStream2 {
             half_height,
         } => {
             quote! { ::alice_lol::SdfNode::CrossShape { length: #length, thickness: #thickness, round_radius: #round_radius, half_height: #half_height } }
+        }
+
+
+        // ── v1.0 プリミティブ ──
+        Expr::Triangle { ax,ay,az,bx,by,bz,cx,cy,cz } => {
+            quote! { ::alice_lol::SdfNode::Triangle { point_a: ::alice_lol::Vec3::new(#ax,#ay,#az), point_b: ::alice_lol::Vec3::new(#bx,#by,#bz), point_c: ::alice_lol::Vec3::new(#cx,#cy,#cz) } }
+        }
+        Expr::BezierPrim { ax,ay,az,bx,by,bz,cx,cy,cz, radius } => {
+            quote! { ::alice_lol::SdfNode::Bezier { point_a: ::alice_lol::Vec3::new(#ax,#ay,#az), point_b: ::alice_lol::Vec3::new(#bx,#by,#bz), point_c: ::alice_lol::Vec3::new(#cx,#cy,#cz), radius: #radius } }
+        }
+        Expr::TriangularPrism { width, half_depth } => {
+            quote! { ::alice_lol::SdfNode::TriangularPrism { width: #width, half_depth: #half_depth } }
+        }
+        Expr::CutSphere { radius, cut_height } => {
+            quote! { ::alice_lol::SdfNode::CutSphere { radius: #radius, cut_height: #cut_height } }
+        }
+        Expr::CutHollowSphere { radius, cut_height, thickness } => {
+            quote! { ::alice_lol::SdfNode::CutHollowSphere { radius: #radius, cut_height: #cut_height, thickness: #thickness } }
+        }
+        Expr::DeathStar { ra, rb, d } => {
+            quote! { ::alice_lol::SdfNode::DeathStar { ra: #ra, rb: #rb, d: #d } }
+        }
+        Expr::SolidAngle { angle, radius } => {
+            quote! { ::alice_lol::SdfNode::SolidAngle { angle: #angle, radius: #radius } }
+        }
+        Expr::Rhombus { la, lb, half_height, round_radius } => {
+            quote! { ::alice_lol::SdfNode::Rhombus { la: #la, lb: #lb, half_height: #half_height, round_radius: #round_radius } }
+        }
+        Expr::Horseshoe { angle, radius, half_length, width, thickness } => {
+            quote! { ::alice_lol::SdfNode::Horseshoe { angle: #angle, radius: #radius, half_length: #half_length, width: #width, thickness: #thickness } }
+        }
+        Expr::Vesica { radius, half_dist } => {
+            quote! { ::alice_lol::SdfNode::Vesica { radius: #radius, half_dist: #half_dist } }
+        }
+        Expr::InfiniteCylinder { radius } => {
+            quote! { ::alice_lol::SdfNode::InfiniteCylinder { radius: #radius } }
+        }
+        Expr::InfiniteCone { angle } => {
+            quote! { ::alice_lol::SdfNode::InfiniteCone { angle: #angle } }
+        }
+        Expr::GyroidPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::Gyroid { scale: #scale, thickness: #thickness } }
+        }
+        Expr::ChamferedCube { hx, hy, hz, chamfer } => {
+            quote! { ::alice_lol::SdfNode::ChamferedCube { half_extents: ::alice_lol::Vec3::new(#hx,#hy,#hz), chamfer: #chamfer } }
+        }
+        Expr::SchwarzPPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::SchwarzP { scale: #scale, thickness: #thickness } }
+        }
+        Expr::SuperellipsoidPrim { hx, hy, hz, e1, e2 } => {
+            quote! { ::alice_lol::SdfNode::Superellipsoid { half_extents: ::alice_lol::Vec3::new(#hx,#hy,#hz), e1: #e1, e2: #e2 } }
+        }
+        Expr::RoundedXPrim { width, round_radius, half_height } => {
+            quote! { ::alice_lol::SdfNode::RoundedX { width: #width, round_radius: #round_radius, half_height: #half_height } }
+        }
+        Expr::PiePrim { angle, radius, half_height } => {
+            quote! { ::alice_lol::SdfNode::Pie { angle: #angle, radius: #radius, half_height: #half_height } }
+        }
+        Expr::TrapezoidPrim { r1, r2, trap_height, half_depth } => {
+            quote! { ::alice_lol::SdfNode::Trapezoid { r1: #r1, r2: #r2, trap_height: #trap_height, half_depth: #half_depth } }
+        }
+        Expr::ParallelogramPrim { width, para_height, skew, half_depth } => {
+            quote! { ::alice_lol::SdfNode::Parallelogram { width: #width, para_height: #para_height, skew: #skew, half_depth: #half_depth } }
+        }
+        Expr::TunnelPrim { width, height_2d, half_depth } => {
+            quote! { ::alice_lol::SdfNode::Tunnel { width: #width, height_2d: #height_2d, half_depth: #half_depth } }
+        }
+        Expr::UnevenCapsulePrim { r1, r2, cap_height, half_depth } => {
+            quote! { ::alice_lol::SdfNode::UnevenCapsule { r1: #r1, r2: #r2, cap_height: #cap_height, half_depth: #half_depth } }
+        }
+        Expr::ArcShapePrim { aperture, radius, thickness, half_height } => {
+            quote! { ::alice_lol::SdfNode::ArcShape { aperture: #aperture, radius: #radius, thickness: #thickness, half_height: #half_height } }
+        }
+        Expr::MoonPrim { d, ra, rb, half_height } => {
+            quote! { ::alice_lol::SdfNode::Moon { d: #d, ra: #ra, rb: #rb, half_height: #half_height } }
+        }
+        Expr::BlobbyCrossPrim { size, half_height } => {
+            quote! { ::alice_lol::SdfNode::BlobbyCross { size: #size, half_height: #half_height } }
+        }
+        Expr::ParabolaSegmentPrim { width, para_height, half_depth } => {
+            quote! { ::alice_lol::SdfNode::ParabolaSegment { width: #width, para_height: #para_height, half_depth: #half_depth } }
+        }
+        Expr::RegularPolygonPrim { radius, n_sides, half_height } => {
+            quote! { ::alice_lol::SdfNode::RegularPolygon { radius: #radius, n_sides: #n_sides, half_height: #half_height } }
+        }
+        Expr::StairsPrim { step_width, step_height, n_steps, half_depth } => {
+            quote! { ::alice_lol::SdfNode::Stairs { step_width: #step_width, step_height: #step_height, n_steps: #n_steps, half_depth: #half_depth } }
+        }
+        Expr::DodecahedronPrim { radius } => {
+            quote! { ::alice_lol::SdfNode::Dodecahedron { radius: #radius } }
+        }
+        Expr::IcosahedronPrim { radius } => {
+            quote! { ::alice_lol::SdfNode::Icosahedron { radius: #radius } }
+        }
+        Expr::TruncatedOctahedronPrim { radius } => {
+            quote! { ::alice_lol::SdfNode::TruncatedOctahedron { radius: #radius } }
+        }
+        Expr::TruncatedIcosahedronPrim { radius } => {
+            quote! { ::alice_lol::SdfNode::TruncatedIcosahedron { radius: #radius } }
+        }
+        Expr::DiamondSurfacePrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::DiamondSurface { scale: #scale, thickness: #thickness } }
+        }
+        Expr::NeoviusPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::Neovius { scale: #scale, thickness: #thickness } }
+        }
+        Expr::LidinoidPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::Lidinoid { scale: #scale, thickness: #thickness } }
+        }
+        Expr::IWPPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::IWP { scale: #scale, thickness: #thickness } }
+        }
+        Expr::FRDPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::FRD { scale: #scale, thickness: #thickness } }
+        }
+        Expr::FischerKochSPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::FischerKochS { scale: #scale, thickness: #thickness } }
+        }
+        Expr::PMYPrim { scale, thickness } => {
+            quote! { ::alice_lol::SdfNode::PMY { scale: #scale, thickness: #thickness } }
+        }
+        Expr::Circle2DPrim { radius, half_height } => {
+            quote! { ::alice_lol::SdfNode::Circle2D { radius: #radius, half_height: #half_height } }
+        }
+        Expr::Rect2DPrim { hx, hy, half_height } => {
+            quote! { ::alice_lol::SdfNode::Rect2D { half_extents: ::glam::Vec2::new(#hx, #hy), half_height: #half_height } }
+        }
+        Expr::Segment2DPrim { ax, ay, bx, by, thickness, half_height } => {
+            quote! { ::alice_lol::SdfNode::Segment2D { a: ::glam::Vec2::new(#ax, #ay), b: ::glam::Vec2::new(#bx, #by), thickness: #thickness, half_height: #half_height } }
+        }
+        Expr::RoundedRect2DPrim { hx, hy, round_radius, half_height } => {
+            quote! { ::alice_lol::SdfNode::RoundedRect2D { half_extents: ::glam::Vec2::new(#hx, #hy), round_radius: #round_radius, half_height: #half_height } }
+        }
+        Expr::Annular2DPrim { outer_radius, thickness, half_height } => {
+            quote! { ::alice_lol::SdfNode::Annular2D { outer_radius: #outer_radius, thickness: #thickness, half_height: #half_height } }
+        }
+        // ── v1.0 モディファイア ──
+        Expr::SweepBezierMod { p0x,p0y,p1x,p1y,p2x,p2y, child } => {
+            let c = codegen(child);
+            quote! { ::alice_lol::SdfNode::SweepBezier { child: ::std::sync::Arc::new(#c), p0: ::glam::Vec2::new(#p0x,#p0y), p1: ::glam::Vec2::new(#p1x,#p1y), p2: ::glam::Vec2::new(#p2x,#p2y) } }
         }
 
         // ── Operations (left-fold for N-ary → binary) ──
