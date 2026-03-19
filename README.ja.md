@@ -24,7 +24,7 @@ let glsl = alice_lol::to_glsl(&scene);
 
 ## 特徴
 
-- **120 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、2 時間制御、3 法則制約
+- **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約
 - **3 シェーダ出力** — GLSL（デフォルト）、WGSL、HLSL（Hardcoded / Dynamic 両モード）
 - **空間枝刈りコンパイラ** — 区間演算で評価不要領域を除外、IFS フラクタルで最大 10 倍高速化
 - **法則制約チェッカー** — `NonOverlap`、`Containment`、`MinThickness`、ハード/ソフト優先度、空間座標レポート
@@ -69,7 +69,7 @@ let glsl = alice_lol::to_glsl(&scene);
 # ビルド
 cargo build
 
-# テスト（216 テスト）
+# テスト（228 テスト）
 cargo test
 
 # 基本デモ
@@ -130,6 +130,14 @@ elongate(hx,hy,hz)  revolution(o)  extrude(h)  taper(k)  displacement(amp,freq)
 polar_repeat(n)  shear(kxy,kxz,kyz)  noise(amp,freq,oct)  repeat_finite(sx,sy,sz,nx,ny,nz)
 octant_mirror  icosahedral_symmetry  with_material(id)  surface_roughness(amp,freq)
 sweep_bezier(p0x,p0y,p1x,p1y,p2x,p2y, child)
+```
+
+### 3Dプリント構造意図（3）
+
+```
+lattice_infill(shell_t, scale, lattice_t, child)   — シェル + ジャイロイドインフィル（汎用）
+diamond_infill(shell_t, scale, lattice_t, child)    — シェル + ダイヤモンドインフィル（高剛性）
+schwarz_infill(shell_t, scale, lattice_t, child)    — シェル + Schwarz-Pインフィル（等方性）
 ```
 
 ### 時間制御（2）
@@ -202,7 +210,7 @@ let report = laws.check();
 | 指標 | 値 |
 |------|-----|
 | clippy (pedantic+nursery) | 0 warnings |
-| テスト数 | 216 |
+| テスト数 | 228 |
 | fmt | clean |
 
 ## ライセンス

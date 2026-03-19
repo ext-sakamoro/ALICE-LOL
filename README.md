@@ -24,7 +24,7 @@ let glsl = alice_lol::to_glsl(&scene);
 
 ## Features
 
-- **120 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、2 時間制御、3 法則制約
+- **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約
 - **3 シェーダ出力** — GLSL (default), WGSL, HLSL（Hardcoded / Dynamic 両モード）
 - **空間枝刈りコンパイラ** — 区間演算で評価不要領域を除外、IFS フラクタルで最大 10x 高速化
 - **法則制約チェッカー** — `NonOverlap`, `Containment`, `MinThickness`、ハード/ソフト優先度、空間座標レポート
@@ -132,6 +132,14 @@ octant_mirror  icosahedral_symmetry  with_material(id)  surface_roughness(amp,fr
 sweep_bezier(p0x,p0y,p1x,p1y,p2x,p2y, child)
 ```
 
+### 3D Print Structural Intent (3)
+
+```
+lattice_infill(shell_t, scale, lattice_t, child)   — Shell + Gyroid infill (general purpose)
+diamond_infill(shell_t, scale, lattice_t, child)    — Shell + Diamond infill (high stiffness)
+schwarz_infill(shell_t, scale, lattice_t, child)    — Shell + Schwarz-P infill (isotropic)
+```
+
 ### Time (2)
 
 ```
@@ -163,6 +171,7 @@ let node = lol! { sphere({r * 2.0}) };     // 算術式
 | `law_demo` | 法則制約 — NonOverlap, Containment, MinThickness |
 | `autodiff_demo` | 自動微分 — 勾配、曲率解析 |
 | `compiled_demo` | CompiledSdf — SIMD バッチ評価 |
+| `print_demo` | 3Dプリント構造意図 — 装飾/構造/ソリッド |
 
 ## Cargo Features
 
@@ -202,7 +211,7 @@ let report = laws.check();
 | Metric | Value |
 |--------|-------|
 | clippy (pedantic+nursery) | 0 warnings |
-| Tests | 216 |
+| Tests | 228 |
 | fmt | clean |
 
 ## License
