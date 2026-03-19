@@ -252,6 +252,107 @@ subtract(
 | Solid sphere > 50mm diameter (FDM) | Wastes filament, long print time | Use `onion` or `lattice_infill` |
 | Mesh > 1M triangles | Slicer software slows down or rejects | Use resolution ≤ 192 in `PrintConfig` |
 
+## Organizer Design Quick Reference
+
+When generating organizer/storage items, use these standard dimensions.
+
+### repeat_finite Pattern Rule
+
+**MANDATORY**: Use `repeat_finite` for any repeating pattern. Never duplicate nodes manually.
+
+```
+// Grid of holes: translate to grid origin, repeat_finite for pattern
+subtract(
+  rounded_box(base_hx, base_hy, base_hz, fillet),
+  translate(grid_cx, grid_cy, 0,
+    repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole_shape))
+)
+```
+
+### Gridfinity Bins
+
+```
+// 2x3 bin, 4U height
+// External: 84 x 126mm, Height: 32mm
+rounded_box(42, 63, 16, 4.0)
+
+// With compartments: subtract dividers
+subtract(
+  rounded_box(42, 63, 16, 4.0),
+  translate(0, 0, 2, rounded_box(39, 60, 14, 1.0))  // hollow interior
+)
+```
+
+### SKADIS Panel
+
+```
+// 300x300mm panel with peg holes
+subtract(
+  rounded_box(150, 150, 2.5, 1.0),
+  union(
+    translate(-141, -141, 0, repeat_finite(7, 7, 0, 40, 40, 0, rounded_box(2.5, 7.5, 3.5, 1.0))),
+    translate(-121, -121, 0, repeat_finite(6, 6, 0, 40, 40, 0, rounded_box(2.5, 7.5, 3.5, 1.0)))
+  )
+)
+```
+
+### Cable Clip (parametric)
+
+```
+// clip_inner = cable_dia / 2 + clearance
+// clip_outer = clip_inner + wall
+// opening = cable_dia × 0.35 (snap retention)
+subtract(
+  cylinder(clip_outer, clip_half_h),
+  cylinder(clip_inner, clip_half_h + 1),
+  translate(0, clip_inner, 0, box3d(opening/2, clip_outer, clip_half_h + 1))
+)
+```
+
+### Drawer Divider
+
+```
+// Cross-slot interlocking divider
+// slot_width = material_thickness + 0.2mm
+// slot_depth = 50% of divider height
+box3d(divider_hx, divider_hy, divider_hz)
+// Subtract slot at center for perpendicular divider
+subtract(
+  box3d(divider_hx, divider_hy, divider_hz),
+  translate(0, -divider_hy/2, 0, box3d(slot_w/2, divider_hy/2, divider_hz + 1))
+)
+```
+
+### Common Dimensions for Organizers
+
+| Object | Key Dimension (mm) |
+|--------|-------------------|
+| Gridfinity grid | 42 × 42 × 7mm/U |
+| SKADIS pitch | 40mm, slot 5×15mm |
+| Multiboard grid | 25mm |
+| French cleat angle | 45° |
+| Pegboard (1/4") | 6.35mm holes, 25.4mm pitch |
+| Spice jar dia | 43-48mm |
+| K-Cup top dia | 51mm |
+| AA battery | 14.5 × 50.5mm |
+| SD card | 24 × 32 × 2.1mm |
+| USB-C cable | 3.5-4.5mm OD |
+| Kitchen sponge | 120 × 70 × 25mm |
+| Toilet paper bore | 40mm ID, 120mm OD |
+| Cutting board | 10-25mm thick |
+
+### Material Selection for Organizers
+
+| Environment | Material | Reason |
+|------------|----------|--------|
+| Desk/office | PLA | Sufficient, easy print |
+| Kitchen (no food contact) | PLA or PETG | No special requirement |
+| Kitchen (food contact) | Food-safe PETG, stainless nozzle | Safety |
+| Bathroom/wet | PETG | Moisture resistance |
+| Garage/workshop | PETG or PLA+ | Impact resistance |
+| Outdoor | ASA | UV resistance |
+| Near heat (dryer, power strip) | PETG (80°C Tg) | PLA deforms at 60°C |
+
 ## Coordinate System & Scale
 
 - **LOL coordinates**: Y-up, origin at center, unitless

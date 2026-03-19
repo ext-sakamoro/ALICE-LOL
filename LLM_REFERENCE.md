@@ -374,6 +374,8 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 "Half" parameters mean HALF the total dimension:
 - A box 4 units wide → `box3d(2.0, ...)` (half = 2.0)
 - A cylinder 3 units tall → `cylinder(r, 1.5)` (half_height = 1.5)
+- `rounded_box(hx, hy, hz, r)` — **all are half-extents**
+- `cylinder(r, half_h)` — second arg is **half-height** (LOL runtime parser)
 
 ## Coordinate System
 
@@ -382,3 +384,133 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 - Ground level = Y=0
 - Scene bounds: [-5, 5] on all axes
 - Default print scale: 1.0 LOL unit = 20mm (configurable via `PrintConfig::scale_mm`)
+
+## SDF Optimization Rules for 3D Printing
+
+### repeat_finite for Pattern Generation (MANDATORY)
+
+Repeating patterns (holes, slots, cutouts) MUST use `repeat_finite`. Never generate individual `translate` × N nodes.
+
+```
+// NG: 200 nodes, O(n) eval per point
+union(translate(a, hole), translate(b, hole), ...)
+
+// OK: 1 node, O(1) eval per point
+translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole))
+```
+
+**Effect**: 93% DSL size reduction, 58% mesh reduction, dramatically faster generation.
+
+### Staggered Grid (e.g. SKADIS)
+
+Two `repeat_finite` with `translate` offset:
+```
+union(
+  translate(g1_cx, g1_cy, 0, repeat_finite(n, n, 0, pitch, pitch, 0, shape)),
+  translate(g2_cx, g2_cy, 0, repeat_finite(m, m, 0, pitch, pitch, 0, shape))
+)
+```
+
+### Through-Holes
+
+Hole height must exceed plate thickness to guarantee penetration:
+```
+hole_half_height = (plate_thickness + 2.0) * 0.5
+```
+
+### Build Volume Validation
+
+Always check output fits target printer:
+
+| Printer | Max Size (mm, with 5mm margin) |
+|---------|-------------------------------|
+| Bambu H2D (single) | 315 × 310 × 315 |
+| Bambu H2D (dual) | 290 × 310 × 315 |
+| Bambu P1S / X1C | 246 × 246 × 246 |
+| Bambu A1 mini | 170 × 170 × 170 |
+
+### Mesh Resolution Guide
+
+| Use | Resolution | Triangles | File Size |
+|-----|-----------|-----------|-----------|
+| Preview | 128 | ~500K | ~40MB |
+| Print | 192 | ~1M | ~80MB |
+| High quality | 256 | ~2M | ~170MB |
+
+## Parametric Design Formulas (ALICE-Bamboo formulas.rs)
+
+All dimensions derive from nozzle diameter (N), layer height (L), and material.
+
+### Core Formulas
+
+```
+E = N × 1.125                           // extrusion width
+min_wall = 3 × E                        // minimum wall thickness
+clearance_snap = A + N × 0.5            // snap-fit clearance (per side)
+clearance_slide = A + N × 0.75          // slide-fit clearance
+pip_gap = L × 2                         // print-in-place gap
+tap_hole = screw_dia × 0.85 + 2 × A    // tapping hole diameter
+hole_model = target_dia + 2 × A         // FDM hole correction
+fillet = max(2 × N, 1.0)               // stress relief fillet
+
+// A = printer accuracy: Bambu=0.1mm, Prusa=0.15mm, Ender=0.2mm
+```
+
+### Standard Values (Bambu H2D, 0.4mm nozzle, 0.2mm layer, PLA)
+
+| Parameter | Formula | Value |
+|-----------|---------|-------|
+| Extrusion width | N×1.125 | 0.45mm |
+| Min wall | 3×E | 1.35mm |
+| Snap clearance | A+N×0.5 | 0.3mm |
+| Slide clearance | A+N×0.75 | 0.4mm |
+| PiP gap | L×2 | 0.4mm |
+| M3 tap hole | 3×0.85+0.2 | 2.75mm |
+
+## Organizer Reference Dimensions
+
+### Gridfinity Standard
+
+```
+grid_unit = 42.0mm
+bin_size = 41.5mm (0.25mm clearance/side)
+height_unit = 7.0mm
+bin_ext_height = U × 7 + 4 (mm)
+bin_int_depth = U × 7 - 3 (mm)
+lip_height = 4.4mm
+magnet = 6.0mm dia × 2.0mm
+corner_fillet = 4.0mm
+```
+
+### IKEA SKADIS
+
+```
+peg_slot = 5 × 15mm (R2.5)
+grid_pitch = 40mm
+stagger_offset = 20mm
+thickness = 5mm
+edge_margin = peg_h/2 + min_wall = 8.85mm
+```
+
+### Standard Clearances (FDM, per side)
+
+| Fit | Formula | 0.4mm nozzle |
+|-----|---------|-------------|
+| Press | A×0.5 | 0.05mm |
+| Snug | A+N×0.25 | 0.2mm |
+| Snap | A+N×0.5 | 0.3mm |
+| Slide | A+N×0.75 | 0.4mm |
+| Loose | A+N | 0.5mm |
+
+### Common Object Dimensions
+
+| Object | Key Dimension |
+|--------|-------------|
+| AA battery | 14.5mm dia × 50.5mm |
+| 18650 cell | 18.4mm dia × 65.2mm |
+| SD card | 24 × 32 × 2.1mm |
+| M3 screw boss OD | 6.6mm (3×2.2) |
+| 608 bearing | 22mm OD × 8mm ID × 7mm |
+| K-Cup | 51mm top dia × 46mm H |
+| Spice jar (standard) | 43-48mm dia |
+| Toilet paper roll | 40mm bore × 120mm OD × 100mm W |
