@@ -24,6 +24,10 @@
 // `parse_lol("sphere(1.0)")` → `SdfNode` に変換
 pub mod runtime_parser;
 
+// ── 3Dプリント向けエクスポート ──
+// LOL → SdfNode → Mesh → STL/3MF のワンストップパイプライン
+pub mod print_export;
+
 // ── 空間枝刈りコンパイラ ──
 pub mod pruned_compile;
 

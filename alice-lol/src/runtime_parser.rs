@@ -1099,6 +1099,56 @@ impl<'a> Parser<'a> {
                 })
             }
 
+            // ── 3D Print Structural Intent (3) ──
+            "lattice_infill" => {
+                let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                Ok(SdfNode::Union {
+                    a: Arc::new(SdfNode::Onion {
+                        child: Arc::new(child.clone()),
+                        thickness: shell_t,
+                    }),
+                    b: Arc::new(SdfNode::Intersection {
+                        a: Arc::new(child),
+                        b: Arc::new(SdfNode::Gyroid {
+                            scale,
+                            thickness: lattice_t,
+                        }),
+                    }),
+                })
+            }
+            "diamond_infill" => {
+                let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                Ok(SdfNode::Union {
+                    a: Arc::new(SdfNode::Onion {
+                        child: Arc::new(child.clone()),
+                        thickness: shell_t,
+                    }),
+                    b: Arc::new(SdfNode::Intersection {
+                        a: Arc::new(child),
+                        b: Arc::new(SdfNode::DiamondSurface {
+                            scale,
+                            thickness: lattice_t,
+                        }),
+                    }),
+                })
+            }
+            "schwarz_infill" => {
+                let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                Ok(SdfNode::Union {
+                    a: Arc::new(SdfNode::Onion {
+                        child: Arc::new(child.clone()),
+                        thickness: shell_t,
+                    }),
+                    b: Arc::new(SdfNode::Intersection {
+                        a: Arc::new(child),
+                        b: Arc::new(SdfNode::SchwarzP {
+                            scale,
+                            thickness: lattice_t,
+                        }),
+                    }),
+                })
+            }
+
             // ── 時間制御 (2) ──
             "animate" => {
                 let speed = self.expect_number()?;

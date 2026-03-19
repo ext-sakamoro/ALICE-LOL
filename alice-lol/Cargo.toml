@@ -34,3 +34,15 @@ name = "autodiff_demo"
 
 [[example]]
 name = "compiled_demo"
+
+[[example]]
+name = "print_demo"
+
+[[example]]
+name = "print_export"
+
+[[example]]
+name = "print_verify"
+
+[[example]]
+name = "alice_coaster"

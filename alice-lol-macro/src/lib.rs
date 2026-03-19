@@ -649,6 +649,26 @@ enum Expr {
         octaves: V,
         child: Box<Self>,
     },
+
+    // ── 3D Print Structural Intent (3) ──
+    LatticeInfill {
+        shell_thickness: V,
+        lattice_scale: V,
+        lattice_thickness: V,
+        child: Box<Self>,
+    },
+    DiamondInfill {
+        shell_thickness: V,
+        lattice_scale: V,
+        lattice_thickness: V,
+        child: Box<Self>,
+    },
+    SchwarzInfill {
+        shell_thickness: V,
+        lattice_scale: V,
+        lattice_thickness: V,
+        child: Box<Self>,
+    },
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1853,6 +1873,35 @@ fn parse_expr(input: ParseStream) -> Result<Expr> {
             })
         }
 
+        // ── 3D Print Structural Intent ──
+        "lattice_infill" => {
+            let (st, ls, lt, child) = parse_3f_child(&content)?;
+            Ok(Expr::LatticeInfill {
+                shell_thickness: st,
+                lattice_scale: ls,
+                lattice_thickness: lt,
+                child: Box::new(child),
+            })
+        }
+        "diamond_infill" => {
+            let (st, ls, lt, child) = parse_3f_child(&content)?;
+            Ok(Expr::DiamondInfill {
+                shell_thickness: st,
+                lattice_scale: ls,
+                lattice_thickness: lt,
+                child: Box::new(child),
+            })
+        }
+        "schwarz_infill" => {
+            let (st, ls, lt, child) = parse_3f_child(&content)?;
+            Ok(Expr::SchwarzInfill {
+                shell_thickness: st,
+                lattice_scale: ls,
+                lattice_thickness: lt,
+                child: Box::new(child),
+            })
+        }
+
         other => Err(syn::Error::new(
             name.span(),
             format!("unknown LOL expression: `{other}`"),
@@ -2494,6 +2543,80 @@ fn codegen(expr: &Expr) -> TokenStream2 {
             let ac = codegen(a);
             let bc = codegen(b);
             quote! { ::alice_lol::SdfNode::Morph { a: ::std::sync::Arc::new(#ac), b: ::std::sync::Arc::new(#bc), t: #t } }
+        }
+
+        // ── 3D Print Structural Intent (糖衣構文 → Union(Onion(child), Intersection(child, TPMS)) に展開) ──
+        Expr::LatticeInfill {
+            shell_thickness,
+            lattice_scale,
+            lattice_thickness,
+            child,
+        } => {
+            let c = codegen(child);
+            quote! { {
+                let __lol_child = #c;
+                ::alice_lol::SdfNode::Union {
+                    a: ::std::sync::Arc::new(::alice_lol::SdfNode::Onion {
+                        child: ::std::sync::Arc::new(__lol_child.clone()),
+                        thickness: #shell_thickness,
+                    }),
+                    b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
+                        a: ::std::sync::Arc::new(__lol_child),
+                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::Gyroid {
+                            scale: #lattice_scale,
+                            thickness: #lattice_thickness,
+                        }),
+                    }),
+                }
+            } }
+        }
+        Expr::DiamondInfill {
+            shell_thickness,
+            lattice_scale,
+            lattice_thickness,
+            child,
+        } => {
+            let c = codegen(child);
+            quote! { {
+                let __lol_child = #c;
+                ::alice_lol::SdfNode::Union {
+                    a: ::std::sync::Arc::new(::alice_lol::SdfNode::Onion {
+                        child: ::std::sync::Arc::new(__lol_child.clone()),
+                        thickness: #shell_thickness,
+                    }),
+                    b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
+                        a: ::std::sync::Arc::new(__lol_child),
+                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::DiamondSurface {
+                            scale: #lattice_scale,
+                            thickness: #lattice_thickness,
+                        }),
+                    }),
+                }
+            } }
+        }
+        Expr::SchwarzInfill {
+            shell_thickness,
+            lattice_scale,
+            lattice_thickness,
+            child,
+        } => {
+            let c = codegen(child);
+            quote! { {
+                let __lol_child = #c;
+                ::alice_lol::SdfNode::Union {
+                    a: ::std::sync::Arc::new(::alice_lol::SdfNode::Onion {
+                        child: ::std::sync::Arc::new(__lol_child.clone()),
+                        thickness: #shell_thickness,
+                    }),
+                    b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
+                        a: ::std::sync::Arc::new(__lol_child),
+                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::SchwarzP {
+                            scale: #lattice_scale,
+                            thickness: #lattice_thickness,
+                        }),
+                    }),
+                }
+            } }
         }
     }
 }
