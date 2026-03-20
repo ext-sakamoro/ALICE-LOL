@@ -258,6 +258,9 @@ subtract(
 | Missing `buffer(0.01).buffer(-0.01)` after booleans | Floating-point errors leave micro-fragments → non-manifold mesh → slicer error | ALWAYS apply epsilon buffer cleanup after `difference()` or `intersection()` |
 | No `is_watertight` check before export | Non-manifold mesh passes silently → fails in slicer | ALWAYS check `mesh.is_watertight` and run `repair.fill_holes()` + `fix_normals()` before export |
 | No build volume assertion | LLM generates 500mm objects that don't fit any printer | ALWAYS assert bounding box ≤ printer max BEFORE export, fail loudly if exceeded |
+| Mount holes in peg slot zone | Peg slots (H=15mm) extend beyond EDGE_MARGIN into frame zone, swallowing mount holes | **EDGE_MARGIN ≥ peg_height/2 + mount_radius + 5mm wall**. Verify `peg_bottom > frame_width` before placing any holes in frame |
+| Mount holes at same XY as connector holes | Larger mount hole (R2.5) visually merges with smaller connector hole (R1.35) — looks like there's no mount hole | Place mount holes at X coordinates that don't coincide with connector hole grid |
+| Slicer displays model Y-flipped | `mesh.apply_translation([-W/2, -H/2, 0])` puts Y=0 at bottom of screen in most slicers, but "top of panel" may appear at bottom | Flip Y axis or document which edge is "up" for wall mounting |
 
 ## Mandatory Code Structure for Multi-Part Scripts
 
