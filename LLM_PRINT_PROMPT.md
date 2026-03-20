@@ -251,6 +251,9 @@ subtract(
 | Sharp internal corners for CNC | Tool can't reach | Use `round(r, ...)` on internal edges |
 | Solid sphere > 50mm diameter (FDM) | Wastes filament, long print time | Use `onion` or `lattice_infill` |
 | Mesh > 1M triangles | Slicer software slows down or rejects | Use resolution ≤ 192 in `PrintConfig` |
+| Load-bearing hole < 3mm from edge | Tear-out failure under load (plastic rips between hole and edge) | Maintain ≥ 5mm solid plastic between load-bearing holes and outer boundary |
+| Mount hole at `frame_width / 2` (center of frame) | Leaves only 1-2mm meat to edge — cracks under wall-mount load | Place mount holes at `frame_width + hole_radius` from edge (≥7mm meat) |
+| Non-circular slot without clearance | FDM shrinks all openings — rectangular slots (e.g. SKADIS pegs) also narrow | Apply `+0.2mm to +0.4mm` clearance to BOTH width AND height of all slots, not just circular holes |
 
 ## Organizer Design Quick Reference
 
