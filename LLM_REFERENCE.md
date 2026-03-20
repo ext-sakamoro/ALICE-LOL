@@ -462,6 +462,9 @@ Anti-patterns:
 - No build volume assertion — LLM generates objects larger than printer bed
 - Cutouts overlapping functional holes (mount, connector) — the cutout eats the surrounding material and the hole vanishes into void. **Always add keepout zones around functional holes before generating cutouts**
 - 4-way connector holes on axes (0,d) instead of diagonals (d,d) — screws hit the seam gap between panels. **Corner connector holes must be at (±d, ±d) diagonal positions**
+- Mount holes placed inside peg slot Y-range — peg slots (height 15.3mm, center Y=10) extend from Y=2.35 to Y=17.65, swallowing any mount hole placed in that zone. **EDGE_MARGIN must be ≥ peg_height/2 + mount_radius + 5mm**
+- Mount holes at same X as connector holes — larger mount hole visually merges with smaller connector hole. **Use different X positions for mount vs connector holes**
+- Model Y-axis orientation in slicer — after `translate(-W/2, -H/2, 0)`, the panel's "top" edge (mount holes) appears at the bottom in most slicers. **Flip Y or clearly document orientation**
 
 ### Single Source of Truth (SSOT) Rule
 
