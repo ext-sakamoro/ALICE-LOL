@@ -469,6 +469,9 @@ Anti-patterns:
 - Connector body too thin for screw head — `(body_edge - hole_center) < screw_head_radius` means screw head protrudes. **Minimum: `edge_margin = screw_head_R + 3mm` = 5.5mm for M2.5**
 - Connector arm too narrow — wall between hole and arm edge < 2mm cracks under torque. **`arm_width ≥ 2 × (hole_offset + head_R + 3mm)`**
 - Keyhole (daruma) slot direction — must extend AWAY from peg slots (toward panel edge). Verify: `slot_extremity < frame_width < peg_bottom_edge`
+- Connector holes asymmetric (`arange(pitch, W, pitch)` starts at `pitch` but ends at `W-remainder`) — seam gap ≠ connector pitch. **Start at `EDGE_MARGIN`, verify `first_hole == W - last_hole`**
+- Keyhole slot in wrong direction — slot must point toward panel edge (outward), not inward. Gravity pulls panel down → screw slides into slot toward edge → locks. **If slot points inward, panel falls off wall**
+- Mount holes not symmetric around panel center — causes tilting when hung on 2 screws. **Verify: `X_left + X_right == PANEL_W` for each symmetric pair**
 
 ### Single Source of Truth (SSOT) Rule
 
