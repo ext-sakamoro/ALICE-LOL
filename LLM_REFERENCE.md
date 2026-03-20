@@ -472,6 +472,8 @@ Anti-patterns:
 - Connector holes asymmetric (`arange(pitch, W, pitch)` starts at `pitch` but ends at `W-remainder`) — seam gap ≠ connector pitch. **Start at `EDGE_MARGIN`, verify `first_hole == W - last_hole`**
 - Keyhole slot in wrong direction — slot must point toward panel edge (outward), not inward. Gravity pulls panel down → screw slides into slot toward edge → locks. **If slot points inward, panel falls off wall**
 - Mount holes not symmetric around panel center — causes tilting when hung on 2 screws. **Verify: `X_left + X_right == PANEL_W` for each symmetric pair**
+- Keyhole slots in different directions for top/bottom — gravity pulls panel DOWN uniformly, so ALL keyholes must have slots pointing the SAME direction (upward/toward top edge). Mixed directions make simultaneous locking physically impossible
+- Connector holes not 180°-rotation-symmetric — modular panels must be interchangeable when rotated. **Build pattern from center outward using mirror: `conn_x_full = sorted(set(left_half + [W - x for x in left_half]))`**
 
 ### Single Source of Truth (SSOT) Rule
 
