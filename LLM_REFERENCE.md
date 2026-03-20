@@ -475,6 +475,8 @@ Anti-patterns:
 - Keyhole slots in different directions for top/bottom — gravity pulls panel DOWN uniformly, so ALL keyholes must have slots pointing the SAME direction (upward/toward top edge). Mixed directions make simultaneous locking physically impossible
 - Connector holes not 180°-rotation-symmetric — modular panels must be interchangeable when rotated. **Build pattern from center outward using mirror: `conn_x_full = sorted(set(left_half + [W - x for x in left_half]))`**
 - Panel outer shape with sharp 90° corners — causes warping on FDM bed, stress cracks at corner screw holes, and painful edges. **Always use `rounded_rect` (R ≥ 4mm) for panel outer shape, not `box`**
+- Wall-mount keyhole with < 10mm wall to panel edge — slot tears under load. **`mount_y ≥ slot_height/2 + 10mm`**. Then add keepout (20mm radius) to prevent cutouts from eating the mount base
+- Mount hole placed inside cutout zone — hole vanishes into void. **Always add `if any(hypot(cx-mx, cy-my) < 20 for mx,my in mounts): continue` in cutout loop**
 - Hard-coded derived values in connector functions — e.g. `[-20, 20]` instead of `[-GRID_PITCH/2, GRID_PITCH/2]`. **ALL derived values must trace back to SSOT constants**
 - Same hole diameter on panel AND connector — both are clearance holes, screw falls through. **Panel = clearance hole (screw_dia + 0.2mm), Connector = tapping hole (screw_dia × 0.85 + 2×A)**
 - Connector body extends into peg slot zone — oversized connector blocks peg insertion from behind. **Verify: `connector_half_height < peg_bottom_edge` with ≥1mm clearance**
