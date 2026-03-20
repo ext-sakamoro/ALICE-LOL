@@ -28,6 +28,11 @@ pub mod runtime_parser;
 // LOL → SdfNode → Mesh → STL/3MF のワンストップパイプライン
 pub mod print_export;
 
+// ── Roblox 向けエクスポート ──
+// LOL → SdfNode → Mesh → OBJ/FBX (MeshPart / アクセサリー用)
+#[cfg(feature = "roblox")]
+pub mod roblox_export;
+
 // ── 空間枝刈りコンパイラ ──
 pub mod pruned_compile;
 

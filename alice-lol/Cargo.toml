@@ -16,6 +16,7 @@ glsl = []
 wgsl = ["alice-sdf/gpu"]
 hlsl = ["alice-sdf/hlsl"]
 physics = ["alice-sdf/physics"]
+roblox = []
 
 [[example]]
 name = "basic"
@@ -46,3 +47,7 @@ name = "print_verify"
 
 [[example]]
 name = "alice_coaster"
+
+[[example]]
+name = "roblox_accessory"
+required-features = ["roblox"]
