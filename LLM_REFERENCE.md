@@ -17,6 +17,7 @@ This compiles to an `SdfNode` tree that can be:
 - Evaluated on CPU (SIMD 8-wide)
 - Transpiled to GLSL/WGSL/HLSL shaders
 - Meshed via Marching Cubes → STL/3MF for 3D printing
+- Exported to OBJ/FBX for Roblox MeshPart / accessories (feature: `roblox`)
 
 ## Syntax Rules
 
@@ -593,3 +594,40 @@ edge_margin = peg_h/2 + min_wall = 8.85mm
 | K-Cup | 51mm top dia × 46mm H |
 | Spice jar (standard) | 43-48mm dia |
 | Toilet paper roll | 40mm bore × 120mm OD × 100mm W |
+
+## Roblox Export (feature: `roblox`)
+
+LOL DSL → OBJ/FBX for Roblox MeshPart / accessories.
+
+### Quick Start
+
+```rust
+use alice_lol::roblox_export::{RobloxConfig, lol_to_obj_roblox};
+
+lol_to_obj_roblox("smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))", "hat.obj", &RobloxConfig::accessory())?;
+```
+
+### Roblox Constraints
+
+| Constraint | Accessory | MeshPart |
+|-----------|-----------|----------|
+| Max triangles | 4,000 | 10,000 |
+| Max size (studs) | 10×10×10 | 10×10×10 |
+| Format | OBJ / FBX | OBJ / FBX |
+| Coordinate | Y-up right-hand | Y-up right-hand |
+
+### Presets
+
+| Preset | `resolution` | `max_triangles` | Use case |
+|--------|-------------|-----------------|----------|
+| `RobloxConfig::accessory()` | 128 | 4,000 | UGC hats, weapons, decorations |
+| `RobloxConfig::meshpart()` | 192 | 10,000 | General MeshParts |
+| `RobloxConfig::preview()` | 64 | 4,000 | Fast preview |
+
+### Design Tips for Roblox Accessories
+
+- Keep shapes simple: `smooth_union` > many `subtract` (fewer triangles)
+- Scale: default `scale_studs = 2.0` → 1.0 SDF unit = 2 studs
+- Avoid thin features: Roblox rendering may Z-fight on <0.05 stud thickness
+- No TPMS infill (`lattice_infill` etc.) — internal geometry wastes triangle budget
+- Use `round()` modifier for smoother edges with fewer triangles
