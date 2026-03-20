@@ -254,6 +254,59 @@ subtract(
 | Load-bearing hole < 3mm from edge | Tear-out failure under load (plastic rips between hole and edge) | Maintain ≥ 5mm solid plastic between load-bearing holes and outer boundary |
 | Mount hole at `frame_width / 2` (center of frame) | Leaves only 1-2mm meat to edge — cracks under wall-mount load | Place mount holes at `frame_width + hole_radius` from edge (≥7mm meat) |
 | Non-circular slot without clearance | FDM shrinks all openings — rectangular slots (e.g. SKADIS pegs) also narrow | Apply `+0.2mm to +0.4mm` clearance to BOTH width AND height of all slots, not just circular holes |
+| Magic numbers in connector functions | Each function computes its own hole spacing → mismatch between parts | **SSOT Rule**: ALL interface dimensions (`CONN_INSET`, `CONN_PITCH`) must be global constants, referenced by every part generator |
+| Missing `buffer(0.01).buffer(-0.01)` after booleans | Floating-point errors leave micro-fragments → non-manifold mesh → slicer error | ALWAYS apply epsilon buffer cleanup after `difference()` or `intersection()` |
+| No `is_watertight` check before export | Non-manifold mesh passes silently → fails in slicer | ALWAYS check `mesh.is_watertight` and run `repair.fill_holes()` + `fix_normals()` before export |
+| No build volume assertion | LLM generates 500mm objects that don't fit any printer | ALWAYS assert bounding box ≤ printer max BEFORE export, fail loudly if exceeded |
+
+## Mandatory Code Structure for Multi-Part Scripts
+
+When generating Python scripts that produce multiple 3D-printable parts, follow this structure:
+
+```python
+# ============================================================
+# 1. GLOBAL CONSTANTS — Single Source of Truth (SSOT)
+# ============================================================
+# ALL interface dimensions defined HERE, not inside functions.
+# Every part generator MUST reference these constants.
+
+PANEL_W = 300.0
+PANEL_T = 5.0
+CONN_SCREW_D = 2.7          # M2.5 hole diameter — same for ALL parts
+CONN_INSET = 4.0             # hole distance from edge — same for ALL parts
+CONN_PITCH = 40.0            # hole spacing — same for ALL parts
+PEG_W = 5.3                  # with FDM clearance (+0.3mm)
+PEG_H = 15.3                 # with FDM clearance (+0.3mm)
+
+# ============================================================
+# 2. GEOMETRY HEALING — after every boolean operation
+# ============================================================
+panel_2d = outer.difference(cuts_union)
+panel_2d = panel_2d.buffer(0.01).buffer(-0.01)  # epsilon cleanup
+panel_2d = make_valid(panel_2d)                   # fix self-intersections
+
+# ============================================================
+# 3. MESH VALIDATION — before every export
+# ============================================================
+if not mesh.is_watertight:
+    trimesh.repair.fill_holes(mesh)
+    trimesh.repair.fix_normals(mesh)
+
+# ============================================================
+# 4. BUILD VOLUME CHECK — before every export
+# ============================================================
+bb = mesh.bounds
+size = bb[1] - bb[0]
+assert size[0] <= MAX_X, f"X={size[0]:.1f}mm exceeds printer limit"
+assert size[1] <= MAX_Y, f"Y={size[1]:.1f}mm exceeds printer limit"
+
+# ============================================================
+# 5. ASSEMBLY VALIDATION — after generating all parts
+# ============================================================
+# Verify: hole diameter match, thickness match, spacing alignment
+```
+
+**Why this structure matters**: LLMs have a tendency to compute dimensions independently in each function, leading to subtle mismatches (e.g., connector holes at 16mm vs panel holes at 40mm). The SSOT pattern forces all parts to reference the same constants, making mismatches impossible by construction.
 
 ## Organizer Design Quick Reference
 

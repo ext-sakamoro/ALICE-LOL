@@ -456,6 +456,49 @@ Anti-patterns:
 - Designing connector hole spacing independently from panel — ALWAYS derive from panel pitch
 - Assuming "close enough" spacing will work — FDM has 0.1-0.2mm accuracy, but 16mm vs 40mm is 24mm off
 - Forgetting to check thickness match — 5mm panel + 4mm connector = misaligned screw depth
+- Hard-coding interface dimensions inside functions — use SSOT global constants
+- Skipping `buffer(0.01).buffer(-0.01)` after booleans — causes non-manifold mesh
+- Exporting without `is_watertight` check — silent failure in slicer
+- No build volume assertion — LLM generates objects larger than printer bed
+
+### Single Source of Truth (SSOT) Rule
+
+**CRITICAL for multi-part designs**: ALL interface dimensions must be defined as global
+constants at the top of the script. Part generators MUST NOT compute their own values.
+
+```
+# GOOD: single definition, referenced everywhere
+CONN_INSET = 4.0
+CONN_PITCH = 40.0
+
+def make_panel():
+    hole_y = CONN_INSET  # ← references global
+def make_connector():
+    hole_y = CONN_INSET  # ← same global, guaranteed match
+
+# BAD: each function computes independently
+def make_panel():
+    hole_y = OUTER_FRAME_W / 2.0  # = 4.0
+def make_connector():
+    hole_y = conn_inset + 1.0     # = 5.0 ← MISMATCH!
+```
+
+### Geometry Healing (Mandatory)
+
+After every boolean operation, apply epsilon buffer cleanup:
+```
+result = shape.difference(cutout)
+result = result.buffer(0.01).buffer(-0.01)  # removes micro-fragments
+result = make_valid(result)                  # fixes self-intersections
+```
+
+Before every 3MF/STL export, validate and repair:
+```
+if not mesh.is_watertight:
+    trimesh.repair.fill_holes(mesh)
+    trimesh.repair.fix_normals(mesh)
+assert mesh.is_watertight, "Mesh must be watertight for 3D printing"
+```
 
 ### Mesh Resolution Guide
 
