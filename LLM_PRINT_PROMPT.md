@@ -261,6 +261,9 @@ subtract(
 | Mount holes in peg slot zone | Peg slots (H=15mm) extend beyond EDGE_MARGIN into frame zone, swallowing mount holes | **EDGE_MARGIN ≥ peg_height/2 + mount_radius + 5mm wall**. Verify `peg_bottom > frame_width` before placing any holes in frame |
 | Mount holes at same XY as connector holes | Larger mount hole (R2.5) visually merges with smaller connector hole (R1.35) — looks like there's no mount hole | Place mount holes at X coordinates that don't coincide with connector hole grid |
 | Slicer displays model Y-flipped | `mesh.apply_translation([-W/2, -H/2, 0])` puts Y=0 at bottom of screen in most slicers, but "top of panel" may appear at bottom | Flip Y axis or document which edge is "up" for wall mounting |
+| Connector too thin — screw head overhangs edge | Hole center to edge < screw_head_radius → screw head protrudes beyond connector body | **edge_margin ≥ screw_head_radius + 3mm wall**. M2.5 head R≈2.5mm → edge_margin ≥ 5.5mm |
+| Connector arm too narrow for screw | Arm width barely contains screw hole — 0.65mm wall cracks on tightening | **arm_width ≥ 2 × (screw_hole_offset + screw_head_radius + 3mm)**. Verify: `(arm_w/2 - hole_offset - screw_r) ≥ 2mm` |
+| Keyhole (daruma) slot extends outside frame | Slot direction (up/down) must stay within frame zone AND not reach peg slot zone | Verify: `slot_top < frame_width` AND `slot_top < peg_bottom_edge` |
 
 ## Mandatory Code Structure for Multi-Part Scripts
 

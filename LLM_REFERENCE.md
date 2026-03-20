@@ -466,6 +466,9 @@ Anti-patterns:
 - Mount holes placed inside peg slot Y-range — peg slots (height 15.3mm, center Y=10) extend from Y=2.35 to Y=17.65, swallowing any mount hole placed in that zone. **EDGE_MARGIN must be ≥ peg_height/2 + mount_radius + 5mm**
 - Mount holes at same X as connector holes — larger mount hole visually merges with smaller connector hole. **Use different X positions for mount vs connector holes**
 - Model Y-axis orientation in slicer — after `translate(-W/2, -H/2, 0)`, the panel's "top" edge (mount holes) appears at the bottom in most slicers. **Flip Y or clearly document orientation**
+- Connector body too thin for screw head — `(body_edge - hole_center) < screw_head_radius` means screw head protrudes. **Minimum: `edge_margin = screw_head_R + 3mm` = 5.5mm for M2.5**
+- Connector arm too narrow — wall between hole and arm edge < 2mm cracks under torque. **`arm_width ≥ 2 × (hole_offset + head_R + 3mm)`**
+- Keyhole (daruma) slot direction — must extend AWAY from peg slots (toward panel edge). Verify: `slot_extremity < frame_width < peg_bottom_edge`
 
 ### Single Source of Truth (SSOT) Rule
 
