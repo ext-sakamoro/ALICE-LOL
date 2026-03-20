@@ -474,6 +474,8 @@ Anti-patterns:
 - Mount holes not symmetric around panel center — causes tilting when hung on 2 screws. **Verify: `X_left + X_right == PANEL_W` for each symmetric pair**
 - Keyhole slots in different directions for top/bottom — gravity pulls panel DOWN uniformly, so ALL keyholes must have slots pointing the SAME direction (upward/toward top edge). Mixed directions make simultaneous locking physically impossible
 - Connector holes not 180°-rotation-symmetric — modular panels must be interchangeable when rotated. **Build pattern from center outward using mirror: `conn_x_full = sorted(set(left_half + [W - x for x in left_half]))`**
+- Panel outer shape with sharp 90° corners — causes warping on FDM bed, stress cracks at corner screw holes, and painful edges. **Always use `rounded_rect` (R ≥ 4mm) for panel outer shape, not `box`**
+- Hard-coded derived values in connector functions — e.g. `[-20, 20]` instead of `[-GRID_PITCH/2, GRID_PITCH/2]`. **ALL derived values must trace back to SSOT constants**
 
 ### Single Source of Truth (SSOT) Rule
 
