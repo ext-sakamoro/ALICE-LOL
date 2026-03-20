@@ -460,6 +460,8 @@ Anti-patterns:
 - Skipping `buffer(0.01).buffer(-0.01)` after booleans — causes non-manifold mesh
 - Exporting without `is_watertight` check — silent failure in slicer
 - No build volume assertion — LLM generates objects larger than printer bed
+- Cutouts overlapping functional holes (mount, connector) — the cutout eats the surrounding material and the hole vanishes into void. **Always add keepout zones around functional holes before generating cutouts**
+- 4-way connector holes on axes (0,d) instead of diagonals (d,d) — screws hit the seam gap between panels. **Corner connector holes must be at (±d, ±d) diagonal positions**
 
 ### Single Source of Truth (SSOT) Rule
 
