@@ -439,6 +439,10 @@ Rules:
 2. **Part thicknesses must match** for flush assembly
 3. **Hole spacings must be integer multiples** — connector hole pitch must equal or be a multiple of panel hole pitch
 4. **Test alignment**: simulate placing connector on panel edge and verify holes align
+5. **Edge-to-Edge Seam Rule**: When joining parts edge-to-edge, the distance between holes across the seam is exactly `margin_A + margin_B`. The connector's hole spacing MUST equal this sum
+6. **Corner holes exist**: If a 4-way connector is designed, verify that the panel actually has holes at its corners — don't assume holes exist everywhere
+7. **Grid Continuity**: For grid systems (SKADIS, Gridfinity), verify grid pitch continues uninterrupted across seams
+8. **Slot clearance**: Clearance rules apply to ALL openings — rectangular slots (e.g. peg slots) need `+0.2 to +0.4mm` on BOTH width AND height, not just circular holes
 
 ```
 // FATAL BUG example (actually happened):
@@ -474,8 +478,11 @@ clearance_snap = A + N × 0.5            // snap-fit clearance (per side)
 clearance_slide = A + N × 0.75          // slide-fit clearance
 pip_gap = L × 2                         // print-in-place gap
 tap_hole = screw_dia × 0.85 + 2 × A    // tapping hole diameter
-hole_model = target_dia + 2 × A         // FDM hole correction
+hole_model = target_dia + 2 × A         // FDM hole correction (circular)
+slot_model_w = target_w + 2 × A        // FDM slot correction (rectangular — BOTH axes)
+slot_model_h = target_h + 2 × A        // e.g. SKADIS peg: 5.0+0.3=5.3mm, 15.0+0.3=15.3mm
 fillet = max(2 × N, 1.0)               // stress relief fillet
+mount_hole_meat = max(hole_r + 5.0, frame_w) // load-bearing hole: ≥5mm meat to edge
 
 // A = printer accuracy: Bambu=0.1mm, Prusa=0.15mm, Ender=0.2mm
 ```
