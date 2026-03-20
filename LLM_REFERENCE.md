@@ -476,6 +476,9 @@ Anti-patterns:
 - Connector holes not 180°-rotation-symmetric — modular panels must be interchangeable when rotated. **Build pattern from center outward using mirror: `conn_x_full = sorted(set(left_half + [W - x for x in left_half]))`**
 - Panel outer shape with sharp 90° corners — causes warping on FDM bed, stress cracks at corner screw holes, and painful edges. **Always use `rounded_rect` (R ≥ 4mm) for panel outer shape, not `box`**
 - Hard-coded derived values in connector functions — e.g. `[-20, 20]` instead of `[-GRID_PITCH/2, GRID_PITCH/2]`. **ALL derived values must trace back to SSOT constants**
+- Same hole diameter on panel AND connector — both are clearance holes, screw falls through. **Panel = clearance hole (screw_dia + 0.2mm), Connector = tapping hole (screw_dia × 0.85 + 2×A)**
+- Connector body extends into peg slot zone — oversized connector blocks peg insertion from behind. **Verify: `connector_half_height < peg_bottom_edge` with ≥1mm clearance**
+- Sharp 90° corners from boolean intersection (e.g. cutout clipped by frame) — stress concentration causes cracks. **Use `buffer(0.5).buffer(-0.5)` after booleans to auto-fillet all sub-R0.5 corners**
 
 ### Single Source of Truth (SSOT) Rule
 
