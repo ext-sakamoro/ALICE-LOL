@@ -429,6 +429,30 @@ Always check output fits target printer:
 | Bambu P1S / X1C | 246 × 246 × 246 |
 | Bambu A1 mini | 170 × 170 × 170 |
 
+### Multi-Part Assembly Validation (MANDATORY)
+
+When generating multi-part designs (panel + connectors, case + lid, etc.),
+**ALL parts must pass assembly validation before export.**
+
+Rules:
+1. **Hole diameters must match** across all parts using the same screw
+2. **Part thicknesses must match** for flush assembly
+3. **Hole spacings must be integer multiples** — connector hole pitch must equal or be a multiple of panel hole pitch
+4. **Test alignment**: simulate placing connector on panel edge and verify holes align
+
+```
+// FATAL BUG example (actually happened):
+// Panel holes: 40mm spacing
+// Connector holes: 16mm spacing → NOT a multiple of 40 → connector won't fit!
+//
+// Fix: connector holes must be 40mm spacing (or 20mm, 80mm — integer multiples)
+```
+
+Anti-patterns:
+- Designing connector hole spacing independently from panel — ALWAYS derive from panel pitch
+- Assuming "close enough" spacing will work — FDM has 0.1-0.2mm accuracy, but 16mm vs 40mm is 24mm off
+- Forgetting to check thickness match — 5mm panel + 4mm connector = misaligned screw depth
+
 ### Mesh Resolution Guide
 
 | Use | Resolution | Triangles | File Size |
