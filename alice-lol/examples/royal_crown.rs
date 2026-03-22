@@ -121,5 +121,7 @@ fn main() {
 
 #[cfg(not(feature = "roblox"))]
 fn main() {
-    eprintln!("roblox feature required: cargo run --example royal_crown --features roblox --release");
+    eprintln!(
+        "roblox feature required: cargo run --example royal_crown --features roblox --release"
+    );
 }
