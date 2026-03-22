@@ -264,6 +264,12 @@ subtract(
 | Connector too thin — screw head overhangs edge | Hole center to edge < screw_head_radius → screw head protrudes beyond connector body | **edge_margin ≥ screw_head_radius + 3mm wall**. M2.5 head R≈2.5mm → edge_margin ≥ 5.5mm |
 | Connector arm too narrow for screw | Arm width barely contains screw hole — 0.65mm wall cracks on tightening | **arm_width ≥ 2 × (screw_hole_offset + screw_head_radius + 3mm)**. Verify: `(arm_w/2 - hole_offset - screw_r) ≥ 2mm` |
 | Keyhole (daruma) slot extends outside frame | Slot direction (up/down) must stay within frame zone AND not reach peg slot zone | Verify: `slot_top < frame_width` AND `slot_top < peg_bottom_edge` |
+| Hook root thickness by guess (e.g. 4mm) | Bending stress breaks the hook — **bending is the primary failure mode, not tension** | Calculate: `t = sqrt(F*L*6*S / (w*σ_eff))`. S-hook 1kgf×25mm lever → **5.2mm min** (not 4mm) |
+| No fillet at hook root / peg junction | Stress concentration Kt=6.7 at sharp corners → crack initiation | **R ≥ 3mm** at all load-bearing junctions (Kt=3.3). R4mm for heavy loads (Kt=3.0) |
+| Container peg without gusset reinforcement | 2kgf × 75mm lever on 5mm-wide peg → **12.8mm min thickness** (impossible without reinforcement) | Add triangular gusset ribs (30×20mm) at peg-to-body junction to distribute bending moment |
+| Shelf without bottom ribs | 3kgf center load → deflection depends on I = w×t³/12 | Add 3+ longitudinal ribs (1.2mm thick, 3mm tall) to increase second moment of area |
+| Hook same width as peg blade (4.5mm) for heavy loads | 3kgf on 4.5mm width → 9.9mm thickness needed (too thick to print) | **Widen hook body** beyond peg blade: 8mm width → 7.5mm thickness (feasible). Peg blade stays 4.5mm |
+| Flat panel with holes via SDF marching cubes | Non-manifold edges (7,000-17,000) — SDF can't resolve thin walls between holes at grid resolution | Use **2D polygon (Shapely) + extrude** for pegboard panels. Reserve SDF for solid 3D shapes |
 
 ## Mandatory Code Structure for Multi-Part Scripts
 
@@ -347,15 +353,27 @@ subtract(
 
 ### SKADIS Panel
 
+**NOTE**: SKADIS panels (thin board + many holes) should use **2D polygon + extrude** (Shapely/trimesh),
+NOT LOL/SDF. SDF marching cubes produces non-manifold edges on this geometry class.
+LOL/SDF is suitable for SKADIS **accessories** (hooks, containers — solid 3D shapes).
+
 ```
-// 300x300mm panel with peg holes
+// SKADIS hook (LOL suitable — solid 3D shape)
+// T-shaped peg: blade 4.5×5mm, shoulder locks behind board
 subtract(
-  rounded_box(150, 150, 2.5, 1.0),
-  union(
-    translate(-141, -141, 0, repeat_finite(7, 7, 0, 40, 40, 0, rounded_box(2.5, 7.5, 3.5, 1.0))),
-    translate(-121, -121, 0, repeat_finite(6, 6, 0, 40, 40, 0, rounded_box(2.5, 7.5, 3.5, 1.0)))
-  )
+  smooth_union(0.5,
+    box3d(2.5, 15, 2.5),
+    translate(0, -20, 0, rounded_box(15, 2.5, 2.5, 1.0))
+  ),
+  translate(0, 15, 0, box3d(3, 5, 3))
 )
+```
+
+SKADIS constants:
+```
+edge_margin = 20mm, grid_pitch = 40mm, stagger = 20mm
+peg_slot = 5 × 15mm (R2.5), board_t = 5mm, corner_R = 9mm
+peg_blade = 4.5 × 5.0mm (FDM), mechanism = T-insert + gravity drop
 ```
 
 ### Cable Clip (parametric)
