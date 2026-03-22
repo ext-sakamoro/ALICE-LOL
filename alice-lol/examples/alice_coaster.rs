@@ -21,8 +21,8 @@ fn main() {
         resolution: 192,
         ..PrintConfig::default()
     }
-        .with_bounds(Vec3::new(-3.0, -0.3, -3.0), Vec3::new(3.0, 0.3, 3.0))
-        .with_scale_mm(20.0);
+    .with_bounds(Vec3::new(-3.0, -0.3, -3.0), Vec3::new(3.0, 0.3, 3.0))
+    .with_scale_mm(20.0);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // ALICE コースター

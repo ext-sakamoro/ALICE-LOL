@@ -41,7 +41,10 @@ fn main() {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     println!("--- 2c. Structural: Schwarz-P Infill (schwarz_infill) ---");
     let schwarz_part = lol! { schwarz_infill(0.05, 5.0, 0.02, cylinder(0.8, 1.0)) };
-    print_eval_grid(&schwarz_part, "Cylinder + Schwarz-P (shell=0.05, scale=5.0)");
+    print_eval_grid(
+        &schwarz_part,
+        "Cylinder + Schwarz-P (shell=0.05, scale=5.0)",
+    );
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 3. 重量物 — ソリッド（変更なし）

@@ -133,13 +133,16 @@ fn main() {
         if inside {
             shell_inside_count += 1;
         }
-        println!("  r={r:.2}: d={d:+.4} [{:}]", if inside { "INSIDE" } else { "outside" });
+        println!(
+            "  r={r:.2}: d={d:+.4} [{:}]",
+            if inside { "INSIDE" } else { "outside" }
+        );
     }
-    assert!(
-        shell_inside_count >= 2,
-        "シェル領域に最低2点はINSIDEが必要"
+    assert!(shell_inside_count >= 2, "シェル領域に最低2点はINSIDEが必要");
+    println!(
+        "  -> PASS: シェル構造を確認 ({shell_inside_count}/{} inside)\n",
+        shell_samples.len()
     );
-    println!("  -> PASS: シェル構造を確認 ({shell_inside_count}/{} inside)\n", shell_samples.len());
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 検証5: 体積比較（ソリッド vs インフィル）
@@ -174,9 +177,9 @@ fn main() {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     println!("--- Test 6: Runtime parser equivalence ---");
     let macro_node = lol! { lattice_infill(0.05, 5.0, 0.02, sphere(1.0)) };
-    let runtime_node = alice_lol::runtime_parser::parse_lol(
-        "lattice_infill(0.05, 5.0, 0.02, sphere(1.0))"
-    ).unwrap();
+    let runtime_node =
+        alice_lol::runtime_parser::parse_lol("lattice_infill(0.05, 5.0, 0.02, sphere(1.0))")
+            .unwrap();
 
     let mut max_diff: f32 = 0.0;
     for i in 0..200 {
@@ -187,7 +190,10 @@ fn main() {
         max_diff = max_diff.max((d_macro - d_runtime).abs());
     }
     println!("  proc_macro vs runtime_parser max diff: {max_diff:.6}");
-    assert!(max_diff < 1e-5, "マクロとランタイムパーサーの出力は一致すべき");
+    assert!(
+        max_diff < 1e-5,
+        "マクロとランタイムパーサーの出力は一致すべき"
+    );
     println!("  -> PASS: 完全一致\n");
 
     println!("=== All 6 verifications PASSED ===");
@@ -237,5 +243,9 @@ fn correlation(a: &[f32], b: &[f32]) -> f32 {
         var_b += db * db;
     }
     let denom = (var_a * var_b).sqrt();
-    if denom < 1e-10 { 0.0 } else { cov / denom }
+    if denom < 1e-10 {
+        0.0
+    } else {
+        cov / denom
+    }
 }

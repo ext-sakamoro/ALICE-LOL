@@ -36,7 +36,10 @@ fn lattice_infill_shell_present() {
     let node = lol! { lattice_infill(0.1, 8.0, 0.02, sphere(1.0)) };
     // 表面のすぐ内側（r=0.95）
     let d_inner = eval(&node, Vec3::new(0.95, 0.0, 0.0));
-    assert!(d_inner < 0.0, "point just inside shell should be negative: {d_inner}");
+    assert!(
+        d_inner < 0.0,
+        "point just inside shell should be negative: {d_inner}"
+    );
     // 外部（r=1.5）
     let d_outer = eval(&node, Vec3::new(1.5, 0.0, 0.0));
     assert!(d_outer > 0.0, "point outside should be positive: {d_outer}");
@@ -78,11 +81,13 @@ fn infill_glsl_output() {
 
 #[test]
 fn runtime_lattice_infill() {
-    let node =
-        alice_lol::runtime_parser::parse_lol("lattice_infill(0.05, 5.0, 0.02, sphere(1.0))")
-            .unwrap();
+    let node = alice_lol::runtime_parser::parse_lol("lattice_infill(0.05, 5.0, 0.02, sphere(1.0))")
+        .unwrap();
     let d = eval(&node, Vec3::ZERO);
-    assert!(d.is_finite(), "runtime lattice_infill should produce valid SDF: {d}");
+    assert!(
+        d.is_finite(),
+        "runtime lattice_infill should produce valid SDF: {d}"
+    );
 }
 
 #[test]
@@ -92,17 +97,22 @@ fn runtime_diamond_infill() {
     )
     .unwrap();
     let d = eval(&node, Vec3::ZERO);
-    assert!(d.is_finite(), "runtime diamond_infill should produce valid SDF: {d}");
+    assert!(
+        d.is_finite(),
+        "runtime diamond_infill should produce valid SDF: {d}"
+    );
 }
 
 #[test]
 fn runtime_schwarz_infill() {
-    let node = alice_lol::runtime_parser::parse_lol(
-        "schwarz_infill(0.05, 5.0, 0.02, cylinder(0.5, 1.0))",
-    )
-    .unwrap();
+    let node =
+        alice_lol::runtime_parser::parse_lol("schwarz_infill(0.05, 5.0, 0.02, cylinder(0.5, 1.0))")
+            .unwrap();
     let d = eval(&node, Vec3::ZERO);
-    assert!(d.is_finite(), "runtime schwarz_infill should produce valid SDF: {d}");
+    assert!(
+        d.is_finite(),
+        "runtime schwarz_infill should produce valid SDF: {d}"
+    );
 }
 
 #[test]
@@ -139,8 +149,5 @@ fn lattice_infill_min_thickness_law() {
     let report = check_laws(&laws, &config);
     // シェル厚 0.1 > min_thickness 0.08 なので、シェル部分はパスするはず
     // （TPMS部分は薄いのでソフト違反の可能性あり。ここでは構造の健全性のみ検証）
-    assert!(
-        report.total_laws == 1,
-        "should have 1 law checked"
-    );
+    assert!(report.total_laws == 1, "should have 1 law checked");
 }

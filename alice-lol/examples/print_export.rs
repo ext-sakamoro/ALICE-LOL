@@ -8,7 +8,7 @@
 //! ```
 
 use alice_lol::lol;
-use alice_lol::print_export::{node_to_stl, node_to_3mf, lol_to_stl, PrintConfig};
+use alice_lol::print_export::{lol_to_stl, node_to_3mf, node_to_stl, PrintConfig};
 use glam::Vec3;
 
 fn main() {
