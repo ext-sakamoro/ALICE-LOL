@@ -735,3 +735,186 @@ lol_to_obj_roblox("smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))", "hat.o
 - Avoid thin features: Roblox rendering may Z-fight on <0.05 stud thickness
 - No TPMS infill (`lattice_infill` etc.) — internal geometry wastes triangle budget
 - Use `round()` modifier for smoother edges with fewer triangles
+
+## Environment & Rendering Pipeline (GLSL Export)
+
+LOL scenes can be exported as complete GLSL fragment shaders with a full rendering environment (sky, weather, lighting, destruction). This is the pipeline used for the ALICE metaverse.
+
+### How It Works
+
+```
+LOL DSL → SdfNode → to_glsl_full(&node, &RenderConfig) → Complete GLSL fragment shader
+```
+
+```rust
+use alice_lol::{lol, to_glsl_full};
+use alice_sdf::compiled::glsl::RenderConfig;
+
+let scene = lol! {
+    union(
+        plane(0.0, 1.0, 0.0, 0.0),
+        translate(0.0, 2.0, 0.0, sphere(1.0))
+    )
+};
+let config = RenderConfig::default();
+let glsl = to_glsl_full(&scene, &config);
+// → Full GLSL ES 300 shader with PBR, sky, weather, fog, post-process
+```
+
+### Making Ground (Terrain)
+
+The simplest ground is a Y=0 plane:
+
+```
+plane(0.0, 1.0, 0.0, 0.0)
+```
+
+Add surface detail with `noise` or `displacement`:
+
+```
+noise(0.1, 2.0, 42, plane(0.0, 1.0, 0.0, 0.0))
+```
+
+For biome-based terrain (snow, rock, desert, grass with phase transitions), enable `biome_terrain: true` in `RenderConfig`. This uses Voronoi erosion and FBM per biome.
+
+### Making Sky
+
+Sky is **automatically generated** by the rendering pipeline — you don't define it in LOL. The generated GLSL includes:
+
+- **Day/Night cycle**: Rayleigh/Mie scattering, sun disc with limb darkening, moon, stars, milky way, aurora
+- **Clouds**: Dual-layer (cumulus + cirrus), weather-responsive
+- **Golden hour**: Ozone absorption, warm color shift
+
+Control via uniforms: `uDayPhase` (0.0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk)
+
+### Weather System
+
+Also automatic. The generated shader responds to these uniforms:
+
+| Uniform | Range | Effect |
+|---------|-------|--------|
+| `uWxFog` | 0-1 | Exponential height-fog + cloud thickening |
+| `uWxRain` | 0-1 | Rain streaks + floor wetness + splash ripples |
+| `uLightning` | 0-1 | Global illumination flash (fast decay) |
+
+### Environment Feature Flags
+
+Enable advanced features via `RenderConfig`:
+
+```rust
+let config = RenderConfig {
+    // ── Ground & Sky (default ON) ──
+    day_night_cycle: true,    // sun/moon/stars animate via uDayPhase
+    weather_system: true,     // fog, rain, lightning
+    biome_terrain: false,     // Voronoi erosion terrain (enable for outdoor scenes)
+    volumetric_light: true,   // god rays + volumetric scatter
+    post_process: true,       // ACES tonemap, bloom, CA, vignette, grain
+
+    // ── Advanced (default OFF — enable for metaverse-grade) ──
+    spectral_rendering: false, // Planck blackbody + CIE 1931 wavelength rendering
+    destruction: false,        // Voronoi cracking, meteor, debris, shockwave
+    vfx_effects: false,        // domain warp plasma, DBM discharge, analytic bloom
+    interior_mapping: false,   // pseudo-rooms behind glass surfaces
+    micro_normal: false,       // nanoscale surface detail
+    ssr_enabled: true,         // screen-space reflection on floor
+    dual_sdf: false,           // separate lite SDF for AO/shadow (performance)
+    material_slots: 1,         // 1 = uniform material, 2+ = per-object materials
+
+    max_steps: 128,            // raymarch steps (64 for Windows TDR safety)
+    max_distance: 200.0,       // raymarch max distance
+    glsl_version: 300,         // GLSL ES version
+};
+```
+
+### Multi-Material Scenes
+
+For scenes with different materials per object, set `material_slots > 1`. Your LOL scene must use `with_material(id, ...)`:
+
+```
+union(
+    with_material(0, plane(0.0, 1.0, 0.0, 0.0)),
+    with_material(1, translate(0.0, 2.0, 0.0, sphere(1.0))),
+    with_material(2, translate(3.0, 1.5, 0.0,
+        smooth_union(0.2, torus(1.0, 0.3), cylinder(0.2, 1.5))
+    ))
+)
+```
+
+Then provide a `getMat(float id, vec3 p)` function in the SDF source that maps IDs to PBR materials (albedo, metallic, roughness, emission, SSS).
+
+### Destruction System
+
+When `destruction: true`, the shader gains Voronoi cracking, falling debris, meteor impact, and shockwave effects. Drive from JS/host:
+
+| Uniform | Type | Description |
+|---------|------|-------------|
+| `uEntropy` | float | Global entropy level (0-1) |
+| `uShatter` | float | Destruction intensity (0-1) |
+| `uMeteorY` | float | Meteor altitude |
+| `uMeteorActive` | float | Meteor visibility (0 or 1) |
+| `uMeteorImpact` | vec2 | Impact center XZ |
+| `uImpact` | float | Impact crater depth |
+| `uImpactRing` | float | Destruction ring radius |
+| `uShake` | vec2 | Camera shake offset |
+
+Use `sdDestruction(p, original_sdf, destruction_amount)` in your SDF to apply cracking to any surface.
+
+### VFX Functions (when `vfx_effects: true`)
+
+Available in your SDF or material code:
+
+| Function | Description |
+|----------|-------------|
+| `dWarp(p, time, intensity)` | Domain warp — organic plasma distortion |
+| `dbmDischarge(p, src, charge, time)` | Fractal discharge arcs (6-fold) |
+| `aBloom(distance, color, intensity, falloff)` | Analytic bloom (no blur pass) |
+
+### Spectral Functions (when `spectral_rendering: true`)
+
+| Function | Description |
+|----------|-------------|
+| `blackbody(K)` | Temperature (Kelvin) → RGB color |
+| `spectralToRGB(lambda)` | Wavelength (nm) → linear RGB via CIE 1931 |
+| `spectralBlackbody(K)` | Planck integral over visible range (4 samples) |
+| `rayleighSpectral(mu, am, densR, extR)` | λ^-4 spectral scattering (4 samples) |
+
+### Physics-Driven Environment (ALICE-Physics)
+
+The destruction uniforms (`uShatter`, `uEntropy`, `uImpact`, etc.) can be driven by ALICE-Physics simulation instead of manual animation. The physics engine provides:
+
+| Physics Module | What It Simulates | Drives |
+|---------------|-------------------|--------|
+| **Thermal** | Heat diffusion, melting, freezing | `uShatter` (melt intensity), `uEntropy` (material loss) |
+| **Fracture** | Stress-driven crack propagation | `uShatter` (crack intensity) |
+| **Pressure** | Contact force deformation | `uImpact` (crater depth) |
+| **Erosion** | Wind/water/chemical erosion | `uEntropy` (degradation) |
+| **Explosion** | Force field with blast radius | `uMeteorImpact` (center), `uImpactRing` (radius) |
+
+The application layer samples physics fields each frame and uploads to shader uniforms. See [ALICE-Physics README](../ALICE-Physics/README.md#rendering-pipeline-integration-alice-sdf-v140) for details.
+
+### Example: Complete Outdoor Scene
+
+```
+union(
+    noise(0.08, 1.5, 42, plane(0.0, 1.0, 0.0, 0.0)),
+    translate(0.0, 3.0, 0.0,
+        smooth_union(0.3,
+            sphere(1.5),
+            translate(0.0, 2.0, 0.0, sphere(1.0))
+        )
+    ),
+    translate(5.0, 0.0, 0.0,
+        twist(0.3, taper(0.2, cylinder(0.8, 3.0)))
+    ),
+    translate(-4.0, 1.5, 2.0,
+        icosahedral_symmetry(translate(1.0, 0.0, 0.0, sphere(0.15)))
+    )
+)
+```
+
+With `RenderConfig::default()`, this generates a shader with:
+- Physically correct sky (Rayleigh/Mie + sun/moon/stars + clouds)
+- PBR lighting (Cook-Torrance GGX, 3 directional + 5 point lights)
+- Weather (fog, rain, lightning)
+- Post-processing (ACES, bloom, chromatic aberration, vignette)
+- ~600 lines of optimized GLSL ES 300
