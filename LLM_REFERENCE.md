@@ -551,6 +551,61 @@ mount_hole_meat = max(hole_r + 5.0, frame_w) // load-bearing hole: ≥5mm meat t
 // A = printer accuracy: Bambu=0.1mm, Prusa=0.15mm, Ender=0.2mm
 ```
 
+### Bending Stress Formula (hooks, cantilevers, peg junctions)
+
+**The primary failure mode for hooks and cantilevered parts is BENDING, not tension.**
+
+```
+σ_bend = F × L × 6 / (w × t²)      // max bending stress (rectangular section)
+t_min = sqrt(F × L × 6 × S / (w × σ_eff))  // minimum thickness from load
+
+F = load (N) = kgf × 9.81
+L = lever arm (mm) = distance from support to load point
+w = width (mm) = cross-section width perpendicular to bending
+t = thickness (mm) = cross-section height in bending direction
+S = safety factor (3.0 for FDM PLA)
+σ_eff = tensile × layer_adhesion (35.75 MPa for PLA)
+```
+
+**Worked examples (PLA, 0.4mm nozzle, safety=3):**
+
+| Part | Load | Lever | Width | Min thickness | Notes |
+|------|------|-------|-------|---------------|-------|
+| S-Hook root | 1kgf | 25mm | 5mm | **5.2mm** | Widen to 8mm → 4.0mm |
+| J-Hook root | 3kgf | 30mm | 5mm | **9.9mm** | Widen to 8mm → 7.5mm |
+| L-Hook root | 5kgf | 80mm | 45mm | **6.6mm** | 2-peg width distributes load |
+| Container peg | 2kgf | 75mm | 5mm | **12.8mm** | Use gusset reinforcement |
+| Shelf center | 3kgf | 40mm | 260mm | **1.5mm** | Wide span = thin OK |
+
+**Key insight**: Widening the part (w↑) reduces required thickness (t↓) quadratically less than increasing lever arm (L↑) increases it. For heavy loads, widen the cross-section rather than just thickening.
+
+### Stress Concentration (Fillet Radius)
+
+```
+Kt ≈ 1 + 2 × sqrt(notch_depth / fillet_radius)
+```
+
+| Fillet R | Kt (4mm notch) | Effect |
+|----------|---------------|--------|
+| 0.5mm | 6.66 | Stress 6.7× → cracks |
+| 1.0mm | 5.00 | Still high |
+| 2.0mm | 3.83 | Acceptable for light loads |
+| 3.0mm | 3.31 | Good for hooks (1-3kgf) |
+| 4.0mm | 3.00 | Best for heavy loads (5kgf+) |
+
+**Rule**: R ≥ 3mm at load-bearing junctions (hook root, peg-to-body, container corner).
+
+### Material Properties (formulas.rs)
+
+| Material | Tensile (MPa) | Adhesion | σ_eff (MPa) | E (MPa) | Best for |
+|----------|--------------|----------|-------------|---------|----------|
+| PLA | 55 | 0.65 | 35.75 | 3500 | General, rigid |
+| PETG | 48 | 0.82 | 39.36 | 2100 | Moisture, impact |
+| ABS | 40 | 0.75 | 30.00 | 2300 | Heat resistance |
+| Nylon | 60 | 0.87 | 52.20 | 1700 | Hinges, tough |
+| NylonCF | 120 | 0.80 | 96.00 | 6000 | Max strength |
+| TPU | 30 | 0.90 | 27.00 | 26 | Flexible, grips |
+
 ### Standard Values (Bambu H2D, 0.4mm nozzle, 0.2mm layer, PLA)
 
 | Parameter | Formula | Value |
@@ -580,12 +635,46 @@ corner_fillet = 4.0mm
 ### IKEA SKADIS
 
 ```
-peg_slot = 5 × 15mm (R2.5)
+peg_slot = 5 × 15mm (R2.5, stadium-shaped)
 grid_pitch = 40mm
 stagger_offset = 20mm
 thickness = 5mm
-edge_margin = peg_h/2 + min_wall = 8.85mm
+corner_fillet = 9mm
+edge_margin = 20mm (V10実証値。18mm未満はペグ穴がフレームに侵入)
+outer_frame = 12mm
+conn_inset = 6mm (= outer_frame / 2)
+
+# Peg/hook cross-section (accessory side)
+peg_blade_w = 5.0mm (matches slot width)
+peg_blade_t = 4.6mm (4.5mm for FDM snug fit)
+mechanism = T-shaped insert-and-drop (gravity lock)
+
+# FDM compensation
+fdm_clearance = +0.3mm → slot 5.3 × 15.3mm
 ```
+
+**生成方式の選択**:
+- **パネル（薄板+大量穴）**: 2Dポリゴン(Shapely) + extrude → 3MF。SDF+マーチングキューブは非多様体多発
+- **アクセサリー（フック/コンテナ/棚）**: 2D側面プロファイル + extrude → 3MF。曲げ応力計算で断面厚を決定
+
+**SKADIS accessory design rules (物理最適化)**:
+1. **曲げ応力で断面厚を決定**: `t = sqrt(F*L*6*S / (w*σ_eff))` — 推測で4mmにしない
+2. **ペグ根元にR3-4mmフィレット**: 応力集中Kt=3.0-3.3に抑制
+3. **コンテナ/棚のペグ接合部**: ガセット(三角リブ)で曲げモーメントを分散
+4. **幅を広げて厚みを減らす**: J-Hook 5mm→8mm幅で必要厚9.9mm→7.5mmに低減
+5. **棚の底面リブ**: たわみδ = F*L³/(48*E*I) で検証、リブで剛性向上
+
+**SKADIS accessory load table**:
+
+| Accessory | Load | Lever | Width | Min t | Fillet |
+|-----------|------|-------|-------|-------|--------|
+| S-Hook | 1kgf | 25mm | 5mm | 5.2mm | R3 |
+| J-Hook | 3kgf | 30mm | 8mm | 7.5mm | R4 |
+| L-Hook (2peg) | 5kgf | 80mm | 45mm | 7.0mm | R4 |
+| Container peg | 2kgf | 75mm | 5mm | 12.8mm | gusset |
+| Shelf | 3kgf | 40mm | 260mm | 2.0mm | ribs |
+| Clip | 0.1kgf | 20mm | 15mm | 1.4mm | R1.5 |
+| Elastic cord | 0.5kgf | 10mm | 5mm | 2.3mm | R3 |
 
 ### Standard Clearances (FDM, per side)
 
