@@ -2,3 +2,6 @@
 CLAUDE.md
 .claude/
 .DS_Store
+*.obj
+*.fbx
+lol_print_output/

@@ -333,6 +333,333 @@ diamond_infill(0.04, 6.0, 0.03,
 schwarz_infill(0.05, 4.0, 0.02, box3d(1.0, 1.0, 1.0))
 ```
 
+## Laser Engraving — Comprehensive Technical Reference
+
+LOL scenes and formulas can be output as laser-engraving SVGs. This section covers the full pipeline from LOL → SVG → Laser, material parameters, pattern generation algorithms, and failure avoidance.
+
+### Critical Rules for Laser SVG Generation
+
+| # | Rule | Reason |
+|---|------|--------|
+| 1 | **NO background rect** | The material surface IS the background. A `<rect fill="#0a0a0a">` will be interpreted as "engrave everything", destroying coatings and causing heat tinting. |
+| 2 | **Layer separation** | Each power level = separate SVG (or clearly separated by color). Bambu Studio imports SVG colors as layers. |
+| 3 | **Process order: weak → strong** | GHOST → DIM → SILVER → WHITE. Strong engraving first causes heat warping that shifts subsequent positions 0.1-0.3mm. |
+| 4 | **Minimum font size** | Readable text: ≥ 2.0mm. Ghost watermark: ≥ 1.0mm. Below 1.0mm, laser line interval cannot resolve characters. |
+| 5 | **QR module size ≥ 0.6mm** | Smaller modules merge under heat spread. Level H error correction: 0.8mm recommended. |
+| 6 | **No SVG transparency/opacity** | Laser software ignores alpha. Use distinct fill colors only. |
+| 7 | **Monospace fonts only** | Proportional fonts create inconsistent stroke widths at sub-1mm scales. |
+| 8 | **Kerf compensation for cuts** | Diode laser kerf = 0.1-0.3mm. Offset cut path by half-kerf outward for dimensional accuracy. |
+
+### Laser Types and Material Compatibility
+
+| Laser Type | Wavelength | Metals | Wood | Acrylic | Leather | Glass | Stone |
+|-----------|-----------|--------|------|---------|---------|-------|-------|
+| **Diode** (H2D 40W) | 455nm | Coated/anodized only | Yes | Dark only | Yes | No | Dark only |
+| **CO2** | 10.6μm | With marking spray | Yes | Yes (all) | Yes | Yes | Yes |
+| **Fiber** | 1064nm | Yes (all) | No | No | No | No | No |
+| **MOPA Fiber** | 1064nm | Yes + color marking | No | No | No | No | No |
+
+**Key insight**: Diode lasers (455nm blue) cannot engrave raw/bare metals — they reflect the beam. They work on:
+- **Coated metals**: Black matte, painted, powder-coated → removes coating to expose base metal
+- **Anodized aluminum**: Burns through anodized layer → white marks on colored surface
+- **Marking spray** (CerMark/LaserBond): Applied coating absorbs beam → fuses to metal permanently
+
+### DPI, Line Interval, and Spot Size
+
+```
+line_interval (mm) = 25.4 / DPI
+spot_size (mm) ≈ 0.08 (H2D focused)
+max_effective_DPI = 25.4 / spot_size ≈ 317 DPI
+
+DPI    Line Interval   Quality         Use Case
+─────────────────────────────────────────────────
+150    0.169mm         Low             Fast preview, large fills
+254    0.100mm         Standard        General engraving
+300    0.085mm         High            Photo engraving, fine text
+317    0.080mm         Maximum         Spot-size limited (H2D)
+500+   0.050mm         Overkill        Lines overlap → muddy/dark
+```
+
+**Rule**: Never set line interval smaller than spot size. Overlapping lines cause charring (wood), melting (acrylic), or heat tinting (metal).
+
+### Material Parameter Tables
+
+#### Metals (Diode 40W, Bambu H2D)
+
+| Material | Preparation | Power% | Speed mm/min | Interval mm | Passes | Air | Notes |
+|----------|------------|--------|-------------|-------------|--------|-----|-------|
+| SUS304 black matte (WHITE) | None | 100 | 800 | 0.05 | 2 | ON | Full coating removal |
+| SUS304 black matte (SILVER) | None | 80 | 1000 | 0.06 | 1 | ON | Near-full removal |
+| SUS304 black matte (DIM) | None | 40 | 1500 | 0.08 | 1 | ON | Partial — dark gray |
+| SUS304 black matte (GHOST) | None | 18 | 3000 | 0.10 | 1 | OFF | Surface alteration only |
+| Anodized aluminum | None | 60-80 | 1500-3000 | 0.06 | 1 | ON | Burns through anodize → white |
+| Bare stainless | CerMark spray | 100 | 600 | 0.05 | 2 | ON | Spray fuses to surface → black mark |
+| Bare aluminum | CerMark spray | 100 | 800 | 0.05 | 1 | ON | Less heat retention than steel |
+| Brass | CerMark spray | 100 | 500 | 0.05 | 2 | ON | Highly reflective — spray mandatory |
+| Copper | Not recommended | — | — | — | — | — | Too reflective, damages optics |
+
+#### Wood (Diode 40W)
+
+| Wood Type | Power% | Speed mm/min | Interval mm | Passes | Air | Notes |
+|-----------|--------|-------------|-------------|--------|-----|-------|
+| Basswood | 30-50 | 3000-6000 | 0.08 | 1 | ON | Soft — low power to avoid charring |
+| Plywood (3mm) | 40-60 | 2000-4000 | 0.08 | 1 | ON | Glue layers engrave differently |
+| Cherry | 50-70 | 2000-4000 | 0.08 | 1 | ON | Hard — needs more energy |
+| Walnut | 60-80 | 1500-3000 | 0.08 | 1 | ON | Dark wood — contrast comes from texture, not color |
+| Maple | 40-60 | 2000-4000 | 0.08 | 1 | ON | Light wood — high contrast |
+| Bamboo | 40-60 | 3000-5000 | 0.08 | 1 | ON | Silica content varies |
+| MDF | 30-50 | 3000-6000 | 0.08 | 1 | ON | Very consistent — good for prototyping |
+| Cork | 15-25 | 4000-6000 | 0.10 | 1 | OFF | Very low power — burns easily |
+
+#### Other Materials (Diode 40W)
+
+| Material | Power% | Speed mm/min | Interval mm | Passes | Air | Notes |
+|----------|--------|-------------|-------------|--------|-----|-------|
+| Dark acrylic (3mm) | 80-100 | 1500-3000 | 0.06 | 1 | ON | Clear acrylic: diode beam passes through |
+| Leather (natural) | 20-40 | 3000-6000 | 0.08 | 1 | OFF | Low power — charring threshold is low |
+| Leather (synthetic) | 15-30 | 3000-6000 | 0.08 | 1 | OFF | Toxic fumes — ventilation mandatory |
+| Cardboard | 15-25 | 4000-8000 | 0.10 | 1 | ON | Very flammable |
+| Slate | 80-100 | 800-1500 | 0.06 | 1-2 | ON | Creates white mark on dark stone |
+| Dark marble | 80-100 | 600-1200 | 0.06 | 2 | ON | Micro-fractures surface → white |
+
+### Heat Tinting (Stainless Steel)
+
+When stainless steel reaches 200-400°C, thin oxide films form interference colors:
+
+| Temperature | Color | Oxide Thickness |
+|------------|-------|----------------|
+| 200°C | Pale yellow | ~30nm |
+| 250°C | Straw/gold | ~45nm |
+| 300°C | Brown/purple | ~65nm |
+| 350°C | Blue | ~80nm |
+| 400°C | Light blue/gray | ~100nm |
+
+**MOPA fiber lasers** exploit this for deliberate color marking (adjustable pulse width + frequency). Diode lasers cannot reliably control this — heat tinting on diode is an **unwanted artifact** indicating over-processing.
+
+### Grayscale Engraving Techniques
+
+#### 1. Direct Power Modulation (Grayscale Mode)
+
+Laser power varies continuously per pixel based on grayscale value. Best for 3D depth engraving on wood.
+
+```
+Grayscale Value → Laser Response
+0   (white)     → No engraving (skip)
+64  (light gray) → 25% power — surface marking
+128 (mid gray)   → 50% power — moderate depth
+192 (dark gray)  → 75% power — deep engraving
+255 (black)      → 100% power — maximum depth
+```
+
+Best materials: Basswood, MDF, leather (consistent grain). Poor: Walnut, plywood (grain/glue inconsistency).
+
+#### 2. Dithering (Binary On/Off per Pixel)
+
+Converts grayscale to binary dot patterns. Each pixel is either "fire" or "skip". Tone represented by dot density.
+
+| Algorithm | Diffusion Matrix | Best For | Character |
+|-----------|-----------------|----------|-----------|
+| **Floyd-Steinberg** | 4 neighbors (7,3,5,1)/16 | General purpose | Good detail, slight directional artifacts |
+| **Jarvis-Judice-Ninke** | 12 neighbors | Smooth gradients | Smoother than F-S, slower |
+| **Stucki** | 12 neighbors (different weights) | Photo engraving | Balanced detail + smoothness |
+| **Atkinson** | 6 neighbors, keeps 75% error | Line art, text | Lighter result — good for laser (less burning) |
+| **Ordered (Bayer)** | NxN threshold matrix | Regular patterns | Structured grid look — good for metal |
+
+**Floyd-Steinberg error diffusion (the reference algorithm)**:
+```
+for each pixel (x, y) from left-to-right, top-to-bottom:
+    old = pixel[x][y]
+    new = round(old)     // quantize to 0 or 255
+    error = old - new
+    pixel[x][y] = new
+    pixel[x+1][y  ] += error × 7/16
+    pixel[x-1][y+1] += error × 3/16
+    pixel[x  ][y+1] += error × 5/16
+    pixel[x+1][y+1] += error × 1/16
+```
+
+**Atkinson** is preferred for laser because it distributes only 75% of error (6/8 instead of 16/16), producing lighter output that prevents over-burning on organic materials.
+
+#### 3. Halftone (Amplitude Modulation)
+
+Dot size varies with tone. Fixed grid spacing. Classic "newspaper print" look.
+
+```
+For each cell (cx, cy) in grid:
+    gray = average_brightness(cell_region)
+    dot_radius = max_radius × (1.0 - gray / 255.0)
+    emit circle at (cx, cy) with radius dot_radius
+```
+
+- **LPI** (lines per inch): Determines grid spacing. 20-40 LPI for laser engraving.
+- Higher LPI = finer detail but requires smaller spot size.
+
+#### 4. Voronoi Stippling (Weighted Centroidal)
+
+Produces organic, hand-drawn stipple look. Based on Lloyd's relaxation algorithm.
+
+```
+1. Seed N random points (N = desired dot count, 5000-50000)
+2. Weight each point by image darkness at that position
+3. Compute Voronoi diagram
+4. Move each point to weighted centroid of its Voronoi cell
+5. Repeat steps 3-4 for 30-50 iterations until convergence
+6. Emit dots at final positions (optionally vary dot size by local darkness)
+```
+
+Excellent for artistic engraving on wood and leather. Each dot = single laser pulse.
+
+### Parametric Pattern Generation (LOL-Compatible)
+
+These mathematical patterns can be generated programmatically and output as laser SVGs. All formulas use parametric curves suitable for vector (line) engraving.
+
+#### Guilloche / Spirograph (Hypotrochoid)
+
+```
+x(t) = (R - r) × cos(t) + d × cos((R - r) / r × t)
+y(t) = (R - r) × sin(t) - d × sin((R - r) / r × t)
+
+R = fixed circle radius
+r = rolling circle radius
+d = pen offset from rolling circle center
+t = 0 to 2π × LCM(R, r) / R
+```
+
+Used for security patterns (banknotes), decorative borders, watch faces. Engrave as vector lines — never raster fill.
+
+#### Lissajous Curves
+
+```
+x(t) = A × sin(a × t + δ)
+y(t) = B × sin(b × t)
+
+a, b = frequency ratio (integer → closed curve)
+δ = phase shift (π/2 → ellipse, 0 → line through origin)
+```
+
+Decorative fills, pendulum-inspired patterns. a:b = 3:2, 5:4 produce complex figures.
+
+#### Rose Curves (Rhodonea)
+
+```
+r(θ) = cos(k × θ)      // polar coordinates
+x = r × cos(θ), y = r × sin(θ)
+
+k = n/d (rational)
+n petals if k is odd, 2n petals if k is even
+```
+
+Flower-like radial patterns. Excellent for medallions and circular plaques.
+
+#### Phyllotaxis (Sunflower Spiral)
+
+```
+θ_n = n × 137.508°     // golden angle
+r_n = c × √n           // Vogel's model
+
+x_n = r_n × cos(θ_n)
+y_n = r_n × sin(θ_n)
+```
+
+Natural-looking dot distributions. Can vary dot size by distance from center. Good for organic stipple effects combined with Voronoi.
+
+#### Reaction-Diffusion (Turing Patterns)
+
+```
+∂u/∂t = Dᵤ∇²u + f(u, v)    // activator
+∂v/∂t = Dᵥ∇²v + g(u, v)    // inhibitor
+
+Gray-Scott model: f = -uv² + F(1-u), g = uv² - (F+k)v
+F = feed rate, k = kill rate
+Dᵤ, Dᵥ = diffusion rates (Dᵥ >> Dᵤ for pattern formation)
+```
+
+Produces spots, stripes, labyrinths depending on F and k parameters. Simulate on 2D grid → threshold → laser binary pattern.
+
+| F | k | Pattern |
+|---|---|---------|
+| 0.055 | 0.062 | Spots |
+| 0.040 | 0.060 | Stripes |
+| 0.030 | 0.057 | Labyrinth |
+| 0.025 | 0.060 | Worms |
+
+### Proposed LOL 2D Constructs for Laser Patterns
+
+Future LOL additions for programmatic laser pattern generation:
+
+| Proposed Syntax | Args | Description |
+|----------------|------|-------------|
+| `halftone(lpi, max_r, child)` | lines/inch, max dot radius, 2D child | AM halftone — dot size modulated by child SDF distance |
+| `dither(algorithm, dpi, child)` | 0=Floyd-Steinberg/1=Atkinson/2=Stucki/3=Jarvis/4=Bayer, dots/inch, child | Error-diffusion dithering of SDF field |
+| `hatch(angle, spacing, child)` | degrees, line spacing mm, 2D child | Linear hatching fill |
+| `crosshatch(spacing, child)` | line spacing mm, 2D child | Dual-angle (0°+90°) hatch fill |
+| `stipple(n, iterations, child)` | dot count, Lloyd iterations, 2D child | Voronoi stippling |
+| `guilloche(R, r, d, child)` | fixed R, rolling r, pen offset, 2D boundary | Spirograph constrained to shape |
+| `lissajous(a, b, delta, child)` | freq X, freq Y, phase, 2D boundary | Lissajous fill pattern |
+| `rose(k, child)` | petal parameter, 2D boundary | Rhodonea curve fill |
+| `phyllotaxis(n, c, child)` | dot count, scale, 2D boundary | Sunflower spiral dot placement |
+| `turing(F, k, res, child)` | feed, kill, grid resolution, 2D boundary | Reaction-diffusion pattern |
+| `density_hatch(min_s, max_s, angle, child)` | min spacing, max spacing, angle, 2D child | Spacing varies with SDF distance → variable tone |
+
+These would compile to SVG path data (vector lines/dots) rather than SdfNode trees, as they target 2D fabrication output.
+
+### Color-to-Power Mapping (SUS304 Black Matte, H2D 40W)
+
+The principle: control color output by how much black coating the laser removes from stainless steel.
+
+| SVG Color | Layer | Power | Speed | Interval | Pass | Air | Effect |
+|-----------|-------|-------|-------|----------|------|-----|--------|
+| `#1e1e1e` | GHOST | 18% | 3000mm/min | 0.10mm | 1 | OFF | Surface alteration only — visible at angle |
+| `#666666` | DIM | 40% | 1500mm/min | 0.08mm | 1 | ON | Partial removal — dark gray |
+| `#C0C0C0` | SILVER | 80% | 1000mm/min | 0.06mm | 1 | ON | Near-full removal — subdued silver |
+| `#FFFFFF` | WHITE | 100% | 800mm/min | 0.05mm | 2 | ON | Full coating removal — bright white |
+| `#0a0a0a` | — | — | — | — | — | — | **DO NOT INCLUDE** (unprocessed surface) |
+
+Key principles:
+- **Density**: Whiter = narrower line interval (0.05mm) = higher laser density
+- **Passes**: Only WHITE uses 2 passes for maximum contrast
+- **Air assist**: OFF only for GHOST (too weak — air would dissipate the effect)
+
+### Anti-Patterns (from real failures)
+
+| Anti-Pattern | What Happens | Fix |
+|-------------|-------------|-----|
+| Include `<rect fill="#0a0a0a">` background | Entire card surface gets laser-blasted, all contrast lost, rainbow heat tinting | Remove background rect from laser SVGs entirely |
+| Import design SVG directly into Bambu Studio | Background rect treated as engravable area | Use `laser-svg` command to generate background-free versions |
+| All layers in one SVG with single power setting | QR and ghost text get same exposure — QR unreadable or ghost text too visible | Separate SVGs per layer, each with own power/speed |
+| GHOST text at font-size < 1mm | Characters merge into uniform texture, no formula legibility even at angle | Minimum 1.0mm for ghost, 2.0mm for readable |
+| Strong engraving (WHITE) before weak (GHOST) | Heat warping from 100% pass shifts subsequent ghost positions by 0.1-0.3mm | Always process weakest layer first |
+| DPI > spot size limit (317 for H2D) | Overlapping scan lines → charring/melting/tinting | Set line interval ≥ 0.08mm |
+| Photo engrave on walnut/plywood | Dark wood grain = low contrast; glue layers in plywood engrave differently | Use basswood, maple, or MDF for photos |
+| Clear acrylic with diode laser | 455nm beam passes through transparent material — no engraving occurs | Use dark/colored acrylic only, or switch to CO2 |
+| Engrave copper/gold with diode | Reflective surfaces bounce beam back into optics → potential damage | Use marking spray, or use fiber laser |
+| No air assist on wood | Smoke deposits on surface → yellow staining, residue in engraving grooves | Always air assist ON for wood |
+
+### Pipeline
+
+```
+LOL formulas → alice-metal-card (Rust) → laser-svg command → Layer-separated SVGs (no background)
+  → Bambu Studio (per-layer import, set Power/Speed/Interval) → H2D 40W laser → Material
+
+Alternative: laser command → G-code directly (rasterize → scanlines → G-code), bypassing Bambu Studio
+```
+
+### Cutting Parameters (Diode 40W, multi-pass)
+
+| Material | Thickness | Power% | Speed mm/min | Passes | Air | Kerf mm |
+|----------|----------|--------|-------------|--------|-----|---------|
+| Basswood | 3mm | 100 | 300 | 2-3 | ON | 0.15 |
+| Basswood | 5mm | 100 | 200 | 4-6 | ON | 0.20 |
+| Plywood (birch) | 3mm | 100 | 250 | 3-4 | ON | 0.20 |
+| Dark acrylic | 3mm | 100 | 150 | 4-6 | ON | 0.15 |
+| Leather (2mm) | 2mm | 80 | 400 | 1-2 | OFF | 0.10 |
+| Cardboard | 1mm | 50 | 600 | 1 | ON | 0.15 |
+| Felt | 2mm | 40 | 400 | 1 | OFF | 0.10 |
+
+**Kerf compensation**: For interlocking/press-fit joints, offset cut path outward by `kerf/2`. Standard tolerance: ±0.13mm for wood/acrylic.
+
+---
+
 ## LOL vs JSON Comparison
 
 ### JSON (verbose, 15 lines):
