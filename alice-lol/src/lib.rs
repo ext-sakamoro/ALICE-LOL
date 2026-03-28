@@ -33,6 +33,10 @@ pub mod print_export;
 #[cfg(feature = "roblox")]
 pub mod roblox_export;
 
+// ── レーザー彫刻向け2Dパターン生成 ──
+// hatch, crosshatch, halftone, dither, guilloche, lissajous, rose, phyllotaxis, turing
+pub mod laser_pattern;
+
 // ── 空間枝刈りコンパイラ ──
 pub mod pruned_compile;
 
