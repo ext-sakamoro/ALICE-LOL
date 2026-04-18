@@ -352,10 +352,9 @@ fn dither_error_diffusion(
 ) -> Vec<LaserElement> {
     // (dx, dy, weight) — 合計が divisor になる
     let (offsets, divisor): (&[(i32, i32, f64)], f64) = match algorithm {
-        DitherAlgorithm::FloydSteinberg => (
-            &[(1, 0, 7.0), (-1, 1, 3.0), (0, 1, 5.0), (1, 1, 1.0)],
-            16.0,
-        ),
+        DitherAlgorithm::FloydSteinberg => {
+            (&[(1, 0, 7.0), (-1, 1, 3.0), (0, 1, 5.0), (1, 1, 1.0)], 16.0)
+        }
         DitherAlgorithm::Atkinson => (
             &[
                 (1, 0, 1.0),
@@ -639,7 +638,12 @@ pub fn turing(
     }
     // 四隅にも小さいシードを配置（パターンの伝播を促進）
     let small_r = (n / 8).max(1);
-    for &(sy, sx) in &[(n / 4, n / 4), (n / 4, 3 * n / 4), (3 * n / 4, n / 4), (3 * n / 4, 3 * n / 4)] {
+    for &(sy, sx) in &[
+        (n / 4, n / 4),
+        (n / 4, 3 * n / 4),
+        (3 * n / 4, n / 4),
+        (3 * n / 4, 3 * n / 4),
+    ] {
         for row in sy.saturating_sub(small_r)..=(sy + small_r).min(n - 1) {
             for col in sx.saturating_sub(small_r)..=(sx + small_r).min(n - 1) {
                 u[row][col] = 0.5;
@@ -660,10 +664,8 @@ pub fn turing(
                 let xp = if x == 0 { n - 1 } else { x - 1 };
                 let xn = if x == n - 1 { 0 } else { x + 1 };
 
-                let lap_u =
-                    u[yp][x] + u[yn][x] + u[y][xp] + u[y][xn] - 4.0 * u[y][x];
-                let lap_v =
-                    v[yp][x] + v[yn][x] + v[y][xp] + v[y][xn] - 4.0 * v[y][x];
+                let lap_u = u[yp][x] + u[yn][x] + u[y][xp] + u[y][xn] - 4.0 * u[y][x];
+                let lap_v = v[yp][x] + v[yn][x] + v[y][xp] + v[y][xn] - 4.0 * v[y][x];
 
                 let uv2 = u[y][x] * v[y][x] * v[y][x];
                 u_next[y][x] = u[y][x] + dt * (du * lap_u - uv2 + feed * (1.0 - u[y][x]));
