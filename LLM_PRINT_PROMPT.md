@@ -433,6 +433,49 @@ subtract(
 | Outdoor | ASA | UV resistance |
 | Near heat (dryer, power strip) | PETG (80°C Tg) | PLA deforms at 60°C |
 
+## Oversize Objects — Split & Join
+
+When the object exceeds the printer build volume, split into multiple parts and use a **lap joint** at the seam.
+
+### Lap Joint Rules
+
+1. **Split axis**: Choose the axis where the dimension exceeds the build volume
+2. **Overlap**: 5mm lap length per side, each half = `wall/2 - clearance_press` thick
+3. **Step direction**: One part's upper half extends, the other's lower half extends → interlock
+4. **Clearance**: Use `clearance_press` (0.05mm) for tight fit with adhesive
+5. **Verify fit**: `part_width = total/2 + lap_length` must be ≤ build volume
+
+### Print Orientation for Shelf/Cabinet Organizers
+
+**Print UPSIDE DOWN — top plate on bed, side panels grow upward.**
+
+- Top plate = largest surface → maximum bed adhesion
+- Side panels with arch cutouts: solid bridge zone (35mm) first, then corner pillars only
+- No thin wall instability (3mm walls 120mm tall will collapse from fan/vibration)
+- Cross rib at the top connects side panels for lateral stability
+- This is the proven pattern from popular MakerWorld models (13.6kg load tested)
+- PLA is sufficient with this pattern (no need for PETG)
+
+**Wrong**: Full thin walls standing from bed → spaghetti detection / collapse
+
+### Large Flat Plate Anti-Warp
+
+Plates larger than ~200×200mm warp and detach from the bed during cooling.
+
+**Required countermeasures**:
+1. **Hex cutout holes** in the plate (⌀15mm, 20mm pitch, 15mm border) — breaks continuous area, reduces shrinkage stress
+2. **Brim** (5-10mm) in slicer settings — increases bed adhesion at edges
+
+**Confirmed failure**: 280×250×5mm PLA plate without cutouts detached from bed mid-print.
+
+### Material for Shelving / Furniture
+
+| Material | Suitability | Reason |
+|----------|------------|--------|
+| PETG | Best | High layer adhesion (0.82), 80°C Tg, tough |
+| Nylon | Excellent | Highest toughness, but warps easily |
+| PLA | Poor | Brittle fracture under sustained load, 60°C Tg |
+
 ## Coordinate System & Scale
 
 - **LOL coordinates**: Y-up, origin at center, unitless

@@ -3,6 +3,14 @@
 //! LOL → `SdfNode` → Mesh → STL/3MF のワンストップパイプライン。
 //! LLM が生成した LOL テキストから直接プリント可能なファイルを出力する。
 //!
+//! # 薄物ジオメトリの制約
+//!
+//! **厚さ ≤ 5mm の薄物（コイン、プレート、ワッシャー等）には本モジュールを使わないこと。**
+//! マーチングキューブは薄い形状のボクセル化で非多様体エッジが大量発生し、
+//! 厚さも正確に再現できない（例: 1.7mm → 5.1mm に膨張）。
+//! 薄物は 2Dポリゴン(Shapely) + extrude(trimesh) → 3MF で生成すること。
+//! `round()` モディファイアは薄物でさらに問題を悪化させる。
+//!
 //! # 使い方
 //!
 //! ```ignore
@@ -22,7 +30,7 @@ use glam::Vec3;
 use std::path::Path;
 
 // ── re-export ──
-pub use alice_sdf::io::{export_3mf, export_stl, export_stl_ascii};
+pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, FbxConfig};
 pub use alice_sdf::mesh::{sdf_to_mesh, MarchingCubesConfig, Mesh, MeshRepair, Vertex};
 
 /// 3Dプリント用エクスポート設定
@@ -237,6 +245,39 @@ pub fn lol_to_3mf(
 ) -> Result<ExportStats, ExportError> {
     let node = crate::runtime_parser::parse_lol(lol_text)?;
     node_to_3mf(&node, path, config)
+}
+
+/// `SdfNode` → FBX ファイル出力
+///
+/// # Errors
+///
+/// メッシュが空の場合 `EmptyMesh`、ファイル書き込み失敗時 `Io` を返す。
+pub fn node_to_fbx(
+    node: &SdfNode,
+    path: impl AsRef<Path>,
+    config: &PrintConfig,
+) -> Result<ExportStats, ExportError> {
+    let mesh = node_to_mesh(node, config);
+    if mesh.indices.is_empty() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let stats = ExportStats::from_mesh(&mesh, &path);
+    export_fbx(&mesh, path, &FbxConfig::binary(), None)?;
+    Ok(stats)
+}
+
+/// LOL テキスト → FBX ファイル出力
+///
+/// # Errors
+///
+/// LOLパースエラー、メッシュ空、ファイル書き込み失敗時にエラーを返す。
+pub fn lol_to_fbx(
+    lol_text: &str,
+    path: impl AsRef<Path>,
+    config: &PrintConfig,
+) -> Result<ExportStats, ExportError> {
+    let node = crate::runtime_parser::parse_lol(lol_text)?;
+    node_to_fbx(&node, path, config)
 }
 
 /// エクスポート統計
