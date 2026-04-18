@@ -289,13 +289,22 @@ When generating objects for 3D printing, consider their physical purpose. LOL pr
 LOL text can be directly converted to printable mesh files:
 
 ```
-LOL text → parse_lol() → SdfNode → sdf_to_mesh() → export_stl() / export_3mf() → Bambu Studio → Printer
+厚物(>5mm): LOL text → parse_lol() → SdfNode → sdf_to_mesh() → export_stl()/export_3mf() → Bambu Studio → Printer
+薄物(≤5mm): Python Shapely 2D polygon → trimesh.extrude_polygon() → export_bambu_3mf() → Printer/MakerWorld
 ```
 
-One-liner API:
+One-liner API (厚物のみ):
 ```rust
 alice_lol::print_export::lol_to_stl("lattice_infill(0.05, 5.0, 0.02, sphere(1.0))", "output.stl", &PrintConfig::default());
 ```
+
+### MakerWorld アップロード対応
+
+MakerWorld (makerworld.com) は素の3MFを拒否する。Bambu Studio互換メタデータ（`xmlns:BambuStudio` 名前空間、`project_settings.config`、サムネイルPNG）が必須。
+
+`ALICE-Bamboo/scripts/` にH2D用テンプレートを格納済み。`export_bambu_3mf()` (Python) がテンプレートを埋め込んでMakerWorld対応3MFを直接出力する。Bambu Studioでの再保存は不要。
+
+詳細: `ALICE-Bamboo/CLAUDE.md`「MakerWorld アップロード」セクション参照。
 
 ### Examples for 3D Printing
 
@@ -342,13 +351,15 @@ LOL scenes and formulas can be output as laser-engraving SVGs. This section cove
 | # | Rule | Reason |
 |---|------|--------|
 | 1 | **NO background rect** | The material surface IS the background. A `<rect fill="#0a0a0a">` will be interpreted as "engrave everything", destroying coatings and causing heat tinting. |
-| 2 | **Layer separation** | Each power level = separate SVG (or clearly separated by color). Bambu Studio imports SVG colors as layers. |
-| 3 | **Process order: weak → strong** | GHOST → DIM → SILVER → WHITE. Strong engraving first causes heat warping that shifts subsequent positions 0.1-0.3mm. |
+| 2 | **Layer separation** (Bambu Studio) OR **1-file integration** (Bambu Suite) | Bambu Suite resets custom parameters on open → multi-layer approach loses custom intensities. 1-file with default params is simpler and actually works. |
+| 3 | **Process order: weak → strong** (if doing multi-pass) | GHOST → DIM → SILVER → WHITE. Strong engraving first causes heat warping that shifts subsequent positions 0.1-0.3mm. |
 | 4 | **Minimum font size** | Readable text: ≥ 2.0mm. Ghost watermark: ≥ 1.0mm. Below 1.0mm, laser line interval cannot resolve characters. |
 | 5 | **QR module size ≥ 0.6mm** | Smaller modules merge under heat spread. Level H error correction: 0.8mm recommended. |
 | 6 | **No SVG transparency/opacity** | Laser software ignores alpha. Use distinct fill colors only. |
 | 7 | **Monospace fonts only** | Proportional fonts create inconsistent stroke widths at sub-1mm scales. |
 | 8 | **Kerf compensation for cuts** | Diode laser kerf = 0.1-0.3mm. Offset cut path by half-kerf outward for dimensional accuracy. |
+| 9 | **Thin plate (≤ 0.5mm) = surface-only design** | Heat bleeds through to reverse side causing 裏移り (back-bleed). Keep engraving on one face only. |
+| 10 | **Bambu Suite default over custom params** | Bambu Suite overrides custom `max_power`/`speed`/`scanning_interval` from .lac file with built-in defaults. Design for defaults: P45%/S250mm/s/I0.1mm (E=0.72 J/mm²) works for SUS304 black matte 0.5mm. |
 
 ### Laser Types and Material Compatibility
 
@@ -386,17 +397,49 @@ DPI    Line Interval   Quality         Use Case
 
 #### Metals (Diode 40W, Bambu H2D)
 
+**⚠️ Bambu Suite 実運用時の注意**: Bambu Suite は .lac プロジェクトを開く時点で
+カスタムパラメータを組み込みデフォルトに上書きする。カスタム値 (P100%/S800 等) を
+.lac に書き込んでも無視される。以下の表は **Bambu Studio + 外部G-code送信時** など、
+パラメータ制御可能な環境での理論値。
+
+**Bambu Suite + H2D 実運用の推奨**: **LaserFillEngrave デフォルト (P45%/S250mm/s/I0.1mm,
+E=0.72 J/mm²)** で SUS304 黒マット 0.5mm が問題なく仕上がる実績あり。1ファイル統合で
+全要素一括処理。複数レイヤー運用は不要。
+
 | Material | Preparation | Power% | Speed mm/min | Interval mm | Passes | Air | Notes |
 |----------|------------|--------|-------------|-------------|--------|-----|-------|
-| SUS304 black matte (WHITE) | None | 100 | 800 | 0.05 | 2 | ON | Full coating removal |
-| SUS304 black matte (SILVER) | None | 80 | 1000 | 0.06 | 1 | ON | Near-full removal |
-| SUS304 black matte (DIM) | None | 40 | 1500 | 0.08 | 1 | ON | Partial — dark gray |
-| SUS304 black matte (GHOST) | None | 18 | 3000 | 0.10 | 1 | OFF | Surface alteration only |
+| SUS304 black matte (Bambu Suite default ✅) | None | **45** | 15000 (250 mm/s) | 0.10 | 1 | ON | **実証済み。E=0.72 J/mm²** |
+| SUS304 black matte (WHITE, 理論) | None | 100 | 800 | 0.05 | 2 | ON | ⚠️ 反り発生実績あり (E=120) |
+| SUS304 black matte (SILVER, 理論) | None | 80 | 1000 | 0.06 | 1 | ON | Near-full removal |
+| SUS304 black matte (DIM, 理論) | None | 40 | 1500 | 0.08 | 1 | ON | Partial — dark gray |
+| SUS304 black matte (GHOST, 理論) | None | 18 | 3000 | 0.10 | 1 | OFF | Surface alteration only |
 | Anodized aluminum | None | 60-80 | 1500-3000 | 0.06 | 1 | ON | Burns through anodize → white |
 | Bare stainless | CerMark spray | 100 | 600 | 0.05 | 2 | ON | Spray fuses to surface → black mark |
 | Bare aluminum | CerMark spray | 100 | 800 | 0.05 | 1 | ON | Less heat retention than steel |
 | Brass | CerMark spray | 100 | 500 | 0.05 | 2 | ON | Highly reflective — spray mandatory |
 | Copper | Not recommended | — | — | — | — | — | Too reflective, damages optics |
+
+### Bambu Suite .lac プロジェクト自動生成
+
+LOL で設計した 2D パターンは SVG → .lac 自動変換可能。.lac は Bambu Suite 専用の
+ZIP+JSON プロジェクトファイル（3DプリントのBambu Studio `.3mf` と別物）。
+
+**パイプライン**: `LOL → SDF → SVG → .lac → Bambu Suite → H2D`
+
+**SVG → .lac 変換の必須ルール**（`alice-metal-card/src/lac_gen.rs` 実装リファレンス）:
+
+1. **PathObject に `is_closed: true/false` 必須** — 欠けると `Invalid data from PathObject` エラー
+2. **SVG path の Q コマンド → C 変換必須** — Bambu Suite は Q 非対応
+   - 変換式: `Q (P0, P1, P2) → C (P0, P0+2/3(P1-P0), P2+2/3(P1-P2), P2)`
+3. **compound path 保持** — 文字の穴（"o" 等）は1 PathObject 内で `M...Z M...Z` 連続で保持
+   - サブパス分割すると穴が塗りつぶされる
+4. **座標単位** — path_data は絶対 mm、usvg の `tree.size()` は px スケール (86mm → 325px@96dpi) なので mm 逆変換必要
+5. **speed 単位は mm/s** (mm/min ではない)
+6. **H2D 40W 作業エリア** — X: 20.5-330.5, Y: 38.3-288.3 mm、中心 (175.5, 163.3)
+7. **process_type は5種** — LaserLineEngrave/FillEngrave/ImageEngrave/LineCut/PrintThenCut。
+   我々の用途では `LaserFillEngrave` が基本
+
+**完全仕様と JSON スキーマ**: `~/.claude/projects/-Users-ys/memory/bambu-suite-lac-format.md`
 
 #### Wood (Diode 40W)
 
@@ -696,6 +739,9 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 - The `print_export` module automatically runs `MeshRepair::repair_all()` (degenerate triangle removal + vertex merge + normal fix) on every export.
 - Keep mesh resolution ≤ 192 to stay under 1M triangles for slicer compatibility.
 - Set slicer infill to **0%** when using `lattice_infill` / `diamond_infill` / `schwarz_infill` — the LOL code already defines internal structure.
+- **Thin geometry (≤ 5mm thickness) must NOT use SDF+marching cubes** — voxel grid cannot resolve thin flat shapes, producing thousands of non-manifold edges and incorrect dimensions (e.g. 1.7mm coin inflated to 5mm). Use **2D polygon (Shapely) + extrude (trimesh) → 3MF** instead. This applies to: coins, cards, badges, tags, thin plates, washers, shims. The `round()` modifier worsens the problem on thin geometry.
+  - Confirmed failure: Shopping Cart Coin (Ø22.8mm × 1.7mm) — SDF at resolution 256 produced 6177 non-manifold edges and Y=5.1mm instead of 1.7mm
+  - Confirmed success: Same coin via Shapely `Point.buffer()` + `trimesh.creation.extrude_polygon()` → 0 errors, exact 1.7mm thickness
 
 ## Parameter Convention
 
@@ -808,6 +854,119 @@ Anti-patterns:
 - Same hole diameter on panel AND connector — both are clearance holes, screw falls through. **Panel = clearance hole (screw_dia + 0.2mm), Connector = tapping hole (screw_dia × 0.85 + 2×A)**
 - Connector body extends into peg slot zone — oversized connector blocks peg insertion from behind. **Verify: `connector_half_height < peg_bottom_edge` with ≥1mm clearance**
 - Sharp 90° corners from boolean intersection (e.g. cutout clipped by frame) — stress concentration causes cracks. **Use `buffer(0.5).buffer(-0.5)` after booleans to auto-fillet all sub-R0.5 corners**
+
+### Oversize Print Splitting — Lap Joint Pattern
+
+Objects exceeding the printer build volume must be split into multiple parts.
+Use a **lap joint** at the split seam for mechanical alignment + adhesive bonding.
+
+**Lap joint LOL pattern** (example: U-shaped shelf divider, 560mm wide → 2 L-halves):
+
+```
+// LEFT half — upper lap tab on +X joining edge
+union(
+  smooth_union(K,
+    subtract(
+      translate(0, 0, TOP_Z, box3d(HX, HY, T)),       // top plate
+      translate(CUT_X, 0, CUT_Z, box3d(LAP_HX, HY+1, CUT_HT))  // remove lower half at edge
+    ),
+    translate(SIDE_X, 0, 0, box3d(T, HY, HZ))         // side plate
+  ),
+  translate(TAB_X, 0, TAB_Z, box3d(LAP_HX, HY, TAB_HT))  // upper lap tab
+)
+
+// RIGHT half — lower lap tab on -X joining edge (mirrored)
+```
+
+**Lap joint parameters**:
+- `lap_length` = 5mm (overlap zone)
+- Each half = `wall/2 - clearance` thick (e.g. 3mm wall → 1.45mm per half)
+- Gap = `2 × clearance` (filled with adhesive)
+- `clearance_press` (0.05mm) for tight fit with adhesive
+
+**Critical rules**:
+1. Each part width = `total_width/2 + lap_length` — verify this fits the build volume
+2. The subtract cut must be `HY+1` (slightly oversized in Y) to ensure clean through-cut
+3. Upper half of the lap on one side, lower half on the other — they interlock like a step
+4. Use `smooth_union` (fillet) at the L-bend for stress distribution, NOT at the lap joint
+
+### Print Orientation for Shelf/Cabinet Organizers
+
+**Rule**: Print UPSIDE DOWN — top plate on bed, side panels grow upward.
+
+```
+Correct (upside down):             Wrong (right-side up):
+  Z ↑                                ┌──────────────────┐
+    │ ┌─┐          ┌─┐               │  top plate       │ ← floating!
+    │ │ │  (arch)  │ │               │                  │
+    │ │ ╰──────────╯ │               └┘                └┘
+    │ │   bridge    │               ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+    │ └──────────────┘               3mm walls → collapse
+    │ ════════════════
+  0 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  bed
+```
+
+**Why**:
+- Top plate = largest flat surface → maximum bed adhesion, no warping
+- No thin walls standing from Z=0: solid bridge zone (35mm) provides stable foundation
+- Side panels have arch cutouts → corner pillars (25mm wide) are sturdy
+- Cross rib connects side panels for lateral stability
+- This is the proven pattern from popular MakerWorld/Printables models (30lbs/13.6kg tested)
+
+### Shelf Organizer Arch Pattern (proven design)
+
+Popular cabinet shelf organizers use **arch cutouts** instead of full thin walls:
+
+```
+// Side panel with arch cutout — stable printing + material efficient
+subtract(
+  translate(SIDE_X, 0, PANEL_CZ, box3d(T, HY, PANEL_HZ)),     // full side panel
+  translate(SIDE_X, 0, ARCH_CZ, rounded_box(T+1, ARCH_HY, ARCH_HZ, R))  // arch cut
+)
+```
+
+**Key parameters** (proven values):
+- `pillar_width = 25mm` — solid corner pillars at each end of the panel
+- `bridge_height = 35mm` — solid zone connecting panel to top plate (printing stability)
+- `arch_r = 15mm` — rounded arch corners (stress distribution)
+- `rib_height = 30mm` — cross rib at bottom edge connecting both side panels
+
+**Benefits vs full thin walls**:
+- 3mm thin walls (120mm tall) collapse during printing from fan/vibration
+- Arch pattern: first 35mm is fully solid → no thin wall instability
+- Corner pillars (25mm × 5mm) are stocky enough to print reliably
+- Material savings from arch opening (less filament, faster print)
+- PLA is sufficient (vs PETG required for thin-wall designs)
+
+### Large Flat Plate Anti-Warp: Hex Cutout Pattern
+
+Large flat plates (e.g. 280×250mm) warp and detach from the bed during cooling.
+**Always add hex cutout holes** to break up continuous area and reduce shrinkage stress.
+
+```
+// Hex grid cutouts on top plate — staggered (千鳥) pattern via 2x repeat_finite
+subtract(
+  PLATE,
+  union(
+    translate(0, 0, PLATE_Z,
+      repeat_finite(COUNT_X, COUNT_Y, 0, PITCH, PITCH, 0,
+        cylinder(HOLE_R, PLATE_T+1))),
+    translate(PITCH/2, PITCH*0.433, PLATE_Z,
+      repeat_finite(COUNT_X2, COUNT_Y2, 0, PITCH, PITCH*0.866, 0,
+        cylinder(HOLE_R, PLATE_T+1)))
+  )
+)
+```
+
+**Proven parameters**:
+- `HOLE_R = 7.5mm` (⌀15mm holes)
+- `PITCH = 20mm` (5mm walls between holes)
+- `border = 15mm` (solid frame around plate edge)
+- `0.866 = √3/2` (hex packing row offset)
+
+**Also recommended**: Add brim (5-10mm) in slicer settings for extra bed adhesion.
+
+**Failure without cutouts**: 280×250×5mm PLA plate detached from bed and fell during printing (confirmed).
 
 ### Single Source of Truth (SSOT) Rule
 
@@ -981,8 +1140,10 @@ fdm_clearance = +0.3mm → slot 5.3 × 15.3mm
 ```
 
 **生成方式の選択**:
+- **薄物（厚さ≤5mm: コイン/プレート/ワッシャー/タグ/バッジ等）**: 2Dポリゴン(Shapely) + extrude → 3MF。SDF+マーチングキューブは薄物で非多様体が大量発生し、厚さも正確に出ない（実証: 1.7mmコイン → SDF出力5.1mm）
 - **パネル（薄板+大量穴）**: 2Dポリゴン(Shapely) + extrude → 3MF。SDF+マーチングキューブは非多様体多発
 - **アクセサリー（フック/コンテナ/棚）**: 2D側面プロファイル + extrude → 3MF。曲げ応力計算で断面厚を決定
+- **厚物・立体物（厚さ>5mm）**: LOL → SDF → マーチングキューブ → 3MF。通常のパイプラインで問題なし
 
 **SKADIS accessory design rules (物理最適化)**:
 1. **曲げ応力で断面厚を決定**: `t = sqrt(F*L*6*S / (w*σ_eff))` — 推測で4mmにしない
