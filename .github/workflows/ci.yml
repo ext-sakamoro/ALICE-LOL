@@ -81,6 +81,13 @@ jobs:
         working-directory: ALICE-LOL
         run: cargo test ${{ matrix.features }}
 
+      # Phase X.8 B-8: catch example bit-rot. `required-features` on
+      # llm-bridge-only examples auto-skips them on the macos default
+      # matrix, so a single line covers both configurations.
+      - name: Build examples
+        working-directory: ALICE-LOL
+        run: cargo build --examples ${{ matrix.features }}
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
