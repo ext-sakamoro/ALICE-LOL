@@ -10,6 +10,12 @@ alice-lol-macro = { path = "../alice-lol-macro" }
 alice-sdf = { path = "../../ALICE-SDF", default-features = false, features = ["glsl"] }
 glam = "0.29"
 
+[dev-dependencies]
+# For Phase X.8 B-5 golden parse test — validates `lol.gbnf` against the
+# alice-llm GBNF parser + FSM. Promoted to a full feature-gated dep in
+# B-6 (feature `llm-bridge`).
+alice-llm = { path = "../../ALICE-LLM", default-features = false, features = ["grammar"] }
+
 [features]
 default = ["glsl"]
 glsl = []
