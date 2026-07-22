@@ -11,12 +11,22 @@ env:
 
 jobs:
   test:
-    name: Test (${{ matrix.os }})
+    name: Test (${{ matrix.os }}${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        include:
+          # macOS: default features only (backward compat + baseline).
+          - os: macos-latest
+            features: ""
+            label: ""
+          # Ubuntu: exercise the llm-bridge feature so B-6 + all future
+          # bridge changes are gated by CI. This also pulls in ALICE-LLM
+          # via the optional path dep (sibling checkout below).
+          - os: ubuntu-latest
+            features: "--features llm-bridge"
+            label: " llm-bridge"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,11 +75,11 @@ jobs:
 
       - name: Build
         working-directory: ALICE-LOL
-        run: cargo build
+        run: cargo build ${{ matrix.features }}
 
       - name: Test
         working-directory: ALICE-LOL
-        run: cargo test
+        run: cargo test ${{ matrix.features }}
 
   clippy:
     name: Clippy
@@ -124,7 +134,7 @@ jobs:
 
       - name: Clippy
         working-directory: ALICE-LOL
-        run: cargo clippy -- -W clippy::pedantic -W clippy::nursery
+        run: cargo clippy --features llm-bridge -- -W clippy::pedantic -W clippy::nursery
 
   fmt:
     name: Format
