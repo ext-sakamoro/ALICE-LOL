@@ -27,6 +27,11 @@ jobs:
           repository: ext-sakamoro/ALICE-SDF
           path: ALICE-SDF
 
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -79,6 +84,11 @@ jobs:
           repository: ext-sakamoro/ALICE-SDF
           path: ALICE-SDF
 
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -128,6 +138,11 @@ jobs:
         with:
           repository: ext-sakamoro/ALICE-SDF
           path: ALICE-SDF
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
 
       - name: Create SDF dependency stubs
         run: |
