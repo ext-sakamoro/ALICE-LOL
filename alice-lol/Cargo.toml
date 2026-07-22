@@ -9,12 +9,10 @@ license = "MIT OR Apache-2.0"
 alice-lol-macro = { path = "../alice-lol-macro" }
 alice-sdf = { path = "../../ALICE-SDF", default-features = false, features = ["glsl"] }
 glam = "0.29"
-
-[dev-dependencies]
-# For Phase X.8 B-5 golden parse test — validates `lol.gbnf` against the
-# alice-llm GBNF parser + FSM. Promoted to a full feature-gated dep in
-# B-6 (feature `llm-bridge`).
-alice-llm = { path = "../../ALICE-LLM", default-features = false, features = ["grammar"] }
+# Optional; only pulled in when `llm-bridge` is enabled. Exposes the
+# GBNF parser + FSM + sampling helpers so downstream can drive
+# grammar-constrained decoding without depending on alice-llm directly.
+alice-llm = { path = "../../ALICE-LLM", default-features = false, features = ["grammar"], optional = true }
 
 [features]
 default = ["glsl"]
@@ -23,6 +21,10 @@ wgsl = ["alice-sdf/gpu"]
 hlsl = ["alice-sdf/hlsl"]
 physics = ["alice-sdf/physics"]
 roblox = []
+# Phase X.8 B-6: exposes `alice_lol::bridge` for grammar-constrained
+# LLM decoding against the LOL DSL. Off by default so pure geometry
+# users don't pay for the alice-llm dep.
+llm-bridge = ["dep:alice-llm"]
 
 [[example]]
 name = "basic"

@@ -33,6 +33,12 @@ pub mod print_export;
 #[cfg(feature = "roblox")]
 pub mod roblox_export;
 
+// ── LLM Guided Generation ブリッジ (Phase X.8 B-6) ──
+// alice-llm の GBNF parser + FSM + logits mask を薄く再輸出し、
+// `lol.gbnf` の LazyLock cached parse を提供する
+#[cfg(feature = "llm-bridge")]
+pub mod bridge;
+
 // ── レーザー彫刻向け2Dパターン生成 ──
 // hatch, crosshatch, halftone, dither, guilloche, lissajous, rose, phyllotaxis, turing
 pub mod laser_pattern;
