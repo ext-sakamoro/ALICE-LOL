@@ -59,3 +59,9 @@ name = "alice_coaster"
 [[example]]
 name = "roblox_accessory"
 required-features = ["roblox"]
+
+# Phase X.8 B-8: end-to-end LLM → LOL DSL → SdfNode → optional STL demo
+# via alice_lol::bridge::generate_sdf_from_prompt.
+[[example]]
+name = "prompt_to_sword"
+required-features = ["llm-bridge"]
