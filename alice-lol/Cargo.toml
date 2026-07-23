@@ -1,18 +1,28 @@
 [package]
 name = "alice-lol"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "ALICE-LOL: Law-Oriented Language — DSL for the ALICE-SDF ecosystem"
+description = "ALICE-LOL: Law-Oriented Language — proc_macro + runtime DSL compiling to SdfNode (GLSL/WGSL/HLSL transpile), print export (STL/3MF/OBJ/FBX), law checker, laser pattern generator, and optional LLM Guided Generation bridge."
 license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol"
+readme = "../README.md"
+keywords = ["dsl", "sdf", "signed-distance-function", "geometry", "3d-print"]
+categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
-alice-lol-macro = { path = "../alice-lol-macro" }
-alice-sdf = { path = "../../ALICE-SDF", default-features = false, features = ["glsl"] }
+alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.7.3", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
 # grammar-constrained decoding without depending on alice-llm directly.
-alice-llm = { path = "../../ALICE-LLM", default-features = false, features = ["grammar"], optional = true }
+# NOTE: alice-llm is AGPL-3.0-or-later; enabling `llm-bridge` propagates
+# that license to downstream. Leave the feature off (default) to stay on
+# MIT-or-Apache-2.0 terms.
+alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = false, features = ["grammar"], optional = true }
 
 [features]
 default = ["glsl"]
