@@ -14,7 +14,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "1.7.3", default-features = false, features = ["glsl"] }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
@@ -29,7 +29,13 @@ default = ["glsl"]
 glsl = []
 wgsl = ["alice-sdf/gpu"]
 hlsl = ["alice-sdf/hlsl"]
-physics = ["alice-sdf/physics"]
+# `physics` feature removed for the 0.2.0 crates.io publish because
+# alice-sdf 1.7.4 temporarily dropped its `physics` bridge (blocked on
+# the transitive dep chain reaching crates.io). Restore alongside
+# alice-sdf 1.8.0. The src re-exports (`sdf_to_physics_field` /
+# `CompiledSdfField` / `attach_physics` / `simulate_sdf` /
+# `SimulatedSdf`) are `#[cfg(feature = "physics")]`-gated so they
+# simply don't activate.
 roblox = []
 # Phase X.8 B-6: exposes `alice_lol::bridge` for grammar-constrained
 # LLM decoding against the LOL DSL. Off by default so pure geometry

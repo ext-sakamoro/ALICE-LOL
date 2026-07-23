@@ -26,14 +26,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "alice-physics"
-version = "0.12.0"
-
-[[package]]
 name = "alice-sdf"
-version = "1.7.3"
+version = "1.7.4"
 dependencies = [
- "alice-physics",
  "bincode",
  "bytemuck",
  "crc32fast",
