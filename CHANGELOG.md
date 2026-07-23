@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-07-23
 
+### Removed (temporary, restoration scheduled alongside alice-sdf 1.8.0)
+
+- **`physics` feature** — previously enabled `alice-sdf/physics` and
+  re-exported `sdf_to_physics_field` / `CompiledSdfField` /
+  `attach_physics` / `simulate_sdf` / `SimulatedSdf`. Removed because
+  `alice-sdf` 1.7.4 dropped its `physics` bridge for the crates.io
+  publish (transitive dep chain not yet on crates.io). The
+  corresponding `pub use alice_sdf::physics_bridge::*;` lines in
+  `lib.rs` are `#[cfg(feature = "physics")]`-gated so they simply
+  don't activate on crates.io 0.2.0. `path` users on the sibling repo
+  workflow are unaffected. Restore alongside alice-sdf 1.8.0.
+
+### Fixed
+
+- Keyword `signed-distance-function` (24 chars) → `distance-field`
+  (14 chars) to satisfy the crates.io 20-char limit.
+
 ### Added
 
 - **LLM Guided Generation bridge (Phase X.8, B-5 → B-9-A)** behind the
