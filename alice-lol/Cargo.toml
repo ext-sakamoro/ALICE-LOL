@@ -9,7 +9,7 @@ repository = "https://github.com/ext-sakamoro/ALICE-LOL"
 homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
 documentation = "https://docs.rs/alice-lol"
 readme = "../README.md"
-keywords = ["dsl", "sdf", "signed-distance-function", "geometry", "3d-print"]
+keywords = ["dsl", "sdf", "distance-field", "geometry", "3d-print"]
 categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
