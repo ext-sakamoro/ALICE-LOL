@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "alice-llm"
-version = "1.2.1"
+version = "1.3.0"
 
 [[package]]
 name = "alice-lol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alice-llm",
  "alice-lol-macro",
@@ -18,7 +18,7 @@ dependencies = [
 
 [[package]]
 name = "alice-lol-macro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",

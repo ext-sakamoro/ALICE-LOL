@@ -1,9 +1,16 @@
 [package]
 name = "alice-lol-macro"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "LOL (Law-Oriented Language) proc_macro — parses LOL DSL, emits SdfNode construction code"
 license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol-macro"
+readme = "../README.md"
+keywords = ["dsl", "proc-macro", "sdf", "geometry", "signed-distance-function"]
+categories = ["graphics", "development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true
