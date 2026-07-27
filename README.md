@@ -218,6 +218,10 @@ let report = laws.check();
 
 MIT OR Apache-2.0
 
+## Claude Code / Codex Skill
+
+The `skills/lol-sdf/` directory bundles ALICE-LOL as an installable agent skill for Claude Code / Codex. It ships the GBNF grammar (`references/lol.gbnf`) for LLM constrained decoding, the print-oriented system prompt (`references/print-guide.md`), and thin CLI wrappers for STL/3MF export, Bambu H2D laser (`.lac`), and Roblox OBJ/FBX. See [`skills/lol-sdf/SKILL.md`](skills/lol-sdf/SKILL.md). Companion `alice-implicit-cad` skill (in the [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) repo) provides the lower-level SDF composition front-end.
+
 ## Related
 
 - [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) — SDF evaluation, compiled backends, SIMD, BVH
