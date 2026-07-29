@@ -227,4 +227,14 @@ The `skills/lol-sdf/` directory bundles ALICE-LOL as an installable agent skill 
 - [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) — SDF evaluation, compiled backends, SIMD, BVH
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View) — wgpu GPU renderer
 - [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) — Deterministic 128-bit physics engine
+
+## Consumers
+
+以下 crate が ALICE-LOL DSL を consumer として利用中 or 計画中:
+
+| Consumer | 状態 | 用途 |
+|---|---|---|
+| [ALICE-Bamboo](https://github.com/ext-sakamoro/ALICE-Bamboo) | Active | 3D プリント統合 pipeline (LOL DSL → SDF → Physics 検証 → 3MF → Bambu Studio) |
+| [ALICE-Manga](https://github.com/ext-sakamoro/ALICE-Manga) | Integration PoC (2026-07-29〜) | 漫画キャラ silhouette / scene の宣言的定義 T1 statement 完了 (dev-dep + PoC example)、`docs/INTEGRATION_STRATEGY.md` T1-T5 roadmap で本格統合予定 |
+| ALICE-Metal-Card | Active | H2D レーザー用 SVG → `.lac` 生成 |
 - [ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System) — 1,250 cross-crate bridges
