@@ -1,0 +1,22 @@
+[package]
+name = "alice-lol-humanoid"
+version = "0.1.0"
+edition = "2021"
+description = "Humanoid template for ALICE-LOL DSL — VRM/BVH → parametric humanoid SdfNode. Phase H.0 scaffolding."
+license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol-humanoid"
+readme = "../README.md"
+keywords = ["dsl", "sdf", "humanoid", "vrm", "character"]
+categories = ["graphics", "game-development"]
+
+[dependencies]
+alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
+glam = "0.29"
+
+[features]
+default = []
+# H.3 で有効化予定 (gltf + serde_json optional dep 追加)
+vrm = []

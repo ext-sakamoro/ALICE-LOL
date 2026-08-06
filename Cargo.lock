@@ -18,6 +18,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-lol-humanoid"
+version = "0.1.0"
+dependencies = [
+ "alice-lol",
+ "glam",
+]
+
+[[package]]
 name = "alice-lol-macro"
 version = "0.2.0"
 dependencies = [
