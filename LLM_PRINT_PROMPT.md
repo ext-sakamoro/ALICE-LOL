@@ -22,6 +22,21 @@ User Request
     │   ├── SLS (powder)
     │   └── CNC (subtractive)
     │
+    ├── Step 1.5: Classify Thickness (mesh routing decision)
+    │   ├── Thin (<= 5mm total thickness):
+    │   │   Use `stdlib::hardsurface::thin::*` primitives + `polygon_to_3mf()`
+    │   │   - shopping_cart_coin_2d(dia, segments) → coin/token/keychain
+    │   │   - skadis_panel_2d(size, corner_r) → IKEA SKADIS wall panel
+    │   │   - thin_plate(w, h, corner_r, holes) → generic thin plate with holes
+    │   │   Reason: SDF+MC on <= 5mm generates non-manifold edges + thickness
+    │   │   inflation (Bamboo real print: 1.7mm design → 5.1mm output,
+    │   │   6177 non-manifold edges) earcutr-based extrude guarantees watertight
+    │   │
+    │   └── Thick (> 5mm):
+    │       Use SdfNode primitives + `node_to_3mf()` or `lol_to_3mf()`
+    │       - stdlib::hardsurface (fastener/joint/reinforcement/mount) 24 primitive
+    │       - marching cubes at resolution 128/256/512
+    │
     ├── Step 2: Classify Structural Intent
     │   ├── Decorative → hollow shell (onion)
     │   ├── Structural + Lightweight → TPMS infill (lattice_infill / diamond_infill / schwarz_infill)
@@ -33,6 +48,47 @@ User Request
     │   └── Lattice thickness (strut width)
     │
     └── Step 4: Output LOL code
+```
+
+## Thickness Routing (Step 1.5 detail)
+
+**Total object thickness (Z-axis or thinnest dimension) determines mesh generation route:**
+
+| Total thickness | Route | API | Example primitive |
+|-----------------|-------|-----|------------------|
+| **<= 5mm (thin)** | 2D polygon + extrude via `earcutr` (watertight guaranteed) | `alice_lol::print_export::polygon_to_3mf(polygon, half_height, path)` | `shopping_cart_coin_2d(22.8, 32)` for 1.7mm coin |
+| **> 5mm (thick)** | 3D SDF + marching cubes (standard) | `alice_lol::print_export::node_to_3mf(node, path, config)` | `bracket_l(60, 40, 4, 40, 3)` for L-bracket |
+
+**Anti-pattern check (must reject before generating):**
+
+- User says "coin" / "token" / "keychain" / "tag" / "badge" (typically <= 3mm) → **thin route required**
+- User says "SKADIS panel" / "pegboard" / "acrylic sheet" (typically 3-5mm) → **thin route required**
+- User says "bracket" / "hook" / "container" / "case" (typically > 5mm structural) → **thick route standard**
+- Ambiguous "plate" / "washer" — ask user for thickness, then route
+
+**Example: Thin route (LOL code)**
+
+```rust
+use alice_lol::stdlib::hardsurface::thin::{shopping_cart_coin_2d, COIN_100YEN_THICKNESS};
+use alice_lol::print_export::polygon_to_3mf;
+
+let coin = shopping_cart_coin_2d(22.8, 48);  // Φ22.8mm, 48-segment circle
+polygon_to_3mf(&coin, COIN_100YEN_THICKNESS * 0.5, "coin.3mf")?;
+// Result: watertight 3MF, no non-manifold edges, exact 1.7mm thickness
+```
+
+**Example: Thick route (LOL code)**
+
+```rust
+use alice_lol::{lol, print_export::{node_to_3mf, PrintConfig}};
+
+let bracket = lol! {
+    smooth_union(3.0,
+        box3d(30.0, 2.0, 20.0),
+        translate(-28.0, 22.0, 0.0, box3d(2.0, 20.0, 20.0))
+    )
+};
+node_to_3mf(&bracket, "bracket.3mf", &PrintConfig::default())?;
 ```
 
 ## Step 1: Manufacturing Method Constraints
@@ -270,6 +326,7 @@ subtract(
 | Shelf without bottom ribs | 3kgf center load → deflection depends on I = w×t³/12 | Add 3+ longitudinal ribs (1.2mm thick, 3mm tall) to increase second moment of area |
 | Hook same width as peg blade (4.5mm) for heavy loads | 3kgf on 4.5mm width → 9.9mm thickness needed (too thick to print) | **Widen hook body** beyond peg blade: 8mm width → 7.5mm thickness (feasible). Peg blade stays 4.5mm |
 | Flat panel with holes via SDF marching cubes | Non-manifold edges (7,000-17,000) — SDF can't resolve thin walls between holes at grid resolution | Use **2D polygon (Shapely) + extrude** for pegboard panels. Reserve SDF for solid 3D shapes |
+| Thin object (<= 5mm) generated via `node_to_3mf(SdfNode, ...)` | SDF+MC on thin geometry produces 6000+ non-manifold edges + thickness inflation (Bamboo real print evidence: 1.7mm design → 5.1mm output) | Use `stdlib::hardsurface::thin::{shopping_cart_coin_2d / skadis_panel_2d / thin_plate}` primitive + `polygon_to_3mf(polygon, half_height, path)` API earcutr triangulation guarantees watertight top/bottom/side walls (Phase A.5.2、alice-sdf mesh-extrude feature) |
 
 ## Mandatory Code Structure for Multi-Part Scripts
 
