@@ -50,6 +50,10 @@ pub mod pruned_compile;
 // LawSet ビルダー、静的矛盾検出、残差フィルタリング
 pub mod law;
 
+// ── Intent Layer (Milestone B.1、Phase 3 Intent 相 IR skeleton) ──
+// IntentNode + Program 独立型、GPU backend との型分離、L1 Physical Intent 14 verb + Sequence/Parallel
+pub mod intent;
+
 // ── Re-export the proc_macro ──
 pub use alice_lol_macro::lol;
 
