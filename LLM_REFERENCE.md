@@ -123,6 +123,32 @@ This compiles to an `SdfNode` tree that can be:
 | `with_material(id, child)` | material ID, child | Assign material |
 | `surface_roughness(freq, amp, oct, child)` | frequency, amplitude, octaves, child | Surface roughness |
 
+### High-Level Hardsurface Primitives (5, Phase 5.1)
+
+Phase 3''/3''.2/3''.3.1 で stdlib::hardsurface::{skadis_sdf, thin_sdf} に実装済の
+完成 pattern を LOL DSL text で 1 word で呼び出せる runtime_parser primitive
+ALICE 三相原理 Phase 2 Law 経路 (SDF+Dual Contouring)、mesh 化は
+`alice_lol::print_export::node_to_3mf_dual_contouring` 推奨
+
+| primitive | 引数 | 意味 | Bamboo canonical |
+|-----------|------|------|-----------------|
+| `shopping_cart_coin(dia, thickness)` | 直径 mm、厚 mm | 100 円硬貨型キーホルダーコイン (Cylinder 単純) | `models/accessories/shopping-cart-coin/generate.py` |
+| `skadis_panel(size, thickness, corner_r)` | 一辺 mm、厚 mm、角丸 R mm | IKEA SKADIS 互換ペグボード + 千鳥ペグ穴 | `models/wall-organizer/skadis-300x300/generate.py` |
+| `skadis_hook_l()` | (0 args) | 2-peg 水平フック (5kgf、reach 75mm) | `models/wall-organizer/skadis-hook-l/generate.py` |
+| `skadis_hook_j()` | (0 args) | 1-peg J 字深フック (3kgf、reach 25 + drop 70mm) | `models/wall-organizer/skadis-hook-j/generate.py` |
+| `skadis_hook_s()` | (0 args) | 1-peg S 字汎用フック (1kgf、reach 22 + drop 45mm) | `models/wall-organizer/skadis-hook-s/generate.py` |
+
+**Usage 例**:
+```
+skadis_panel(300, 5, 5)
+shopping_cart_coin(22.8, 1.7)
+skadis_hook_l()
+```
+
+これらは実プリント合格 baseline (Bamboo canonical Python 版と同 spec) を LOL DSL で
+1 word で呼び出せる形にしたもの mesh 化経路は必ず Dual Contouring 経由
+(polygon_extrude Phase 4 で削除済)
+
 ### 3D Print Structural Intent (3)
 
 These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, TPMS))`. Use them when generating objects for physical fabrication.
