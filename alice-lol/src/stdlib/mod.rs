@@ -11,3 +11,4 @@
 //! transpile pipeline がそのまま流用できる
 
 pub mod hardsurface;
+pub mod pattern;
