@@ -10,6 +10,65 @@
 
 ---
 
+## 0. Pre-Verify 実測結果 + Bambu Studio 検証優先順位 (2026-08-06 Phase B.2 代替)
+
+**実行**: `cd ~/ALICE-Bamboo && cargo test --test bambu_pre_verify --release -- --nocapture`
+
+Phase 5.6 手順書 17 items のうち **自動検証可能 9 items** を Rust integration test で
+先行実施 (`~/ALICE-Bamboo/tests/bambu_pre_verify.rs`) user は残 **8 items** (Bambu Studio
+目視 / slice / 実プリント) に絞れる
+
+### PASS 8 pattern (推奨、user 目視 8 items 実施)
+
+| pattern | route | mesh (vert/face) | bbox mm | file KB | PrintabilityScore |
+|--|--|--|--|--|--|
+| shopping_cart_coin_100yen | DC | 49K / 96K | 22×2×22 | 779 | 88 Excellent |
+| skadis_panel_300x300 | DC | 51K / 102K | 22×11×22 | 1755 | 94 Excellent |
+| skadis_hook_l | DC | 62K / 123K | 18×8×8 | 1211 | 79 Good (Field test 通過) |
+| skadis_hook_s | DC | 54K / 108K | 18×10×5 | 1317 | 88 Excellent |
+| skadis_shelf | DC | 33K / 65K | 22×2×22 | 1297 | 97 Excellent |
+| shelf_divider_560x250x120 | MC | 54K / 106K | 22×22×5 | 1486 | 69 Acceptable (30lbs 実荷重 baseline) |
+| wall_hook | MC | 34K / 68K | 22×22×12 | 1008 | 70 Good |
+| drawer_organizer | MC | 33K / 66K | 0×22×22 | 2468 | 81 Good |
+
+### FAIL 5 pattern (Bambu Studio 検証保留、SDF 生成 bug 個別 fix 後に再検証)
+
+| pattern | 症状 | 真因仮説 |
+|--|--|--|
+| skadis_container | mesh 0 (resolution 128 でも生成失敗) | SDF `smooth_union` の tight_aabb 計算破綻 or CSG 交差問題 |
+| gridfinity_bin | mesh 0 (Phase 5.8 dividers fix 済のはずが SDF eval 破綻) | GridfinitySpec::default_2x2 の SDF 経路で AABB detect 失敗 |
+| skadis_elastic_cord | NME 212 (DC watertight 破綻) | 薄物間 domain 干渉、DC config 調整 or SDF 設計見直し要 |
+| skadis_hook_j | NME 23 (DC 微細 NME) | Y 軸 native cylinder の DC boundary で watertight 微破綻 |
+| skadis_clip | NME 4 (DC 微細 NME、許容 threshold 内かも) | 同上、resolution 上げれば解消の可能性 |
+
+FAIL pattern の user 対応: **Bambu Studio 検証を skip 推奨、fix 完了通知を待つ**
+(現状 Phase 5.6 手順書の T5-T7 / K2 は informational のみ、実プリント推奨せず)
+
+### 自動 9 items の内訳 (test で assert 済)
+
+1. mesh face count > 0
+2. mesh vertex count > 0
+3. bbox size <= Bambu H2D 315×310×315mm build volume
+4. non_manifold_edges (DC 経路 0 保証、MC 経路 5% 許容)
+5. boundary_edges 計測 (watertight metric)
+6. degenerate_triangles 計測 (品質 metric)
+7. 3MF file 生成成功 (Bambu template 埋込込み)
+8. 3MF file size > 10KB (metadata + mesh 埋込確認)
+9. min_wall_thickness spec >= 1.2mm (PrintabilityScore の min_thickness = 100 対応)
+
+### user 目視 8 items (Bambu Studio 実施)
+
+10. Bambu Studio でファイル open 可
+11. slice 成功
+12. thumbnail 表示
+13. printer profile 認識 (Bambu H2D)
+14. filament 割り当て (PLA / PETG spec 準拠)
+15. 印刷開始時 bed 密着確認
+16. 印刷完了品質 (層剥離 / warp / 表面)
+17. functional 確認 (ペグ固定 / 荷重 / 用途)
+
+---
+
 ## 1. 検証対象ファイル一覧 (17 品目)
 
 ### 1.1 薄物 DC 経路 (9 品目、`~/ALICE-Bamboo/output/thin/`)
