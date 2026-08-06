@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "alice-llm"
-version = "1.3.0"
+version = "1.6.0"
 
 [[package]]
 name = "alice-lol"
@@ -26,9 +26,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-physics"
+version = "0.12.0"
+
+[[package]]
 name = "alice-sdf"
 version = "1.7.4"
 dependencies = [
+ "alice-physics",
  "bincode",
  "bytemuck",
  "crc32fast",
