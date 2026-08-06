@@ -3,13 +3,13 @@
 //! Humanoid template for `alice_lol` DSL parametric character generation
 //!
 //! `~/ALICE-LOL/docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
-//! 現在 Phase = **H.1 Static template** (canonical T-pose + `to_sdf`、morphology は H.2)
+//! 現在 Phase = **H.2 Parametric morphology** (`MorphologyParams` + builder、joint 位置の parametric 導出)
 //!
 //! # Roadmap
 //!
 //! - H.0 Scaffolding (完了)
-//! - **H.1 Static template** (本 Phase、`HumanoidTemplate::default()` + `to_sdf(k)`)
-//! - H.2 Parametric morphology (`MorphologyParams` + builder)
+//! - H.1 Static template (完了)
+//! - **H.2 Parametric morphology** (本 Phase、`MorphologyParams` + `HumanoidTemplateBuilder`)
 //! - H.3 VRM import (feature `vrm`、gltf optional dep)
 //! - H.4 BVH import + pose (`apply_pose`)
 //! - H.5 ALICE-Manga との duplication 整理
@@ -20,20 +20,30 @@
 //! Phase 2 Law (parametric morphology) → Phase 3 Intent (verb) の橋渡し
 //! 詳細: `docs/HUMANOID_TEMPLATE_DESIGN.md` §1
 //!
-//! # H.1 実装ノート (duplication)
+//! # H.1 / H.2 実装ノート (duplication)
 //!
-//! `Joint` enum / `Bone` struct / `MuscleWidths` / `HumanoidTemplate::default()` /
-//! `to_sdf(k)` は ALICE-Manga `src/skeleton.rs` + `src/skeleton3d.rs` の code copy
+//! `Joint` enum / `Bone` struct / `MuscleWidths` / bones topology は
+//! ALICE-Manga `src/skeleton.rs` + `src/skeleton3d.rs` の code copy
 //! Phase H.5 で reconciliation (併存 / wrapper 化 / 段階移行) を user 判断
 //!
 //! # Quick start
 //!
 //! ```
-//! use alice_lol_humanoid::HumanoidTemplate;
+//! use alice_lol_humanoid::{HumanoidTemplate, MorphologyParams};
 //!
-//! let template = HumanoidTemplate::default();
-//! let sdf = template.to_sdf(0.15);
-//! // sdf は 15-Capsule chain の SmoothUnion tree
+//! // canonical (H.1 hardcoded 相当、10 頭身)
+//! let default_template = HumanoidTemplate::default();
+//!
+//! // chibi 3 頭身 (SD 体型)
+//! let chibi = HumanoidTemplate::from_morphology(&MorphologyParams::chibi());
+//!
+//! // builder chain
+//! let custom = HumanoidTemplate::builder()
+//!     .height(1.7)
+//!     .head_body_ratio(7.5)
+//!     .build();
+//!
+//! let sdf = default_template.to_sdf(0.15);
 //! ```
 
 #![forbid(unsafe_code)]
@@ -178,6 +188,111 @@ impl Default for MuscleWidths {
 }
 
 // ============================================================================
+// MorphologyParams (H.2)
+// ============================================================================
+
+/// 骨格比パラメータ (parametric law) から humanoid joint 位置を数式導出する
+///
+/// # 座標系
+///
+/// 右手系、Y up、Waist が原点、canonical T-pose (両腕水平、Z=0)
+///
+/// # 各 ratio の意味
+///
+/// - `height`: 全身高 (Y span、canonical 5.0、real-world 1.7 m 等の任意単位)
+/// - `head_body_ratio`: 頭身 (head span = height / n、chibi=3、adult=7.5、hero=10)
+/// - `arm_ratio`: 腕長 / 身長 per side (肩から手首の直線距離、canonical 0.36)
+/// - `shoulder_ratio`: 肩幅 / 身長 (両肩間の距離、canonical 0.24)
+/// - `hip_ratio`: 骨盤幅 / 身長 (両股関節間の距離、canonical 0.16)
+/// - `leg_ratio`: 脚長 / 身長 (股関節から足首、canonical 0.5)
+///
+/// # 導出 formula (Waist 原点、Y up)
+///
+/// ```text
+/// head_top_y = h * 0.5
+/// head_span  = h / n
+/// neck_y     = head_top_y - head_span
+/// chest_y    = neck_y * 0.75
+/// ankle_y    = -h * leg_ratio
+/// knee_y     = ankle_y * 0.52
+/// shoulder_x = h * shoulder_ratio * 0.5
+/// arm_len    = h * arm_ratio
+/// elbow_x    = shoulder_x + arm_len * 0.5
+/// wrist_x    = shoulder_x + arm_len
+/// hip_x      = h * hip_ratio * 0.5
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct MorphologyParams {
+    /// 全身高
+    pub height: f32,
+    /// 頭身
+    pub head_body_ratio: f32,
+    /// 腕長 / 身長 (per side)
+    pub arm_ratio: f32,
+    /// 肩幅 / 身長
+    pub shoulder_ratio: f32,
+    /// 骨盤幅 / 身長
+    pub hip_ratio: f32,
+    /// 脚長 / 身長
+    pub leg_ratio: f32,
+}
+
+impl MorphologyParams {
+    /// adult 7.5 頭身 preset (real body 相当、height=5.0)
+    #[must_use]
+    pub const fn adult() -> Self {
+        Self {
+            height: 5.0,
+            head_body_ratio: 7.5,
+            arm_ratio: 0.38,
+            shoulder_ratio: 0.23,
+            hip_ratio: 0.16,
+            leg_ratio: 0.52,
+        }
+    }
+
+    /// chibi 3 頭身 preset (SD 体型、大頭 / short limb、height=5.0)
+    #[must_use]
+    pub const fn chibi() -> Self {
+        Self {
+            height: 5.0,
+            head_body_ratio: 3.0,
+            arm_ratio: 0.28,
+            shoulder_ratio: 0.28,
+            hip_ratio: 0.22,
+            leg_ratio: 0.4,
+        }
+    }
+
+    /// hero 8 頭身 preset (少年漫画ヒーロー、height=5.0)
+    #[must_use]
+    pub const fn hero() -> Self {
+        Self {
+            height: 5.0,
+            head_body_ratio: 8.0,
+            arm_ratio: 0.4,
+            shoulder_ratio: 0.25,
+            hip_ratio: 0.16,
+            leg_ratio: 0.52,
+        }
+    }
+}
+
+impl Default for MorphologyParams {
+    /// canonical (H.1 hardcoded joint 位置と 100% 一致、10 頭身、height=5.0)
+    fn default() -> Self {
+        Self {
+            height: 5.0,
+            head_body_ratio: 10.0,
+            arm_ratio: 0.36,
+            shoulder_ratio: 0.24,
+            hip_ratio: 0.16,
+            leg_ratio: 0.5,
+        }
+    }
+}
+
+// ============================================================================
 // HumanoidTemplate
 // ============================================================================
 
@@ -186,7 +301,7 @@ impl Default for MuscleWidths {
 /// # 座標系
 ///
 /// 右手系、Y up (alice-lol / alice-sdf 慣例と一致)
-/// canonical T-pose では頭頂 y=+2.5、足首 y=-2.5、両腕水平
+/// canonical T-pose では頭頂 `y = +h / 2`、足首 `y = -h * leg_ratio`、両腕水平 (H.2 formula)
 #[derive(Debug, Clone)]
 pub struct HumanoidTemplate {
     /// bone list (from → to + thickness)
@@ -196,117 +311,67 @@ pub struct HumanoidTemplate {
 }
 
 impl Default for HumanoidTemplate {
-    /// canonical humanoid T-pose factory (16 joint / 15 bone、Y up、頭頂 y=+2.5、足首 y=-2.5)
+    /// canonical humanoid T-pose factory ([`MorphologyParams::default`] 相当)
     fn default() -> Self {
-        let mut joints = HashMap::with_capacity(16);
-        // 脊柱軸 (x=0, z=0)
-        joints.insert(Joint::Head, [0.0, 2.5, 0.0]);
-        joints.insert(Joint::Neck, [0.0, 2.0, 0.0]);
-        joints.insert(Joint::Chest, [0.0, 1.5, 0.0]);
-        joints.insert(Joint::Waist, [0.0, 0.0, 0.0]);
-        // 両肩 / 肘 / 手首 (T-pose)
-        joints.insert(Joint::LShoulder, [-0.6, 1.5, 0.0]);
-        joints.insert(Joint::RShoulder, [0.6, 1.5, 0.0]);
-        joints.insert(Joint::LElbow, [-1.5, 1.5, 0.0]);
-        joints.insert(Joint::RElbow, [1.5, 1.5, 0.0]);
-        joints.insert(Joint::LWrist, [-2.4, 1.5, 0.0]);
-        joints.insert(Joint::RWrist, [2.4, 1.5, 0.0]);
-        // 両脚
-        joints.insert(Joint::LHip, [-0.4, 0.0, 0.0]);
-        joints.insert(Joint::RHip, [0.4, 0.0, 0.0]);
-        joints.insert(Joint::LKnee, [-0.4, -1.3, 0.0]);
-        joints.insert(Joint::RKnee, [0.4, -1.3, 0.0]);
-        joints.insert(Joint::LAnkle, [-0.4, -2.5, 0.0]);
-        joints.insert(Joint::RAnkle, [0.4, -2.5, 0.0]);
-
-        let bones = vec![
-            // 脊柱 (3)
-            Bone {
-                from: Joint::Head,
-                to: Joint::Neck,
-                thickness: 0.4,
-            },
-            Bone {
-                from: Joint::Neck,
-                to: Joint::Chest,
-                thickness: 0.5,
-            },
-            Bone {
-                from: Joint::Chest,
-                to: Joint::Waist,
-                thickness: 0.6,
-            },
-            // 左腕 (3)
-            Bone {
-                from: Joint::Chest,
-                to: Joint::LShoulder,
-                thickness: 0.4,
-            },
-            Bone {
-                from: Joint::LShoulder,
-                to: Joint::LElbow,
-                thickness: 0.35,
-            },
-            Bone {
-                from: Joint::LElbow,
-                to: Joint::LWrist,
-                thickness: 0.3,
-            },
-            // 右腕 (3)
-            Bone {
-                from: Joint::Chest,
-                to: Joint::RShoulder,
-                thickness: 0.4,
-            },
-            Bone {
-                from: Joint::RShoulder,
-                to: Joint::RElbow,
-                thickness: 0.35,
-            },
-            Bone {
-                from: Joint::RElbow,
-                to: Joint::RWrist,
-                thickness: 0.3,
-            },
-            // 左脚 (3)
-            Bone {
-                from: Joint::Waist,
-                to: Joint::LHip,
-                thickness: 0.4,
-            },
-            Bone {
-                from: Joint::LHip,
-                to: Joint::LKnee,
-                thickness: 0.35,
-            },
-            Bone {
-                from: Joint::LKnee,
-                to: Joint::LAnkle,
-                thickness: 0.3,
-            },
-            // 右脚 (3)
-            Bone {
-                from: Joint::Waist,
-                to: Joint::RHip,
-                thickness: 0.4,
-            },
-            Bone {
-                from: Joint::RHip,
-                to: Joint::RKnee,
-                thickness: 0.35,
-            },
-            Bone {
-                from: Joint::RKnee,
-                to: Joint::RAnkle,
-                thickness: 0.3,
-            },
-        ];
-
-        Self { bones, joints }
+        Self::from_morphology(&MorphologyParams::default())
     }
 }
 
 impl HumanoidTemplate {
+    /// [`MorphologyParams`] から joint 位置を数式導出、bones topology は固定
+    #[must_use]
+    pub fn from_morphology(params: &MorphologyParams) -> Self {
+        let h = params.height;
+        let n = params.head_body_ratio;
+
+        // Y 座標 (Waist が原点)
+        let head_top_y = h * 0.5;
+        let head_span = h / n;
+        let neck_y = head_top_y - head_span;
+        let chest_y = neck_y * 0.75;
+        let waist_y = 0.0_f32;
+        let hip_y = 0.0_f32;
+        let ankle_y = -h * params.leg_ratio;
+        let knee_y = ankle_y * 0.52;
+        let shoulder_y = chest_y;
+
+        // X 座標 (右側正、左側負、T-pose 水平)
+        let shoulder_x = h * params.shoulder_ratio * 0.5;
+        let arm_len = h * params.arm_ratio;
+        let elbow_x = arm_len.mul_add(0.5, shoulder_x);
+        let wrist_x = shoulder_x + arm_len;
+        let hip_x = h * params.hip_ratio * 0.5;
+
+        let mut joints = HashMap::with_capacity(16);
+        joints.insert(Joint::Head, [0.0, head_top_y, 0.0]);
+        joints.insert(Joint::Neck, [0.0, neck_y, 0.0]);
+        joints.insert(Joint::Chest, [0.0, chest_y, 0.0]);
+        joints.insert(Joint::Waist, [0.0, waist_y, 0.0]);
+        joints.insert(Joint::LShoulder, [-shoulder_x, shoulder_y, 0.0]);
+        joints.insert(Joint::RShoulder, [shoulder_x, shoulder_y, 0.0]);
+        joints.insert(Joint::LElbow, [-elbow_x, shoulder_y, 0.0]);
+        joints.insert(Joint::RElbow, [elbow_x, shoulder_y, 0.0]);
+        joints.insert(Joint::LWrist, [-wrist_x, shoulder_y, 0.0]);
+        joints.insert(Joint::RWrist, [wrist_x, shoulder_y, 0.0]);
+        joints.insert(Joint::LHip, [-hip_x, hip_y, 0.0]);
+        joints.insert(Joint::RHip, [hip_x, hip_y, 0.0]);
+        joints.insert(Joint::LKnee, [-hip_x, knee_y, 0.0]);
+        joints.insert(Joint::RKnee, [hip_x, knee_y, 0.0]);
+        joints.insert(Joint::LAnkle, [-hip_x, ankle_y, 0.0]);
+        joints.insert(Joint::RAnkle, [hip_x, ankle_y, 0.0]);
+
+        Self {
+            bones: canonical_bones(),
+            joints,
+        }
+    }
+
+    /// fluent builder for morphology-driven construction
+    #[must_use]
+    pub fn builder() -> HumanoidTemplateBuilder {
+        HumanoidTemplateBuilder::default()
+    }
+
     /// bone chain を Capsule → `SmoothUnion` tree に変換 ([`MuscleWidths::default`] = shounen 使用)
     ///
     /// # Panics
@@ -362,6 +427,174 @@ impl HumanoidTemplate {
     }
 }
 
+/// canonical 15-bone humanoid topology (脊柱 3 + 左腕 3 + 右腕 3 + 左脚 3 + 右脚 3)
+fn canonical_bones() -> Vec<Bone> {
+    vec![
+        // 脊柱 (3)
+        Bone {
+            from: Joint::Head,
+            to: Joint::Neck,
+            thickness: 0.4,
+        },
+        Bone {
+            from: Joint::Neck,
+            to: Joint::Chest,
+            thickness: 0.5,
+        },
+        Bone {
+            from: Joint::Chest,
+            to: Joint::Waist,
+            thickness: 0.6,
+        },
+        // 左腕 (3)
+        Bone {
+            from: Joint::Chest,
+            to: Joint::LShoulder,
+            thickness: 0.4,
+        },
+        Bone {
+            from: Joint::LShoulder,
+            to: Joint::LElbow,
+            thickness: 0.35,
+        },
+        Bone {
+            from: Joint::LElbow,
+            to: Joint::LWrist,
+            thickness: 0.3,
+        },
+        // 右腕 (3)
+        Bone {
+            from: Joint::Chest,
+            to: Joint::RShoulder,
+            thickness: 0.4,
+        },
+        Bone {
+            from: Joint::RShoulder,
+            to: Joint::RElbow,
+            thickness: 0.35,
+        },
+        Bone {
+            from: Joint::RElbow,
+            to: Joint::RWrist,
+            thickness: 0.3,
+        },
+        // 左脚 (3)
+        Bone {
+            from: Joint::Waist,
+            to: Joint::LHip,
+            thickness: 0.4,
+        },
+        Bone {
+            from: Joint::LHip,
+            to: Joint::LKnee,
+            thickness: 0.35,
+        },
+        Bone {
+            from: Joint::LKnee,
+            to: Joint::LAnkle,
+            thickness: 0.3,
+        },
+        // 右脚 (3)
+        Bone {
+            from: Joint::Waist,
+            to: Joint::RHip,
+            thickness: 0.4,
+        },
+        Bone {
+            from: Joint::RHip,
+            to: Joint::RKnee,
+            thickness: 0.35,
+        },
+        Bone {
+            from: Joint::RKnee,
+            to: Joint::RAnkle,
+            thickness: 0.3,
+        },
+    ]
+}
+
+// ============================================================================
+// HumanoidTemplateBuilder (H.2)
+// ============================================================================
+
+/// [`HumanoidTemplate`] の fluent builder ([`MorphologyParams`] を chain 設定)
+///
+/// # 例
+///
+/// ```
+/// use alice_lol_humanoid::HumanoidTemplate;
+///
+/// let t = HumanoidTemplate::builder()
+///     .height(1.7)
+///     .head_body_ratio(7.5)
+///     .build();
+/// ```
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HumanoidTemplateBuilder {
+    params: MorphologyParams,
+}
+
+impl HumanoidTemplateBuilder {
+    /// 全 params を一括設定 (preset 経由の chain 起点用)
+    #[must_use]
+    pub const fn from_params(mut self, params: MorphologyParams) -> Self {
+        self.params = params;
+        self
+    }
+
+    /// 全身高
+    #[must_use]
+    pub const fn height(mut self, h: f32) -> Self {
+        self.params.height = h;
+        self
+    }
+
+    /// 頭身
+    #[must_use]
+    pub const fn head_body_ratio(mut self, n: f32) -> Self {
+        self.params.head_body_ratio = n;
+        self
+    }
+
+    /// 腕長 / 身長 (per side)
+    #[must_use]
+    pub const fn arm_ratio(mut self, r: f32) -> Self {
+        self.params.arm_ratio = r;
+        self
+    }
+
+    /// 肩幅 / 身長
+    #[must_use]
+    pub const fn shoulder_ratio(mut self, r: f32) -> Self {
+        self.params.shoulder_ratio = r;
+        self
+    }
+
+    /// 骨盤幅 / 身長
+    #[must_use]
+    pub const fn hip_ratio(mut self, r: f32) -> Self {
+        self.params.hip_ratio = r;
+        self
+    }
+
+    /// 脚長 / 身長
+    #[must_use]
+    pub const fn leg_ratio(mut self, r: f32) -> Self {
+        self.params.leg_ratio = r;
+        self
+    }
+
+    /// [`HumanoidTemplate`] を構築 (`from_morphology` 経由)
+    #[must_use]
+    pub fn build(self) -> HumanoidTemplate {
+        HumanoidTemplate::from_morphology(&self.params)
+    }
+}
+
+// ============================================================================
+// classify_thickness helper
+// ============================================================================
+
 /// `bone.from` / `bone.to` から limb / torso / head を判別し対応 thickness を返す
 fn classify_thickness(bone: Bone, widths: &MuscleWidths) -> f32 {
     use Joint::{Chest, Head, Neck, Waist};
@@ -383,6 +616,8 @@ fn classify_thickness(bone: Bone, widths: &MuscleWidths) -> f32 {
 mod tests {
     use super::*;
     use alice_lol::eval;
+
+    // ─── H.1 継続 test (invariance で全 pass 想定) ───
 
     #[test]
     fn humanoid_default_has_16_joints_15_bones() {
@@ -500,5 +735,129 @@ mod tests {
         // uniqueness: HashSet 化して同数なら重複なし
         let set: std::collections::HashSet<Joint> = Joint::ALL.iter().copied().collect();
         assert_eq!(set.len(), 16);
+    }
+
+    // ─── H.2 追加 test (MorphologyParams + Builder) ───
+
+    #[test]
+    fn morphology_default_matches_h1_hardcoded_joints() {
+        // H.1 で hardcoded だった canonical 座標を parametric formula が再現するか
+        let t = HumanoidTemplate::default();
+        let expect = [
+            (Joint::Head, [0.0_f32, 2.5, 0.0]),
+            (Joint::Neck, [0.0, 2.0, 0.0]),
+            (Joint::Chest, [0.0, 1.5, 0.0]),
+            (Joint::Waist, [0.0, 0.0, 0.0]),
+            (Joint::LShoulder, [-0.6, 1.5, 0.0]),
+            (Joint::RShoulder, [0.6, 1.5, 0.0]),
+            (Joint::LElbow, [-1.5, 1.5, 0.0]),
+            (Joint::RElbow, [1.5, 1.5, 0.0]),
+            (Joint::LWrist, [-2.4, 1.5, 0.0]),
+            (Joint::RWrist, [2.4, 1.5, 0.0]),
+            (Joint::LHip, [-0.4, 0.0, 0.0]),
+            (Joint::RHip, [0.4, 0.0, 0.0]),
+            (Joint::LKnee, [-0.4, -1.3, 0.0]),
+            (Joint::RKnee, [0.4, -1.3, 0.0]),
+            (Joint::LAnkle, [-0.4, -2.5, 0.0]),
+            (Joint::RAnkle, [0.4, -2.5, 0.0]),
+        ];
+        for (joint, expected) in expect {
+            let actual = t.joints[&joint];
+            for i in 0..3 {
+                assert!(
+                    (actual[i] - expected[i]).abs() < 1e-4,
+                    "joint {joint:?} axis {i}: expected {}, got {}",
+                    expected[i],
+                    actual[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn morphology_chibi_has_larger_head_span_than_adult() {
+        let chibi = MorphologyParams::chibi();
+        let adult = MorphologyParams::adult();
+        let head_span_chibi = chibi.height / chibi.head_body_ratio;
+        let head_span_adult = adult.height / adult.head_body_ratio;
+        assert!(
+            head_span_chibi > head_span_adult,
+            "chibi head span ({head_span_chibi}) should exceed adult ({head_span_adult})"
+        );
+    }
+
+    #[test]
+    fn morphology_taller_scales_all_positions_linearly() {
+        let short = MorphologyParams::default();
+        let tall = MorphologyParams {
+            height: short.height * 2.0,
+            ..MorphologyParams::default()
+        };
+        let t_s = HumanoidTemplate::from_morphology(&short);
+        let t_t = HumanoidTemplate::from_morphology(&tall);
+        for j in Joint::ALL {
+            let s = t_s.joints[&j];
+            let t = t_t.joints[&j];
+            for i in 0..3 {
+                assert!(
+                    s[i].mul_add(-2.0, t[i]).abs() < 1e-4,
+                    "joint {j:?} axis {i}: short {} → tall {}, expected 2x",
+                    s[i],
+                    t[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn builder_chain_produces_expected_joint_positions() {
+        // height=10, head_body_ratio=4 → head_top y = 5, head_span = 2.5, neck y = 2.5
+        let t = HumanoidTemplate::builder()
+            .height(10.0)
+            .head_body_ratio(4.0)
+            .build();
+        assert!((t.joints[&Joint::Head][1] - 5.0).abs() < 1e-4);
+        assert!((t.joints[&Joint::Neck][1] - 2.5).abs() < 1e-4);
+        assert!((t.joints[&Joint::Chest][1] - 1.875).abs() < 1e-4); // 2.5 * 0.75
+    }
+
+    #[test]
+    fn morphology_adult_vs_hero_head_span_differs() {
+        let adult = MorphologyParams::adult();
+        let hero = MorphologyParams::hero();
+        let head_span_adult = adult.height / adult.head_body_ratio;
+        let head_span_hero = hero.height / hero.head_body_ratio;
+        assert!(
+            head_span_adult > head_span_hero,
+            "adult 7.5 頭身 head span ({head_span_adult}) should exceed hero 8 頭身 ({head_span_hero})"
+        );
+    }
+
+    #[test]
+    fn humanoid_from_morphology_preserves_bone_topology_across_presets() {
+        let t_chibi = HumanoidTemplate::from_morphology(&MorphologyParams::chibi());
+        let t_adult = HumanoidTemplate::from_morphology(&MorphologyParams::adult());
+        let t_hero = HumanoidTemplate::from_morphology(&MorphologyParams::hero());
+        for t in [&t_chibi, &t_adult, &t_hero] {
+            assert_eq!(t.bones.len(), 15);
+            assert_eq!(t.joints.len(), 16);
+        }
+        // bone topology (from / to pairs) は preset に関わらず同一
+        for i in 0..15 {
+            assert_eq!(t_chibi.bones[i].from, t_adult.bones[i].from);
+            assert_eq!(t_chibi.bones[i].to, t_adult.bones[i].to);
+            assert_eq!(t_adult.bones[i].from, t_hero.bones[i].from);
+        }
+    }
+
+    #[test]
+    fn morphology_presets_head_body_ratio_ordering() {
+        let chibi = MorphologyParams::chibi();
+        let adult = MorphologyParams::adult();
+        let hero = MorphologyParams::hero();
+        let default = MorphologyParams::default();
+        assert!(chibi.head_body_ratio < adult.head_body_ratio);
+        assert!(adult.head_body_ratio < hero.head_body_ratio);
+        assert!(hero.head_body_ratio < default.head_body_ratio); // default = 10 (最高)
     }
 }
