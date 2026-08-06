@@ -485,4 +485,343 @@ mod tests {
             assert!(eval(&hook, Vec3::new(-2.5, 0.0, 0.0)) < 0.0);
         }
     }
+
+    // ── Phase 5.2 accessory 4 種の tests ──
+
+    #[test]
+    fn container_returns_union() {
+        let c = skadis_container_sdf();
+        assert!(matches!(c, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn clip_returns_union() {
+        let c = skadis_clip_sdf();
+        assert!(matches!(c, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn shelf_returns_union() {
+        let s = skadis_shelf_sdf();
+        assert!(matches!(s, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn elastic_cord_returns_union() {
+        let e = skadis_elastic_cord_sdf();
+        assert!(matches!(e, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn all_phase_5_2_accessories_produce_finite_sdf() {
+        let nodes = [
+            skadis_container_sdf(),
+            skadis_clip_sdf(),
+            skadis_shelf_sdf(),
+            skadis_elastic_cord_sdf(),
+        ];
+        for (i, n) in nodes.iter().enumerate() {
+            let d = eval(n, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "accessory {i}: non-finite SDF");
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────
+// Phase 5.2: SKADIS 残 4 accessory SDF (container/clip/shelf/elastic_cord)
+//
+// Bamboo Python `models/wall-organizer/skadis-{container,clip,shelf,elastic-cord}/generate.py`
+// の実プリント合格 spec を SDF に近似移植 装飾 (fillet / 肉抜き穴 / テーパー) は省略、
+// DC の Hermite で自然滑らか化 実プリント品質は Phase 5.6 user 検証で判定
+// ────────────────────────────────────────────────────────
+
+// ── container 定数 (Bamboo skadis-container/generate.py 準拠) ──
+/// container 内幅 (mm)
+pub const CONTAINER_W: f32 = 65.0;
+/// container 内奥行 (mm)
+pub const CONTAINER_D: f32 = 75.0;
+/// container 内高 (mm)
+pub const CONTAINER_H: f32 = 70.0;
+/// container 壁厚 (mm、4 perimeters)
+pub const CONTAINER_WALL_T: f32 = 1.6;
+/// container 底厚 (mm)
+pub const CONTAINER_BOTTOM_T: f32 = 1.6;
+
+/// SKADIS container SDF (小物入れ、2 peg、Bamboo `skadis-container` 実プリント合格 spec)
+///
+/// 構造: 外形 Box3d - 内部 Box3d + 底 Box3d + 背面 ペグ 2 個
+/// 装飾 (肉抜き穴 4 個 / R フィレット / ガセット補強) は省略 (近似実装)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::skadis_sdf::skadis_container_sdf;
+/// let c = skadis_container_sdf();
+/// // node_to_3mf_dual_contouring(&c, path, config) で 3MF 化推奨
+/// ```
+#[must_use]
+pub fn skadis_container_sdf() -> SdfNode {
+    let outer_w = CONTAINER_W + 2.0 * CONTAINER_WALL_T;
+    let outer_d = CONTAINER_D + 2.0 * CONTAINER_WALL_T;
+    let total_h = CONTAINER_H + CONTAINER_BOTTOM_T;
+
+    // 外形 (X 幅 × Y 高 × Z 奥行)
+    let outer = SdfNode::Box3d {
+        half_extents: Vec3::new(outer_w * 0.5, total_h * 0.5, outer_d * 0.5),
+    };
+    // 内部 (刳り抜き、底より上、上面は開口 = Y=+total_h/2 + margin)
+    let inner = SdfNode::Box3d {
+        half_extents: Vec3::new(
+            CONTAINER_W * 0.5,
+            (CONTAINER_H + 1.0) * 0.5, // 上面 open
+            CONTAINER_D * 0.5,
+        ),
+    };
+    let inner_placed = SdfNode::Translate {
+        child: Arc::new(inner),
+        offset: Vec3::new(
+            0.0,
+            CONTAINER_BOTTOM_T + CONTAINER_H * 0.5 - total_h * 0.5,
+            0.0,
+        ),
+    };
+    let hollow = SdfNode::Subtraction {
+        a: Arc::new(outer),
+        b: Arc::new(inner_placed),
+    };
+
+    // 背面ペグ (Z = -outer_d/2 の壁面、Y = 上部 60%)
+    let peg = skadis_peg_and_shoulder(PEG_BLADE_W);
+    // peg は X 軸に伸びる (X = -BOARD_T .. 0)、これを背面に配置するには rotate 不要
+    // (peg 座標系: X = -BOARD_T .. 0、Z = ±hook_width/2)
+    // container の背面 (Z = -outer_d/2 - BOARD_T .. -outer_d/2) に配置するには
+    // peg を translate: Z += -outer_d/2、Y += 上部位置
+    let peg_placed = SdfNode::Translate {
+        child: Arc::new(peg),
+        offset: Vec3::new(0.0, total_h * 0.35, -outer_d * 0.5),
+    };
+
+    SdfNode::Union {
+        a: Arc::new(hollow),
+        b: Arc::new(peg_placed),
+    }
+}
+
+// ── clip 定数 (Bamboo skadis-clip/generate.py 準拠) ──
+/// clip 横幅 (mm、Bamboo `CLIP_WIDTH`)
+pub const CLIP_WIDTH: f32 = 15.0;
+/// clip 全長 (mm、ペグ下、Bamboo `CLIP_LENGTH`)
+pub const CLIP_LENGTH: f32 = 55.0;
+/// clip 本体厚 (片側 mm)
+pub const CLIP_BODY_T: f32 = 3.0;
+/// clip スロット幅 (mm、紙 1-3 枚)
+pub const CLIP_SLOT_W: f32 = 1.2;
+
+/// SKADIS clip SDF (単 peg、差込 slot 式クリップ、Bamboo `skadis-clip` 実プリント合格 spec)
+///
+/// 構造: 前板 + 背板 (SLOT_W 離間) + root 結合部 + 先端凸 + ペグ
+/// PLA 弾性限界内で使う想定 (0.1kgf メモ・写真、バネなし)
+#[must_use]
+pub fn skadis_clip_sdf() -> SdfNode {
+    let gap = CLIP_SLOT_W * 0.5;
+
+    // root (peg 根元結合、Y = 上部、slot 全幅)
+    let root = SdfNode::Box3d {
+        half_extents: Vec3::new((gap + CLIP_BODY_T) * 0.5, 4.0, CLIP_WIDTH * 0.5),
+    };
+    let root_placed = SdfNode::Translate {
+        child: Arc::new(root),
+        offset: Vec3::new(gap * 0.5, PEG_BLADE_T * 0.25, 0.0),
+    };
+    // 前板 (Y = 下方向、CLIP_LENGTH)
+    let front = SdfNode::Box3d {
+        half_extents: Vec3::new(CLIP_BODY_T * 0.5, CLIP_LENGTH * 0.5, CLIP_WIDTH * 0.5),
+    };
+    let front_placed = SdfNode::Translate {
+        child: Arc::new(front),
+        offset: Vec3::new(gap + CLIP_BODY_T * 0.5, -CLIP_LENGTH * 0.5, 0.0),
+    };
+    // 背板 (対称位置)
+    let back = SdfNode::Box3d {
+        half_extents: Vec3::new(CLIP_BODY_T * 0.5, CLIP_LENGTH * 0.5, CLIP_WIDTH * 0.5),
+    };
+    let back_placed = SdfNode::Translate {
+        child: Arc::new(back),
+        offset: Vec3::new(-gap - CLIP_BODY_T * 0.5, -CLIP_LENGTH * 0.5, 0.0),
+    };
+    // 先端凸 (保持力向上)
+    let tip = SdfNode::Box3d {
+        half_extents: Vec3::new(0.4, 2.5, CLIP_WIDTH * 0.5),
+    };
+    let tip_placed = SdfNode::Translate {
+        child: Arc::new(tip),
+        offset: Vec3::new(gap + 0.1, -CLIP_LENGTH + 2.5, 0.0),
+    };
+    // ペグ
+    let peg = skadis_peg_and_shoulder(CLIP_WIDTH);
+
+    let body_upper = SdfNode::Union {
+        a: Arc::new(root_placed),
+        b: Arc::new(peg),
+    };
+    let body_front = SdfNode::Union {
+        a: Arc::new(body_upper),
+        b: Arc::new(front_placed),
+    };
+    let body_back = SdfNode::Union {
+        a: Arc::new(body_front),
+        b: Arc::new(back_placed),
+    };
+    SdfNode::Union {
+        a: Arc::new(body_back),
+        b: Arc::new(tip_placed),
+    }
+}
+
+// ── shelf 定数 (Bamboo skadis-shelf/generate.py 準拠) ──
+/// shelf 幅 (mm、W 方向、6 grid × 40mm)
+pub const SHELF_W: f32 = 260.0;
+/// shelf 奥行 (mm)
+pub const SHELF_D: f32 = 80.0;
+/// shelf lip 高 (前面リップ mm)
+pub const SHELF_LIP_H: f32 = 20.0;
+/// shelf 背面高 (mm)
+pub const SHELF_BACK_H: f32 = 25.0;
+/// shelf 底厚 (mm、曲げ計算 1.5 + マージン)
+pub const SHELF_BOTTOM_T: f32 = 2.0;
+/// shelf ペグ間隔 (mm、6 × GRID_PITCH)
+pub const SHELF_PEG_SPACING: f32 = 240.0;
+
+/// SKADIS shelf SDF (2 peg 棚、Bamboo `skadis-shelf` 実プリント合格 spec)
+///
+/// 構造: U 字断面 (底 + 背 + 前リップ) を W 方向に extrude + 2 peg (両端)
+/// 底面リブ 3 本は省略 (近似実装、DC で watertight 保証)
+#[must_use]
+pub fn skadis_shelf_sdf() -> SdfNode {
+    // 底板 (X = W 方向、Y = 底厚、Z = 奥行)
+    let bottom = SdfNode::Box3d {
+        half_extents: Vec3::new(SHELF_W * 0.5, SHELF_BOTTOM_T * 0.5, SHELF_D * 0.5),
+    };
+    // 背面 (Y = back_h、Z = -SHELF_D/2 位置、厚 = wall_t)
+    let back = SdfNode::Box3d {
+        half_extents: Vec3::new(SHELF_W * 0.5, SHELF_BACK_H * 0.5, 1.6 * 0.5),
+    };
+    let back_placed = SdfNode::Translate {
+        child: Arc::new(back),
+        offset: Vec3::new(0.0, SHELF_BACK_H * 0.5, -SHELF_D * 0.5 + 0.8),
+    };
+    // 前リップ
+    let lip = SdfNode::Box3d {
+        half_extents: Vec3::new(SHELF_W * 0.5, SHELF_LIP_H * 0.5, 1.6 * 0.5),
+    };
+    let lip_placed = SdfNode::Translate {
+        child: Arc::new(lip),
+        offset: Vec3::new(0.0, SHELF_LIP_H * 0.5, SHELF_D * 0.5 - 0.8),
+    };
+    // 2 ペグ (両端、SHELF_PEG_SPACING 離間)
+    let peg = skadis_peg_and_shoulder(PEG_BLADE_W);
+    let peg_l = SdfNode::Translate {
+        child: Arc::new(peg.clone()),
+        offset: Vec3::new(-SHELF_PEG_SPACING * 0.5, SHELF_BACK_H * 0.7, -SHELF_D * 0.5),
+    };
+    let peg_r = SdfNode::Translate {
+        child: Arc::new(peg),
+        offset: Vec3::new(SHELF_PEG_SPACING * 0.5, SHELF_BACK_H * 0.7, -SHELF_D * 0.5),
+    };
+
+    let step1 = SdfNode::Union {
+        a: Arc::new(bottom),
+        b: Arc::new(back_placed),
+    };
+    let step2 = SdfNode::Union {
+        a: Arc::new(step1),
+        b: Arc::new(lip_placed),
+    };
+    let step3 = SdfNode::Union {
+        a: Arc::new(step2),
+        b: Arc::new(peg_l),
+    };
+    SdfNode::Union {
+        a: Arc::new(step3),
+        b: Arc::new(peg_r),
+    }
+}
+
+// ── elastic_cord 定数 ──
+/// elastic_cord 本体厚 (mm、曲げ計算 2.3 + マージン)
+pub const ELASTIC_CORD_BODY_T: f32 = 3.0;
+/// elastic_cord peg 間隔 (mm、Bamboo GRID_PITCH)
+pub const ELASTIC_CORD_PEG_PITCH: f32 = 40.0;
+/// elastic_cord フック突出 (mm)
+pub const ELASTIC_CORD_HOOK_REACH: f32 = 12.0;
+/// elastic_cord フック R (mm、折れ防止)
+pub const ELASTIC_CORD_HOOK_R: f32 = 3.0;
+
+/// SKADIS elastic cord holder SDF (2 peg 上下、Bamboo `skadis-elastic-cord` 実プリント合格 spec)
+///
+/// 構造: 上下 2 ペグ (GRID_PITCH 離間) + 縦背骨 + 2 hook (上下対称、R カーブ)
+/// バンド溝は省略 (近似実装)
+#[must_use]
+pub fn skadis_elastic_cord_sdf() -> SdfNode {
+    let ht = ELASTIC_CORD_BODY_T * 0.5;
+    let hook_width = 8.0; // hook 幅 (Z 方向)
+
+    // 上ペグ (Y = 0)
+    let peg_top = skadis_peg_and_shoulder(hook_width);
+    // 下ペグ (Y = -GRID_PITCH)
+    let peg_bot = SdfNode::Translate {
+        child: Arc::new(skadis_peg_and_shoulder(hook_width)),
+        offset: Vec3::new(0.0, -ELASTIC_CORD_PEG_PITCH, 0.0),
+    };
+
+    // 背骨 (Y = -pitch/2 中心、高 = pitch + 8mm、X = ht 位置、厚 = ht)
+    let spine = SdfNode::Box3d {
+        half_extents: Vec3::new(ht * 0.5, (ELASTIC_CORD_PEG_PITCH + 8.0) * 0.5, 4.0),
+    };
+    let spine_placed = SdfNode::Translate {
+        child: Arc::new(spine),
+        offset: Vec3::new(ht * 0.5, -ELASTIC_CORD_PEG_PITCH * 0.5, 0.0),
+    };
+
+    // 上フック (前方突出、R カーブを Capsule 連結で近似)
+    let mut top_pts: Vec<glam::Vec2> = vec![glam::Vec2::new(ht, -8.0)];
+    let n = 12;
+    for i in 1..=n {
+        #[allow(clippy::cast_precision_loss)]
+        let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
+        top_pts.push(glam::Vec2::new(
+            ht + (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R) * a.sin(),
+            -8.0 - ELASTIC_CORD_HOOK_R * (1.0 - a.cos()),
+        ));
+    }
+    let top_hook = capsule_polyline_sdf(&top_pts, ht, hook_width);
+
+    // 下フック (Y = -pitch + 8、上下対称、上向きに曲がる)
+    let mut bot_pts: Vec<glam::Vec2> = vec![glam::Vec2::new(ht, -ELASTIC_CORD_PEG_PITCH + 8.0)];
+    for i in 1..=n {
+        #[allow(clippy::cast_precision_loss)]
+        let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
+        bot_pts.push(glam::Vec2::new(
+            ht + (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R) * a.sin(),
+            -ELASTIC_CORD_PEG_PITCH + 8.0 + ELASTIC_CORD_HOOK_R * (1.0 - a.cos()),
+        ));
+    }
+    let bot_hook = capsule_polyline_sdf(&bot_pts, ht, hook_width);
+
+    let step1 = SdfNode::Union {
+        a: Arc::new(peg_top),
+        b: Arc::new(peg_bot),
+    };
+    let step2 = SdfNode::Union {
+        a: Arc::new(step1),
+        b: Arc::new(spine_placed),
+    };
+    let step3 = SdfNode::Union {
+        a: Arc::new(step2),
+        b: Arc::new(top_hook),
+    };
+    SdfNode::Union {
+        a: Arc::new(step3),
+        b: Arc::new(bot_hook),
+    }
 }
