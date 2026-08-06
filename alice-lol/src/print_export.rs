@@ -34,7 +34,10 @@ pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, Fb
 pub use alice_sdf::mesh::polygon_extrude::{
     circle as polygon_circle, rect as polygon_rect, rounded_rect as polygon_rounded_rect, Polygon2D,
 };
-pub use alice_sdf::mesh::{sdf_to_mesh, MarchingCubesConfig, Mesh, MeshRepair, Vertex};
+pub use alice_sdf::mesh::{
+    dual_contouring, sdf_to_mesh, DualContouringConfig, MarchingCubesConfig, Mesh, MeshRepair,
+    Vertex,
+};
 
 /// 3Dプリント用エクスポート設定
 #[derive(Debug, Clone)]
@@ -284,7 +287,84 @@ pub fn lol_to_fbx(
 }
 
 // ────────────────────────────────────────────────────────
+// Dual Contouring 経路 (Phase 3''、SDF 経路のまま watertight 保証、ALICE way)
+// ────────────────────────────────────────────────────────
+
+/// `SdfNode` → mesh (dual contouring 経由、SDF 経路のまま watertight 保証)
+///
+/// Marching Cubes は薄物 (≤ 5mm) で非多様体多発の原理的限界 (Bamboo 実測 6177 non-manifold edges)
+/// **Dual Contouring は Hermite data (edge crossing position + normal) で sharp feature を保存**、
+/// 薄物 + 大量穴でも topology 保証、SDF 経路のまま Phase 2 Law 準拠
+///
+/// 用途: SKADIS panel / thin plate / mechanical part 等、MC が破綻する SDF に対して
+/// `sdf_to_mesh` の代わりに本 fn を使う
+#[must_use]
+pub fn node_to_mesh_dual_contouring(node: &SdfNode, config: &PrintConfig) -> Mesh {
+    let dc_config = DualContouringConfig {
+        resolution: config.resolution,
+        compute_normals: true,
+        ..DualContouringConfig::default()
+    };
+    let mut mesh = dual_contouring(node, config.bounds_min, config.bounds_max, &dc_config);
+    if (config.scale_mm - 1.0).abs() > f32::EPSILON {
+        for v in &mut mesh.vertices {
+            v.position *= config.scale_mm;
+        }
+    }
+    mesh
+}
+
+/// `SdfNode` → STL (dual contouring 経路、SDF 経路のまま watertight 保証)
+///
+/// # Errors
+///
+/// メッシュ空 `EmptyMesh`、ファイル書込 `Io`
+pub fn node_to_stl_dual_contouring(
+    node: &SdfNode,
+    path: impl AsRef<Path>,
+    config: &PrintConfig,
+) -> Result<ExportStats, ExportError> {
+    let mesh = node_to_mesh_dual_contouring(node, config);
+    if mesh.indices.is_empty() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let stats = ExportStats::from_mesh(&mesh, &path);
+    export_stl(&mesh, path)?;
+    Ok(stats)
+}
+
+/// `SdfNode` → 3MF (dual contouring 経路、SDF 経路のまま watertight 保証)
+///
+/// SKADIS panel / thin mechanical part 等、Marching Cubes が非多様体を出す SDF に対して
+/// [`node_to_3mf`] の代わりに本 fn を使う ALICE 三相原理 Phase 2 Law 準拠
+///
+/// Phase A.5.2 の `polygon_to_3mf` (earcutr 経路) は Phase 1 Data 相当なので、本 fn が
+/// 完成次第 deprecate 予定 (`~/.claude/projects/-Users-ys/memory/feedback_alice_polygon_extrude_data_route.md` 参照)
+///
+/// # Errors
+///
+/// メッシュ空 `EmptyMesh`、ファイル書込 `Io`
+pub fn node_to_3mf_dual_contouring(
+    node: &SdfNode,
+    path: impl AsRef<Path>,
+    config: &PrintConfig,
+) -> Result<ExportStats, ExportError> {
+    let mesh = node_to_mesh_dual_contouring(node, config);
+    if mesh.indices.is_empty() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let stats = ExportStats::from_mesh(&mesh, &path);
+    export_3mf(&mesh, path)?;
+    Ok(stats)
+}
+
+// ────────────────────────────────────────────────────────
 // 2D polygon + extrude 経路 (Phase A.5.2、薄物 ≤ 5mm 向け)
+//
+// **注意**: 本経路は ALICE 三相原理 Phase 1 Data 相当 = **ALICE 違反**
+// 詳細: memory/feedback_alice_polygon_extrude_data_route.md
+// 真の ALICE way は上記 `node_to_3mf_dual_contouring` (Phase 2 Law 経路)
+// 本経路は Phase 3'' 完成後 deprecate 予定 現状は暫定救済策として残置
 // ────────────────────────────────────────────────────────
 
 /// [`Polygon2D`] を extrude して watertight mesh を返す (スケーリング適用)
