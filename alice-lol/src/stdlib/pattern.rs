@@ -131,16 +131,18 @@ pub struct LolPattern {
 pub mod registry {
     use super::{CertificationSource, LolPattern, PatternRoute};
 
-    // ── 実プリント合格 baseline (certified_by = UserFieldTest、Bamboo models/ に .3mf あり) ──
+    // ── 実プリント合格 baseline (Bamboo models/ 配下 .3mf 記録あり + Bamboo simulation で追加検証済) ──
+    // Phase B.2 代替 (2026-08-06): Bamboo `examples/compute_pattern_scores.rs` で全 13 pattern の
+    // Simulation score 実測、UserFieldTest + Simulation Excellent の pattern は Both に昇格
 
     /// 100yen 型 shopping cart coin (Bamboo `models/accessories/shopping-cart-coin/`)
     pub const SHOPPING_CART_COIN_100YEN: LolPattern = LolPattern {
         name: "shopping_cart_coin_100yen",
-        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (Bamboo 実プリント合格)",
+        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (Bamboo 実プリント合格 + Sim Excellent 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
-        field_test: None, // Phase B.2 で埋め込み
+        certified_by: CertificationSource::Both,
+        printability_score: Some(88),
+        field_test: None, // Phase B.2 で date/material/printer/notes 埋め込み
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/accessories/shopping-cart-coin/generate.py"),
@@ -149,10 +151,11 @@ pub mod registry {
     /// IKEA SKADIS 300×300 panel (Bamboo `models/wall-organizer/skadis-300x300/`)
     pub const SKADIS_PANEL_300X300: LolPattern = LolPattern {
         name: "skadis_panel_300x300",
-        description: "IKEA SKADIS 互換 300×300×5mm ペグボード + 千鳥ペグ穴 98 個",
+        description:
+            "IKEA SKADIS 互換 300×300×5mm ペグボード + 千鳥ペグ穴 98 個 (Sim Excellent 94)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(94),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
@@ -160,12 +163,15 @@ pub mod registry {
     };
 
     /// U 字棚仕切り (Bamboo `models/shelf/divider-560x250x120/`、Rust generator canonical)
+    /// Sim 69 Acceptable (warp Critical、560mm 幅で env open-air PLA warp 高判定) だが
+    /// 30lbs 荷重実プリント合格 baseline のため UserFieldTest 維持 (CI gate は field test 経由通過)
     pub const SHELF_DIVIDER_560X250X120: LolPattern = LolPattern {
         name: "shelf_divider_560x250x120",
-        description: "U 字棚仕切り 560×250×120mm + hex 抜き穴 (板反り対策)",
+        description:
+            "U 字棚仕切り 560×250×120mm + hex 抜き穴 (板反り対策、30lbs 実荷重合格、Sim 69)",
         route: PatternRoute::SdfMarchingCubes,
         certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        printability_score: Some(69),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
@@ -174,132 +180,141 @@ pub mod registry {
 
     // ── SKADIS アクセサリー 6 種 (Bamboo models/wall-organizer/、Phase B.1.c で primitive 実装予定) ──
 
-    /// SKADIS J 型 hook
+    /// SKADIS J 型 hook (Sim 79 Good、hook 形状 overhang 30%+ が主因、Field test で通過)
     pub const SKADIS_HOOK_J: LolPattern = LolPattern {
         name: "skadis_hook_j",
-        description: "IKEA SKADIS 互換 J 型 hook (Bamboo Python 2D+extrude canonical)",
+        description: "IKEA SKADIS 互換 J 型 hook (Bamboo Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-hook-j/generate.py"),
     };
 
-    /// SKADIS L 型 hook
+    /// SKADIS L 型 hook (Sim 79 Good、直角曲げの overhang が主因、Field test で通過)
     pub const SKADIS_HOOK_L: LolPattern = LolPattern {
         name: "skadis_hook_l",
-        description: "IKEA SKADIS 互換 L 型 hook (直角曲げ、Bamboo Python 2D+extrude canonical)",
+        description:
+            "IKEA SKADIS 互換 L 型 hook (直角曲げ、Bamboo Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-hook-l/generate.py"),
     };
 
-    /// SKADIS S 型 hook
+    /// SKADIS S 型 hook (Sim 88 Excellent)
     pub const SKADIS_HOOK_S: LolPattern = LolPattern {
         name: "skadis_hook_s",
-        description: "IKEA SKADIS 互換 S 型 hook (S 字曲げ、Bamboo Python 2D+extrude canonical)",
+        description:
+            "IKEA SKADIS 互換 S 型 hook (S 字曲げ、Bamboo Python 2D+extrude canonical、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-hook-s/generate.py"),
     };
 
-    /// SKADIS container (小物入れ、2 peg)
+    /// SKADIS container (小物入れ、2 peg、Sim 94 Excellent)
     pub const SKADIS_CONTAINER: LolPattern = LolPattern {
         name: "skadis_container",
-        description: "IKEA SKADIS 互換 container (2 peg、gusset ribs で補強)",
+        description: "IKEA SKADIS 互換 container (2 peg、gusset ribs で補強、Sim 94)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(94),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-container/generate.py"),
     };
 
-    /// SKADIS clip (単 peg)
+    /// SKADIS clip (単 peg、Sim 88 Excellent)
     pub const SKADIS_CLIP: LolPattern = LolPattern {
         name: "skadis_clip",
-        description: "IKEA SKADIS 互換 clip (単 peg、細物ホルダー)",
+        description: "IKEA SKADIS 互換 clip (単 peg、細物ホルダー、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-clip/generate.py"),
     };
 
-    /// SKADIS shelf (2 peg 棚)
+    /// SKADIS shelf (2 peg 棚、Sim 97 Excellent)
     pub const SKADIS_SHELF: LolPattern = LolPattern {
         name: "skadis_shelf",
-        description: "IKEA SKADIS 互換 shelf (2 peg、rib 補強棚板)",
+        description: "IKEA SKADIS 互換 shelf (2 peg、rib 補強棚板、Sim 97)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(97),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-shelf/generate.py"),
     };
 
-    /// SKADIS elastic cord holder (伸縮ホルダー)
+    /// SKADIS elastic cord holder (伸縮ホルダー、Sim 88 Excellent)
     pub const SKADIS_ELASTIC_CORD: LolPattern = LolPattern {
         name: "skadis_elastic_cord",
-        description: "IKEA SKADIS 互換 elastic cord holder (伸縮バンドで固定)",
+        description: "IKEA SKADIS 互換 elastic cord holder (伸縮バンドで固定、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
-        printability_score: None,
+        certified_by: CertificationSource::Both,
+        printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("models/wall-organizer/skadis-elastic-cord/generate.py"),
     };
 
-    // ── 未実地検証 pattern (certified_by = None、Bamboo Rust generator のみ、Phase B.1.b で LOL 移設) ──
+    // ── Bamboo simulation certified (未実地検証、Sim score のみで CI gate 判定) ──
+    // gridfinity_bin: Sim 97 Excellent → gate 通過、wall_hook / drawer_organizer は
+    // Sim < 85 なので gate 未通過 (実プリント baseline or 設計 revise 必要)
 
-    /// 壁掛けフック (Bamboo `generators/hook.rs`、実プリント未検証)
+    /// 壁掛けフック (Bamboo `generators/hook.rs`、Sim 70 Good = 幾何形状 overhang 30%+、CI gate 未通過)
+    /// gate 通過には (a) spec 見直し (angle 45deg 制約) / (b) user field test で 85+ 判定 のいずれか必要
     pub const WALL_HOOK: LolPattern = LolPattern {
         name: "wall_hook",
-        description: "壁掛けフック (荷重指定 kgf で応力逆算、Bamboo Rust generator canonical)",
+        description:
+            "壁掛けフック (荷重指定 kgf で応力逆算、Bamboo Rust generator canonical、Sim 70)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::None,
-        printability_score: None,
+        certified_by: CertificationSource::BambooSimulation,
+        printability_score: Some(70),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("src/generators/hook.rs"),
     };
 
-    /// Gridfinity bin (Bamboo `generators/gridfinity.rs`、実プリント未検証)
+    /// Gridfinity bin (Bamboo `generators/gridfinity.rs`、Sim 97 Excellent、CI gate 通過)
     pub const GRIDFINITY_BIN: LolPattern = LolPattern {
         name: "gridfinity_bin",
-        description: "Gridfinity 互換 bin (42mm grid、任意 units × height × dividers)",
+        description: "Gridfinity 互換 bin (42mm grid、任意 units × height × dividers、Sim 97)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::None,
-        printability_score: None,
+        certified_by: CertificationSource::BambooSimulation,
+        printability_score: Some(97),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
         bamboo_canonical: Some("src/generators/gridfinity.rs"),
     };
 
-    /// Drawer organizer (Bamboo `generators/drawer.rs`、実プリント未検証)
+    /// Drawer organizer (Bamboo `generators/drawer.rs`、Sim 81 Good、CI gate 未通過)
+    /// warp High が主因 (250mm+ 幅で PLA 反り)、gate 通過には (a) PETG 素材変更 (但し現状の
+    /// `safety_validate` は env open-air PLA hardcoded で material 差替効果限定) or
+    /// (b) user field test で 85+ 判定 のいずれか必要
     pub const DRAWER_ORGANIZER: LolPattern = LolPattern {
         name: "drawer_organizer",
-        description: "引出し仕切り (chopsticks/fork/knife/spoon/marker/pen 等 slot 定義)",
+        description: "引出し仕切り (chopsticks/fork/knife/spoon/marker/pen 等 slot 定義、Sim 81)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::None,
-        printability_score: None,
+        certified_by: CertificationSource::BambooSimulation,
+        printability_score: Some(81),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
@@ -414,11 +429,13 @@ mod tests {
 
     #[test]
     fn uncertified_patterns_count() {
+        // Phase B.2 代替 (2026-08-06): Bamboo simulation 反映後、全 13 pattern が
+        // UserFieldTest / Both / BambooSimulation のいずれかで certified、None は 0
         let uncertified: Vec<_> = registry::ALL
             .iter()
             .filter(|p| p.certified_by == CertificationSource::None)
             .collect();
-        assert_eq!(uncertified.len(), 3);
+        assert_eq!(uncertified.len(), 0);
     }
 
     #[test]
@@ -446,14 +463,23 @@ mod tests {
     fn find_shopping_cart_coin() {
         let p = find_by_name("shopping_cart_coin_100yen").expect("registered");
         assert_eq!(p.route, PatternRoute::SdfDualContouring);
-        assert_eq!(p.certified_by, CertificationSource::UserFieldTest);
+        // Phase B.2 代替 (2026-08-06): Bamboo Sim Excellent 88 + UserFieldTest = Both 昇格
+        assert_eq!(p.certified_by, CertificationSource::Both);
+        assert_eq!(p.printability_score, Some(88));
     }
 
     #[test]
-    fn find_wall_hook_is_uncertified() {
+    fn find_wall_hook_bamboo_sim_certified() {
+        // Phase B.2 代替 (2026-08-06): Bamboo Sim 70 Good、None → BambooSimulation 昇格
+        // Sim < 85 なので CI gate 未通過 (user field test 待ち or spec 見直し必要)
         let p = find_by_name("wall_hook").expect("registered");
-        assert_eq!(p.certified_by, CertificationSource::None);
+        assert_eq!(p.certified_by, CertificationSource::BambooSimulation);
+        assert_eq!(p.printability_score, Some(70));
         assert!(p.bamboo_canonical.is_some());
+        assert!(
+            !pattern_passes_ci_gate(p),
+            "wall_hook は Sim 70 なので CI gate 未通過"
+        );
     }
 
     #[test]
@@ -517,12 +543,14 @@ mod tests {
 
     #[test]
     fn patterns_failing_ci_gate_matches_uncertified_count() {
-        // Phase B.2 実データ登録前は certified None 3 + score None 3 = 3 pattern 通過失敗
+        // Phase B.2 代替 (2026-08-06): Bamboo simulation 反映後
+        // gate 通過: UserFieldTest/Both 10 pattern + gridfinity_bin (Sim 97 Excellent) = 11
+        // gate 未通過: wall_hook (Sim 70) + drawer_organizer (Sim 81) = 2
         let failing = patterns_failing_ci_gate();
         assert_eq!(
             failing.len(),
-            3,
-            "現状 3 uncertified 想定 (wall_hook / gridfinity_bin / drawer_organizer)"
+            2,
+            "wall_hook + drawer_organizer が Sim < 85 で gate 未通過"
         );
     }
 
