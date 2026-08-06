@@ -29,13 +29,10 @@ default = ["glsl"]
 glsl = []
 wgsl = ["alice-sdf/gpu"]
 hlsl = ["alice-sdf/hlsl"]
-# `physics` feature removed for the 0.2.0 crates.io publish because
-# alice-sdf 1.7.4 temporarily dropped its `physics` bridge (blocked on
-# the transitive dep chain reaching crates.io). Restore alongside
-# alice-sdf 1.8.0. The src re-exports (`sdf_to_physics_field` /
-# `CompiledSdfField` / `attach_physics` / `simulate_sdf` /
-# `SimulatedSdf`) are `#[cfg(feature = "physics")]`-gated so they
-# simply don't activate.
+# Physics bridge — alice-sdf 1.7.4 で一時削除、Milestone A.1.0 (2026-08-06) で復帰
+# path dep 経由 (alice-physics が crates.io 未公開のため path only)
+# 再エクスポート: sdf_to_physics_field / CompiledSdfField / attach_physics / simulate_sdf / SimulatedSdf
+physics = ["alice-sdf/physics"]
 roblox = []
 # Phase X.8 B-6: exposes `alice_lol::bridge` for grammar-constrained
 # LLM decoding against the LOL DSL. Off by default so pure geometry
