@@ -325,6 +325,45 @@ pub mod registry {
 }
 
 // ────────────────────────────────────────────────────────
+// Phase D.2: 85 点 CI gate contract
+// ────────────────────────────────────────────────────────
+
+/// pattern の CI merge gate 判定
+///
+/// 通過条件 (OR): `printability_score >= 85` (Bamboo `PrintabilityScore::Excellent`)
+/// または `certified_by` が `UserFieldTest` を含む (実プリント合格 baseline)
+///
+/// 未検証 (score None + `certified_by = None`) の pattern は **通過しない**
+///
+/// Phase D.1 の `alice_bamboo::rating::PrintabilityScore` で計算した score を
+/// registry の `printability_score` field に埋めた前提、Phase B.2 で
+/// `field_test` を埋めた前提で機能する
+#[must_use]
+pub fn pattern_passes_ci_gate(pattern: &LolPattern) -> bool {
+    let score_ok = pattern.printability_score.is_some_and(|s| s >= 85);
+    let field_tested = pattern.certified_by.includes_field_test();
+    score_ok || field_tested
+}
+
+/// registry 全 pattern の CI gate 判定 (未通過 pattern 名 list を返す)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::pattern::patterns_failing_ci_gate;
+/// let failing = patterns_failing_ci_gate();
+/// // Phase B.2 完成前は wall_hook / gridfinity_bin / drawer_organizer が未通過
+/// // (certified_by = None、score None) 想定
+/// ```
+#[must_use]
+pub fn patterns_failing_ci_gate() -> Vec<&'static LolPattern> {
+    registry::ALL
+        .iter()
+        .filter(|p| !pattern_passes_ci_gate(p))
+        .collect()
+}
+
+// ────────────────────────────────────────────────────────
 // filter helpers
 // ────────────────────────────────────────────────────────
 
@@ -435,6 +474,56 @@ mod tests {
         for p in registry::ALL {
             assert_eq!(p.source_crate, "alice-lol");
         }
+    }
+
+    #[test]
+    fn ci_gate_field_tested_patterns_pass() {
+        // 実プリント合格 baseline (UserFieldTest) は score なしでも通過
+        for p in registry::ALL {
+            if p.certified_by.includes_field_test() {
+                assert!(
+                    pattern_passes_ci_gate(p),
+                    "{}: field-tested but CI gate fail",
+                    p.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ci_gate_uncertified_without_score_fail() {
+        // certified_by = None + score None は通過しない
+        for p in registry::ALL {
+            if p.certified_by == CertificationSource::None && p.printability_score.is_none() {
+                assert!(
+                    !pattern_passes_ci_gate(p),
+                    "{}: uncertified + score None は CI gate 失敗すべき",
+                    p.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ci_gate_hypothetical_high_score_passes() {
+        // score >= 85 なら certified_by 無視で通過
+        let p = LolPattern {
+            printability_score: Some(90),
+            certified_by: CertificationSource::None,
+            ..registry::WALL_HOOK
+        };
+        assert!(pattern_passes_ci_gate(&p));
+    }
+
+    #[test]
+    fn patterns_failing_ci_gate_matches_uncertified_count() {
+        // Phase B.2 実データ登録前は certified None 3 + score None 3 = 3 pattern 通過失敗
+        let failing = patterns_failing_ci_gate();
+        assert_eq!(
+            failing.len(),
+            3,
+            "現状 3 uncertified 想定 (wall_hook / gridfinity_bin / drawer_organizer)"
+        );
     }
 
     #[test]
