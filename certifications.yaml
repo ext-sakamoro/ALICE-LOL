@@ -1,0 +1,128 @@
+# certifications.yaml — LOL pattern の実地テスト record (Phase D.3 skeleton)
+#
+# Purpose: alice_lol::stdlib::pattern::registry の各 pattern に紐づく実プリント
+# 実測記録を YAML 形式で管理 Phase B.2 で user が実測データを埋める
+#
+# Schema (各 entry):
+#   pattern_name: registry の LolPattern.name (snake_case)
+#   field_test:
+#     date:     ISO 8601 (YYYY-MM-DD)
+#     material: PLA / PETG / ABS / Nylon / TPU
+#     printer:  Bambu H2D / Bambu P1S / Bambu A1 mini
+#     notes:    free-form (実プリント時の観察点、成果物写真 URL 等)
+#   printability_score:  0-100 (Bamboo PrintabilityScore で計算、任意)
+#
+# 現状 (2026-08-06 Phase D.3 skeleton): 全 entry TBD (Phase B.2 で埋める)
+# entry 追加時は registry (src/stdlib/pattern.rs) の対応 pattern の
+# `certified_by = UserFieldTest` + `field_test = Some(FieldTestRecord { ... })` に反映
+#
+# 参照: docs/BAMBU_STUDIO_VERIFICATION.md (Phase 5.6 手順書)
+#       ~/.claude/projects/-Users-ys/memory/reference_bambu_3mf_analyzed_assets.md
+
+# ─── 薄物 (Phase 3''-3''.3.1、DC 経路) ───
+
+- pattern_name: shopping_cart_coin_100yen
+  field_test:
+    date: TBD  # user 実プリント日
+    material: TBD  # 想定: PLA
+    printer: TBD  # 想定: Bambu H2D
+    notes: TBD  # Bamboo canonical: models/accessories/shopping-cart-coin/
+  printability_score: null  # 未計算、Phase B.2 で PrintabilityScore::from_reports 実行
+
+- pattern_name: skadis_panel_300x300
+  field_test:
+    date: TBD
+    material: TBD  # 想定: PETG (棚系荷重、PLA 非推奨)
+    printer: TBD
+    notes: TBD  # Bamboo canonical: models/wall-organizer/skadis-300x300/
+  printability_score: null
+
+- pattern_name: skadis_hook_l
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD  # 2-peg 5kgf、DC 経路 mesh 品質検証要
+  printability_score: null
+
+- pattern_name: skadis_hook_j
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD
+  printability_score: null
+
+- pattern_name: skadis_hook_s
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD
+  printability_score: null
+
+- pattern_name: skadis_container
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD  # Phase 5.2 近似実装 (肉抜き穴省略)、実プリント品質確認要
+  printability_score: null
+
+- pattern_name: skadis_clip
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD
+  printability_score: null
+
+- pattern_name: skadis_shelf
+  field_test:
+    date: TBD
+    material: TBD  # 想定: PETG (棚荷重)
+    printer: TBD
+    notes: TBD  # Phase 5.2 近似実装 (底面 rib 省略)、実プリント荷重テスト推奨
+  printability_score: null
+
+- pattern_name: skadis_elastic_cord
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD
+  printability_score: null
+
+# ─── 厚物 (Phase B.1.b、MC 経路) ───
+
+- pattern_name: shelf_divider_560x250x120
+  field_test:
+    date: TBD
+    material: TBD  # 想定: PETG (実プリント合格 baseline、~/ALICE-Bamboo canonical)
+    printer: TBD  # 想定: Bambu H2D
+    notes: TBD  # 30lbs 荷重実証 baseline (Bamboo canonical、逆さ印刷、560mm 幅は分割印刷要)
+  printability_score: null
+
+- pattern_name: wall_hook
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD  # 荷重 1kgf spec (WallHookSpec::pla_1kgf)、実プリント時 backplate 6mm 厚
+  printability_score: null
+
+- pattern_name: gridfinity_bin
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD  # Phase 5.8 fix 後、2×2 dividers 動作確認済 (57.7MB)
+  printability_score: null
+
+- pattern_name: drawer_organizer
+  field_test:
+    date: TBD
+    material: TBD
+    printer: TBD
+    notes: TBD  # 250mm 幅、chopsticks+fork+knife の standard slot 組合せ
+  printability_score: null
