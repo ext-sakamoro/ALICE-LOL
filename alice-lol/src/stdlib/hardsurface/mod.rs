@@ -8,6 +8,7 @@
 //! - [`joint`] — 組立 6 primitive (片持ち snap-fit / 環状 snap-fit / スロット / T スロット 2020 / アリ継ぎ / ピンヒンジ)
 //! - [`reinforcement`] — 補強 6 primitive (リブ / ボス / フィレット / 面取り / ハニカム infill / Gyroid infill)
 //! - [`mount`] — 建築/取付 6 primitive (L 字ブラケット / 円形フランジ / ラック / SKADIS peg / 2020 profile / 3030 profile)
+//! - [`thin`] — 薄物 3 primitive (shopping cart coin / SKADIS panel / thin plate)、2D polygon + extrude 経路 (Phase A.5.2)
 //!
 //! ## 準拠 formulas (ALICE-Bamboo `src/formulas.rs`)
 //!
@@ -27,3 +28,4 @@ pub mod fastener;
 pub mod joint;
 pub mod mount;
 pub mod reinforcement;
+pub mod thin;
