@@ -1539,6 +1539,22 @@ impl<'a> Parser<'a> {
                 self.expect_rparen()?;
                 Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_hook_s_sdf())
             }
+            "skadis_container" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_container_sdf())
+            }
+            "skadis_clip" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_clip_sdf())
+            }
+            "skadis_shelf" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_shelf_sdf())
+            }
+            "skadis_elastic_cord" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_elastic_cord_sdf())
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
