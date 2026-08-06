@@ -32,3 +32,4 @@ pub mod pattern_sdf;
 pub mod reinforcement;
 pub mod skadis_sdf;
 pub mod thin;
+pub mod thin_sdf;
