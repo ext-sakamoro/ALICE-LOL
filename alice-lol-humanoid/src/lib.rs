@@ -3,15 +3,15 @@
 //! Humanoid template for `alice_lol` DSL parametric character generation
 //!
 //! `~/ALICE-LOL/docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
-//! 現在 Phase = **H.3 VRM import** (feature `vrm` opt-in、`HumanoidTemplate::from_vrm`)
+//! 現在 Phase = **H.4 BVH import + pose** (BVH parser + `HumanoidTemplate::with_pose` FK)
 //!
 //! # Roadmap
 //!
 //! - H.0 Scaffolding (完了)
 //! - H.1 Static template (完了)
 //! - H.2 Parametric morphology (完了)
-//! - **H.3 VRM import** (本 Phase、feature `vrm`、`serde_json` optional dep)
-//! - H.4 BVH import + pose (`apply_pose`)
+//! - H.3 VRM import (完了)
+//! - **H.4 BVH import + pose** (本 Phase、`bvh` module 常時 available + `with_pose` FK)
 //! - H.5 ALICE-Manga との duplication 整理
 //! - H.6 Intent 結線 (`apply_intent(&IntentNode)`)
 //!
@@ -52,6 +52,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use alice_lol::{SdfNode, Vec3};
+use glam::{Mat4, Quat};
+
+pub mod bvh;
 
 #[cfg(feature = "vrm")]
 pub mod vrm;
@@ -117,6 +120,73 @@ impl Joint {
         Self::LAnkle,
         Self::RAnkle,
     ];
+}
+
+// ============================================================================
+// VRM humanoid parent-child hierarchy (pub(crate)、H.3 vrm + H.4 with_pose 共用)
+// ============================================================================
+
+/// VRM humanoid の parent-child hierarchy (Waist が root、他 15 joint は parent を持つ)
+/// forward kinematics で必要
+pub(crate) const VRM_PARENT_TABLE: &[(Joint, Joint)] = &[
+    (Joint::Chest, Joint::Waist),
+    (Joint::Neck, Joint::Chest),
+    (Joint::Head, Joint::Neck),
+    (Joint::LShoulder, Joint::Chest),
+    (Joint::LElbow, Joint::LShoulder),
+    (Joint::LWrist, Joint::LElbow),
+    (Joint::RShoulder, Joint::Chest),
+    (Joint::RElbow, Joint::RShoulder),
+    (Joint::RWrist, Joint::RElbow),
+    (Joint::LHip, Joint::Waist),
+    (Joint::LKnee, Joint::LHip),
+    (Joint::LAnkle, Joint::LKnee),
+    (Joint::RHip, Joint::Waist),
+    (Joint::RKnee, Joint::RHip),
+    (Joint::RAnkle, Joint::RKnee),
+];
+
+/// FK walk 用 topological order (parent が先、child が後、BFS from Waist)
+pub(crate) const VRM_TOPO_ORDER: &[Joint] = &[
+    Joint::Waist,
+    Joint::Chest,
+    Joint::LHip,
+    Joint::RHip,
+    Joint::Neck,
+    Joint::LShoulder,
+    Joint::RShoulder,
+    Joint::LKnee,
+    Joint::RKnee,
+    Joint::Head,
+    Joint::LElbow,
+    Joint::RElbow,
+    Joint::LAnkle,
+    Joint::RAnkle,
+    Joint::LWrist,
+    Joint::RWrist,
+];
+
+/// [`Joint`] → VRM bone name の逆引き
+#[must_use]
+pub(crate) const fn joint_to_vrm_name(j: Joint) -> &'static str {
+    match j {
+        Joint::Head => "head",
+        Joint::Neck => "neck",
+        Joint::Chest => "chest",
+        Joint::Waist => "hips",
+        Joint::LShoulder => "leftUpperArm",
+        Joint::RShoulder => "rightUpperArm",
+        Joint::LElbow => "leftLowerArm",
+        Joint::RElbow => "rightLowerArm",
+        Joint::LWrist => "leftHand",
+        Joint::RWrist => "rightHand",
+        Joint::LHip => "leftUpperLeg",
+        Joint::RHip => "rightUpperLeg",
+        Joint::LKnee => "leftLowerLeg",
+        Joint::RKnee => "rightLowerLeg",
+        Joint::LAnkle => "leftFoot",
+        Joint::RAnkle => "rightFoot",
+    }
 }
 
 // ============================================================================
@@ -408,6 +478,85 @@ impl HumanoidTemplate {
                 k: smoothness_k,
             })
             .expect("bones non-empty by assert above")
+    }
+
+    /// bind pose (self) + VRM-named local rotations で FK 適用、新 template を返す
+    ///
+    /// `vrm_named_rotations` は VRM bone name (`"leftUpperArm"` 等) → parent frame の local rotation
+    /// 指定なし joint は identity 適用 (bind pose 保持)
+    /// bones topology は同一、joints のみ FK で更新される
+    ///
+    /// # FK Algorithm
+    ///
+    /// 1. `self.joints` を bind pose として、各 child joint の parent 基準 local offset を計算
+    /// 2. Waist を root、[`VRM_TOPO_ORDER`] で FK walk:
+    ///    `world[child] = world[parent] * translate(offset) * rotate(local_rot)`
+    /// 3. `world.transform_point3(Vec3::ZERO)` で新 joint 位置を抽出
+    ///
+    /// # Panics
+    ///
+    /// - `self.joints` に [`Joint::Waist`] が存在しない (canonical topology 前提)
+    #[must_use]
+    pub fn with_pose(&self, vrm_named_rotations: &HashMap<String, Quat>) -> Self {
+        let parent_map: HashMap<Joint, Joint> = VRM_PARENT_TABLE.iter().copied().collect();
+
+        // Step 1: bind pose local offsets
+        let mut local_offsets: HashMap<Joint, Vec3> = HashMap::with_capacity(15);
+        for (&child, &parent) in &parent_map {
+            if let (Some(&c), Some(&p)) = (self.joints.get(&child), self.joints.get(&parent)) {
+                local_offsets.insert(child, Vec3::from(c) - Vec3::from(p));
+            }
+        }
+
+        // Step 2: root transform (Waist)
+        let root_pos: Vec3 = self
+            .joints
+            .get(&Joint::Waist)
+            .copied()
+            .expect("HumanoidTemplate::with_pose requires Waist joint")
+            .into();
+        let root_rot = vrm_named_rotations
+            .get(joint_to_vrm_name(Joint::Waist))
+            .copied()
+            .unwrap_or(Quat::IDENTITY);
+        let root_transform = Mat4::from_rotation_translation(root_rot, root_pos);
+
+        // Step 3: FK walk
+        let mut world_transforms: HashMap<Joint, Mat4> = HashMap::with_capacity(16);
+        world_transforms.insert(Joint::Waist, root_transform);
+
+        for &joint in VRM_TOPO_ORDER {
+            if joint == Joint::Waist {
+                continue;
+            }
+            let Some(&parent) = parent_map.get(&joint) else {
+                continue;
+            };
+            let Some(&parent_t) = world_transforms.get(&parent) else {
+                continue;
+            };
+            let offset = local_offsets.get(&joint).copied().unwrap_or(Vec3::ZERO);
+            let rot = vrm_named_rotations
+                .get(joint_to_vrm_name(joint))
+                .copied()
+                .unwrap_or(Quat::IDENTITY);
+            let local_t = Mat4::from_rotation_translation(rot, offset);
+            world_transforms.insert(joint, parent_t * local_t);
+        }
+
+        // Step 4: extract world positions
+        let joints: HashMap<Joint, [f32; 3]> = world_transforms
+            .iter()
+            .map(|(j, t)| {
+                let p = t.transform_point3(Vec3::ZERO);
+                (*j, [p.x, p.y, p.z])
+            })
+            .collect();
+
+        Self {
+            bones: self.bones.clone(),
+            joints,
+        }
     }
 
     fn bone_to_capsule(&self, bone: Bone, widths: &MuscleWidths) -> SdfNode {
@@ -862,5 +1011,114 @@ mod tests {
         assert!(chibi.head_body_ratio < adult.head_body_ratio);
         assert!(adult.head_body_ratio < hero.head_body_ratio);
         assert!(hero.head_body_ratio < default.head_body_ratio); // default = 10 (最高)
+    }
+
+    // ─── H.4 追加 test (with_pose FK) ───
+
+    #[test]
+    fn with_pose_identity_returns_bind_pose_equivalent_positions() {
+        let t = HumanoidTemplate::default();
+        let rotations: HashMap<String, Quat> = HashMap::new();
+        let posed = t.with_pose(&rotations);
+        assert_eq!(posed.joints.len(), t.joints.len());
+        for joint in Joint::ALL {
+            let orig = t.joints[&joint];
+            let new = posed.joints[&joint];
+            for i in 0..3 {
+                assert!(
+                    (orig[i] - new[i]).abs() < 1e-4,
+                    "joint {joint:?} axis {i}: bind {} vs posed {}",
+                    orig[i],
+                    new[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn with_pose_left_shoulder_rotation_moves_arm_up() {
+        // canonical bind pose:
+        //   LShoulder [-0.6, 1.5, 0]、LElbow [-1.5, 1.5, 0] (offset [-0.9, 0, 0])
+        //   LWrist [-2.4, 1.5, 0] (offset [-0.9, 0, 0] from LElbow)
+        // leftUpperArm に Z=-π/2 適用 → LShoulder 中心に arm が +Y に回転
+        let t = HumanoidTemplate::default();
+        let mut rotations = HashMap::new();
+        rotations.insert(
+            "leftUpperArm".to_string(),
+            Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2),
+        );
+        let posed = t.with_pose(&rotations);
+
+        // LShoulder 自身 は変わらず (parent = Chest、Chest に rotation なし)
+        let ls = posed.joints[&Joint::LShoulder];
+        assert!((ls[0] - (-0.6)).abs() < 1e-4, "LShoulder x: {}", ls[0]);
+        assert!((ls[1] - 1.5).abs() < 1e-4, "LShoulder y: {}", ls[1]);
+
+        // LElbow は Shoulder 中心 Z=-π/2 で offset (-0.9, 0, 0) が (0, 0.9, 0) に回る
+        // world = LShoulder + rotated = (-0.6, 2.4, 0)
+        let le = posed.joints[&Joint::LElbow];
+        assert!((le[0] - (-0.6)).abs() < 1e-4, "LElbow x: {}", le[0]);
+        assert!((le[1] - 2.4).abs() < 1e-4, "LElbow y: {}", le[1]);
+
+        // 右腕 (rightUpperArm rotation なし) は影響なし
+        let re = posed.joints[&Joint::RElbow];
+        assert!((re[0] - 1.5).abs() < 1e-4, "RElbow x: {}", re[0]);
+        assert!((re[1] - 1.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn with_pose_hips_rotation_propagates_to_children() {
+        // hips (Waist) の Y=π/2 rotation は全 children に伝播
+        // canonical: Chest [0, 1.5, 0], LShoulder [-0.6, 1.5, 0]
+        //   Chest の offset from Waist = (0, 1.5, 0)、Y rotation は Y 成分不変 → (0, 1.5, 0)
+        //   LShoulder の offset from Chest = (-0.6, 0, 0)、R_y(π/2) → (0, 0, 0.6)
+        //   → LShoulder world = Chest(0, 1.5, 0) + (0, 0, 0.6) = (0, 1.5, 0.6)
+        let t = HumanoidTemplate::default();
+        let mut rotations = HashMap::new();
+        rotations.insert(
+            "hips".to_string(),
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+        );
+        let posed = t.with_pose(&rotations);
+
+        // Waist は原点固定 (self position)
+        let waist = posed.joints[&Joint::Waist];
+        assert!(waist[0].abs() < 1e-4);
+        assert!(waist[1].abs() < 1e-4);
+
+        // Chest は Y unchanged
+        let chest = posed.joints[&Joint::Chest];
+        assert!(chest[0].abs() < 1e-4, "Chest x: {}", chest[0]);
+        assert!((chest[1] - 1.5).abs() < 1e-4);
+
+        // LShoulder は +Z 方向に回転
+        let ls = posed.joints[&Joint::LShoulder];
+        assert!(ls[0].abs() < 1e-4, "LShoulder x after Y rot: {}", ls[0]);
+        assert!((ls[1] - 1.5).abs() < 1e-4);
+        assert!(
+            (ls[2] - 0.6).abs() < 1e-4,
+            "LShoulder z after Y rot: {}",
+            ls[2]
+        );
+    }
+
+    #[test]
+    fn with_pose_unmapped_bone_names_ignored() {
+        // 不明な bone name は無視される (bind pose 保持)
+        let t = HumanoidTemplate::default();
+        let mut rotations = HashMap::new();
+        rotations.insert("unknownBone".to_string(), Quat::from_rotation_x(1.0));
+        let posed = t.with_pose(&rotations);
+        // 全 joint bind pose 保持
+        for joint in Joint::ALL {
+            let orig = t.joints[&joint];
+            let new = posed.joints[&joint];
+            for i in 0..3 {
+                assert!(
+                    (orig[i] - new[i]).abs() < 1e-4,
+                    "joint {joint:?} axis {i} changed by unmapped bone",
+                );
+            }
+        }
     }
 }
