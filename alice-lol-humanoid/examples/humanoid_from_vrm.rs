@@ -20,13 +20,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("VRM path: {path}");
-    let template = match HumanoidTemplate::from_vrm(&path)? {
-        None => {
-            println!("VRM に humanoid bones が見つかりません");
-            println!("(VRM 1.0 の可能性、または VRM extension 不在)");
-            return Ok(());
-        }
-        Some(t) => t,
+    let Some(template) = HumanoidTemplate::from_vrm(&path)? else {
+        println!("VRM に humanoid bones が見つかりません");
+        println!("(VRM 1.0 の可能性、または VRM extension 不在)");
+        return Ok(());
     };
 
     println!("HumanoidTemplate 構築成功");
@@ -45,14 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Joint::LAnkle,
     ];
     for j in sample_joints {
-        if let Some(p) = template.joints.get(&j) {
-            println!(
-                "  {:<11} [{:>7.3}, {:>7.3}, {:>7.3}]",
-                format!("{j:?}"),
-                p[0],
-                p[1],
-                p[2]
-            );
+        if let Some([x, y, z]) = template.joints.get(&j).copied() {
+            println!("  {:<11} [{x:>7.3}, {y:>7.3}, {z:>7.3}]", format!("{j:?}"));
         }
     }
 
