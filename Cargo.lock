@@ -12,6 +12,7 @@ version = "0.2.0"
 dependencies = [
  "alice-llm",
  "alice-lol-macro",
+ "alice-physics",
  "alice-sdf",
  "glam",
 ]

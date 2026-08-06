@@ -23,6 +23,14 @@ glam = "0.29"
 # that license to downstream. Leave the feature off (default) to stay on
 # MIT-or-Apache-2.0 terms.
 alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = false, features = ["grammar"], optional = true }
+# Optional; only pulled in when `physics` feature is enabled Provides
+# FilamentDb / fillet_stress / beam_stress / layer_adhesion / thermal_stress
+# access to stdlib::hardsurface primitives so material-backed stress checks
+# can replace hardcoded const fallbacks
+# NOTE: alice-physics is AGPL-3.0 enabling `physics` feature propagates that
+# license to downstream Leave the feature off (default) to stay on
+# MIT-or-Apache-2.0 terms
+alice-physics = { path = "../../ALICE-Physics", default-features = false, features = ["std"], optional = true }
 
 [features]
 default = ["glsl"]
@@ -30,9 +38,9 @@ glsl = []
 wgsl = ["alice-sdf/gpu"]
 hlsl = ["alice-sdf/hlsl"]
 # Physics bridge — alice-sdf 1.7.4 で一時削除、Milestone A.1.0 (2026-08-06) で復帰
-# path dep 経由 (alice-physics が crates.io 未公開のため path only)
-# 再エクスポート: sdf_to_physics_field / CompiledSdfField / attach_physics / simulate_sdf / SimulatedSdf
-physics = ["alice-sdf/physics"]
+# stdlib::hardsurface からも alice-physics 直接 API (FilamentDb / fillet_stress
+# / beam_stress) が使えるよう alice-physics direct dep も opt-in (Phase A.3)
+physics = ["dep:alice-physics", "alice-sdf/physics"]
 roblox = []
 # Phase X.8 B-6: exposes `alice_lol::bridge` for grammar-constrained
 # LLM decoding against the LOL DSL. Off by default so pure geometry
