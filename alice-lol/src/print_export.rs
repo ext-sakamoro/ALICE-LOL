@@ -31,9 +31,6 @@ use std::path::Path;
 
 // ── re-export ──
 pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, FbxConfig};
-pub use alice_sdf::mesh::polygon_extrude::{
-    circle as polygon_circle, rect as polygon_rect, rounded_rect as polygon_rounded_rect, Polygon2D,
-};
 pub use alice_sdf::mesh::{
     dual_contouring, sdf_to_mesh, DualContouringConfig, MarchingCubesConfig, Mesh, MeshRepair,
     Vertex,
@@ -338,8 +335,10 @@ pub fn node_to_stl_dual_contouring(
 /// SKADIS panel / thin mechanical part 等、Marching Cubes が非多様体を出す SDF に対して
 /// [`node_to_3mf`] の代わりに本 fn を使う ALICE 三相原理 Phase 2 Law 準拠
 ///
-/// Phase A.5.2 の `polygon_to_3mf` (earcutr 経路) は Phase 1 Data 相当なので、本 fn が
-/// 完成次第 deprecate 予定 (`~/.claude/projects/-Users-ys/memory/feedback_alice_polygon_extrude_data_route.md` 参照)
+/// Phase 3''.2 の実測 (`coin_dc_vs_mc.rs` example) で 極薄物 (1.7mm coin) でも
+/// DC は全 resolution で `non_manifold_edges = 0` を実現、MC の破綻 (resolution 512 で
+/// 24,808 non-manifold) を完全回避 これに基づき Phase 4 で旧 `polygon_to_*`
+/// (earcutr Data 経路 = ALICE 違反) を削除、DC 経路に完全統一
 ///
 /// # Errors
 ///
@@ -350,74 +349,6 @@ pub fn node_to_3mf_dual_contouring(
     config: &PrintConfig,
 ) -> Result<ExportStats, ExportError> {
     let mesh = node_to_mesh_dual_contouring(node, config);
-    if mesh.indices.is_empty() {
-        return Err(ExportError::EmptyMesh);
-    }
-    let stats = ExportStats::from_mesh(&mesh, &path);
-    export_3mf(&mesh, path)?;
-    Ok(stats)
-}
-
-// ────────────────────────────────────────────────────────
-// 2D polygon + extrude 経路 (Phase A.5.2、薄物 ≤ 5mm 向け)
-//
-// **注意**: 本経路は ALICE 三相原理 Phase 1 Data 相当 = **ALICE 違反**
-// 詳細: memory/feedback_alice_polygon_extrude_data_route.md
-// 真の ALICE way は上記 `node_to_3mf_dual_contouring` (Phase 2 Law 経路)
-// 本経路は Phase 3'' 完成後 deprecate 予定 現状は暫定救済策として残置
-// ────────────────────────────────────────────────────────
-
-/// [`Polygon2D`] を extrude して watertight mesh を返す (スケーリング適用)
-///
-/// SDF+Marching Cubes を経由しないため薄物 (≤ 5mm) でも非多様体エッジが発生しない
-///
-/// - `half_height`: extrude 半高 (mm、全厚 = 2 × `half_height`)
-/// - `scale_mm`: 座標系スケール (通常 1.0、`Polygon2D` が既に mm 単位のため)
-#[must_use]
-pub fn polygon_to_mesh(polygon: &Polygon2D, half_height: f32, scale_mm: f32) -> Mesh {
-    let mut mesh = polygon.extrude(half_height);
-    if (scale_mm - 1.0).abs() > f32::EPSILON {
-        for v in &mut mesh.vertices {
-            v.position *= scale_mm;
-        }
-    }
-    mesh
-}
-
-/// [`Polygon2D`] → STL ファイル出力 (薄物向け、非多様体問題なし)
-///
-/// # Errors
-///
-/// `Polygon2D` が degenerate (頂点不足など) で triangulation 失敗時 `EmptyMesh`、
-/// ファイル書き込み失敗時 `Io` を返す
-pub fn polygon_to_stl(
-    polygon: &Polygon2D,
-    half_height: f32,
-    path: impl AsRef<Path>,
-) -> Result<ExportStats, ExportError> {
-    let mesh = polygon_to_mesh(polygon, half_height, 1.0);
-    if mesh.indices.is_empty() {
-        return Err(ExportError::EmptyMesh);
-    }
-    let stats = ExportStats::from_mesh(&mesh, &path);
-    export_stl(&mesh, path)?;
-    Ok(stats)
-}
-
-/// [`Polygon2D`] → 3MF ファイル出力 (薄物向け)
-///
-/// SKADIS panel / shopping cart coin / thin plate 等の実プリント合格 pattern を
-/// Bambu Studio に直接読ませられる .3mf を生成する canonical 経路
-///
-/// # Errors
-///
-/// メッシュ空 `EmptyMesh`、ファイル書き込み失敗 `Io`
-pub fn polygon_to_3mf(
-    polygon: &Polygon2D,
-    half_height: f32,
-    path: impl AsRef<Path>,
-) -> Result<ExportStats, ExportError> {
-    let mesh = polygon_to_mesh(polygon, half_height, 1.0);
     if mesh.indices.is_empty() {
         return Err(ExportError::EmptyMesh);
     }

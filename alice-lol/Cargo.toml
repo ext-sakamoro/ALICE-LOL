@@ -14,7 +14,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false, features = ["glsl", "mesh-extrude"] }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
