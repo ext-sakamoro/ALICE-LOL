@@ -52,6 +52,7 @@ signchar ::= "+" | "-"
 # ─── Expression dispatcher ────────────────────────────────────────────
 
 expr ::= prim_1f
+       | prim_0f
        | prim_2f
        | prim_3f
        | prim_4f
@@ -73,6 +74,7 @@ expr ::= prim_1f
 
 # ─── Primitives (fixed number of floats, no children) ─────────────────
 
+prim_0f ::= name_0f ws "(" ws ")"
 prim_1f ::= name_1f ws "(" ws number ws ")"
 prim_2f ::= name_2f ws "(" ws number ws "," ws number ws ")"
 prim_3f ::= name_3f ws "(" ws number ws "," ws number ws "," ws number ws ")"
@@ -81,6 +83,10 @@ prim_5f ::= name_5f ws "(" ws number ws "," ws number ws "," ws number ws "," ws
 prim_6f ::= name_6f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 prim_9f ::= name_9f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 prim_10f ::= name_10f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+
+name_0f ::= "skadis_hook_l"
+          | "skadis_hook_j"
+          | "skadis_hook_s"
 
 name_1f ::= "sphere"
           | "octahedron"
@@ -117,6 +123,7 @@ name_2f ::= "cylinder"
           | "circle_2d"
           | "blobby_cross"
           | "terrain"
+          | "shopping_cart_coin"
 
 name_3f ::= "box3d"
           | "ellipsoid"
@@ -132,6 +139,7 @@ name_3f ::= "box3d"
           | "rect_2d"
           | "annular_2d"
           | "parabola_segment"
+          | "skadis_panel"
           | "regular_polygon"
           | "tunnel"
           | "rounded_x"

@@ -1514,6 +1514,32 @@ impl<'a> Parser<'a> {
                 })
             }
 
+            // ── Phase 5.1 高階 primitive (stdlib::hardsurface 完成 pattern) ──
+            // ALICE 三相原理 Phase 2 Law 経路 (SDF+DC)、pipeline: LOL DSL → SdfNode → DC → 3MF
+            // 詳細: docs/PIPELINE_COMPLETE.md
+            "shopping_cart_coin" => {
+                let (dia, thickness) = self.parse_2f()?;
+                Ok(crate::stdlib::hardsurface::thin_sdf::shopping_cart_coin_sdf(dia, thickness))
+            }
+            "skadis_panel" => {
+                let (size, thickness, corner_r) = self.parse_3f()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_panel_sdf(
+                    size, thickness, corner_r,
+                ))
+            }
+            "skadis_hook_l" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_hook_l_sdf())
+            }
+            "skadis_hook_j" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_hook_j_sdf())
+            }
+            "skadis_hook_s" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_hook_s_sdf())
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2193,5 +2219,63 @@ mod tests {
         assert!(
             parse_lol("sweep_bezier(0.0, 0.0, 0.5, 1.0, 1.0, 0.0, circle_2d(0.2, 0.5))").is_ok()
         );
+    }
+
+    // ── Phase 5.1 高階 primitive tests ──
+
+    #[test]
+    fn test_shopping_cart_coin() {
+        let node = parse_lol("shopping_cart_coin(22.8, 1.7)").unwrap();
+        match node {
+            SdfNode::Cylinder {
+                radius,
+                half_height,
+            } => {
+                assert!((radius - 11.4).abs() < 1e-4);
+                assert!((half_height - 0.85).abs() < 1e-4);
+            }
+            _ => panic!("expected Cylinder"),
+        }
+    }
+
+    #[test]
+    fn test_skadis_panel() {
+        let node = parse_lol("skadis_panel(300, 5, 5)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_skadis_hook_l_no_args() {
+        let node = parse_lol("skadis_hook_l()").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_skadis_hook_j_no_args() {
+        let node = parse_lol("skadis_hook_j()").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_skadis_hook_s_no_args() {
+        let node = parse_lol("skadis_hook_s()").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_phase_5_1_high_level_primitives_eval_correctly() {
+        // Phase 5.1 追加 5 primitive の parse + eval sanity check
+        use alice_sdf::eval;
+        for lol in [
+            "shopping_cart_coin(22.8, 1.7)",
+            "skadis_panel(300, 5, 5)",
+            "skadis_hook_l()",
+            "skadis_hook_j()",
+            "skadis_hook_s()",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
     }
 }
