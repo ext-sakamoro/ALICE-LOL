@@ -428,3 +428,116 @@ LOL は「新しい言語を作る」のではなく、**「ALICE のコンパ�
 3. **安全側フォールバック**: 解析解が出なければ即座に保守的バウンディング。安全性は数学的に 100% 保証
 4. **矛盾は吸収する**: パニックや UB ではなく、エネルギー最小化による均衡点への収束
 5. **遅延は物理定数**: ネットワークレイテンシを if 文のエラーハンドリングではなく遅延ポテンシャルとして数式に吸収
+
+---
+
+## 9. ALICE 三相原理 (Data → Law → Intent) と 現行進捗 Snapshot (2026-08-06)
+
+LOL は ALICE エコシステム全体の **三相原理**「Data (Phase 1) → Law (Phase 2) → Intent (Phase 3)」の中核 DSL / IR として位置付けられる。本 section は 2026-08-06 sprint 時点の実装 snapshot。
+
+### 9.1 三相原理
+
+| Phase | 送信物 | 圧縮率 | 実装状態 |
+|--|--|--|--|
+| **Phase 1 Data** | polygon / mocap / texture (従来 IT / ゲーム) | 1× (baseline) | 対象外 (LOL は Phase 2 以上のみ) |
+| **Phase 2 Law** | SDF 数式 / 決定論物理 / 制約 | 数十〜数千× | ✅ SdfNode IR + 8 Constraint variant |
+| **Phase 3 Intent** | 8-byte verb packet / 動作意図 | 10,000× (目標) | ⏳ IntentNode + Program skeleton (実行系は B.3 以降) |
+
+### 9.2 IR 階層
+
+```
+Program {
+    sdf: SdfNode,              // Phase 2 IR (Data + Law)
+    sdf_registry: Vec<SdfNode>, // Intent が参照するエンティティ集合
+    intent: Option<IntentNode>, // Phase 3 IR (Intent、独立 enum で型分離)
+}
+```
+
+- **SdfNode** = 71 primitive + 23 CSG + 4 transform + 20 modifier + 3 TPMS + 時間軸 の代数系
+- **`law::Constraint`** = 8 variant (§9.3)
+- **`intent::IntentNode`** = 16 variant (14 verb + Sequence/Parallel、§9.4)
+
+型分離設計: `Program::as_sdf()` は intent field を露出しない = GPU backend の 誤解釈事故を型で防止。
+
+### 9.3 Law 制約 8 variant (Phase 2)
+
+| # | Constraint | 検証内容 | 実装 |
+|--|--|--|--|
+| 1 | `NonOverlap { a, b }` | 2 SDF が重ならない | v0.3 実装済 |
+| 2 | `Containment { inner, outer }` | inner が outer 内部に完全収容 | v0.3 実装済 |
+| 3 | `MinThickness { node, min_thickness }` | 最小肉厚保証 | v0.3 実装済 |
+| 4 | `Stress { node, load_points, min_thickness_factor }` | 荷重点近傍の応力集中 (proxy) | A.2 追加 (2026-08-06) |
+| 5 | `Thermal { node, heat_sources, search_radius, min_surface_ratio }` | 熱源近傍の放熱面積比 (proxy) | A.2 追加 |
+| 6 | `Contact { a, b, min_distance, max_distance }` | 2 面の接触距離範囲 (assembly/mating) | A.2 追加 |
+| 7 | `Continuity { node, seed_point }` | 単一連結領域 (flood fill 6-connected) | A.2 追加 |
+| 8 | `VolumeConservation { before, after, relative_tolerance }` | morph 前後の体積保存 | A.2 追加 |
+
+新 5 variant (Stress / Thermal / Contact / Continuity / VolumeConservation) は **geometric proxy 評価** (grid + `sdf_eval`)、Physics dep 追加なし。精密 physics-backed 評価は A.2.1 (別 sprint) で `alice-physics` `sim_modifier` / `sdf_collider` API 経由に置換予定。
+
+### 9.4 Intent verb catalog 16 variant (Phase 3、B.1 MVP)
+
+**L1 Physical Intent verb (14)**:
+
+| # | Verb | 引数 |
+|--|--|--|
+| 1 | `Grasp` | target_id, hand, force |
+| 2 | `Release` | target_id |
+| 3 | `Walk` | destination, speed |
+| 4 | `Gaze` | target, duration_ms |
+| 5 | `Point` | target, hand |
+| 6 | `Throw` | target, force, hand |
+| 7 | `Catch` | object_id |
+| 8 | `Push` | target_id, direction, force |
+| 9 | `Pull` | target_id, direction, force |
+| 10 | `Rotate` | target_id, axis, angle_rad |
+| 11 | `Align` | target_id, reference |
+| 12 | `Follow` | target_id, distance |
+| 13 | `Avoid` | target_id, min_distance |
+| 14 | `Rest` | duration_ms |
+
+**合成 (2)**: `Sequence(Vec<IntentNode>)` / `Parallel(Vec<IntentNode>)`
+
+L2 Social Intent は未定義 (Foundry / Anima 成熟後に別 module)、L3 Architectural Intent は別 crate `ALICE-Cognitive` (meta-agent)。
+
+### 9.5 Backend / consumer 拡張
+
+| feature | 状態 | 説明 |
+|--|--|--|
+| `default = ["glsl"]` | ✅ | 標準構成 |
+| `wgsl` | ✅ | WebGPU 出力 (要 `alice-sdf/gpu`) |
+| `hlsl` | ✅ | UE5 / DirectX 出力 |
+| `roblox` | ✅ | OBJ/FBX MeshPart / accessory 出力 |
+| `physics` | ✅ | A.1.0 復帰 (2026-08-06)、SdfField trait impl + ModifiedSdf chain |
+| `llm-bridge` | ✅ | GBNF constrained decoding |
+
+CI matrix (2026-08-06 時点): macOS default / Ubuntu llm-bridge / Ubuntu glsl+wgsl+hlsl (backend-parity)。
+
+### 9.6 テスト / 品質 (2026-08-06 snapshot)
+
+- lib tests: **123** (intent 10 追加)
+- integration tests: law 32 + backend parity 22 (Ubuntu backend-parity CI で実行)
+- CPU eval + GLSL/WGSL/HLSL 3 backend の structural parity 保証 (Level 1)
+- physics feature 有効時: physics_bridge + sim_bridge 11 test、regression 1272 test (alice-sdf 側)
+- clippy: 新規追加 module 起因 warning ゼロ (law / intent / backend_parity)
+
+### 9.7 進行中 / 未着手 milestone (2026-08-06 時点)
+
+- ⏸ **A.1.1** Physics bridge 拡張復帰 (sim_modifier chain builder + sdf_destruction wrapper + gpu_sdf + `physics!` DSL macro)
+- ⏸ **A.1.pub** alice-physics crates.io publish 対応
+- ⏸ **A.2.1** Law 制約の physics-backed 評価 (`sim_modifier` / `sdf_collider` 経由)
+- ⏸ **A.3** ALICE-Font に `lol` optional dep (glyph SDF を LOL DSL で書ける経路)
+- ⏸ **A.4.1** Backend parity Level 2 (実 GPU 実行 + CPU eval 数値比較、要 wgpu setup)
+- ⏸ **B.2** Verb catalog v0 doc 化 (実質 B.1 で完成)
+- ⏸ **B.3** ALICE-Kinematics 統合 (LOL `IntentNode` → Kinematics `Intent` 8-byte packet 翻訳器)
+- ⏸ **B.4** LOL DSL に `intent! { }` block 構文
+- ⏸ **B.5** Backend 展開 (Intent は Rust runtime / wasm backend が第一級 target、GPU は Phase 2 まで)
+- ⏸ **C.1-C.4** 8-byte packet 実運用 (Metaverse transport / Foundry-Anima-Manga 統合 / Physics+Kinematics+IK 受信側解釈)
+
+### 9.8 関連 commit (ALICE-LOL、2026-08-06 sprint)
+
+- `4e78955` (ALICE-SDF) — A.1.0 physics feature 復帰
+- `a4bcfc7` (ALICE-LOL) — A.1.0 LOL 側 physics feature 連動
+- `37fa796` (ALICE-LOL) — Cargo.lock alice-physics 追加
+- `9c44c06` (ALICE-LOL) — A.2 Law 5 制約拡張 (Stress/Thermal/Contact/Continuity/VolumeConservation)
+- `4364dc1` (ALICE-LOL) — A.2 fmt 修正 + A.4 backend parity Level 1 (22 test) + ci.yml matrix 拡張
+- `ac675d5` (ALICE-LOL) — B.1 IntentNode + Program 構造 (16 variant、10 test)
