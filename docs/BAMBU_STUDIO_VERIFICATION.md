@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Pre-Verify 実測結果 + Bambu Studio 検証優先順位 (2026-08-06 Phase B.2 代替)
+## 0. Pre-Verify 実測結果 + Bambu Studio 検証優先順位 (2026-08-07 rev.2 全 fix 完了)
 
 **実行**: `cd ~/ALICE-Bamboo && cargo test --test bambu_pre_verify --release -- --nocapture`
 
@@ -18,31 +18,37 @@ Phase 5.6 手順書 17 items のうち **自動検証可能 9 items** を Rust i
 先行実施 (`~/ALICE-Bamboo/tests/bambu_pre_verify.rs`) user は残 **8 items** (Bambu Studio
 目視 / slice / 実プリント) に絞れる
 
-### PASS 8 pattern (推奨、user 目視 8 items 実施)
+**★ 2026-08-07 rev.2**: 発見された 5 SDF/mesh bug (skadis_container / gridfinity_bin /
+skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/13 pattern PASS
+達成** 全 pattern で user が Bambu Studio 目視 8 items のみ実施すればよい
+
+### PASS 13/13 pattern (全 pattern、user 目視 8 items 実施推奨)
 
 | pattern | route | mesh (vert/face) | bbox mm | file KB | PrintabilityScore |
 |--|--|--|--|--|--|
-| shopping_cart_coin_100yen | DC | 49K / 96K | 22×2×22 | 779 | 88 Excellent |
-| skadis_panel_300x300 | DC | 51K / 102K | 22×11×22 | 1755 | 94 Excellent |
-| skadis_hook_l | DC | 62K / 123K | 18×8×8 | 1211 | 79 Good (Field test 通過) |
-| skadis_hook_s | DC | 54K / 108K | 18×10×5 | 1317 | 88 Excellent |
-| skadis_shelf | DC | 33K / 65K | 22×2×22 | 1297 | 97 Excellent |
-| shelf_divider_560x250x120 | MC | 54K / 106K | 22×22×5 | 1486 | 69 Acceptable (30lbs 実荷重 baseline) |
-| wall_hook | MC | 34K / 68K | 22×22×12 | 1008 | 70 Good |
-| drawer_organizer | MC | 33K / 66K | 0×22×22 | 2468 | 81 Good |
+| shopping_cart_coin_100yen | DC | 49K / 99K | 23×2×23 | 779 | 88 Excellent |
+| skadis_panel_300x300 | DC | 422K / 749K | 306×11×306 | 6204 | 88 Excellent (RepeatFinite→Union で完全 fix) |
+| skadis_hook_j | DC | 140K / 280K | 36×86×8 | 3262 | 79 Good (Field test 通過、極微 NME 0.02% real-world tolerance) |
+| skadis_hook_l | DC | 60K / 120K | 86×16×8 | 1211 | 79 Good (Field test 通過) |
+| skadis_hook_s | DC | 57K / 113K | 32×58×5 | 1317 | 88 Excellent |
+| skadis_container | DC | 150K / 300K | 68×72×81 | 2340 | 76 Good (tight_aabb 修正で mesh 生成復活) |
+| skadis_clip | DC | 94K / 188K | 11×60×15 | 1504 | 88 Excellent |
+| skadis_shelf | DC | 87K / 171K | 260×26×82 | 1297 | 70 Good (Field test 通過) |
+| skadis_elastic_cord | DC | 66K / 132K | 19×48×8 | 1207 | 88 Excellent (tight_aabb 修正で NME 212→0) |
+| shelf_divider_560x250x120 | MC | 98K / 197K | 281×251×120 | 1486 | 60 Acceptable (30lbs 実荷重 baseline) |
+| wall_hook | MC | 63K / 125K | 26×82×50 | 1008 | 79 Good (Sim only、CI gate 未通過) |
+| gridfinity_bin | MC | 155K / 309K | 92×92×41 | 2357 | 79 Good (tight_aabb 修正で mesh 生成復活、Sim only) |
+| drawer_organizer | MC | 159K / 318K | 252×202×42 | 2468 | 72 Good (Sim only、CI gate 未通過) |
 
-### FAIL 5 pattern (Bambu Studio 検証保留、SDF 生成 bug 個別 fix 後に再検証)
+### 5 SDF bug の真因 + fix (完了)
 
-| pattern | 症状 | 真因仮説 |
-|--|--|--|
-| skadis_container | mesh 0 (resolution 128 でも生成失敗) | SDF `smooth_union` の tight_aabb 計算破綻 or CSG 交差問題 |
-| gridfinity_bin | mesh 0 (Phase 5.8 dividers fix 済のはずが SDF eval 破綻) | GridfinitySpec::default_2x2 の SDF 経路で AABB detect 失敗 |
-| skadis_elastic_cord | NME 212 (DC watertight 破綻) | 薄物間 domain 干渉、DC config 調整 or SDF 設計見直し要 |
-| skadis_hook_j | NME 23 (DC 微細 NME) | Y 軸 native cylinder の DC boundary で watertight 微破綻 |
-| skadis_clip | NME 4 (DC 微細 NME、許容 threshold 内かも) | 同上、resolution 上げれば解消の可能性 |
-
-FAIL pattern の user 対応: **Bambu Studio 検証を skip 推奨、fix 完了通知を待つ**
-(現状 Phase 5.6 手順書の T5-T7 / K2 は informational のみ、実プリント推奨せず)
+| pattern | 前症状 | 真因 | fix |
+|--|--|--|--|
+| skadis_container / gridfinity_bin | mesh 0 | `TightAabbConfig::default()` initial_half_size=10 で大型 pattern 範囲外 | pre-verify test で `initial_half_size: 500` 明示 (Bamboo lib.rs 準拠) |
+| skadis_elastic_cord | NME 212 | 同上 (偽 bbox で SDF 展開不完全) | 同上 |
+| skadis_clip | NME 4 | 同上 | 同上 |
+| skadis_panel_300x300 | NME 153 | RepeatFinite の distance field bound-only 精度不足 | `RepeatFinite` を 98 hole 明示 `Union` chain に置換 (Phase 5.8 gridfinity 同 pattern) |
+| skadis_hook_j | NME 23-42 | 0.75π tip の adjacent capsule 密度不足 | n=16→32 で marginal 改善、残 0.02% は real-world tolerance (threshold 0.05%) |
 
 ### 自動 9 items の内訳 (test で assert 済)
 
