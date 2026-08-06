@@ -3,14 +3,14 @@
 //! Humanoid template for `alice_lol` DSL parametric character generation
 //!
 //! `~/ALICE-LOL/docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
-//! 現在 Phase = **H.2 Parametric morphology** (`MorphologyParams` + builder、joint 位置の parametric 導出)
+//! 現在 Phase = **H.3 VRM import** (feature `vrm` opt-in、`HumanoidTemplate::from_vrm`)
 //!
 //! # Roadmap
 //!
 //! - H.0 Scaffolding (完了)
 //! - H.1 Static template (完了)
-//! - **H.2 Parametric morphology** (本 Phase、`MorphologyParams` + `HumanoidTemplateBuilder`)
-//! - H.3 VRM import (feature `vrm`、gltf optional dep)
+//! - H.2 Parametric morphology (完了)
+//! - **H.3 VRM import** (本 Phase、feature `vrm`、`serde_json` optional dep)
 //! - H.4 BVH import + pose (`apply_pose`)
 //! - H.5 ALICE-Manga との duplication 整理
 //! - H.6 Intent 結線 (`apply_intent(&IntentNode)`)
@@ -52,6 +52,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use alice_lol::{SdfNode, Vec3};
+
+#[cfg(feature = "vrm")]
+pub mod vrm;
 
 // ============================================================================
 // Joint
@@ -428,7 +431,7 @@ impl HumanoidTemplate {
 }
 
 /// canonical 15-bone humanoid topology (脊柱 3 + 左腕 3 + 右腕 3 + 左脚 3 + 右脚 3)
-fn canonical_bones() -> Vec<Bone> {
+pub(crate) fn canonical_bones() -> Vec<Bone> {
     vec![
         // 脊柱 (3)
         Bone {

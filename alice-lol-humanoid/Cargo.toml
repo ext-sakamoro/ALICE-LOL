@@ -2,7 +2,7 @@
 name = "alice-lol-humanoid"
 version = "0.1.0"
 edition = "2021"
-description = "Humanoid template for ALICE-LOL DSL — VRM/BVH → parametric humanoid SdfNode. Phase H.0 scaffolding."
+description = "Humanoid template for ALICE-LOL DSL — VRM/BVH → parametric humanoid SdfNode. Phase H.3 VRM import."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 repository = "https://github.com/ext-sakamoro/ALICE-LOL"
@@ -16,7 +16,14 @@ categories = ["graphics", "game-development"]
 alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
 glam = "0.29"
 
+# Optional (feature vrm)
+serde_json = { version = "1", optional = true }
+
 [features]
 default = []
-# H.3 で有効化予定 (gltf + serde_json optional dep 追加)
-vrm = []
+# VRM 0.x binary GLB からhumanoid bone を抽出 (自前 GLB JSON parser 使用、gltf crate は不要)
+vrm = ["dep:serde_json"]
+
+[[example]]
+name = "humanoid_from_vrm"
+required-features = ["vrm"]
