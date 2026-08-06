@@ -8,7 +8,8 @@
 //! - [`joint`] — 組立 6 primitive (片持ち snap-fit / 環状 snap-fit / スロット / T スロット 2020 / アリ継ぎ / ピンヒンジ)
 //! - [`reinforcement`] — 補強 6 primitive (リブ / ボス / フィレット / 面取り / ハニカム infill / Gyroid infill)
 //! - [`mount`] — 建築/取付 6 primitive (L 字ブラケット / 円形フランジ / ラック / SKADIS peg / 2020 profile / 3030 profile)
-//! - [`thin`] — 薄物 3 primitive (shopping cart coin / SKADIS panel / thin plate)、2D polygon + extrude 経路 (Phase A.5.2)
+//! - [`thin_sdf`] — 薄物 SDF primitive (shopping cart coin 単純 Cylinder、Phase 3''.2、Dual Contouring 経路推奨、旧 `thin` polygon 経路は Phase 4 で削除済)
+//! - [`skadis_sdf`] — SKADIS panel 純 SDF (Phase 3''、Dual Contouring 経路推奨)
 //! - [`pattern_sdf`] — Bamboo Rust generator を SdfNode 直接構築に翻訳した完成 pattern 4 種 (Phase B.1.b、wall_hook / gridfinity_bin / drawer_organizer / shelf_divider)
 //!
 //! ## 準拠 formulas (ALICE-Bamboo `src/formulas.rs`)
@@ -31,5 +32,4 @@ pub mod mount;
 pub mod pattern_sdf;
 pub mod reinforcement;
 pub mod skadis_sdf;
-pub mod thin;
 pub mod thin_sdf;

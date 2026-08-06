@@ -42,10 +42,10 @@ fn main() {
     // ────────────────────────────────
     // route 別集計
     // ────────────────────────────────
-    let thin = patterns_by_route(PatternRoute::PolygonExtrude);
+    let thin = patterns_by_route(PatternRoute::SdfDualContouring);
     let thick = patterns_by_route(PatternRoute::SdfMarchingCubes);
     println!(
-        "\n--- Route breakdown ---\n  PolygonExtrude (薄物): {} patterns\n  SdfMarchingCubes (厚物): {} patterns",
+        "\n--- Route breakdown ---\n  SdfDualContouring (薄物): {} patterns\n  SdfMarchingCubes (厚物): {} patterns",
         thin.len(),
         thick.len()
     );

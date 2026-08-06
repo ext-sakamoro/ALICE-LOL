@@ -18,8 +18,8 @@
 //!
 //! ## route 分類
 //!
-//! - **`SdfMarchingCubes`**: `SdfNode` + `sdf_to_mesh` (厚物 > 5mm)
-//! - **`PolygonExtrude`**: `Polygon2D::extrude` (薄物 <= 5mm、Phase A.5.2 追加)
+//! - **`SdfMarchingCubes`**: `SdfNode` + `sdf_to_mesh` (厚物、Marching Cubes 経路)
+//! - **`SdfDualContouring`**: `SdfNode` + `dual_contouring` (薄物 <= 5mm を含む全物、Phase 3'' 追加 ALICE 三相原理 Phase 2 Law 準拠、Hermite data で watertight 保証、極薄物 1.7mm でも `non_manifold_edges = 0` 実測済)
 //!
 //! ## 実測データの補填 (Phase B.2)
 //!
@@ -35,9 +35,9 @@
 pub enum PatternRoute {
     /// `SdfNode` + marching cubes (厚物 > 5mm 向け)、`alice_lol::print_export::node_to_3mf`
     SdfMarchingCubes,
-    /// `Polygon2D::extrude` (薄物 <= 5mm 向け)、`alice_lol::print_export::polygon_to_3mf`
-    /// Phase A.5.2 で追加、earcutr triangulation 経由 watertight 保証
-    PolygonExtrude,
+    /// `SdfNode` + `dual_contouring` (薄物 <= 5mm を含む全物向け)、`alice_lol::print_export::node_to_3mf_dual_contouring`
+    /// Phase 3'' 追加、ALICE 三相原理 Phase 2 Law 準拠 Hermite data で watertight 保証
+    SdfDualContouring,
 }
 
 impl PatternRoute {
@@ -46,7 +46,7 @@ impl PatternRoute {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::SdfMarchingCubes => "SDF+MC (marching cubes)",
-            Self::PolygonExtrude => "2D+extrude (earcutr)",
+            Self::SdfDualContouring => "SDF+DC (dual contouring)",
         }
     }
 }
@@ -137,7 +137,7 @@ pub mod registry {
     pub const SHOPPING_CART_COIN_100YEN: LolPattern = LolPattern {
         name: "shopping_cart_coin_100yen",
         description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (Bamboo 実プリント合格)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None, // Phase B.2 で埋め込み
@@ -150,7 +150,7 @@ pub mod registry {
     pub const SKADIS_PANEL_300X300: LolPattern = LolPattern {
         name: "skadis_panel_300x300",
         description: "IKEA SKADIS 互換 300×300×5mm ペグボード + 千鳥ペグ穴 98 個",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -178,7 +178,7 @@ pub mod registry {
     pub const SKADIS_HOOK_J: LolPattern = LolPattern {
         name: "skadis_hook_j",
         description: "IKEA SKADIS 互換 J 型 hook (Bamboo Python 2D+extrude canonical)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -191,7 +191,7 @@ pub mod registry {
     pub const SKADIS_HOOK_L: LolPattern = LolPattern {
         name: "skadis_hook_l",
         description: "IKEA SKADIS 互換 L 型 hook (直角曲げ、Bamboo Python 2D+extrude canonical)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -204,7 +204,7 @@ pub mod registry {
     pub const SKADIS_HOOK_S: LolPattern = LolPattern {
         name: "skadis_hook_s",
         description: "IKEA SKADIS 互換 S 型 hook (S 字曲げ、Bamboo Python 2D+extrude canonical)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -217,7 +217,7 @@ pub mod registry {
     pub const SKADIS_CONTAINER: LolPattern = LolPattern {
         name: "skadis_container",
         description: "IKEA SKADIS 互換 container (2 peg、gusset ribs で補強)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -230,7 +230,7 @@ pub mod registry {
     pub const SKADIS_CLIP: LolPattern = LolPattern {
         name: "skadis_clip",
         description: "IKEA SKADIS 互換 clip (単 peg、細物ホルダー)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -243,7 +243,7 @@ pub mod registry {
     pub const SKADIS_SHELF: LolPattern = LolPattern {
         name: "skadis_shelf",
         description: "IKEA SKADIS 互換 shelf (2 peg、rib 補強棚板)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -256,7 +256,7 @@ pub mod registry {
     pub const SKADIS_ELASTIC_CORD: LolPattern = LolPattern {
         name: "skadis_elastic_cord",
         description: "IKEA SKADIS 互換 elastic cord holder (伸縮バンドで固定)",
-        route: PatternRoute::PolygonExtrude,
+        route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: None,
         field_test: None,
@@ -337,7 +337,7 @@ pub fn field_tested_patterns() -> Vec<&'static LolPattern> {
         .collect()
 }
 
-/// 経路別 filter (`route == PatternRoute::PolygonExtrude` 等)
+/// 経路別 filter (`route == PatternRoute::SdfDualContouring` 等)
 #[must_use]
 pub fn patterns_by_route(route: PatternRoute) -> Vec<&'static LolPattern> {
     registry::ALL.iter().filter(|p| p.route == route).collect()
@@ -383,8 +383,8 @@ mod tests {
     }
 
     #[test]
-    fn polygon_extrude_route_count() {
-        let thin = patterns_by_route(PatternRoute::PolygonExtrude);
+    fn dual_contouring_route_count() {
+        let thin = patterns_by_route(PatternRoute::SdfDualContouring);
         // coin + skadis_panel + 7 skadis accessories (hook_j/l/s/container/clip/shelf/elastic) = 9
         assert_eq!(thin.len(), 9);
     }
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn routes_sum_matches_registry_all() {
-        let thin = patterns_by_route(PatternRoute::PolygonExtrude).len();
+        let thin = patterns_by_route(PatternRoute::SdfDualContouring).len();
         let thick = patterns_by_route(PatternRoute::SdfMarchingCubes).len();
         assert_eq!(thin + thick, registry::ALL.len());
     }
@@ -406,7 +406,7 @@ mod tests {
     #[test]
     fn find_shopping_cart_coin() {
         let p = find_by_name("shopping_cart_coin_100yen").expect("registered");
-        assert_eq!(p.route, PatternRoute::PolygonExtrude);
+        assert_eq!(p.route, PatternRoute::SdfDualContouring);
         assert_eq!(p.certified_by, CertificationSource::UserFieldTest);
     }
 
