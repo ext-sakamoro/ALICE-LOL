@@ -721,9 +721,8 @@ fn check_continuity(
     let mut total_interior: usize = 0;
     for (ix, iy, iz, idx) in grid_indices(n) {
         #[allow(clippy::cast_precision_loss)]
-        let center = config.aabb_min
-            + step * Vec3::new(ix as f32, iy as f32, iz as f32)
-            + step * 0.5;
+        let center =
+            config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32) + step * 0.5;
         if sdf_eval(node, center) < 0.0 {
             interior[idx] = true;
             total_interior += 1;
@@ -1097,8 +1096,8 @@ fn check_contradiction(a: &Constraint, b: &Constraint) -> Option<String> {
             let dbg_b = format!("{nb:?}");
             let dbg_ca = format!("{ca:?}");
             let dbg_cb = format!("{cb:?}");
-            let same_pair = (dbg_a == dbg_ca && dbg_b == dbg_cb)
-                || (dbg_a == dbg_cb && dbg_b == dbg_ca);
+            let same_pair =
+                (dbg_a == dbg_ca && dbg_b == dbg_cb) || (dbg_a == dbg_cb && dbg_b == dbg_ca);
             if same_pair && *min_distance <= 0.0 {
                 Some(
                     "NonOverlap と Contact(min<=0) が同一ノードペアに適用: 接触を許容と禁止が同時"

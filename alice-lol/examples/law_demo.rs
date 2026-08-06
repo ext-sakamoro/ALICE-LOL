@@ -186,13 +186,8 @@ fn main() {
     // ── Thermal: bulky sphere に熱源 ──
     println!("--- Thermal: 大きな sphere に熱源 (放熱面積不足) ---");
     let bulk = lol! { sphere(3.0) };
-    let thermal_set = LawSet::new().thermal(
-        "cooling",
-        bulk,
-        vec![Vec3::new(0.0, 0.0, 0.0)],
-        1.5,
-        0.8,
-    );
+    let thermal_set =
+        LawSet::new().thermal("cooling", bulk, vec![Vec3::new(0.0, 0.0, 0.0)], 1.5, 0.8);
     print!(
         "{}",
         format_report(&thermal_set.check(&CheckConfig {
