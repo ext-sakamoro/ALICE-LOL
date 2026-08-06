@@ -254,7 +254,7 @@ fn default_config() {
 // v1.0 Phase 1: LawSet ビルダー
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-use alice_lol::law::{hard_violations, soft_violations, top_violations, Contradiction, LawSet};
+use alice_lol::law::{hard_violations, soft_violations, top_violations, LawSet};
 
 /// LawSet ビルダーで複数制約を一括検証
 #[test]
@@ -528,4 +528,201 @@ fn filter_no_violations() {
     assert!(top_violations(&report, 5).is_empty());
     assert!(hard_violations(&report).is_empty());
     assert!(soft_violations(&report).is_empty());
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// A.2 新 5 variant tests (Stress / Thermal / Contact / Continuity / VolumeConservation)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Stress: 薄い bar に強い荷重 → 肉厚不足 violation
+#[test]
+fn stress_thin_bar_high_load() {
+    // 薄い box (Y=0.15 厚) — force 5.0, factor 0.2 → 必要肉厚 1.0
+    let bar = lol! { box3d(2.0, 0.15, 0.15) };
+    let set = LawSet::new().stress(
+        "bar_stress",
+        bar,
+        vec![(Vec3::new(0.0, 0.0, 0.0), 5.0)],
+        0.2,
+    );
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-3.0),
+        aabb_max: Vec3::splat(3.0),
+        resolution: 24,
+    };
+
+    let report = set.check(&config);
+    assert!(report.has_hard_violations(), "薄い bar は stress 違反を検出すべき");
+    assert!(report.violations[0].residual < 0.0);
+}
+
+/// Stress: 厚い block に軽い荷重 → pass
+#[test]
+fn stress_thick_block_low_load() {
+    // 厚い box (2.0 × 2.0 × 2.0) — force 1.0, factor 0.2 → 必要肉厚 0.2
+    let block = lol! { box3d(1.0, 1.0, 1.0) };
+    let set = LawSet::new().stress(
+        "block_stress",
+        block,
+        vec![(Vec3::new(0.0, 0.0, 0.0), 1.0)],
+        0.2,
+    );
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::splat(2.0),
+        resolution: 8,
+    };
+
+    let report = set.check(&config);
+    assert!(report.all_passed(), "厚い block は stress pass すべき");
+}
+
+/// Thermal: 熱源近傍で内部セルはあるが表面近傍セル比が低い形状 → violation
+#[test]
+fn thermal_bulky_shape_near_source() {
+    // 大きな sphere (熱源から遠くまで内部) — search_radius 内で内部だらけ、表面比低
+    let bulk = lol! { sphere(3.0) };
+    let set = LawSet::new().thermal(
+        "cooling",
+        bulk,
+        vec![Vec3::new(0.0, 0.0, 0.0)],
+        1.5,   // search_radius
+        0.8,   // min_surface_ratio (現実的に達成困難)
+    );
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-4.0),
+        aabb_max: Vec3::splat(4.0),
+        resolution: 16,
+    };
+
+    let report = set.check(&config);
+    assert!(report.has_hard_violations(), "bulky 形状は放熱面積不足 violation");
+}
+
+/// Contact: 距離が範囲内 → pass
+#[test]
+fn contact_within_range() {
+    let a = lol! { sphere(1.0) };
+    let b = lol! { translate(2.5, 0.0, 0.0, sphere(1.0)) };
+    // 表面間距離 = 2.5 - 2.0 = 0.5
+    let set = LawSet::new().contact("mating", a, b, 0.3, 1.0);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::new(4.0, 2.0, 2.0),
+        resolution: 24,
+    };
+
+    let report = set.check(&config);
+    assert!(report.all_passed(), "距離 0.5 は [0.3, 1.0] 範囲内 = pass");
+}
+
+/// Contact: 遠すぎる → violation
+#[test]
+fn contact_too_far() {
+    let a = lol! { sphere(0.5) };
+    let b = lol! { translate(5.0, 0.0, 0.0, sphere(0.5)) };
+    // 表面間距離 = 5.0 - 1.0 = 4.0
+    let set = LawSet::new().contact("mating_far", a, b, 0.1, 1.0);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::new(7.0, 2.0, 2.0),
+        resolution: 24,
+    };
+
+    let report = set.check(&config);
+    assert!(report.has_hard_violations(), "距離 4.0 は max=1.0 超過 = violation");
+}
+
+/// Continuity: 単一 sphere → pass
+#[test]
+fn continuity_single_sphere() {
+    let sphere_node = lol! { sphere(1.0) };
+    let set = LawSet::new().continuity("connected", sphere_node, Vec3::ZERO);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::splat(2.0),
+        resolution: 16,
+    };
+
+    let report = set.check(&config);
+    assert!(report.all_passed(), "単一 sphere は連結");
+}
+
+/// Continuity: 離れた 2 sphere → violation
+#[test]
+fn continuity_disjoint_spheres() {
+    // 2 つ離れた sphere の union — seed は左側 sphere
+    let disjoint = lol! { union(sphere(0.8), translate(4.0, 0.0, 0.0, sphere(0.8))) };
+    let set = LawSet::new().continuity("connected", disjoint, Vec3::ZERO);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::new(6.0, 2.0, 2.0),
+        resolution: 24,
+    };
+
+    let report = set.check(&config);
+    assert!(
+        report.has_hard_violations(),
+        "離れた 2 sphere は disjoint region violation"
+    );
+}
+
+/// VolumeConservation: 同じ SDF → pass (差 = 0)
+#[test]
+fn volume_conservation_identity() {
+    let before = lol! { sphere(1.0) };
+    let after = lol! { sphere(1.0) };
+    let set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-2.0),
+        aabb_max: Vec3::splat(2.0),
+        resolution: 16,
+    };
+
+    let report = set.check(&config);
+    assert!(report.all_passed(), "同一 SDF は体積保存");
+}
+
+/// VolumeConservation: 大きく違う体積 → violation
+#[test]
+fn volume_conservation_large_diff() {
+    let before = lol! { sphere(1.0) };
+    let after = lol! { sphere(2.0) }; // 体積 8 倍
+    let set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-3.0),
+        aabb_max: Vec3::splat(3.0),
+        resolution: 16,
+    };
+
+    let report = set.check(&config);
+    assert!(
+        report.has_hard_violations(),
+        "半径 2 倍は体積 8 倍 = tolerance 5% 大幅超過"
+    );
+}
+
+/// Contradiction: Contact(min=0) + NonOverlap 同一ペア → 矛盾検出
+#[test]
+fn contradiction_contact_nonoverlap_conflict() {
+    let a = lol! { sphere(1.0) };
+    let b = lol! { translate(2.0, 0.0, 0.0, sphere(1.0)) };
+    let set = LawSet::new()
+        .contact("mating", a.clone(), b.clone(), 0.0, 1.0)
+        .hard("no_overlap", Constraint::NonOverlap { a, b });
+
+    let contradictions = set.detect_contradictions();
+    assert!(!contradictions.is_empty(), "矛盾検出されるべき");
+    assert!(contradictions[0]
+        .reason
+        .contains("Contact"));
 }
