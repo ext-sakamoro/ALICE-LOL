@@ -31,6 +31,9 @@ use std::path::Path;
 
 // ── re-export ──
 pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, FbxConfig};
+pub use alice_sdf::mesh::polygon_extrude::{
+    circle as polygon_circle, rect as polygon_rect, rounded_rect as polygon_rounded_rect, Polygon2D,
+};
 pub use alice_sdf::mesh::{sdf_to_mesh, MarchingCubesConfig, Mesh, MeshRepair, Vertex};
 
 /// 3Dプリント用エクスポート設定
@@ -278,6 +281,69 @@ pub fn lol_to_fbx(
 ) -> Result<ExportStats, ExportError> {
     let node = crate::runtime_parser::parse_lol(lol_text)?;
     node_to_fbx(&node, path, config)
+}
+
+// ────────────────────────────────────────────────────────
+// 2D polygon + extrude 経路 (Phase A.5.2、薄物 ≤ 5mm 向け)
+// ────────────────────────────────────────────────────────
+
+/// [`Polygon2D`] を extrude して watertight mesh を返す (スケーリング適用)
+///
+/// SDF+Marching Cubes を経由しないため薄物 (≤ 5mm) でも非多様体エッジが発生しない
+///
+/// - `half_height`: extrude 半高 (mm、全厚 = 2 × `half_height`)
+/// - `scale_mm`: 座標系スケール (通常 1.0、`Polygon2D` が既に mm 単位のため)
+#[must_use]
+pub fn polygon_to_mesh(polygon: &Polygon2D, half_height: f32, scale_mm: f32) -> Mesh {
+    let mut mesh = polygon.extrude(half_height);
+    if (scale_mm - 1.0).abs() > f32::EPSILON {
+        for v in &mut mesh.vertices {
+            v.position *= scale_mm;
+        }
+    }
+    mesh
+}
+
+/// [`Polygon2D`] → STL ファイル出力 (薄物向け、非多様体問題なし)
+///
+/// # Errors
+///
+/// `Polygon2D` が degenerate (頂点不足など) で triangulation 失敗時 `EmptyMesh`、
+/// ファイル書き込み失敗時 `Io` を返す
+pub fn polygon_to_stl(
+    polygon: &Polygon2D,
+    half_height: f32,
+    path: impl AsRef<Path>,
+) -> Result<ExportStats, ExportError> {
+    let mesh = polygon_to_mesh(polygon, half_height, 1.0);
+    if mesh.indices.is_empty() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let stats = ExportStats::from_mesh(&mesh, &path);
+    export_stl(&mesh, path)?;
+    Ok(stats)
+}
+
+/// [`Polygon2D`] → 3MF ファイル出力 (薄物向け)
+///
+/// SKADIS panel / shopping cart coin / thin plate 等の実プリント合格 pattern を
+/// Bambu Studio に直接読ませられる .3mf を生成する canonical 経路
+///
+/// # Errors
+///
+/// メッシュ空 `EmptyMesh`、ファイル書き込み失敗 `Io`
+pub fn polygon_to_3mf(
+    polygon: &Polygon2D,
+    half_height: f32,
+    path: impl AsRef<Path>,
+) -> Result<ExportStats, ExportError> {
+    let mesh = polygon_to_mesh(polygon, half_height, 1.0);
+    if mesh.indices.is_empty() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let stats = ExportStats::from_mesh(&mesh, &path);
+    export_3mf(&mesh, path)?;
+    Ok(stats)
 }
 
 /// エクスポート統計
