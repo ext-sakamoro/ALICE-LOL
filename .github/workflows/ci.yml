@@ -27,6 +27,12 @@ jobs:
           - os: ubuntu-latest
             features: "--features llm-bridge"
             label: " llm-bridge"
+          # Ubuntu: exercise all 3 shader backends (glsl / wgsl / hlsl) so
+          # tests/backend_parity.rs (Milestone A.4) is actually run in CI.
+          # cfg-gated on all 3 features, otherwise the module is empty.
+          - os: ubuntu-latest
+            features: "--features glsl,wgsl,hlsl"
+            label: " backend-parity"
     steps:
       - uses: actions/checkout@v4
         with:

@@ -553,7 +553,10 @@ fn stress_thin_bar_high_load() {
     };
 
     let report = set.check(&config);
-    assert!(report.has_hard_violations(), "薄い bar は stress 違反を検出すべき");
+    assert!(
+        report.has_hard_violations(),
+        "薄い bar は stress 違反を検出すべき"
+    );
     assert!(report.violations[0].residual < 0.0);
 }
 
@@ -588,8 +591,8 @@ fn thermal_bulky_shape_near_source() {
         "cooling",
         bulk,
         vec![Vec3::new(0.0, 0.0, 0.0)],
-        1.5,   // search_radius
-        0.8,   // min_surface_ratio (現実的に達成困難)
+        1.5, // search_radius
+        0.8, // min_surface_ratio (現実的に達成困難)
     );
 
     let config = CheckConfig {
@@ -599,7 +602,10 @@ fn thermal_bulky_shape_near_source() {
     };
 
     let report = set.check(&config);
-    assert!(report.has_hard_violations(), "bulky 形状は放熱面積不足 violation");
+    assert!(
+        report.has_hard_violations(),
+        "bulky 形状は放熱面積不足 violation"
+    );
 }
 
 /// Contact: 距離が範囲内 → pass
@@ -635,7 +641,10 @@ fn contact_too_far() {
     };
 
     let report = set.check(&config);
-    assert!(report.has_hard_violations(), "距離 4.0 は max=1.0 超過 = violation");
+    assert!(
+        report.has_hard_violations(),
+        "距離 4.0 は max=1.0 超過 = violation"
+    );
 }
 
 /// Continuity: 単一 sphere → pass
@@ -722,7 +731,5 @@ fn contradiction_contact_nonoverlap_conflict() {
 
     let contradictions = set.detect_contradictions();
     assert!(!contradictions.is_empty(), "矛盾検出されるべき");
-    assert!(contradictions[0]
-        .reason
-        .contains("Contact"));
+    assert!(contradictions[0].reason.contains("Contact"));
 }
