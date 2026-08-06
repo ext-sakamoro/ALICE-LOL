@@ -284,24 +284,32 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
             let cell_hy = (cell_d - spec.wall_thickness) * 0.5;
             let cx_start = -inner_hx + cell_w * 0.5;
             let cy_start = -inner_hy + cell_d * 0.5;
-            #[allow(clippy::cast_precision_loss)]
-            let grid_cx = cx_start + (dx - 1) as f32 * cell_w * 0.5;
-            #[allow(clippy::cast_precision_loss)]
-            let grid_cy = cy_start + (dy - 1) as f32 * cell_d * 0.5;
-            let rep_x = if dx > 1 { (dx - 1) / 2 } else { 0 };
-            let rep_y = if dy > 1 { (dy - 1) / 2 } else { 0 };
 
+            // Phase 5.8 bug fix: 従来 RepeatFinite count = (dx-1)/2 の integer 除算で
+            // dx=2 (最典型 2×2 divider) の時 count=0 → cavity 1 個 のみ生成 → subtract で
+            // 空 mesh 生成 (1.3KB degenerate mesh、Phase 5.5 CLI 実行で発覚)
+            // 修正: dx * dy 個の cavity を Union で明示配置、RepeatFinite 依存廃止
             let cavity = rounded_box(cell_hx, cell_hy, cavity_hz, gridfinity_spec::INNER_FILLET);
-            let cavity_repeated = SdfNode::RepeatFinite {
-                child: Arc::new(cavity),
-                count: [rep_x, rep_y, 0],
-                spacing: Vec3::new(cell_w, cell_d, 1.0),
-            };
-            let cavities_placed = translate(
-                cavity_repeated,
-                Vec3::new(grid_cx, grid_cy, cavity_offset_z),
-            );
-            return subtract(outer, cavities_placed);
+            let mut cavities: Option<SdfNode> = None;
+            for i in 0..dx {
+                for j in 0..dy {
+                    #[allow(clippy::cast_precision_loss)]
+                    let cx = cx_start + i as f32 * cell_w;
+                    #[allow(clippy::cast_precision_loss)]
+                    let cy = cy_start + j as f32 * cell_d;
+                    let cav = translate(cavity.clone(), Vec3::new(cx, cy, cavity_offset_z));
+                    cavities = Some(match cavities {
+                        Some(prev) => SdfNode::Union {
+                            a: Arc::new(prev),
+                            b: Arc::new(cav),
+                        },
+                        None => cav,
+                    });
+                }
+            }
+            if let Some(all_cavities) = cavities {
+                return subtract(outer, all_cavities);
+            }
         }
     }
     // dividers なし (単一 cavity)
