@@ -2,7 +2,7 @@
 //!
 //! SDF シーンに物理的・幾何学的制約を宣言し、違反を検出する。
 
-use alice_lol::law::{check_laws, format_report, CheckConfig, Constraint, Law};
+use alice_lol::law::{check_laws, format_report, CheckConfig, Constraint, Law, LawSet};
 use alice_lol::{lol, Vec3};
 
 fn main() {
@@ -161,6 +161,87 @@ fn main() {
             println!("  矛盾検出: {} vs {} — {}", c.law_a, c.law_b, c.reason);
         }
     }
+
+    println!();
+    println!("=== A.2 新 5 variant デモ (Stress / Thermal / Contact / Continuity / VolumeConservation) ===\n");
+
+    // ── Stress: 薄い bar に強い荷重 ──
+    println!("--- Stress: 薄い bar (Y=0.15) に force=5 荷重 ---");
+    let bar = lol! { box3d(2.0, 0.15, 0.15) };
+    let stress_set = LawSet::new().stress(
+        "bar_stress",
+        bar,
+        vec![(Vec3::new(0.0, 0.0, 0.0), 5.0)],
+        0.2,
+    );
+    print!(
+        "{}",
+        format_report(&stress_set.check(&CheckConfig {
+            aabb_min: Vec3::splat(-3.0),
+            aabb_max: Vec3::splat(3.0),
+            resolution: 24,
+        }))
+    );
+
+    // ── Thermal: bulky sphere に熱源 ──
+    println!("--- Thermal: 大きな sphere に熱源 (放熱面積不足) ---");
+    let bulk = lol! { sphere(3.0) };
+    let thermal_set = LawSet::new().thermal(
+        "cooling",
+        bulk,
+        vec![Vec3::new(0.0, 0.0, 0.0)],
+        1.5,
+        0.8,
+    );
+    print!(
+        "{}",
+        format_report(&thermal_set.check(&CheckConfig {
+            aabb_min: Vec3::splat(-4.0),
+            aabb_max: Vec3::splat(4.0),
+            resolution: 16,
+        }))
+    );
+
+    // ── Contact: mating 距離範囲内 ──
+    println!("--- Contact: 2 sphere 距離 0.5 (範囲 [0.3, 1.0] pass) ---");
+    let ca = lol! { sphere(1.0) };
+    let cb = lol! { translate(2.5, 0.0, 0.0, sphere(1.0)) };
+    let contact_set = LawSet::new().contact("mating", ca, cb, 0.3, 1.0);
+    print!(
+        "{}",
+        format_report(&contact_set.check(&CheckConfig {
+            aabb_min: Vec3::splat(-2.0),
+            aabb_max: Vec3::new(4.0, 2.0, 2.0),
+            resolution: 24,
+        }))
+    );
+
+    // ── Continuity: disjoint 2 sphere ──
+    println!("--- Continuity: 離れた 2 sphere (disjoint region 検出) ---");
+    let disjoint = lol! { union(sphere(0.8), translate(4.0, 0.0, 0.0, sphere(0.8))) };
+    let continuity_set = LawSet::new().continuity("connected", disjoint, Vec3::ZERO);
+    print!(
+        "{}",
+        format_report(&continuity_set.check(&CheckConfig {
+            aabb_min: Vec3::splat(-2.0),
+            aabb_max: Vec3::new(6.0, 2.0, 2.0),
+            resolution: 24,
+        }))
+    );
+
+    // ── VolumeConservation: 半径 2 倍で体積 8 倍 ──
+    println!("--- VolumeConservation: sphere(1) → sphere(2) 体積 8 倍 (tolerance 5% 超過) ---");
+    let before = lol! { sphere(1.0) };
+    let after = lol! { sphere(2.0) };
+    let vc_set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+    print!(
+        "{}",
+        format_report(&vc_set.check(&CheckConfig {
+            aabb_min: Vec3::splat(-3.0),
+            aabb_max: Vec3::splat(3.0),
+            resolution: 16,
+        }))
+    );
 
     println!("\n法則デモ完了。");
 }
