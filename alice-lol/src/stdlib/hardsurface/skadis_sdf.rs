@@ -223,8 +223,11 @@ pub fn skadis_hook_j_sdf() -> SdfNode {
     let radius = root_t * 0.5;
 
     // J 字 centerline: 前方 1/4 arc + 下方 straight + tip カーブ (0.75π)
+    // 2026-08-07 NME fix: n=16 → 32 で adjacent capsule 間隔短縮、self-intersect 減、
+    // DC watertight 破綻 (NME 42) 解消狙い hook_l (n=12) / hook_s (n=16) は tip angle
+    // が 0.7π 以下で NME 0 保証済、hook_j の 0.75π tip のみ密度不足だった
     let mut pts: Vec<glam::Vec2> = vec![glam::Vec2::new(0.0, 0.0)];
-    let n = 16;
+    let n = 32;
     // 前方 1/4 arc (0 → π/2)、reach 方向に S(sin) 進み、下方に -R(1-cos)
     for i in 0..=n {
         #[allow(clippy::cast_precision_loss)]
@@ -367,37 +370,42 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 使用可能範囲 = size - 2 * EDGE_MARGIN、その範囲を pitch で割った half を count に
     let usable = size - 2.0 * SKADIS_EDGE_MARGIN;
     #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    let count = ((usable * 0.5) / SKADIS_GRID_PITCH).floor() as u32;
+    let count = ((usable * 0.5) / SKADIS_GRID_PITCH).floor() as i32;
 
-    // Base grid (原点中心)
-    let base_grid = SdfNode::RepeatFinite {
-        child: Arc::new(peg_hole.clone()),
-        count: [count, 0, count],
-        spacing: Vec3::new(SKADIS_GRID_PITCH, 1.0, SKADIS_GRID_PITCH),
-    };
-
-    // Stagger grid (原点から (offset, 0, offset) シフト)
-    let stagger_grid_raw = SdfNode::RepeatFinite {
-        child: Arc::new(peg_hole),
-        count: [count, 0, count],
-        spacing: Vec3::new(SKADIS_GRID_PITCH, 1.0, SKADIS_GRID_PITCH),
-    };
-    let stagger_grid = SdfNode::Translate {
-        child: Arc::new(stagger_grid_raw),
-        offset: Vec3::new(SKADIS_GRID_OFFSET, 0.0, SKADIS_GRID_OFFSET),
-    };
-
-    // 2 grid Union で全 peg 穴
-    let all_holes = SdfNode::Union {
-        a: Arc::new(base_grid),
-        b: Arc::new(stagger_grid),
-    };
+    // 2026-08-07 fix: RepeatFinite → 明示 Union へ置換 (Phase 5.8 gridfinity 同 pattern)
+    // 理由: RepeatFinite の distance field は要素間 bound-only 保証で exact metric ではない
+    // DC の Hermite data sampling で boundary 精度不足による watertight 破綻 (NME 163) 発生
+    // 明示 Union で真の distance field を得て DC で完全 watertight 達成 (NME 0 実測)
+    let mut all_holes: Option<SdfNode> = None;
+    for (grid_x, grid_z) in [(0.0, 0.0), (SKADIS_GRID_OFFSET, SKADIS_GRID_OFFSET)] {
+        for ix in -count..=count {
+            for iz in -count..=count {
+                #[allow(clippy::cast_precision_loss)]
+                let cx = ix as f32 * SKADIS_GRID_PITCH + grid_x;
+                #[allow(clippy::cast_precision_loss)]
+                let cz = iz as f32 * SKADIS_GRID_PITCH + grid_z;
+                let hole = SdfNode::Translate {
+                    child: Arc::new(peg_hole.clone()),
+                    offset: Vec3::new(cx, 0.0, cz),
+                };
+                all_holes = Some(match all_holes {
+                    Some(prev) => SdfNode::Union {
+                        a: Arc::new(prev),
+                        b: Arc::new(hole),
+                    },
+                    None => hole,
+                });
+            }
+        }
+    }
 
     // panel - holes
-    SdfNode::Subtraction {
-        a: Arc::new(panel),
-        b: Arc::new(all_holes),
+    match all_holes {
+        Some(holes) => SdfNode::Subtraction {
+            a: Arc::new(panel),
+            b: Arc::new(holes),
+        },
+        None => panel,
     }
 }
 
