@@ -277,7 +277,9 @@ impl ProgramBuilder {
     #[must_use]
     pub fn build(self) -> Program {
         Program {
-            sdf: self.sdf.expect("ProgramBuilder::build には with_sdf が必須"),
+            sdf: self
+                .sdf
+                .expect("ProgramBuilder::build には with_sdf が必須"),
             sdf_registry: self.registry,
             intent: self.intent,
         }
@@ -546,9 +548,7 @@ mod tests {
 
     #[test]
     fn program_get_out_of_range() {
-        let prog = ProgramBuilder::new()
-            .with_sdf(SdfNode::sphere(1.0))
-            .build();
+        let prog = ProgramBuilder::new().with_sdf(SdfNode::sphere(1.0)).build();
         assert!(prog.get(0).is_none());
     }
 

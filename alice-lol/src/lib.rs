@@ -54,6 +54,10 @@ pub mod law;
 // IntentNode + Program 独立型、GPU backend との型分離、L1 Physical Intent 14 verb + Sequence/Parallel
 pub mod intent;
 
+// ── Standard Library (Phase A.1、hardsurface primitive collection) ──
+// 実プリント検証済みの機械要素 primitive (fastener/joint/reinforcement/mount) を SdfNode helper で提供
+pub mod stdlib;
+
 // ── Re-export the proc_macro ──
 pub use alice_lol_macro::lol;
 
