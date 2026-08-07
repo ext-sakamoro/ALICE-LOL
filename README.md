@@ -146,11 +146,44 @@ schwarz_infill(shell_t, scale, lattice_t, child)    — Shell + Schwarz-P infill
 animate(speed, amplitude, child)  morph(t, a, b)
 ```
 
-### Laws (3)
+### Laws (8) — geometric proxy 制約チェッカー
 
 ```
+# 幾何 (v0.3 baseline、3 variant)
 NonOverlap(a, b)  Containment(outer, inner)  MinThickness(node, min_t)
+
+# 物理 proxy (Milestone A.2、2026-08-06 追加、5 variant)
+Stress(node, load_points, min_thickness_factor)     # 荷重点近傍の応力集中
+Thermal(node, heat_sources, search_radius, min_surface_ratio)  # 熱源近傍の放熱面積比
+Contact(a, b, min_distance, max_distance)           # 接触可能距離範囲
+Continuity(node, seed_point)                        # 単一連結領域 (BFS flood fill)
+VolumeConservation(before, after, relative_tolerance)  # morph 前後の体積保存
 ```
+
+geometric proxy 評価 (grid + `sdf_eval()`)、Physics dep 追加なし。精密 physics-backed 評価は Milestone A.2.1 で `alice-physics` API 経由に置換予定。
+
+`LawSet` builder に convenience method 全 8 variant 分あり (`.stress()` / `.thermal()` / `.contact()` / `.continuity()` / `.volume_conservation()`)。`detect_contradictions()` で NonOverlap+Containment、Contact+NonOverlap の静的矛盾検出も追加。
+
+### Intent (Milestone B.1、2026-08-06、Phase 3 IR skeleton)
+
+`IntentNode` 16 variant + `Program { sdf, sdf_registry, intent }` 独立型 (GPU backend 型分離設計)。L1 Physical Intent verb 14 種 (grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest) + 合成 2 種 (Sequence / Parallel)。
+
+```rust
+use alice_lol::intent::{grasp, walk, sequence, HandSide, ProgramBuilder};
+use alice_lol::SdfNode;
+use glam::Vec3;
+
+let mut builder = ProgramBuilder::new().with_sdf(SdfNode::sphere(1.0));
+let cup_id = builder.register(SdfNode::sphere(0.3));
+let intent = sequence(vec![
+    walk(Vec3::new(1.0, 0.0, 0.0), 0.5),
+    grasp(cup_id, HandSide::Right, 5.0),
+]);
+let prog = builder.with_intent(intent).build();
+```
+
+- `Program::as_sdf()` は intent field を露出しない = GPU backend 型分離で誤解釈事故を防止
+- ALICE-Kinematics `lol` feature 経由で 8-byte Intent packet に翻訳可 (Milestone B.3)
 
 ### Variable Capture
 
@@ -180,7 +213,15 @@ let node = lol! { sphere({r * 2.0}) };     // 算術式
 | `glsl` | Yes | GLSL トランスパイル出力 |
 | `wgsl` | No | WGSL (WebGPU) 出力 |
 | `hlsl` | No | HLSL (DirectX) 出力 |
-| `physics` | No | ALICE-Physics 連携 (SDF → 力場) |
+| `physics` | No | ALICE-Physics bridge (SdfField trait impl + sim_modifier chain、Milestone A.1.0 2026-08-06 復帰) |
+| `roblox` | No | Roblox OBJ/FBX (MeshPart / accessory) |
+| `llm-bridge` | No | GBNF constrained decoding (AGPL-3.0 propagation 注意) |
+
+### Backend parity test suite (Milestone A.4、2026-08-06)
+
+`tests/backend_parity.rs` に 22 test を追加、GLSL/WGSL/HLSL 3 backend で同一 SdfNode の transpile parity を CI で保証 (primitive 7 + CSG 5 + transform 3 + modifier 4 + TPMS 1 + composite 2)。
+
+CI matrix に `--features glsl,wgsl,hlsl` entry (`backend-parity` label) 追加済。Level 2 (実 GPU 実行 + CPU eval 数値比較) は A.4.1 別 sprint (wgpu setup 必要)。
 
 ## API
 
