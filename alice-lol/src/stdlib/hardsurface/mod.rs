@@ -33,3 +33,80 @@ pub mod pattern_sdf;
 pub mod reinforcement;
 pub mod skadis_sdf;
 pub mod thin_sdf;
+
+use alice_sdf::SdfNode;
+use std::sync::Arc;
+
+/// N 個の SdfNode を **balanced binary tree** で Union fold する
+///
+/// 線形左入れ子 fold (`Union(Union(...(Union(a,b),c)...))`, depth O(n)) を使うと
+/// grid 系 primitive (skadis_panel 98 holes 等) で eval() recursion が
+/// test thread の 2 MB stack を超過する (2026-08-07 CI 事故で発覚)
+///
+/// 本 helper は隣接ペアを Union で潰しながら fold し、depth O(log n) にする
+/// 数値挙動は不変 (Union は結合律)、eval recursion depth のみ改善
+///
+/// # 例
+///
+/// - 98 nodes → linear fold: depth 98 (overflow risk)
+/// - 98 nodes → balanced fold: depth ceil(log2(98)) = 7 (safe)
+#[must_use]
+pub fn balanced_union_fold(mut nodes: Vec<SdfNode>) -> Option<SdfNode> {
+    if nodes.is_empty() {
+        return None;
+    }
+    while nodes.len() > 1 {
+        let mut next: Vec<SdfNode> = Vec::with_capacity(nodes.len().div_ceil(2));
+        let mut iter = nodes.into_iter();
+        while let Some(a) = iter.next() {
+            match iter.next() {
+                Some(b) => next.push(SdfNode::Union {
+                    a: Arc::new(a),
+                    b: Arc::new(b),
+                }),
+                None => next.push(a),
+            }
+        }
+        nodes = next;
+    }
+    nodes.into_iter().next()
+}
+
+#[cfg(test)]
+mod balanced_fold_tests {
+    use super::*;
+
+    #[test]
+    fn empty_returns_none() {
+        assert!(balanced_union_fold(Vec::new()).is_none());
+    }
+
+    #[test]
+    fn single_returns_self() {
+        let n = SdfNode::Sphere { radius: 1.0 };
+        let out = balanced_union_fold(vec![n.clone()]).unwrap();
+        assert!(matches!(out, SdfNode::Sphere { .. }));
+    }
+
+    #[test]
+    fn multi_returns_union_tree() {
+        let nodes: Vec<_> = (0..8).map(|_| SdfNode::Sphere { radius: 0.1 }).collect();
+        let out = balanced_union_fold(nodes).unwrap();
+        assert!(matches!(out, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn depth_is_logarithmic() {
+        // 100 nodes should produce depth ~7 (ceil log2 100)
+        fn depth(n: &SdfNode) -> usize {
+            match n {
+                SdfNode::Union { a, b } => 1 + depth(a).max(depth(b)),
+                _ => 1,
+            }
+        }
+        let nodes: Vec<_> = (0..100).map(|_| SdfNode::Sphere { radius: 0.1 }).collect();
+        let out = balanced_union_fold(nodes).unwrap();
+        let d = depth(&out);
+        assert!(d <= 8, "100 nodes → depth {} (期待: ≤ 8)", d);
+    }
+}

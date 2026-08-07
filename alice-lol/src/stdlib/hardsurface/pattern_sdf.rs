@@ -290,23 +290,22 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
             // 空 mesh 生成 (1.3KB degenerate mesh、Phase 5.5 CLI 実行で発覚)
             // 修正: dx * dy 個の cavity を Union で明示配置、RepeatFinite 依存廃止
             let cavity = rounded_box(cell_hx, cell_hy, cavity_hz, gridfinity_spec::INNER_FILLET);
-            let mut cavities: Option<SdfNode> = None;
+            // 2026-08-07 fix: 線形左入れ子 fold → balanced fold で eval recursion 削減
+            // (skadis_panel の 98-deep 事案と同 pattern の予防、depth O(n) → O(log n))
+            let mut cavity_list: Vec<SdfNode> = Vec::with_capacity(dx as usize * dy as usize);
             for i in 0..dx {
                 for j in 0..dy {
                     #[allow(clippy::cast_precision_loss)]
                     let cx = cx_start + i as f32 * cell_w;
                     #[allow(clippy::cast_precision_loss)]
                     let cy = cy_start + j as f32 * cell_d;
-                    let cav = translate(cavity.clone(), Vec3::new(cx, cy, cavity_offset_z));
-                    cavities = Some(match cavities {
-                        Some(prev) => SdfNode::Union {
-                            a: Arc::new(prev),
-                            b: Arc::new(cav),
-                        },
-                        None => cav,
-                    });
+                    cavity_list.push(translate(
+                        cavity.clone(),
+                        Vec3::new(cx, cy, cavity_offset_z),
+                    ));
                 }
             }
+            let cavities = super::balanced_union_fold(cavity_list);
             if let Some(all_cavities) = cavities {
                 return subtract(outer, all_cavities);
             }
