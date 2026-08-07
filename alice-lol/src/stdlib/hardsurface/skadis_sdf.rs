@@ -140,24 +140,17 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
     //   よって Z 方向厚は Box3d(hook_width) で separately clip 相当だが、
     //   単純化のため各 Capsule は 3D で curve に沿った tube (Z 方向 hook_width で clip なし)
     //   User 側で Intersection with Box3d(hook_width) して幅制限可
-    let mut acc: Option<SdfNode> = None;
-    for pair in pts.windows(2) {
-        let a = pair[0];
-        let b = pair[1];
-        let capsule = SdfNode::Capsule {
-            point_a: Vec3::new(a.x, a.y, 0.0),
-            point_b: Vec3::new(b.x, b.y, 0.0),
+    // 2026-08-07 fix: 線形左入れ子 fold → balanced fold で eval recursion 削減
+    // (14 point の polyline 程度なら overflow せずとも、grid 系との対称性で統一)
+    let capsules: Vec<SdfNode> = pts
+        .windows(2)
+        .map(|pair| SdfNode::Capsule {
+            point_a: Vec3::new(pair[0].x, pair[0].y, 0.0),
+            point_b: Vec3::new(pair[1].x, pair[1].y, 0.0),
             radius: tube_radius,
-        };
-        acc = Some(match acc {
-            Some(prev) => SdfNode::Union {
-                a: Arc::new(prev),
-                b: Arc::new(capsule),
-            },
-            None => capsule,
-        });
-    }
-    let curve = acc.unwrap_or(SdfNode::Sphere { radius: 0.0 });
+        })
+        .collect();
+    let curve = super::balanced_union_fold(capsules).unwrap_or(SdfNode::Sphere { radius: 0.0 });
     // Z 方向を hook_width に clip (Intersection with Box3d)
     let z_clip = SdfNode::Box3d {
         half_extents: Vec3::new(1000.0, 1000.0, hook_width * 0.5),
@@ -376,7 +369,10 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 理由: RepeatFinite の distance field は要素間 bound-only 保証で exact metric ではない
     // DC の Hermite data sampling で boundary 精度不足による watertight 破綻 (NME 163) 発生
     // 明示 Union で真の distance field を得て DC で完全 watertight 達成 (NME 0 実測)
-    let mut all_holes: Option<SdfNode> = None;
+    //
+    // 2026-08-07 fix 2: 線形左入れ子 fold → balanced fold で eval recursion depth 削減
+    // (98-deep 線形 fold は test thread 2 MB stack を超過して stack overflow の実測 CI 事故)
+    let mut hole_list: Vec<SdfNode> = Vec::new();
     for (grid_x, grid_z) in [(0.0, 0.0), (SKADIS_GRID_OFFSET, SKADIS_GRID_OFFSET)] {
         for ix in -count..=count {
             for iz in -count..=count {
@@ -384,20 +380,14 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
                 let cx = ix as f32 * SKADIS_GRID_PITCH + grid_x;
                 #[allow(clippy::cast_precision_loss)]
                 let cz = iz as f32 * SKADIS_GRID_PITCH + grid_z;
-                let hole = SdfNode::Translate {
+                hole_list.push(SdfNode::Translate {
                     child: Arc::new(peg_hole.clone()),
                     offset: Vec3::new(cx, 0.0, cz),
-                };
-                all_holes = Some(match all_holes {
-                    Some(prev) => SdfNode::Union {
-                        a: Arc::new(prev),
-                        b: Arc::new(hole),
-                    },
-                    None => hole,
                 });
             }
         }
     }
+    let all_holes = super::balanced_union_fold(hole_list);
 
     // panel - holes
     match all_holes {
