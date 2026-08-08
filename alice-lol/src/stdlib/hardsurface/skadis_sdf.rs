@@ -448,6 +448,7 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     };
     let half_size = size * 0.5;
     let conn_inset_from_center = half_size - SKADIS_CONN_INSET; // 中央から縁-inset 距離
+
     // 4 辺 (Python np.arange(GRID_PITCH, PANEL_W, GRID_PITCH) = 40, 80, ..., <size)
     let mut i = 1i32;
     loop {
@@ -457,6 +458,7 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
             break;
         }
         let center_shift = pos - half_size; // Python x → Rust cx
+
         // 上辺 (Y=CONN_INSET 相当 = Z=-conn_inset_from_center) と 下辺
         hole_list.push(SdfNode::Translate {
             child: Arc::new(conn_cyl.clone()),
