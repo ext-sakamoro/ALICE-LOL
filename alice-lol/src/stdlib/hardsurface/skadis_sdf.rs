@@ -316,6 +316,22 @@ pub const SKADIS_PANEL_THICKNESS: f32 = 5.0;
 /// 貫通穴 depth margin (mm、subtract 用に peg 穴を板より少し長く取る)
 pub const HOLE_THROUGH_MARGIN: f32 = 0.5;
 
+/// SKADIS connector ネジ穴径 (mm、M2.5 = Ø2.7mm、Bamboo `CONN_SCREW_D`)
+/// production `skadis_connector_2x2.3mf` で 2 枚 panel を連結するネジ用
+pub const SKADIS_CONN_SCREW_D: f32 = 2.7;
+
+/// SKADIS connector/mount 穴の縁からの inset 距離 (mm、Bamboo `CONN_INSET`)
+/// = OUTER_FRAME / 2 = 6.0mm (frame 中央、板の縁から 6mm 内側)
+pub const SKADIS_CONN_INSET: f32 = 6.0;
+
+/// SKADIS 壁掛けマウント穴半径 (mm、Ø5mm、Bamboo `MOUNT_HOLE_R`)
+/// 上下辺に 3 穴ずつ、壁ネジ用
+pub const SKADIS_MOUNT_HOLE_R: f32 = 2.5;
+
+/// SKADIS 外周フレーム幅 (mm、Bamboo `OUTER_FRAME`)
+/// peg 穴が侵入しない reserved 領域 (`EDGE_MARGIN ≥ 18mm` 制約と対)
+pub const SKADIS_OUTER_FRAME: f32 = 12.0;
+
 // ────────────────────────────────────────────────────────
 // SDF spec function
 // ────────────────────────────────────────────────────────
@@ -345,18 +361,52 @@ pub const HOLE_THROUGH_MARGIN: f32 = 0.5;
 #[must_use]
 pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNode {
     // 外形 (原点中心の RoundedBox、Y 軸方向 = 板厚)
-    let panel = SdfNode::RoundedBox {
+    // 2026-08-08 fix: RoundedBox は 6 面全てに round_radius を追加する仕様のため、
+    // 素朴に使うと Y 方向にも corner_radius が加算されて板厚が (thickness + 2*corner_radius)
+    // になる (例: thickness=5, corner_radius=6 で Y=17mm、Bamboo production 5mm と 3.4x 齟齬)
+    // 対策: Y 方向のみ Box3d で cut して真の thickness に強制 (X/Z の 4 corner fillet は保持)
+    let panel_infl = SdfNode::RoundedBox {
         half_extents: Vec3::new(size * 0.5, thickness * 0.5, size * 0.5),
         round_radius: corner_radius,
     };
-
-    // Peg 穴 (単一)、Y 軸貫通、板厚方向に margin 付き
-    let peg_hole = SdfNode::Box3d {
+    let y_cutter = SdfNode::Box3d {
         half_extents: Vec3::new(
-            SKADIS_PEG_W * 0.5,
-            thickness * 0.5 + HOLE_THROUGH_MARGIN,
-            SKADIS_PEG_H * 0.5,
+            size * 0.5 + corner_radius + 1.0, // X/Z は panel_infl 全体を包含 (fillet 保持)
+            thickness * 0.5,                  // Y は正確に thickness に制限
+            size * 0.5 + corner_radius + 1.0,
         ),
+    };
+    let panel = SdfNode::Intersection {
+        a: Arc::new(panel_infl),
+        b: Arc::new(y_cutter),
+    };
+
+    // Peg 穴 = Stadium 形状 (Bamboo `SKADIS_SPEC.md` §1 準拠、5×15mm、round 2.5mm 半円 ends)
+    // 2026-08-08 fix: 旧実装は Box3d rectangle だったが production は stadium (semicircular ends)
+    // Stadium 構成 = 中央 Box (5 × T+2m × 10、Z 方向 10mm) + 端 Cylinder 2 個 (radius 2.5、Y 軸)
+    let t_pass = thickness + 2.0 * HOLE_THROUGH_MARGIN;
+    let stadium_middle_z = (SKADIS_PEG_H - SKADIS_PEG_W) * 0.5; // (15-5)/2 = 5mm
+    let peg_middle = SdfNode::Box3d {
+        half_extents: Vec3::new(SKADIS_PEG_W * 0.5, t_pass * 0.5, stadium_middle_z),
+    };
+    let peg_end_cyl = SdfNode::Cylinder {
+        radius: SKADIS_PEG_W * 0.5, // 2.5mm = 半円 end
+        half_height: t_pass * 0.5,
+    };
+    let peg_end_top = SdfNode::Translate {
+        child: Arc::new(peg_end_cyl.clone()),
+        offset: Vec3::new(0.0, 0.0, stadium_middle_z),
+    };
+    let peg_end_bot = SdfNode::Translate {
+        child: Arc::new(peg_end_cyl),
+        offset: Vec3::new(0.0, 0.0, -stadium_middle_z),
+    };
+    let peg_hole = SdfNode::Union {
+        a: Arc::new(SdfNode::Union {
+            a: Arc::new(peg_middle),
+            b: Arc::new(peg_end_top),
+        }),
+        b: Arc::new(peg_end_bot),
     };
 
     // grid count: 原点中心で ±count 個 (実出力 2*count+1) を pitch で並べる
@@ -387,6 +437,81 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
             }
         }
     }
+
+    // 2026-08-08 add: Connector holes (M2.5 Ø2.7mm、4 辺 + 4 角、Bamboo canonical 準拠)
+    // production `models/wall-organizer/skadis-300x300/generate.py::get_conn_positions`
+    // 板 origin=中央のため、Python `(x, y)` (板 origin 左下) を Rust `(cx, cz)` に座標変換:
+    // cx = x - size/2、cz = y - size/2 (Python Y-up plane = Rust X-Z plane)
+    let conn_cyl = SdfNode::Cylinder {
+        radius: SKADIS_CONN_SCREW_D * 0.5, // 1.35mm
+        half_height: t_pass * 0.5,
+    };
+    let half_size = size * 0.5;
+    let conn_inset_from_center = half_size - SKADIS_CONN_INSET; // 中央から縁-inset 距離
+    // 4 辺 (Python np.arange(GRID_PITCH, PANEL_W, GRID_PITCH) = 40, 80, ..., <size)
+    let mut i = 1i32;
+    loop {
+        #[allow(clippy::cast_precision_loss)]
+        let pos = i as f32 * SKADIS_GRID_PITCH;
+        if pos >= size {
+            break;
+        }
+        let center_shift = pos - half_size; // Python x → Rust cx
+        // 上辺 (Y=CONN_INSET 相当 = Z=-conn_inset_from_center) と 下辺
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(conn_cyl.clone()),
+            offset: Vec3::new(center_shift, 0.0, -conn_inset_from_center),
+        });
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(conn_cyl.clone()),
+            offset: Vec3::new(center_shift, 0.0, conn_inset_from_center),
+        });
+        // 左辺 / 右辺
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(conn_cyl.clone()),
+            offset: Vec3::new(-conn_inset_from_center, 0.0, center_shift),
+        });
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(conn_cyl.clone()),
+            offset: Vec3::new(conn_inset_from_center, 0.0, center_shift),
+        });
+        i += 1;
+    }
+    // 4 角
+    for &(sx, sz) in &[
+        (-conn_inset_from_center, -conn_inset_from_center),
+        (conn_inset_from_center, -conn_inset_from_center),
+        (-conn_inset_from_center, conn_inset_from_center),
+        (conn_inset_from_center, conn_inset_from_center),
+    ] {
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(conn_cyl.clone()),
+            offset: Vec3::new(sx, 0.0, sz),
+        });
+    }
+
+    // 2026-08-08 add: Mount holes (Ø5mm 壁掛け、上下辺 3 穴、Bamboo canonical 準拠)
+    // production `get_mount_positions`: X=60/150/220 (peg X=20+40k と非重複)、Y=CONN_INSET/PANEL_H-CONN_INSET
+    // 板 origin=中央: cx = x - size/2 (Python origin 左下)
+    let mount_cyl = SdfNode::Cylinder {
+        radius: SKADIS_MOUNT_HOLE_R, // 2.5mm
+        half_height: t_pass * 0.5,
+    };
+    let mount_x_positions = [60.0, 150.0, 220.0];
+    for &x in &mount_x_positions {
+        let cx = x - half_size;
+        // 上辺 (Python Y=CONN_INSET → Rust Z=-conn_inset_from_center)
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(mount_cyl.clone()),
+            offset: Vec3::new(cx, 0.0, -conn_inset_from_center),
+        });
+        // 下辺
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(mount_cyl.clone()),
+            offset: Vec3::new(cx, 0.0, conn_inset_from_center),
+        });
+    }
+
     let all_holes = super::balanced_union_fold(hole_list);
 
     // panel - holes
@@ -442,6 +567,131 @@ mod tests {
         // 外形外 (X=200 = size/2 + margin 外) は空間
         let panel = skadis_panel_sdf(300.0, 5.0, 5.0);
         assert!(eval(&panel, Vec3::new(200.0, 0.0, 0.0)) > 0.0);
+    }
+
+    // ── 2026-08-08 fix: Y 厚さ bound + Stadium peg hole の regression tests ──
+
+    #[test]
+    fn skadis_panel_y_thickness_bounded_at_thickness_half() {
+        // 板厚方向 Y は正確に ±thickness/2 に制限 (RoundedBox の 6 面 inflate bug 対策)
+        // thickness=5、corner_radius=6 で旧実装は Y=±8.5 (17mm 厚) → production 齟齬
+        // 修正後は Y=±2.5 (5mm 厚) に強制
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        // Y = 3.0mm (thickness/2=2.5 の外) は空間
+        assert!(
+            eval(&panel, Vec3::new(10.0, 3.0, 10.0)) > 0.0,
+            "Y=3mm は thickness/2=2.5mm を超えるので空間になるはず"
+        );
+        // Y = 2.0mm (thickness/2=2.5 の内) + XZ 材料内位置は material 内部
+        assert!(
+            eval(&panel, Vec3::new(10.0, 2.0, 10.0)) < 0.0,
+            "Y=2mm + XZ=(10,10) は material 内部になるはず"
+        );
+    }
+
+    #[test]
+    fn skadis_panel_xz_corner_fillet_preserved() {
+        // X/Z 4 corner の fillet は保持される (corner_radius=6 が X/Z に効く)
+        // panel size=300、corner_radius=6 → 実効 X/Z 範囲 = ±156 (=150+6)
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        // 完全角 (156, 0, 156) は fillet で外側 (fillet 内側は距離 > 0)
+        assert!(
+            eval(&panel, Vec3::new(156.0, 0.0, 156.0)) > 0.0,
+            "コーナー (156, 0, 156) は fillet で切り取られるので空間になるはず"
+        );
+        // fillet の外中央 (156, 0, 0) は境界近傍 (実効的にほぼ 0)
+        // Panel 中の material 位置 (110, 0, 110) は material 内部
+        // (100, 0, 100) は stagger grid peg (20+40*2) 中心なので穴、避ける
+        assert!(
+            eval(&panel, Vec3::new(110.0, 0.0, 110.0)) < 0.0,
+            "(110, 0, 110) は grid 外の material 内部になるはず"
+        );
+    }
+
+    #[test]
+    fn skadis_panel_connector_holes_are_present() {
+        // 2026-08-08 add: connector 穴 (M2.5 Ø2.7mm) は 4 辺 + 4 角に存在
+        // panel origin=中央、conn_inset_from_center = 150 - 6 = 144mm
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        // 4 角: (±144, 0, ±144) 全部空間 (穴)
+        for &(sx, sz) in &[
+            (-144.0f32, -144.0),
+            (144.0, -144.0),
+            (-144.0, 144.0),
+            (144.0, 144.0),
+        ] {
+            assert!(
+                eval(&panel, Vec3::new(sx, 0.0, sz)) > 0.0,
+                "コーナー connector 穴 ({sx}, 0, {sz}) は空間になるはず"
+            );
+        }
+        // 上辺 conn: X=40 (Python x=190 → cx=40)、Z=-144
+        // Python `arange(40, 300, 40)` = [40, 80, 120, 160, 200, 240, 280]
+        // Rust cx = x - 150 = [-110, -70, -30, 10, 50, 90, 130]
+        // 代表 3 位置検証
+        for &cx in &[-110.0f32, 10.0, 130.0] {
+            assert!(
+                eval(&panel, Vec3::new(cx, 0.0, -144.0)) > 0.0,
+                "上辺 connector 穴 ({cx}, 0, -144) は空間になるはず"
+            );
+        }
+    }
+
+    #[test]
+    fn skadis_panel_mount_holes_are_present() {
+        // 2026-08-08 add: mount 穴 (Ø5mm) は上下辺の X=60/150/220 (Python) = cx=-90/0/70 (Rust)
+        // Z = ±(size/2 - CONN_INSET) = ±144
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        for &cx in &[-90.0f32, 0.0, 70.0] {
+            // 上辺 (Z=-144)
+            assert!(
+                eval(&panel, Vec3::new(cx, 0.0, -144.0)) > 0.0,
+                "上辺 mount 穴 ({cx}, 0, -144) は空間になるはず"
+            );
+            // 下辺 (Z=+144)
+            assert!(
+                eval(&panel, Vec3::new(cx, 0.0, 144.0)) > 0.0,
+                "下辺 mount 穴 ({cx}, 0, 144) は空間になるはず"
+            );
+        }
+    }
+
+    #[test]
+    fn skadis_panel_frame_zone_material_between_holes() {
+        // frame 領域 (X=144 = size/2 - CONN_INSET 近辺) で穴と穴の間は material
+        // 上辺 Z=-144、X=-140 (連続 conn 穴の中間) → material 内部
+        // Python conn X=[190]=cx=40 vs mount X=[60,150,220]=cx=[-90,0,70]
+        // cx=-140 は最も近い穴が corner (-144, ±144) 約 4mm 離、mount cx=-90 は 50mm 離
+        // 穴半径 max=2.5mm (mount) なので cx=-140 は material 内
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        assert!(
+            eval(&panel, Vec3::new(-140.0, 0.0, -140.0)) < 0.0,
+            "frame 内 穴なし位置 (-140, 0, -140) は material 内部になるはず"
+        );
+    }
+
+    #[test]
+    fn skadis_panel_peg_hole_stadium_shape() {
+        // Stadium peg 穴 5×15mm、round 2.5mm ends
+        // 基準 peg は (0, 0, 0) 中心、X 幅 ±2.5、Z 高 ±7.5
+        let panel = skadis_panel_sdf(300.0, 5.0, 6.0);
+        // Z = 6.0mm (Z=±7.5 の semicircle end 内) + X=0 → stadium 内部 = 穴
+        assert!(
+            eval(&panel, Vec3::new(0.0, 0.0, 6.0)) > 0.0,
+            "(0, 0, 6.0) は stadium 半円 end 内なので穴になるはず"
+        );
+        // Z = 8.0mm (Z=±7.5 の semicircle end 外) → 穴外、material 内部
+        assert!(
+            eval(&panel, Vec3::new(0.0, 0.0, 8.0)) < 0.0,
+            "(0, 0, 8.0) は stadium 外側で material 内部になるはず"
+        );
+        // X = 3.0mm (X=±2.5 の外) → stadium 外、material 内部
+        // ただし Z 位置に注意: (3, 0, 0) は peg 穴 X 幅の外だが Z 中央 → 内側判定は shape 次第
+        // 旧 rectangle なら X=3 > X=±2.5 = 外、Stadium も同じ
+        assert!(
+            eval(&panel, Vec3::new(3.0, 0.0, 0.0)) < 0.0,
+            "(3, 0, 0) は stadium X 幅 (±2.5) の外なので material 内部になるはず"
+        );
     }
 
     #[test]
