@@ -578,6 +578,303 @@ pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 5. sticky_note_holder (organizer-gridfinity-desk § 2.7)
+// ────────────────────────────────────────────────────────
+
+/// 付箋ホルダーの寸法仕様 (76×76mm 小型 or 76×127mm 大型対応)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StickyNoteHolderSpec {
+    /// pad 幅 (mm、X、標準 76 = 3 inch)
+    pub pad_width: f32,
+    /// pad 深さ (mm、Y、標準 76 or 127)
+    pub pad_depth: f32,
+    /// 全高 (mm、pad 3-8 枚分 = 25-40mm)
+    pub height: f32,
+    /// 壁厚 (mm、default 1.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 1.5)
+    pub floor_thickness: f32,
+}
+
+impl StickyNoteHolderSpec {
+    /// 小型正方形 76×76 × 30mm (Post-it 3×3 inch standard)
+    #[must_use]
+    pub const fn small_square() -> Self {
+        Self {
+            pad_width: 76.0,
+            pad_depth: 76.0,
+            height: 30.0,
+            wall_thickness: 1.5,
+            floor_thickness: 1.5,
+        }
+    }
+}
+
+/// 付箋ホルダー (`RoundedBox` outer - `Box3d` cavity)
+///
+/// 構造 (organizer-gridfinity-desk § 2.7 準拠):
+/// - Outer: `RoundedBox` (`(pad_width + 2×wall) × (pad_depth + 2×wall) × height`)
+/// - Cavity: `Box3d` (`pad_width × pad_depth × (height - floor)`)、Z=+floor/2 offset
+/// - `Subtraction` で cavity を outer から刳り抜き
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sticky_note_holder, StickyNoteHolderSpec};
+/// let holder = sticky_note_holder(&StickyNoteHolderSpec::small_square());
+/// ```
+#[must_use]
+pub fn sticky_note_holder(spec: &StickyNoteHolderSpec) -> SdfNode {
+    let outer_hx = (spec.pad_width + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hy = (spec.pad_depth + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hz = spec.height * 0.5;
+    let inner_hx = spec.pad_width * 0.5;
+    let inner_hy = spec.pad_depth * 0.5;
+    let cavity_h = spec.height - spec.floor_thickness;
+    let inner_hz = cavity_h * 0.5;
+    let cavity_offset_z = spec.floor_thickness * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let cavity = translate(
+        box3d(inner_hx, inner_hy, inner_hz),
+        Vec3::new(0.0, 0.0, cavity_offset_z),
+    );
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
+// 6. business_card_holder (organizer-gridfinity-desk § 2.6)
+// ────────────────────────────────────────────────────────
+
+/// 名刺ホルダーの寸法仕様 (JP meishi 91×55 / US 89×51 / EU 85.6×54)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BusinessCardHolderSpec {
+    /// card 幅 (mm、X、JP=91 / US=89 / EU=85.6)
+    pub card_width: f32,
+    /// card 高さ (mm、Y、JP=55 / US=51 / EU=54)
+    pub card_height: f32,
+    /// slot 厚 (mm、30-50 枚分 = 20-25mm)
+    pub slot_thickness: f32,
+    /// 全高 (mm、card の 30-40% が露出、slot depth)
+    pub slot_depth: f32,
+    /// 壁厚 (mm、default 1.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl BusinessCardHolderSpec {
+    /// JP meishi 91×55mm default (30-50 枚収容想定)
+    #[must_use]
+    pub const fn jp_meishi() -> Self {
+        Self {
+            card_width: 91.0,
+            card_height: 55.0,
+            slot_thickness: 22.0,
+            slot_depth: 32.0,
+            wall_thickness: 1.5,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// 名刺ホルダー (縦置き slot、card protrude で掴みやすさ確保)
+///
+/// 構造 (organizer-gridfinity-desk § 2.6 準拠):
+/// - Outer: `RoundedBox` (`(card_w + 2×wall) × (slot_thickness + 2×wall) × slot_depth`)
+/// - Cavity: `Box3d` (`card_w × slot_thickness × (slot_depth - floor)`)、Z=+floor/2 offset
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{business_card_holder, BusinessCardHolderSpec};
+/// let holder = business_card_holder(&BusinessCardHolderSpec::jp_meishi());
+/// ```
+#[must_use]
+pub fn business_card_holder(spec: &BusinessCardHolderSpec) -> SdfNode {
+    let outer_hx = (spec.card_width + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hy = (spec.slot_thickness + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hz = spec.slot_depth * 0.5;
+    let inner_hx = spec.card_width * 0.5;
+    let inner_hy = spec.slot_thickness * 0.5;
+    let cavity_h = spec.slot_depth - spec.floor_thickness;
+    let inner_hz = cavity_h * 0.5;
+    let cavity_offset_z = spec.floor_thickness * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let cavity = translate(
+        box3d(inner_hx, inner_hy, inner_hz),
+        Vec3::new(0.0, 0.0, cavity_offset_z),
+    );
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
+// 7. pen_cup (organizer-gridfinity-desk § 2.2)
+// ────────────────────────────────────────────────────────
+
+/// ペン立ての寸法仕様 (single-compartment 円筒 cup)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PenCupSpec {
+    /// cup 内径 (mm、default 70-85、複数本のペン収容想定)
+    pub inner_diameter: f32,
+    /// cup 全高 (mm、default 90-120)
+    pub height: f32,
+    /// 壁厚 (mm、default 1.5-2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl PenCupSpec {
+    /// 標準サイズ Ø75×100mm (organizer-gridfinity-desk § 2.2 sweet spot)
+    #[must_use]
+    pub const fn standard_75x100() -> Self {
+        Self {
+            inner_diameter: 75.0,
+            height: 100.0,
+            wall_thickness: 2.0,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// ペン立て (`Cylinder` outer - `Cylinder` cavity)
+///
+/// 構造 (organizer-gridfinity-desk § 2.2 準拠、Cylinder は Y 軸 alignment):
+/// - Outer: `Cylinder` (r = `(inner_dia + 2×wall) / 2`, half_h = `height / 2`)
+/// - Cavity: `Cylinder` (r = `inner_dia / 2`, half_h = `(height - floor) / 2`)、Y=+floor/2 offset
+///   (Y+ 方向が cup 開口部、Y- 方向が floor)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{pen_cup, PenCupSpec};
+/// let cup = pen_cup(&PenCupSpec::standard_75x100());
+/// ```
+#[must_use]
+pub fn pen_cup(spec: &PenCupSpec) -> SdfNode {
+    let outer_r = (spec.inner_diameter + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hy = spec.height * 0.5;
+    let inner_r = spec.inner_diameter * 0.5;
+    let cavity_h = spec.height - spec.floor_thickness;
+    let inner_hy = cavity_h * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5;
+
+    let outer = cylinder(outer_r, outer_hy);
+    let cavity = translate(
+        cylinder(inner_r, inner_hy),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
+// 8. phone_stand (organizer-gridfinity-desk § 2.9)
+// ────────────────────────────────────────────────────────
+
+/// スマホ / タブレット スタンドの寸法仕様 (L 字構造 + slot)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PhoneStandSpec {
+    /// slot 幅 (mm、phone 10-15 / tablet 12-18、ケース対応時 +2-3)
+    pub slot_width: f32,
+    /// slot 奥行 (mm、Y、back plate 厚さ + 底刳り、default 6)
+    pub slot_depth: f32,
+    /// base 幅 (mm、X、default 80-100 phone / 150-200 tablet)
+    pub base_width: f32,
+    /// base 奥行 (mm、Y、default 80-100 phone / 100-150 tablet)
+    pub base_depth: f32,
+    /// base 厚 (mm、Z、default 5-8)
+    pub base_thickness: f32,
+    /// back plate 高さ (mm、default 80-120 phone / 150-190 tablet)
+    pub back_height: f32,
+    /// back plate 厚 (mm、Y、default 4-6)
+    pub back_thickness: f32,
+    /// cable 通し穴径 (mm、default 15-25)、`None` で穴なし
+    pub cable_hole_dia: Option<f32>,
+}
+
+impl PhoneStandSpec {
+    /// スマホ default (base 90×90×6, back 100×5, slot 14mm, cable Ø18)
+    #[must_use]
+    pub const fn phone_default() -> Self {
+        Self {
+            slot_width: 14.0,
+            slot_depth: 6.0,
+            base_width: 90.0,
+            base_depth: 90.0,
+            base_thickness: 6.0,
+            back_height: 100.0,
+            back_thickness: 5.0,
+            cable_hole_dia: Some(18.0),
+        }
+    }
+}
+
+/// スマホ / タブレット スタンド (L 字 base + back plate、front 面 slot)
+///
+/// 構造 (organizer-gridfinity-desk § 2.9 準拠):
+/// - Base: `Box3d` (`base_width × base_depth × base_thickness`)、Z=+base_thickness/2
+/// - Back plate: `Box3d` (`base_width × back_thickness × back_height`)、後端 Y=-(base_depth/2 - back_thickness/2)、Z 中心=+base_thickness+back_height/2
+/// - Slot: `Box3d` を back plate 前面から刳り抜き (phone を差し込む溝)
+/// - Cable hole: `Cylinder` を base 中央から Z 貫通 (指定時のみ)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{phone_stand, PhoneStandSpec};
+/// let stand = phone_stand(&PhoneStandSpec::phone_default());
+/// ```
+#[must_use]
+pub fn phone_stand(spec: &PhoneStandSpec) -> SdfNode {
+    let base_hx = spec.base_width * 0.5;
+    let base_hy = spec.base_depth * 0.5;
+    let base_hz = spec.base_thickness * 0.5;
+    let back_hx = spec.base_width * 0.5;
+    let back_hy = spec.back_thickness * 0.5;
+    let back_hz = spec.back_height * 0.5;
+
+    // Base at Z=+base_hz (bottom on Z=0)
+    let base = translate(
+        box3d(base_hx, base_hy, base_hz),
+        Vec3::new(0.0, 0.0, base_hz),
+    );
+
+    // Back plate at rear edge (Y=-(base_hy - back_hy))、Z=base_thickness + back_hz
+    let back_plate_y = -(base_hy - back_hy);
+    let back_plate_z = spec.base_thickness + back_hz;
+    let back = translate(
+        box3d(back_hx, back_hy, back_hz),
+        Vec3::new(0.0, back_plate_y, back_plate_z),
+    );
+
+    // Slot cut: front face of back plate、Y=back_plate_y + back_hy (前面)
+    // slot 幅方向 X、深さ Y、高さ Z (top 部分に配置、phone を挿入する溝)
+    let slot_hx = spec.slot_width * 0.5;
+    let slot_hy = back_hy + 0.5; // 貫通用余裕
+    let slot_hz = spec.back_height * 0.4; // back 高さの 40% を slot 深に
+    let slot_center_z = back_plate_z + back_hz - slot_hz;
+    let slot = translate(
+        box3d(slot_hx, slot_hy, slot_hz),
+        Vec3::new(0.0, back_plate_y, slot_center_z),
+    );
+
+    let structure = union(base, back);
+    let with_slot = subtract(structure, slot);
+
+    // Cable hole (指定時のみ、base 中央 Z 貫通)
+    if let Some(dia) = spec.cable_hole_dia {
+        let hole = translate(
+            cylinder(dia * 0.5, base_hz + 1.0),
+            Vec3::new(0.0, 0.0, base_hz),
+        );
+        subtract(with_slot, hole)
+    } else {
+        with_slot
+    }
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -680,6 +977,84 @@ mod tests {
         for (i, node) in nodes.iter().enumerate() {
             let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
             assert!(d.is_finite(), "pattern {i} produced non-finite SDF: {d}");
+        }
+    }
+
+    // ── organizer-gridfinity-desk PART 2 archetypes (Phase B) ──
+
+    #[test]
+    fn sticky_note_holder_small_square_is_subtraction() {
+        let h = sticky_note_holder(&StickyNoteHolderSpec::small_square());
+        assert!(matches!(h, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn sticky_note_holder_floor_center_is_inside() {
+        let h = sticky_note_holder(&StickyNoteHolderSpec::small_square());
+        // floor 中央 (0, 0, +0.5 = floor 中心付近) は材料内部
+        assert!(eval(&h, Vec3::new(0.0, 0.0, -14.0)) < 0.0);
+    }
+
+    #[test]
+    fn business_card_holder_jp_meishi_is_subtraction() {
+        let h = business_card_holder(&BusinessCardHolderSpec::jp_meishi());
+        assert!(matches!(h, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn business_card_holder_wall_is_solid() {
+        let h = business_card_holder(&BusinessCardHolderSpec::jp_meishi());
+        // 側壁 (X=46、slot cavity 外) は材料
+        // inner_hx=45.5、outer_hx=47.0 なので wall は X=45.5 to 47.0
+        assert!(eval(&h, Vec3::new(46.0, 0.0, 5.0)) < 0.0);
+    }
+
+    #[test]
+    fn pen_cup_standard_is_subtraction() {
+        let cup = pen_cup(&PenCupSpec::standard_75x100());
+        assert!(matches!(cup, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn pen_cup_wall_is_solid() {
+        let cup = pen_cup(&PenCupSpec::standard_75x100());
+        // Cylinder は Y 軸 alignment (`length(xz)` for radial、`abs(y)` for height)
+        // outer_r=39.5、inner_r=37.5、壁厚 2mm、Y=0 中央 → 壁は radial 37.5 < r < 39.5
+        assert!(eval(&cup, Vec3::new(38.5, 0.0, 0.0)) < 0.0);
+        // cup 底 (Y=-49、Y-axis 底、cavity は Y=+1 offset なので Y=-49 は材料)
+        assert!(eval(&cup, Vec3::new(0.0, -49.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn phone_stand_default_has_cable_hole() {
+        let s = phone_stand(&PhoneStandSpec::phone_default());
+        // Some(cable_hole) 指定なので最終 node は Subtraction (hole subtract)
+        assert!(matches!(s, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn phone_stand_no_cable_hole_is_slot_subtract() {
+        let mut spec = PhoneStandSpec::phone_default();
+        spec.cable_hole_dia = None;
+        let s = phone_stand(&spec);
+        // cable_hole なしなので slot subtract で止まる = Subtraction
+        assert!(matches!(s, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn all_part2_archetypes_evaluations_finite() {
+        let nodes = [
+            sticky_note_holder(&StickyNoteHolderSpec::small_square()),
+            business_card_holder(&BusinessCardHolderSpec::jp_meishi()),
+            pen_cup(&PenCupSpec::standard_75x100()),
+            phone_stand(&PhoneStandSpec::phone_default()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "PART 2 archetype {i} produced non-finite SDF: {d}"
+            );
         }
     }
 }

@@ -277,6 +277,25 @@ impl<'a> Parser<'a> {
         Ok((a, b, c, d))
     }
 
+    /// f32 値 7 個 (Phase B.1.b `gridfinity_bin_ex` 用)
+    fn parse_7f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32, f32), ParseError> {
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let e = self.expect_number()?;
+        self.expect_comma()?;
+        let f = self.expect_number()?;
+        self.expect_comma()?;
+        let g = self.expect_number()?;
+        self.expect_rparen()?;
+        Ok((a, b, c, d, e, f, g))
+    }
+
     /// f32 + 子ノード 1 個
     fn parse_1f_child(&mut self) -> Result<(f32, SdfNode), ParseError> {
         let v = self.expect_number()?;
@@ -1576,6 +1595,32 @@ impl<'a> Parser<'a> {
                     &spec,
                 ))
             }
+            "gridfinity_bin_ex" => {
+                // gridfinity_bin_ex(ux, uy, hu, divx, divy, wall, floor) 7 param full spec
+                // divx>=1 && divy>=1 → dividers=Some((divx, divy))、それ以外 → None
+                // wall <= 0 → default 1.2、floor <= 0 → default 1.5
+                let (ux, uy, hu, divx, divy, wall, floor) = self.parse_7f()?;
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let dividers = if divx >= 1.0 && divy >= 1.0 {
+                    Some((divx as u32, divy as u32))
+                } else {
+                    None
+                };
+                let wall_thickness = if wall > 0.0 { wall } else { 1.2 };
+                let floor_thickness = if floor > 0.0 { floor } else { 1.5 };
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let spec = crate::stdlib::hardsurface::pattern_sdf::GridfinitySpec {
+                    units_x: ux as u32,
+                    units_y: uy as u32,
+                    height_u: hu as u32,
+                    dividers,
+                    wall_thickness,
+                    floor_thickness,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin(
+                    &spec,
+                ))
+            }
             "wall_hook" => {
                 self.expect_rparen()?;
                 Ok(crate::stdlib::hardsurface::pattern_sdf::wall_hook(
@@ -1593,6 +1638,63 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::shelf_divider(
                     &crate::stdlib::hardsurface::pattern_sdf::ShelfDividerSpec::field_tested_560x250x120(),
                 ))
+            }
+
+            // ── organizer-gridfinity-desk PART 2 archetypes (Phase B、2026-08-19) ──
+            "sticky_note_holder" => {
+                // sticky_note_holder(pad_w, pad_d, height) 3 param、wall/floor は default 1.5
+                let (pw, pd, h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::StickyNoteHolderSpec {
+                    pad_width: pw,
+                    pad_depth: pd,
+                    height: h,
+                    wall_thickness: 1.5,
+                    floor_thickness: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sticky_note_holder(
+                    &spec,
+                ))
+            }
+            "business_card_holder" => {
+                // business_card_holder(card_w, card_h, slot_thickness) 3 param
+                let (cw, ch, st) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::BusinessCardHolderSpec {
+                    card_width: cw,
+                    card_height: ch,
+                    slot_thickness: st,
+                    slot_depth: ch * 0.6,
+                    wall_thickness: 1.5,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::business_card_holder(&spec))
+            }
+            "pen_cup" => {
+                // pen_cup(inner_dia, height) 2 param、wall=2.0、floor=2.0 default
+                let (dia, h) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PenCupSpec {
+                    inner_diameter: dia,
+                    height: h,
+                    wall_thickness: 2.0,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::pen_cup(&spec))
+            }
+            "phone_stand" => {
+                // phone_stand(slot_width, back_height, cable_hole_dia) 3 param
+                // cable_hole_dia <= 0 → None (穴なし)、それ以外 → Some(dia)
+                let (sw, bh, chd) = self.parse_3f()?;
+                let cable_hole_dia = if chd > 0.0 { Some(chd) } else { None };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PhoneStandSpec {
+                    slot_width: sw,
+                    slot_depth: 6.0,
+                    base_width: 90.0,
+                    base_depth: 90.0,
+                    base_thickness: 6.0,
+                    back_height: bh,
+                    back_thickness: 5.0,
+                    cable_hole_dia,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::phone_stand(&spec))
             }
 
             other => Err(ParseError {
@@ -2369,6 +2471,72 @@ mod tests {
             "wall_hook()",
             "drawer_organizer()",
             "shelf_divider()",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Phase C: gridfinity_bin_ex (7 param advanced) tests ──
+
+    #[test]
+    fn test_gridfinity_bin_ex_no_dividers_no_walls() {
+        // divx=0/divy=0 → dividers=None、wall=0/floor=0 → default (1.2, 1.5)
+        let node = parse_lol("gridfinity_bin_ex(2, 2, 6, 0, 0, 0, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_gridfinity_bin_ex_with_dividers_and_walls() {
+        // 3×3 grid × 6U + dividers 2×2 + wall=1.5 + floor=2.0
+        let node = parse_lol("gridfinity_bin_ex(3, 3, 6, 2, 2, 1.5, 2.0)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    // ── Phase B: PART 2 archetype tests ──
+
+    #[test]
+    fn test_sticky_note_holder_small_square() {
+        let node = parse_lol("sticky_note_holder(76, 76, 30)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_business_card_holder_jp_meishi() {
+        let node = parse_lol("business_card_holder(91, 55, 22)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_pen_cup_standard() {
+        let node = parse_lol("pen_cup(75, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_phone_stand_with_cable_hole() {
+        let node = parse_lol("phone_stand(14, 100, 18)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_phone_stand_no_cable_hole() {
+        // cable_hole_dia=0 で穴なし、それでも slot subtract で Subtraction
+        let node = parse_lol("phone_stand(14, 100, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_phase_b_part2_archetypes_eval_correctly() {
+        // organizer-gridfinity-desk PART 2 追加 4 archetype の parse + eval sanity check
+        use alice_sdf::eval;
+        for lol in [
+            "sticky_note_holder(76, 76, 30)",
+            "business_card_holder(91, 55, 22)",
+            "pen_cup(75, 100)",
+            "phone_stand(14, 100, 18)",
+            "gridfinity_bin_ex(3, 3, 6, 2, 2, 1.5, 2.0)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
