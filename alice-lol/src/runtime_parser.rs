@@ -1697,6 +1697,69 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::phone_stand(&spec))
             }
 
+            // ── organizer-gridfinity-desk PART 2 B2 archetypes (2026-08-19) ──
+            "headphone_holder" => {
+                // headphone_holder(arm_length, headband_width, mount_width) 3 param
+                // mount_hole_dia は default M4 (4.5mm) 固定、他は spec default
+                let (al, hw, mw) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::HeadphoneHolderSpec {
+                    arm_length: al,
+                    arm_thickness: 6.0,
+                    arm_width: hw,
+                    mount_width: mw,
+                    mount_height: 68.0,
+                    mount_thickness: 6.0,
+                    hook_tip_up: 18.0,
+                    mount_hole_dia: Some(4.5),
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::headphone_holder(
+                    &spec,
+                ))
+            }
+            "under_desk_mount" => {
+                // under_desk_mount(desk_thickness, clamp_width, screw_dia) 3 param
+                // screw_dia <= 0 → None (両面テープ想定)、それ以外 → Some(dia)
+                let (dt, cw, sd) = self.parse_3f()?;
+                let screw_hole_dia = if sd > 0.0 { Some(sd) } else { None };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::UnderDeskMountSpec {
+                    desk_thickness: dt,
+                    clamp_width: cw,
+                    clamp_depth: 50.0,
+                    clamp_wall_thickness: 4.0,
+                    screw_hole_dia,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::under_desk_mount(
+                    &spec,
+                ))
+            }
+            "desk_shelf" => {
+                // desk_shelf(shelf_width, shelf_depth, leg_height) 3 param
+                let (sw, sd, lh) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::DeskShelfSpec {
+                    shelf_width: sw,
+                    shelf_depth: sd,
+                    shelf_thickness: 5.0,
+                    leg_height: lh,
+                    leg_thickness: 20.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::desk_shelf(&spec))
+            }
+            "monitor_riser" => {
+                // monitor_riser(width, depth, height) 3 param、cable_hole default Some(40)
+                let (w, d, h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::MonitorRiserSpec {
+                    width: w,
+                    depth: d,
+                    height: h,
+                    platform_thickness: 8.0,
+                    leg_thickness: 25.0,
+                    cable_hole_dia: Some(40.0),
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::monitor_riser(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2537,6 +2600,57 @@ mod tests {
             "pen_cup(75, 100)",
             "phone_stand(14, 100, 18)",
             "gridfinity_bin_ex(3, 3, 6, 2, 2, 1.5, 2.0)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Phase B2: PART 2 完成 4 archetype tests ──
+
+    #[test]
+    fn test_headphone_holder_wall_mount() {
+        let node = parse_lol("headphone_holder(80, 50, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_under_desk_mount_standard() {
+        let node = parse_lol("under_desk_mount(25, 40, 4)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_under_desk_mount_no_screw() {
+        // screw=0 で穴なし (両面テープ想定)、それでも SmoothUnion で止まる
+        let node = parse_lol("under_desk_mount(25, 40, 0)").unwrap();
+        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn test_desk_shelf_desktop() {
+        let node = parse_lol("desk_shelf(400, 200, 100)").unwrap();
+        // 3-way SmoothUnion (subtract なし)
+        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn test_monitor_riser_compact() {
+        let node = parse_lol("monitor_riser(250, 180, 90)").unwrap();
+        // cable_hole 有 → Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_phase_b2_part2_archetypes_eval_correctly() {
+        // organizer-gridfinity-desk PART 2 B2 追加 4 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "headphone_holder(80, 50, 100)",
+            "under_desk_mount(25, 40, 4)",
+            "desk_shelf(400, 200, 100)",
+            "monitor_riser(250, 180, 90)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
