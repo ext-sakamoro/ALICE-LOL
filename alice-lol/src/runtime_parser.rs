@@ -1556,6 +1556,45 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_elastic_cord_sdf())
             }
 
+            // ── Phase B.1.b 高階 primitive (stdlib::hardsurface::pattern_sdf) ──
+            // Bamboo Rust generator 由来の 4 pattern (wall_hook / gridfinity_bin /
+            // drawer_organizer / shelf_divider) を DSL syntax に expose
+            // wall_hook / drawer_organizer / shelf_divider は param なし = spec default
+            // gridfinity_bin は 3 param (units_x, units_y, height_u) basic 版
+            "gridfinity_bin" => {
+                let (ux, uy, hu) = self.parse_3f()?;
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let spec = crate::stdlib::hardsurface::pattern_sdf::GridfinitySpec {
+                    units_x: ux as u32,
+                    units_y: uy as u32,
+                    height_u: hu as u32,
+                    dividers: None,
+                    wall_thickness: 1.2,
+                    floor_thickness: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin(
+                    &spec,
+                ))
+            }
+            "wall_hook" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::pattern_sdf::wall_hook(
+                    &crate::stdlib::hardsurface::pattern_sdf::WallHookSpec::pla_1kgf(),
+                ))
+            }
+            "drawer_organizer" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::pattern_sdf::drawer_organizer(
+                    &crate::stdlib::hardsurface::pattern_sdf::DrawerSpec::default_chopsticks_set(),
+                ))
+            }
+            "shelf_divider" => {
+                self.expect_rparen()?;
+                Ok(crate::stdlib::hardsurface::pattern_sdf::shelf_divider(
+                    &crate::stdlib::hardsurface::pattern_sdf::ShelfDividerSpec::field_tested_560x250x120(),
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2288,6 +2327,48 @@ mod tests {
             "skadis_hook_l()",
             "skadis_hook_j()",
             "skadis_hook_s()",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Phase B.1.b 高階 primitive tests (pattern_sdf 経路) ──
+
+    #[test]
+    fn test_gridfinity_bin_2x2_6u() {
+        let node = parse_lol("gridfinity_bin(2, 2, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_wall_hook_no_args() {
+        let node = parse_lol("wall_hook()").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_drawer_organizer_no_args() {
+        let node = parse_lol("drawer_organizer()").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_shelf_divider_no_args() {
+        let node = parse_lol("shelf_divider()").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_phase_b_1_b_pattern_sdf_primitives_eval_correctly() {
+        // Phase B.1.b 追加 4 primitive の parse + eval sanity check
+        use alice_sdf::eval;
+        for lol in [
+            "gridfinity_bin(2, 2, 6)",
+            "wall_hook()",
+            "drawer_organizer()",
+            "shelf_divider()",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
