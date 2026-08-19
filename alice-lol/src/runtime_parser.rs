@@ -1760,6 +1760,48 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── household.md archetypes (Sprint 4、2026-08-19) ──
+            "coaster" => {
+                // coaster(diameter, thickness) 2 param、lip は default (2.5mm 幅 / 1.5mm 高)
+                let (dia, t) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CoasterSpec {
+                    diameter: dia,
+                    thickness: t,
+                    lip_width: 2.5,
+                    lip_height: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::coaster(&spec))
+            }
+            "tissue_box_cover" => {
+                // tissue_box_cover(internal_l, internal_w, internal_h) 3 param
+                // wall + slot は default (1.6mm 壁 / 80×30mm slot)
+                let (il, iw, ih) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::TissueBoxCoverSpec {
+                    internal_length: il,
+                    internal_width: iw,
+                    internal_height: ih,
+                    wall_thickness: 1.6,
+                    slot_length: 80.0,
+                    slot_width: 30.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::tissue_box_cover(
+                    &spec,
+                ))
+            }
+            "storage_box" => {
+                // storage_box(internal_l, internal_w, internal_h) 3 param
+                // wall + floor は default (2.0mm 各)、lid + hinge なし (future sprint)
+                let (il, iw, ih) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::StorageBoxSpec {
+                    internal_length: il,
+                    internal_width: iw,
+                    internal_height: ih,
+                    wall_thickness: 2.0,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::storage_box(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2651,6 +2693,41 @@ mod tests {
             "under_desk_mount(25, 40, 4)",
             "desk_shelf(400, 200, 100)",
             "monitor_riser(250, 180, 90)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 4: household.md 3 archetype tests ──
+
+    #[test]
+    fn test_coaster_round() {
+        let node = parse_lol("coaster(95, 5)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_tissue_box_cover_rectangular_us() {
+        let node = parse_lol("tissue_box_cover(231, 116, 53)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_storage_box_medium() {
+        let node = parse_lol("storage_box(150, 100, 60)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_sprint4_household_archetypes_eval_correctly() {
+        // household.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "coaster(95, 5)",
+            "tissue_box_cover(231, 116, 53)",
+            "storage_box(150, 100, 60)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

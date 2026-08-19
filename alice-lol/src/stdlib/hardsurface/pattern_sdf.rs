@@ -1213,6 +1213,219 @@ pub fn monitor_riser(spec: &MonitorRiserSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 13. coaster (household § 7)
+// ────────────────────────────────────────────────────────
+
+/// コースター spec (round disc、top に shallow recess で rim 形成)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CoasterSpec {
+    /// 直径 (mm、default 95、range 80-110)
+    pub diameter: f32,
+    /// 全厚 (mm、default 5、range 4-8)
+    pub thickness: f32,
+    /// rim 幅 (mm、default 2.5)、外周の rim の水平厚
+    pub lip_width: f32,
+    /// rim 高さ (mm、default 1.5)、top からの rim 突出高
+    pub lip_height: f32,
+}
+
+impl CoasterSpec {
+    /// 標準 round Ø95×5mm (household § 7 sweet spot)
+    #[must_use]
+    pub const fn round_95x5() -> Self {
+        Self {
+            diameter: 95.0,
+            thickness: 5.0,
+            lip_width: 2.5,
+            lip_height: 1.5,
+        }
+    }
+}
+
+/// 円形コースター (bowl 状、rim で液滴 catch)
+///
+/// 構造 (household § 7 準拠、Cylinder は Y-axis alignment):
+/// - Base: `Cylinder` (r = `diameter/2`, half_h = `thickness/2`)
+/// - Recess: `Cylinder` (r = `(diameter - 2×lip_width)/2`, depth = `lip_height`)
+///   Y+ 方向 (上面) から subtract、`Subtraction { base, recess }`
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{coaster, CoasterSpec};
+/// let c = coaster(&CoasterSpec::round_95x5());
+/// ```
+#[must_use]
+pub fn coaster(spec: &CoasterSpec) -> SdfNode {
+    let outer_r = spec.diameter * 0.5;
+    let outer_hy = spec.thickness * 0.5;
+    let inner_r = outer_r - spec.lip_width;
+    let recess_hy = spec.lip_height * 0.5;
+    let recess_offset_y = outer_hy - recess_hy;
+
+    let base = cylinder(outer_r, outer_hy);
+    let recess = translate(
+        cylinder(inner_r, recess_hy + 0.5),
+        Vec3::new(0.0, recess_offset_y + 0.25, 0.0),
+    );
+    subtract(base, recess)
+}
+
+// ────────────────────────────────────────────────────────
+// 14. tissue_box_cover (household § 1)
+// ────────────────────────────────────────────────────────
+
+/// ティッシュボックスカバー spec (bottom open で箱にかぶせる、top に pull slot)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TissueBoxCoverSpec {
+    /// 内部 長さ (mm、L、default 231 = US rectangular + 2mm clearance)
+    pub internal_length: f32,
+    /// 内部 幅 (mm、W、default 116 = US rectangular + 2mm clearance)
+    pub internal_width: f32,
+    /// 内部 高さ (mm、H、default 53)
+    pub internal_height: f32,
+    /// 壁厚 (mm、default 1.6)
+    pub wall_thickness: f32,
+    /// top pull slot 長辺 (mm、default 80、slot は long axis に配置)
+    pub slot_length: f32,
+    /// top pull slot 短辺 (mm、default 30)
+    pub slot_width: f32,
+}
+
+impl TissueBoxCoverSpec {
+    /// US rectangular standard (231×116×53mm 内部、tissue 抽出 slot 80×30)
+    #[must_use]
+    pub const fn rectangular_us() -> Self {
+        Self {
+            internal_length: 231.0,
+            internal_width: 116.0,
+            internal_height: 53.0,
+            wall_thickness: 1.6,
+            slot_length: 80.0,
+            slot_width: 30.0,
+        }
+    }
+}
+
+/// ティッシュボックスカバー (bottom open、top pull slot 付き)
+///
+/// 構造 (household § 1 準拠、Y-up、bottom Y=-hy 側 open):
+/// - Outer: `RoundedBox` (`(L+2w) × (H+w) × (W+2w)`)、上面 (Y+) は塞ぐ、底面 (Y-) は cavity で貫通
+/// - Cavity: `Box3d` (`L × (H+w) × W`)、Y- 方向にオフセット (底面貫通)
+/// - Top slot: `Box3d` (`slot_L × w × slot_W`)、Y+ 上面配置 (tissue 抽出用)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{tissue_box_cover, TissueBoxCoverSpec};
+/// let t = tissue_box_cover(&TissueBoxCoverSpec::rectangular_us());
+/// ```
+#[must_use]
+pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
+    let ext_l = spec.internal_length + 2.0 * spec.wall_thickness;
+    let ext_w = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_h = spec.internal_height + spec.wall_thickness;
+
+    let outer_hx = ext_l * 0.5;
+    let outer_hy = ext_h * 0.5;
+    let outer_hz = ext_w * 0.5;
+
+    // Cavity: 底面 (Y-) を開口したいので Y- 方向オフセット、Y+ (top wall) 残す
+    let cavity_hx = spec.internal_length * 0.5;
+    let cavity_hy = (spec.internal_height + spec.wall_thickness + 1.0) * 0.5;
+    let cavity_hz = spec.internal_width * 0.5;
+    let cavity_offset_y = -(spec.wall_thickness + 0.5) * 0.5;
+
+    // Top slot (Y+ 面貫通): X 方向 slot_length、Y 方向 wall_thickness+margin、Z 方向 slot_width
+    let slot_hx = spec.slot_length * 0.5;
+    let slot_hy = (spec.wall_thickness + 1.0) * 0.5;
+    let slot_hz = spec.slot_width * 0.5;
+    let slot_offset_y = outer_hy - slot_hy + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let slot = translate(
+        box3d(slot_hx, slot_hy, slot_hz),
+        Vec3::new(0.0, slot_offset_y, 0.0),
+    );
+
+    subtract(subtract(outer, cavity), slot)
+}
+
+// ────────────────────────────────────────────────────────
+// 15. storage_box (household § 3、基本形 lid なし)
+// ────────────────────────────────────────────────────────
+
+/// 収納 BOX spec (top open、lid + hinge は future sprint)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StorageBoxSpec {
+    /// 内部 長さ (mm、L、default 150 = medium size)
+    pub internal_length: f32,
+    /// 内部 幅 (mm、W、default 100)
+    pub internal_width: f32,
+    /// 内部 高さ (mm、H、default 60)
+    pub internal_height: f32,
+    /// 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl StorageBoxSpec {
+    /// medium size 150×100×60mm 内部 (household § 3 medium spec)
+    #[must_use]
+    pub const fn medium() -> Self {
+        Self {
+            internal_length: 150.0,
+            internal_width: 100.0,
+            internal_height: 60.0,
+            wall_thickness: 2.0,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// 収納 BOX 基本形 (top open、底 + 4 側壁、lid + hinge なし)
+///
+/// 構造 (household § 3 準拠、Y-up、top (Y+) 側 open):
+/// - Outer: `RoundedBox` (`(L+2w) × (H+floor) × (W+2w)`)
+/// - Cavity: `Box3d` (`L × (H+margin) × W`)、Y+ 方向にオフセット (top 開口)
+///
+/// lid + hinge は future sprint (Print-in-place knuckle / filament pin / living hinge)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{storage_box, StorageBoxSpec};
+/// let b = storage_box(&StorageBoxSpec::medium());
+/// ```
+#[must_use]
+pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
+    let ext_l = spec.internal_length + 2.0 * spec.wall_thickness;
+    let ext_w = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_h = spec.internal_height + spec.floor_thickness;
+
+    let outer_hx = ext_l * 0.5;
+    let outer_hy = ext_h * 0.5;
+    let outer_hz = ext_w * 0.5;
+
+    let cavity_hx = spec.internal_length * 0.5;
+    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hz = spec.internal_width * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -1473,6 +1686,74 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "PART 2 B2 archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── household.md 3 archetype (Sprint 4) ──
+
+    #[test]
+    fn coaster_default_is_subtraction() {
+        let c = coaster(&CoasterSpec::round_95x5());
+        // recess subtract で Subtraction
+        assert!(matches!(c, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn coaster_rim_is_solid() {
+        let c = coaster(&CoasterSpec::round_95x5());
+        // rim (X=46、outer_r=47.5、inner_r=45) 内は材料
+        // Cylinder Y-axis なので radial 判定は (X, Z) plane、Y=0 が厚さ中央
+        assert!(eval(&c, Vec3::new(46.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn coaster_bottom_is_solid() {
+        let c = coaster(&CoasterSpec::round_95x5());
+        // Y=-2 (底面付近、Y-axis で outer_hy=2.5 の底寄り) は材料
+        assert!(eval(&c, Vec3::new(0.0, -2.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn tissue_box_cover_default_is_subtraction() {
+        let t = tissue_box_cover(&TissueBoxCoverSpec::rectangular_us());
+        // cavity + slot subtract で 2 段 Subtraction、最外層 Subtraction
+        assert!(matches!(t, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn tissue_box_cover_top_wall_at_slot_center_is_hollow() {
+        let t = tissue_box_cover(&TissueBoxCoverSpec::rectangular_us());
+        // top slot 中央 (X=0, Y=+top_wall 内, Z=0) は slot で刳り抜かれて空間
+        // top wall Y は internal_height/2 + wall/2 = 26.5 + 0.8 = 27.3
+        assert!(eval(&t, Vec3::new(0.0, 27.5, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn storage_box_default_is_subtraction() {
+        let b = storage_box(&StorageBoxSpec::medium());
+        assert!(matches!(b, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn storage_box_floor_is_solid() {
+        let b = storage_box(&StorageBoxSpec::medium());
+        // 底面 (Y=-31、ext_h=62、outer_hy=31、floor 底寄り) は材料
+        assert!(eval(&b, Vec3::new(0.0, -30.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_household_archetypes_evaluations_finite() {
+        let nodes = [
+            coaster(&CoasterSpec::round_95x5()),
+            tissue_box_cover(&TissueBoxCoverSpec::rectangular_us()),
+            storage_box(&StorageBoxSpec::medium()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "household archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
