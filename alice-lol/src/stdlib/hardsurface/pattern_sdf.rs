@@ -875,6 +875,344 @@ pub fn phone_stand(spec: &PhoneStandSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 9. headphone_holder (organizer-gridfinity-desk § 2.5)
+// ────────────────────────────────────────────────────────
+
+/// ヘッドホンホルダー spec (wall-mount type、hook arm + backplate)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeadphoneHolderSpec {
+    /// hook arm 長さ (mm、Z 方向 protrusion、default 80)
+    pub arm_length: f32,
+    /// hook arm 太さ (mm、Y 方向厚さ、default 6)
+    pub arm_thickness: f32,
+    /// hook arm 幅 (mm、X、headband_width + margin、default 50)
+    pub arm_width: f32,
+    /// mount plate 幅 (mm、X、default 100)
+    pub mount_width: f32,
+    /// mount plate 高さ (mm、Y、default 68)
+    pub mount_height: f32,
+    /// mount plate 厚 (mm、Z、default 6)
+    pub mount_thickness: f32,
+    /// hook tip 上方向 curl (mm、Y、default 18)、slip 防止
+    pub hook_tip_up: f32,
+    /// M4 mount hole 径 (mm)、`None` で穴なし
+    pub mount_hole_dia: Option<f32>,
+}
+
+impl HeadphoneHolderSpec {
+    /// 標準 wall-mount default (arm 80mm、mount 100×68mm、M4 穴あり)
+    #[must_use]
+    pub const fn wall_mount_default() -> Self {
+        Self {
+            arm_length: 80.0,
+            arm_thickness: 6.0,
+            arm_width: 50.0,
+            mount_width: 100.0,
+            mount_height: 68.0,
+            mount_thickness: 6.0,
+            hook_tip_up: 18.0,
+            mount_hole_dia: Some(4.5),
+        }
+    }
+}
+
+/// ヘッドホンホルダー (wall_hook variant、hook 太くて headband 対応)
+///
+/// 構造 (organizer-gridfinity-desk § 2.5 準拠、wall_hook と同 pattern):
+/// - Mount plate: `RoundedBox` (X×Y×Z = mount_w × mount_h × mount_thickness)、Z=0 中心
+/// - Hook arm: `RoundedBox`、mount plate 前面 (Z=+mount_thickness/2) から Z 方向 protrusion
+/// - Hook tip: `RoundedBox`、arm 先端で Y 上方向 curl (slip 防止)
+/// - 3-way `SmoothUnion` で blend
+/// - Mount holes: `Box3d` (方形穴、Z-thickness で 2 個縦並び)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{headphone_holder, HeadphoneHolderSpec};
+/// let h = headphone_holder(&HeadphoneHolderSpec::wall_mount_default());
+/// ```
+#[must_use]
+pub fn headphone_holder(spec: &HeadphoneHolderSpec) -> SdfNode {
+    let mp_hx = spec.mount_width * 0.5;
+    let mp_hy = spec.mount_height * 0.5;
+    let mp_hz = spec.mount_thickness * 0.5;
+    let arm_hx = spec.arm_width * 0.5;
+    let arm_hy = spec.arm_thickness * 0.5;
+    let arm_hz = spec.arm_length * 0.5;
+    let tip_hy = spec.hook_tip_up * 0.5;
+
+    let mount = rounded_box(mp_hx, mp_hy, mp_hz, 3.0);
+    let arm = translate(
+        rounded_box(arm_hx, arm_hy, arm_hz, 2.0),
+        Vec3::new(0.0, 0.0, mp_hz + arm_hz),
+    );
+    let tip = translate(
+        rounded_box(arm_hx, tip_hy, arm_hy, 2.0),
+        Vec3::new(0.0, arm_hy + tip_hy, mp_hz + spec.arm_length - arm_hy),
+    );
+
+    let body = smooth_union(smooth_union(mount, arm, 3.0), tip, 3.0);
+
+    if let Some(dia) = spec.mount_hole_dia {
+        let hole_hx = dia * 0.5;
+        let hole_hy = dia * 0.5;
+        let hole_hz = mp_hz + 0.5;
+        let hole_spacing = mp_hy * 0.6;
+        let hole_top = translate(
+            box3d(hole_hx, hole_hy, hole_hz),
+            Vec3::new(0.0, hole_spacing, 0.0),
+        );
+        let hole_bot = translate(
+            box3d(hole_hx, hole_hy, hole_hz),
+            Vec3::new(0.0, -hole_spacing, 0.0),
+        );
+        subtract(body, union(hole_top, hole_bot))
+    } else {
+        body
+    }
+}
+
+// ────────────────────────────────────────────────────────
+// 10. under_desk_mount (organizer-gridfinity-desk § 2.4)
+// ────────────────────────────────────────────────────────
+
+/// 机下 clamp mount spec (C 字クランプ、机端に取付)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnderDeskMountSpec {
+    /// clamp gap = 机厚 (mm、Y、default 25、range 0-60)
+    pub desk_thickness: f32,
+    /// clamp jaw 幅 (mm、X、default 40)
+    pub clamp_width: f32,
+    /// clamp jaw 奥行 (mm、Z、default 50)
+    pub clamp_depth: f32,
+    /// clamp 壁厚 (mm、default 4)、構造強度
+    pub clamp_wall_thickness: f32,
+    /// screw hole 径 (mm、M4 = 4mm、`None` で穴なし = 両面テープ想定)
+    pub screw_hole_dia: Option<f32>,
+}
+
+impl UnderDeskMountSpec {
+    /// 標準机 default (25mm 机厚、40mm jaw、M4 screw)
+    #[must_use]
+    pub const fn standard_desk() -> Self {
+        Self {
+            desk_thickness: 25.0,
+            clamp_width: 40.0,
+            clamp_depth: 50.0,
+            clamp_wall_thickness: 4.0,
+            screw_hole_dia: Some(4.0),
+        }
+    }
+}
+
+/// 机下 clamp mount (C 字構造、机端に上下 jaw で挟み込み)
+///
+/// 構造 (organizer-gridfinity-desk § 2.4 準拠):
+/// - Top jaw: `Box3d` (机上に載る、X×Y×Z = clamp_w × wall_t × clamp_depth)、Y=+top_y 位置
+/// - Bottom jaw: `Box3d` (机下、同 size)、Y=-bottom_y 位置
+/// - Back stem: `Box3d` (背面接続、X×Y×Z = clamp_w × (desk+2×wall) × wall_t)、Z=-back_z 位置
+/// - Screw hole: `Cylinder` Y-axis (bottom jaw を貫通、締付ネジ用)、指定時のみ
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{under_desk_mount, UnderDeskMountSpec};
+/// let m = under_desk_mount(&UnderDeskMountSpec::standard_desk());
+/// ```
+#[must_use]
+pub fn under_desk_mount(spec: &UnderDeskMountSpec) -> SdfNode {
+    let jaw_hx = spec.clamp_width * 0.5;
+    let jaw_hy = spec.clamp_wall_thickness * 0.5;
+    let jaw_hz = spec.clamp_depth * 0.5;
+    let top_y = spec.desk_thickness * 0.5 + jaw_hy;
+    let bottom_y = -(spec.desk_thickness * 0.5 + jaw_hy);
+    let stem_hx = spec.clamp_width * 0.5;
+    let stem_hy = (spec.desk_thickness + 2.0 * spec.clamp_wall_thickness) * 0.5;
+    let stem_hz = spec.clamp_wall_thickness * 0.5;
+    let back_z = -(jaw_hz - stem_hz);
+
+    let top_jaw = translate(box3d(jaw_hx, jaw_hy, jaw_hz), Vec3::new(0.0, top_y, 0.0));
+    let bottom_jaw = translate(box3d(jaw_hx, jaw_hy, jaw_hz), Vec3::new(0.0, bottom_y, 0.0));
+    let back_stem = translate(
+        box3d(stem_hx, stem_hy, stem_hz),
+        Vec3::new(0.0, 0.0, back_z),
+    );
+
+    let body = smooth_union(smooth_union(top_jaw, bottom_jaw, 2.0), back_stem, 2.0);
+
+    if let Some(dia) = spec.screw_hole_dia {
+        // Y-axis cylinder = 縦穴、bottom jaw を Y 方向に貫通
+        let hole = translate(
+            cylinder(dia * 0.5, jaw_hy + 0.5),
+            Vec3::new(0.0, bottom_y, 0.0),
+        );
+        subtract(body, hole)
+    } else {
+        body
+    }
+}
+
+// ────────────────────────────────────────────────────────
+// 11. desk_shelf (organizer-gridfinity-desk § 2.3)
+// ────────────────────────────────────────────────────────
+
+/// 卓上シェルフ spec (平板 + 左右 2 脚、shelf_divider 簡易版)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeskShelfSpec {
+    /// shelf 幅 (mm、X、default 400、range 200-500)
+    pub shelf_width: f32,
+    /// shelf 奥行 (mm、Z、default 200、range 150-300)
+    pub shelf_depth: f32,
+    /// shelf 厚 (mm、Y、default 5)
+    pub shelf_thickness: f32,
+    /// leg 高さ (mm、Y、default 100、range 60-150)
+    pub leg_height: f32,
+    /// leg 厚 (mm、X、default 20)、構造強度
+    pub leg_thickness: f32,
+}
+
+impl DeskShelfSpec {
+    /// 標準卓上 default (400×200×100mm、単一プリント想定)
+    #[must_use]
+    pub const fn desktop_400x200() -> Self {
+        Self {
+            shelf_width: 400.0,
+            shelf_depth: 200.0,
+            shelf_thickness: 5.0,
+            leg_height: 100.0,
+            leg_thickness: 20.0,
+        }
+    }
+}
+
+/// 卓上シェルフ (shelf plate + 左右 2 脚、シンプル L 構造)
+///
+/// 構造 (organizer-gridfinity-desk § 2.3 準拠、shelf_divider 簡易版):
+/// - Shelf plate: `Box3d` (X×Y×Z = shelf_w × shelf_t × shelf_d)、Y=+leg_h + shelf_t/2
+/// - Left leg: `Box3d` (X×Y×Z = leg_t × leg_h × shelf_d)、X=-(shelf_w/2 - leg_t/2)、Y=leg_h/2
+/// - Right leg: 同 X=+(shelf_w/2 - leg_t/2)
+/// - `SmoothUnion` で 3-way blend
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{desk_shelf, DeskShelfSpec};
+/// let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
+/// ```
+#[must_use]
+pub fn desk_shelf(spec: &DeskShelfSpec) -> SdfNode {
+    let shelf_hx = spec.shelf_width * 0.5;
+    let shelf_hy = spec.shelf_thickness * 0.5;
+    let shelf_hz = spec.shelf_depth * 0.5;
+    let leg_hx = spec.leg_thickness * 0.5;
+    let leg_hy = spec.leg_height * 0.5;
+    let leg_hz = spec.shelf_depth * 0.5;
+
+    let shelf_y = spec.leg_height + shelf_hy;
+    let leg_x = shelf_hx - leg_hx;
+
+    let shelf = translate(
+        box3d(shelf_hx, shelf_hy, shelf_hz),
+        Vec3::new(0.0, shelf_y, 0.0),
+    );
+    let leg_l = translate(
+        box3d(leg_hx, leg_hy, leg_hz),
+        Vec3::new(-leg_x, leg_hy, 0.0),
+    );
+    let leg_r = translate(box3d(leg_hx, leg_hy, leg_hz), Vec3::new(leg_x, leg_hy, 0.0));
+
+    let fillet_k = spec.shelf_thickness * 0.5;
+    smooth_union(smooth_union(shelf, leg_l, fillet_k), leg_r, fillet_k)
+}
+
+// ────────────────────────────────────────────────────────
+// 12. monitor_riser (organizer-gridfinity-desk § 2.1)
+// ────────────────────────────────────────────────────────
+
+/// モニターライザー spec (簡易版、単一プリント想定 = 250mm 以下)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MonitorRiserSpec {
+    /// 全幅 (mm、X、default 250、range 200-280 単一プリント制約)
+    pub width: f32,
+    /// 全奥行 (mm、Z、default 180、range 150-240)
+    pub depth: f32,
+    /// 全高 (mm、Y、default 90、range 60-120 ergonomic range)
+    pub height: f32,
+    /// プラットフォーム厚 (mm、Y、default 8)
+    pub platform_thickness: f32,
+    /// leg 厚 (mm、X、default 25)、構造強度
+    pub leg_thickness: f32,
+    /// cable 通し穴径 (mm、`None` で穴なし、default `Some(40)`)
+    pub cable_hole_dia: Option<f32>,
+}
+
+impl MonitorRiserSpec {
+    /// 標準 compact desk default (250×180×90mm、cable Ø40mm)
+    #[must_use]
+    pub const fn compact_desk() -> Self {
+        Self {
+            width: 250.0,
+            depth: 180.0,
+            height: 90.0,
+            platform_thickness: 8.0,
+            leg_thickness: 25.0,
+            cable_hole_dia: Some(40.0),
+        }
+    }
+}
+
+/// モニターライザー (platform + 左右 2 脚 + optional cable hole)
+///
+/// 構造 (organizer-gridfinity-desk § 2.1 準拠、簡易版 = 単一プリント):
+/// - Platform: `RoundedBox` (X×Y×Z = width × plat_t × depth)、Y 上端
+/// - Left leg: `Box3d` (X×Y×Z = leg_t × leg_h × depth × 0.9)
+/// - Right leg: 同、X 反対
+/// - Cable hole: Y-axis `Cylinder` (platform 貫通、指定時のみ)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{monitor_riser, MonitorRiserSpec};
+/// let m = monitor_riser(&MonitorRiserSpec::compact_desk());
+/// ```
+#[must_use]
+pub fn monitor_riser(spec: &MonitorRiserSpec) -> SdfNode {
+    let plat_hx = spec.width * 0.5;
+    let plat_hy = spec.platform_thickness * 0.5;
+    let plat_hz = spec.depth * 0.5;
+    let leg_hx = spec.leg_thickness * 0.5;
+    let leg_h = spec.height - spec.platform_thickness;
+    let leg_hy = leg_h * 0.5;
+    let leg_hz = spec.depth * 0.45; // depth の 90% で少し内側
+
+    let plat_y = leg_h + plat_hy;
+    let leg_x = plat_hx - leg_hx;
+
+    let platform = translate(
+        rounded_box(plat_hx, plat_hy, plat_hz, 4.0),
+        Vec3::new(0.0, plat_y, 0.0),
+    );
+    let leg_l = translate(
+        box3d(leg_hx, leg_hy, leg_hz),
+        Vec3::new(-leg_x, leg_hy, 0.0),
+    );
+    let leg_r = translate(box3d(leg_hx, leg_hy, leg_hz), Vec3::new(leg_x, leg_hy, 0.0));
+
+    let structure = smooth_union(smooth_union(platform, leg_l, 2.0), leg_r, 2.0);
+
+    if let Some(dia) = spec.cable_hole_dia {
+        // Y-axis cylinder = platform 上下貫通 (Y 方向)
+        let hole = translate(
+            cylinder(dia * 0.5, plat_hy + 0.5),
+            Vec3::new(0.0, plat_y, 0.0),
+        );
+        subtract(structure, hole)
+    } else {
+        structure
+    }
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -1054,6 +1392,87 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "PART 2 archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── organizer-gridfinity-desk PART 2 完成 4 archetype (Phase B2) ──
+
+    #[test]
+    fn headphone_holder_default_is_subtraction() {
+        let h = headphone_holder(&HeadphoneHolderSpec::wall_mount_default());
+        // mount_hole があるので Subtraction
+        assert!(matches!(h, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn headphone_holder_no_holes_is_smooth_union() {
+        let mut spec = HeadphoneHolderSpec::wall_mount_default();
+        spec.mount_hole_dia = None;
+        let h = headphone_holder(&spec);
+        // mount_hole なしなら SmoothUnion
+        assert!(matches!(h, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn under_desk_mount_default_is_subtraction() {
+        let m = under_desk_mount(&UnderDeskMountSpec::standard_desk());
+        // screw_hole があるので Subtraction
+        assert!(matches!(m, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn under_desk_mount_no_screw_is_smooth_union() {
+        let mut spec = UnderDeskMountSpec::standard_desk();
+        spec.screw_hole_dia = None;
+        let m = under_desk_mount(&spec);
+        // screw なしなら SmoothUnion (両面テープ想定)
+        assert!(matches!(m, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn desk_shelf_default_is_smooth_union() {
+        let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
+        // 3-way SmoothUnion (shelf + 2 legs)、subtract なし
+        assert!(matches!(s, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn desk_shelf_leg_position_is_inside() {
+        let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
+        // 左脚中央 (X=-(200-10)=-190、Y=50 leg 中央) は材料
+        assert!(eval(&s, Vec3::new(-190.0, 50.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn monitor_riser_default_has_cable_hole() {
+        let r = monitor_riser(&MonitorRiserSpec::compact_desk());
+        // cable_hole 指定なので Subtraction
+        assert!(matches!(r, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn monitor_riser_no_cable_is_smooth_union() {
+        let mut spec = MonitorRiserSpec::compact_desk();
+        spec.cable_hole_dia = None;
+        let r = monitor_riser(&spec);
+        // cable_hole なしなら SmoothUnion
+        assert!(matches!(r, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn all_part2_b2_archetypes_evaluations_finite() {
+        let nodes = [
+            headphone_holder(&HeadphoneHolderSpec::wall_mount_default()),
+            under_desk_mount(&UnderDeskMountSpec::standard_desk()),
+            desk_shelf(&DeskShelfSpec::desktop_400x200()),
+            monitor_riser(&MonitorRiserSpec::compact_desk()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "PART 2 B2 archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
