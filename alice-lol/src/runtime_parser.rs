@@ -2651,34 +2651,35 @@ mod tests {
 
     // ── Phase B2: PART 2 完成 4 archetype tests ──
 
-    // 2026-08-20: 5 Y-up archetype を to_z_up wrap で Z-up 世界に変換、
-    // top-level SdfNode variant は Rotate (内部 Subtraction/SmoothUnion 隠蔽)
+    // 2026-08-20 (v2): archetype 別 print-optimal 方針
+    // - headphone_holder / under_desk_mount: unwrap (Subtraction/SmoothUnion)
+    // - desk_shelf / tissue_box_cover: to_z_up_flipped (Rotate)
 
     #[test]
     fn test_headphone_holder_wall_mount() {
         let node = parse_lol("headphone_holder(80, 50, 100)").unwrap();
-        // to_z_up wrap で Rotate top-level
-        assert!(matches!(node, SdfNode::Rotate { .. }));
+        // unwrap 済、mount_hole あり → Subtraction (mount plate flat 印刷姿勢)
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
     }
 
     #[test]
     fn test_under_desk_mount_standard() {
         let node = parse_lol("under_desk_mount(25, 40, 4)").unwrap();
-        // to_z_up wrap で Rotate top-level
-        assert!(matches!(node, SdfNode::Rotate { .. }));
+        // unwrap 済、screw_hole あり → Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
     }
 
     #[test]
     fn test_under_desk_mount_no_screw() {
-        // screw=0 で穴なし (両面テープ想定)、to_z_up wrap で Rotate top-level
+        // screw=0 で穴なし、unwrap 済 → SmoothUnion (両面テープ想定)
         let node = parse_lol("under_desk_mount(25, 40, 0)").unwrap();
-        assert!(matches!(node, SdfNode::Rotate { .. }));
+        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
     }
 
     #[test]
     fn test_desk_shelf_desktop() {
         let node = parse_lol("desk_shelf(400, 200, 100)").unwrap();
-        // to_z_up wrap で Rotate top-level (内部 3-way SmoothUnion)
+        // to_z_up_flipped で Rotate top-level (shelf 下 印刷)
         assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
@@ -2716,7 +2717,7 @@ mod tests {
     #[test]
     fn test_tissue_box_cover_rectangular_us() {
         let node = parse_lol("tissue_box_cover(231, 116, 53)").unwrap();
-        // to_z_up wrap で Rotate top-level (内部 2 段 Subtraction)
+        // to_z_up_flipped wrap で Rotate top-level (slot 下 印刷 upside-down)
         assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
