@@ -2651,30 +2651,35 @@ mod tests {
 
     // ── Phase B2: PART 2 完成 4 archetype tests ──
 
+    // 2026-08-20: 5 Y-up archetype を to_z_up wrap で Z-up 世界に変換、
+    // top-level SdfNode variant は Rotate (内部 Subtraction/SmoothUnion 隠蔽)
+
     #[test]
     fn test_headphone_holder_wall_mount() {
         let node = parse_lol("headphone_holder(80, 50, 100)").unwrap();
-        assert!(matches!(node, SdfNode::Subtraction { .. }));
+        // to_z_up wrap で Rotate top-level
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn test_under_desk_mount_standard() {
         let node = parse_lol("under_desk_mount(25, 40, 4)").unwrap();
-        assert!(matches!(node, SdfNode::Subtraction { .. }));
+        // to_z_up wrap で Rotate top-level
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn test_under_desk_mount_no_screw() {
-        // screw=0 で穴なし (両面テープ想定)、それでも SmoothUnion で止まる
+        // screw=0 で穴なし (両面テープ想定)、to_z_up wrap で Rotate top-level
         let node = parse_lol("under_desk_mount(25, 40, 0)").unwrap();
-        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn test_desk_shelf_desktop() {
         let node = parse_lol("desk_shelf(400, 200, 100)").unwrap();
-        // 3-way SmoothUnion (subtract なし)
-        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
+        // to_z_up wrap で Rotate top-level (内部 3-way SmoothUnion)
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
@@ -2711,13 +2716,15 @@ mod tests {
     #[test]
     fn test_tissue_box_cover_rectangular_us() {
         let node = parse_lol("tissue_box_cover(231, 116, 53)").unwrap();
-        assert!(matches!(node, SdfNode::Subtraction { .. }));
+        // to_z_up wrap で Rotate top-level (内部 2 段 Subtraction)
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn test_storage_box_medium() {
         let node = parse_lol("storage_box(150, 100, 60)").unwrap();
-        assert!(matches!(node, SdfNode::Subtraction { .. }));
+        // to_z_up wrap で Rotate top-level (内部 Subtraction)
+        assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
