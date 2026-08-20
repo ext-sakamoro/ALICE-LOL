@@ -24,7 +24,7 @@
 //!   本 module は **`SdfMarchingCubes` 経路のみ** (`SdfNode::sdf_to_mesh` 経由)
 
 use alice_sdf::SdfNode;
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use std::sync::Arc;
 
 // ────────────────────────────────────────────────────────
@@ -48,6 +48,18 @@ fn cylinder(radius: f32, half_height: f32) -> SdfNode {
     SdfNode::Cylinder {
         radius,
         half_height,
+    }
+}
+
+/// Y-axis cylinder を Z-axis 世界向けに 90° 回転
+///
+/// `SdfNode::Cylinder` は Y-axis alignment (半径 XZ 平面、高さ Y 軸) だが
+/// text-to-print viewer は Z-up なので、cup / cable hole 等の縦向き用途では
+/// 本 helper で Z-axis alignment に変換する
+fn cylinder_z(radius: f32, half_height: f32) -> SdfNode {
+    SdfNode::Rotate {
+        child: Arc::new(cylinder(radius, half_height)),
+        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -265,12 +277,14 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
     #[allow(clippy::cast_precision_loss)]
     let ext_h = spec.height_u as f32 * gridfinity_spec::HEIGHT_UNIT + gridfinity_spec::LIP_HEIGHT;
     let bin_hz = ext_h * 0.5;
-    #[allow(clippy::cast_precision_loss)]
-    let int_depth = spec.height_u as f32 * gridfinity_spec::HEIGHT_UNIT - 3.0;
-    let cavity_hz = int_depth * 0.5;
+    // 2026-08-20 fix: cavity 天面が outer top 未満で塞がる bug を修正
+    // 旧: cavity_hz = int_depth/2、cavity_offset_z = floor/2 で cavity 天面が
+    //     outer top より 6.25mm 内側 = 「ただの四角」に見える
+    // 新: cavity を outer top を貫通するサイズにして top open を保証
+    let cavity_hz = (ext_h - spec.floor_thickness + 1.0) * 0.5;
     let inner_hx = bin_hx - spec.wall_thickness;
     let inner_hy = bin_hy - spec.wall_thickness;
-    let cavity_offset_z = spec.floor_thickness * 0.5;
+    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
 
     let outer = rounded_box(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET);
 
@@ -739,12 +753,12 @@ impl PenCupSpec {
     }
 }
 
-/// ペン立て (`Cylinder` outer - `Cylinder` cavity)
+/// ペン立て (`Cylinder` outer - `Cylinder` cavity、Z-up)
 ///
-/// 構造 (organizer-gridfinity-desk § 2.2 準拠、Cylinder は Y 軸 alignment):
-/// - Outer: `Cylinder` (r = `(inner_dia + 2×wall) / 2`, half_h = `height / 2`)
-/// - Cavity: `Cylinder` (r = `inner_dia / 2`, half_h = `(height - floor) / 2`)、Y=+floor/2 offset
-///   (Y+ 方向が cup 開口部、Y- 方向が floor)
+/// 構造 (organizer-gridfinity-desk § 2.2 準拠、`cylinder_z` で Z-axis alignment):
+/// - Outer: Z-axis `Cylinder` (r = `(inner_dia + 2×wall) / 2`, half_h = `height / 2`)
+/// - Cavity: Z-axis `Cylinder` (r = `inner_dia / 2`, half_h = `(height - floor) / 2`)、Z=+floor/2 offset
+///   (Z+ 方向が cup 開口部、Z- 方向が floor)
 ///
 /// # 使用例
 ///
@@ -755,16 +769,16 @@ impl PenCupSpec {
 #[must_use]
 pub fn pen_cup(spec: &PenCupSpec) -> SdfNode {
     let outer_r = (spec.inner_diameter + 2.0 * spec.wall_thickness) * 0.5;
-    let outer_hy = spec.height * 0.5;
+    let outer_hz = spec.height * 0.5;
     let inner_r = spec.inner_diameter * 0.5;
     let cavity_h = spec.height - spec.floor_thickness;
-    let inner_hy = cavity_h * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5;
+    let inner_hz = cavity_h * 0.5;
+    let cavity_offset_z = spec.floor_thickness * 0.5;
 
-    let outer = cylinder(outer_r, outer_hy);
+    let outer = cylinder_z(outer_r, outer_hz);
     let cavity = translate(
-        cylinder(inner_r, inner_hy),
-        Vec3::new(0.0, cavity_offset_y, 0.0),
+        cylinder_z(inner_r, inner_hz),
+        Vec3::new(0.0, 0.0, cavity_offset_z),
     );
     subtract(outer, cavity)
 }
@@ -862,10 +876,10 @@ pub fn phone_stand(spec: &PhoneStandSpec) -> SdfNode {
     let structure = union(base, back);
     let with_slot = subtract(structure, slot);
 
-    // Cable hole (指定時のみ、base 中央 Z 貫通)
+    // Cable hole (指定時のみ、base 中央 Z 貫通、Z-axis cylinder で viewer Z-up 対応)
     if let Some(dia) = spec.cable_hole_dia {
         let hole = translate(
-            cylinder(dia * 0.5, base_hz + 1.0),
+            cylinder_z(dia * 0.5, base_hz + 1.0),
             Vec3::new(0.0, 0.0, base_hz),
         );
         subtract(with_slot, hole)
@@ -1161,13 +1175,13 @@ impl MonitorRiserSpec {
     }
 }
 
-/// モニターライザー (platform + 左右 2 脚 + optional cable hole)
+/// モニターライザー (platform + 左右 2 脚 + optional cable hole、Z-up)
 ///
 /// 構造 (organizer-gridfinity-desk § 2.1 準拠、簡易版 = 単一プリント):
-/// - Platform: `RoundedBox` (X×Y×Z = width × plat_t × depth)、Y 上端
-/// - Left leg: `Box3d` (X×Y×Z = leg_t × leg_h × depth × 0.9)
+/// - Platform: `RoundedBox` (X×Y×Z = width × depth × plat_t)、Z 上端
+/// - Left leg: `Box3d` (X×Y×Z = leg_t × depth × leg_h)、Z 方向脚
 /// - Right leg: 同、X 反対
-/// - Cable hole: Y-axis `Cylinder` (platform 貫通、指定時のみ)
+/// - Cable hole: Z-axis `Cylinder` (`cylinder_z`、platform 貫通、指定時のみ)
 ///
 /// # 使用例
 ///
@@ -1178,33 +1192,33 @@ impl MonitorRiserSpec {
 #[must_use]
 pub fn monitor_riser(spec: &MonitorRiserSpec) -> SdfNode {
     let plat_hx = spec.width * 0.5;
-    let plat_hy = spec.platform_thickness * 0.5;
-    let plat_hz = spec.depth * 0.5;
+    let plat_hy = spec.depth * 0.5;
+    let plat_hz = spec.platform_thickness * 0.5;
     let leg_hx = spec.leg_thickness * 0.5;
+    let leg_hy = spec.depth * 0.45; // depth の 90% で少し内側
     let leg_h = spec.height - spec.platform_thickness;
-    let leg_hy = leg_h * 0.5;
-    let leg_hz = spec.depth * 0.45; // depth の 90% で少し内側
+    let leg_hz = leg_h * 0.5;
 
-    let plat_y = leg_h + plat_hy;
+    let plat_z = leg_h + plat_hz;
     let leg_x = plat_hx - leg_hx;
 
     let platform = translate(
         rounded_box(plat_hx, plat_hy, plat_hz, 4.0),
-        Vec3::new(0.0, plat_y, 0.0),
+        Vec3::new(0.0, 0.0, plat_z),
     );
     let leg_l = translate(
         box3d(leg_hx, leg_hy, leg_hz),
-        Vec3::new(-leg_x, leg_hy, 0.0),
+        Vec3::new(-leg_x, 0.0, leg_hz),
     );
-    let leg_r = translate(box3d(leg_hx, leg_hy, leg_hz), Vec3::new(leg_x, leg_hy, 0.0));
+    let leg_r = translate(box3d(leg_hx, leg_hy, leg_hz), Vec3::new(leg_x, 0.0, leg_hz));
 
     let structure = smooth_union(smooth_union(platform, leg_l, 2.0), leg_r, 2.0);
 
     if let Some(dia) = spec.cable_hole_dia {
-        // Y-axis cylinder = platform 上下貫通 (Y 方向)
+        // Z-axis cylinder = platform 上下貫通 (Z 方向)
         let hole = translate(
-            cylinder(dia * 0.5, plat_hy + 0.5),
-            Vec3::new(0.0, plat_y, 0.0),
+            cylinder_z(dia * 0.5, plat_hz + 0.5),
+            Vec3::new(0.0, 0.0, plat_z),
         );
         subtract(structure, hole)
     } else {
@@ -1242,12 +1256,12 @@ impl CoasterSpec {
     }
 }
 
-/// 円形コースター (bowl 状、rim で液滴 catch)
+/// 円形コースター (bowl 状、rim で液滴 catch、Z-up)
 ///
-/// 構造 (household § 7 準拠、Cylinder は Y-axis alignment):
-/// - Base: `Cylinder` (r = `diameter/2`, half_h = `thickness/2`)
-/// - Recess: `Cylinder` (r = `(diameter - 2×lip_width)/2`, depth = `lip_height`)
-///   Y+ 方向 (上面) から subtract、`Subtraction { base, recess }`
+/// 構造 (household § 7 準拠、`cylinder_z` で Z-axis alignment):
+/// - Base: Z-axis `Cylinder` (r = `diameter/2`, half_h = `thickness/2`)
+/// - Recess: Z-axis `Cylinder` (r = `(diameter - 2×lip_width)/2`, depth = `lip_height`)
+///   Z+ 方向 (上面) から subtract、`Subtraction { base, recess }`
 ///
 /// # 使用例
 ///
@@ -1258,15 +1272,15 @@ impl CoasterSpec {
 #[must_use]
 pub fn coaster(spec: &CoasterSpec) -> SdfNode {
     let outer_r = spec.diameter * 0.5;
-    let outer_hy = spec.thickness * 0.5;
+    let outer_hz = spec.thickness * 0.5;
     let inner_r = outer_r - spec.lip_width;
-    let recess_hy = spec.lip_height * 0.5;
-    let recess_offset_y = outer_hy - recess_hy;
+    let recess_hz = spec.lip_height * 0.5;
+    let recess_offset_z = outer_hz - recess_hz;
 
-    let base = cylinder(outer_r, outer_hy);
+    let base = cylinder_z(outer_r, outer_hz);
     let recess = translate(
-        cylinder(inner_r, recess_hy + 0.5),
-        Vec3::new(0.0, recess_offset_y + 0.25, 0.0),
+        cylinder_z(inner_r, recess_hz + 0.5),
+        Vec3::new(0.0, 0.0, recess_offset_z + 0.25),
     );
     subtract(base, recess)
 }
@@ -1569,11 +1583,11 @@ mod tests {
     #[test]
     fn pen_cup_wall_is_solid() {
         let cup = pen_cup(&PenCupSpec::standard_75x100());
-        // Cylinder は Y 軸 alignment (`length(xz)` for radial、`abs(y)` for height)
-        // outer_r=39.5、inner_r=37.5、壁厚 2mm、Y=0 中央 → 壁は radial 37.5 < r < 39.5
+        // Z-axis alignment (cylinder_z で 90° rotate、cup 軸 = Z、radial = XY 平面)
+        // outer_r=39.5、inner_r=37.5、Z=0 中央 → 壁は radial 37.5 < sqrt(x²+y²) < 39.5
         assert!(eval(&cup, Vec3::new(38.5, 0.0, 0.0)) < 0.0);
-        // cup 底 (Y=-49、Y-axis 底、cavity は Y=+1 offset なので Y=-49 は材料)
-        assert!(eval(&cup, Vec3::new(0.0, -49.0, 0.0)) < 0.0);
+        // cup 底 (Z=-49、Z-axis 底、cavity は Z=+1 offset なので Z=-49 は材料)
+        assert!(eval(&cup, Vec3::new(0.0, 0.0, -49.0)) < 0.0);
     }
 
     #[test]
@@ -1653,7 +1667,8 @@ mod tests {
     #[test]
     fn desk_shelf_leg_position_is_inside() {
         let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
-        // 左脚中央 (X=-(200-10)=-190、Y=50 leg 中央) は材料
+        // 左脚中央 (X=-(200-10)=-190、Y=50 leg 中央、Z=0) は材料
+        // desk_shelf は既存で Y-up 設計、脚は Y 方向に立つ (leg_hy=50、Y=0..100)
         assert!(eval(&s, Vec3::new(-190.0, 50.0, 0.0)) < 0.0);
     }
 
