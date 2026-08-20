@@ -63,15 +63,29 @@ fn cylinder_z(radius: f32, half_height: f32) -> SdfNode {
     }
 }
 
-/// Y-up 設計の archetype 全体を Z-up 世界向けに 90° 回転
+/// Y-up 設計の archetype 全体を Z-up 世界向けに 90° 回転 (Y→ +Z、正立)
 ///
 /// text-to-print viewer は Z-up 固定なので、Y-up (Y=vertical) で設計した
 /// pattern を viewer に正しい向きで表示するため本 helper で wrap する
-/// 変換: 世界 (X, Y, Z) → 内部 (X, Z, -Y)、内部 (0, 1, 0) = 世界 (0, 0, 1)
+/// 変換: 内部 (0, 1, 0) = 世界 (0, 0, 1)、intended bottom (Y-) は世界 Z=0 bed 側
+/// storage_box 等の「底が bed で top open」pattern で使う
 fn to_z_up(y_up_node: SdfNode) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(y_up_node),
         rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+    }
+}
+
+/// Y-up 設計を Z-up 世界向けに 90° 回転 (Y→ -Z、upside-down)
+///
+/// `to_z_up` の逆方向、intended top (Y+) を bed 側 (Z=0) に配置
+/// tissue_box_cover の「Print upside-down: slot on bed, walls up, bottom-open ceiling」
+/// (household.md § 1 spec 準拠)、desk_shelf の「shelf on bed, legs up」等
+/// 「印刷時に元の top を bed に置きたい」場合に使う
+fn to_z_up_flipped(y_up_node: SdfNode) -> SdfNode {
+    SdfNode::Rotate {
+        child: Arc::new(y_up_node),
+        rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -992,9 +1006,12 @@ pub fn headphone_holder(spec: &HeadphoneHolderSpec) -> SdfNode {
             box3d(hole_hx, hole_hy, hole_hz),
             Vec3::new(0.0, -hole_spacing, 0.0),
         );
-        to_z_up(subtract(body, union(hole_top, hole_bot)))
+        // 2026-08-20 unwrap: 元 Y-up 設計 = mount plate 100×68 flat on bed / arm 上向き が
+        // print-optimal (wall_hook と同 pattern) to_z_up wrap は mount thin edge on bed
+        // 化して印刷不能にしていたので撤廃
+        subtract(body, union(hole_top, hole_bot))
     } else {
-        to_z_up(body)
+        body
     }
 }
 
@@ -1067,14 +1084,16 @@ pub fn under_desk_mount(spec: &UnderDeskMountSpec) -> SdfNode {
     let body = smooth_union(smooth_union(top_jaw, bottom_jaw, 2.0), back_stem, 2.0);
 
     if let Some(dia) = spec.screw_hole_dia {
-        // Y-axis cylinder = 縦穴、bottom jaw を Y 方向に貫通 (to_z_up で世界 Z 方向に転換)
+        // 2026-08-20 unwrap: 元 Y-up 設計 = back stem 40×33 flat on bed / jaws 上向き平行
+        // (`|_|` U 字) が print-optimal to_z_up wrap は thin edge on bed 化して不能にしていた
+        // Y-axis cylinder = bottom jaw を Y 方向 (元 Y-up 世界の縦) に貫通
         let hole = translate(
             cylinder(dia * 0.5, jaw_hy + 0.5),
             Vec3::new(0.0, bottom_y, 0.0),
         );
-        to_z_up(subtract(body, hole))
+        subtract(body, hole)
     } else {
-        to_z_up(body)
+        body
     }
 }
 
@@ -1148,7 +1167,10 @@ pub fn desk_shelf(spec: &DeskShelfSpec) -> SdfNode {
     let leg_r = translate(box3d(leg_hx, leg_hy, leg_hz), Vec3::new(leg_x, leg_hy, 0.0));
 
     let fillet_k = spec.shelf_thickness * 0.5;
-    to_z_up(smooth_union(
+    // 2026-08-20 flip: shelf plate 400×200 を bed に置いて legs を上向きピラーに
+    // to_z_up (Y→+Z) だと legs 下 / shelf 上 = 380mm ブリッジ = 印刷不能
+    // to_z_up_flipped (Y→-Z) で intended-top (shelf) が Z=0 bed 側に
+    to_z_up_flipped(smooth_union(
         smooth_union(shelf, leg_l, fillet_k),
         leg_r,
         fillet_k,
@@ -1382,7 +1404,10 @@ pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
         Vec3::new(0.0, slot_offset_y, 0.0),
     );
 
-    to_z_up(subtract(subtract(outer, cavity), slot))
+    // 2026-08-20 flip: household § 1 spec「Print upside-down: open bottom up
+    // to avoid supports on top surface」準拠、slot 面 (元 +Y) を bed 側 (Z=0) に、
+    // bottom-open (元 -Y) を天井に置いて ceiling bridging を回避
+    to_z_up_flipped(subtract(subtract(outer, cavity), slot))
 }
 
 // ────────────────────────────────────────────────────────
@@ -1641,55 +1666,56 @@ mod tests {
 
     // ── organizer-gridfinity-desk PART 2 完成 4 archetype (Phase B2) ──
 
-    // 2026-08-20: 5 Y-up archetype (headphone/under_desk/desk_shelf/tissue/storage)
-    // を to_z_up wrap で Z-up 世界に変換、top-level SdfNode variant は Rotate、
-    // eval 座標は世界 (X, Y_new, Z_new) = 内部 (X, Z_internal, -Y_internal) で解釈
+    // 2026-08-20 (v2): archetype 別 print-optimal 方針
+    // - headphone_holder / under_desk_mount: unwrap (元 Z-up で print-optimal)
+    // - desk_shelf / tissue_box_cover: to_z_up_flipped (intended-top を bed に = upside-down 印刷)
+    // - storage_box: to_z_up 維持 (intended-bottom を bed に = 正立印刷)
 
     #[test]
-    fn headphone_holder_default_is_rotate_wrapped_subtraction() {
+    fn headphone_holder_default_is_subtraction() {
         let h = headphone_holder(&HeadphoneHolderSpec::wall_mount_default());
-        // to_z_up wrap で top-level は Rotate、内部は Subtraction (mount_hole あり)
-        assert!(matches!(h, SdfNode::Rotate { .. }));
+        // unwrap 済み、mount_hole あり → Subtraction (mount plate flat + arm 上向き 印刷)
+        assert!(matches!(h, SdfNode::Subtraction { .. }));
     }
 
     #[test]
-    fn headphone_holder_no_holes_is_rotate_wrapped_smooth_union() {
+    fn headphone_holder_no_holes_is_smooth_union() {
         let mut spec = HeadphoneHolderSpec::wall_mount_default();
         spec.mount_hole_dia = None;
         let h = headphone_holder(&spec);
-        // to_z_up wrap で top-level は Rotate、内部は SmoothUnion (mount_hole なし)
-        assert!(matches!(h, SdfNode::Rotate { .. }));
+        // unwrap 済み、mount_hole なし → SmoothUnion
+        assert!(matches!(h, SdfNode::SmoothUnion { .. }));
     }
 
     #[test]
-    fn under_desk_mount_default_is_rotate_wrapped_subtraction() {
+    fn under_desk_mount_default_is_subtraction() {
         let m = under_desk_mount(&UnderDeskMountSpec::standard_desk());
-        // to_z_up wrap で top-level は Rotate、内部は Subtraction (screw_hole あり)
-        assert!(matches!(m, SdfNode::Rotate { .. }));
+        // unwrap 済み、screw_hole あり → Subtraction (back stem flat + jaws 上向き `|_|`)
+        assert!(matches!(m, SdfNode::Subtraction { .. }));
     }
 
     #[test]
-    fn under_desk_mount_no_screw_is_rotate_wrapped_smooth_union() {
+    fn under_desk_mount_no_screw_is_smooth_union() {
         let mut spec = UnderDeskMountSpec::standard_desk();
         spec.screw_hole_dia = None;
         let m = under_desk_mount(&spec);
-        // to_z_up wrap で top-level は Rotate、内部は SmoothUnion (両面テープ想定)
-        assert!(matches!(m, SdfNode::Rotate { .. }));
+        // unwrap 済み、screw なし → SmoothUnion (両面テープ想定)
+        assert!(matches!(m, SdfNode::SmoothUnion { .. }));
     }
 
     #[test]
-    fn desk_shelf_default_is_rotate_wrapped() {
+    fn desk_shelf_default_is_rotate_flipped() {
         let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
-        // to_z_up wrap で top-level は Rotate、内部は 3-way SmoothUnion
+        // to_z_up_flipped wrap で top-level は Rotate (shelf 下 / legs 上 印刷)
         assert!(matches!(s, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn desk_shelf_leg_position_is_inside() {
         let s = desk_shelf(&DeskShelfSpec::desktop_400x200());
-        // 内部設計は Y-up (leg_hy=50、Y=0..100)、to_z_up wrap で世界 Z 方向に転換
-        // 世界 (X=-190, Y=0, Z=50) → 内部 (X, Z_i, -Y_i) = (-190, 50, 0) = 元 Y-up の脚位置
-        assert!(eval(&s, Vec3::new(-190.0, 0.0, 50.0)) < 0.0);
+        // to_z_up_flipped (rot_x -π/2): 内部 (X, Y, Z) → 世界 (X, Z, -Y)
+        // 内部脚位置 (-190, 50, 0) → 世界 (-190, 0, -50)
+        assert!(eval(&s, Vec3::new(-190.0, 0.0, -50.0)) < 0.0);
     }
 
     #[test]
@@ -1750,18 +1776,19 @@ mod tests {
     }
 
     #[test]
-    fn tissue_box_cover_default_is_rotate_wrapped() {
+    fn tissue_box_cover_default_is_rotate_flipped() {
         let t = tissue_box_cover(&TissueBoxCoverSpec::rectangular_us());
-        // to_z_up wrap で top-level は Rotate、内部は 2 段 Subtraction
+        // to_z_up_flipped wrap で top-level は Rotate (slot 下 印刷 upside-down)
         assert!(matches!(t, SdfNode::Rotate { .. }));
     }
 
     #[test]
     fn tissue_box_cover_top_wall_at_slot_center_is_hollow() {
         let t = tissue_box_cover(&TissueBoxCoverSpec::rectangular_us());
-        // 内部 Y-up 設計: top slot 中央は Y=+27.3 (internal_height/2 + wall/2)
-        // to_z_up 変換: 世界 Z_new = 内部 Y_i → 世界 (0, 0, 27.5) を verify
-        assert!(eval(&t, Vec3::new(0.0, 0.0, 27.5)) > 0.0);
+        // to_z_up_flipped: 内部 (X, Y, Z) → 世界 (X, Z, -Y)
+        // 内部 top slot 中央 (0, 27.5, 0) → 世界 (0, 0, -27.5)
+        // slot が bed 側 (-Z) にある = 印刷 upside-down 姿勢
+        assert!(eval(&t, Vec3::new(0.0, 0.0, -27.5)) > 0.0);
     }
 
     #[test]
