@@ -5,6 +5,7 @@
 //!
 //! - [`hardsurface`] — メカ / 建築 / パーツ / 道具 / 家具 の構造要素
 //!   (Phase A.1: fastener 締結 6 primitive)
+//! - [`products`] — 生活雑貨 / 家庭用 canonical primitive (Phase P.1: マグカップ)
 //!
 //! 各 pattern は既存の [`alice_sdf::SdfNode`] variant を Rust helper 関数で組み立てる
 //! LOL DSL の syntax / proc_macro / GBNF `lol.gbnf` は無変更、既存 SdfNode → GLSL/WGSL/HLSL
@@ -12,3 +13,4 @@
 
 pub mod hardsurface;
 pub mod pattern;
+pub mod products;

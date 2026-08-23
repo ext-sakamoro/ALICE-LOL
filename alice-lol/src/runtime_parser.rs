@@ -1575,6 +1575,14 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_elastic_cord_sdf())
             }
 
+            // ── Phase P.1 products primitive (stdlib::products) ──
+            // 生活雑貨 canonical primitive text-to-print β の 3B LLM 複合形状
+            // hallucination 事案対応 詳細: [[feedback_llm_3b_complex_shape_hallucination]]
+            "mug" => {
+                let (dia, height) = self.parse_2f()?;
+                Ok(crate::stdlib::products::mug_sdf(dia, height))
+            }
+
             // ── Phase B.1.b 高階 primitive (stdlib::hardsurface::pattern_sdf) ──
             // Bamboo Rust generator 由来の 4 pattern (wall_hook / gridfinity_bin /
             // drawer_organizer / shelf_divider) を DSL syntax に expose
@@ -2504,6 +2512,14 @@ mod tests {
     fn test_skadis_panel() {
         let node = parse_lol("skadis_panel(300, 5, 5)").unwrap();
         assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_mug() {
+        // Phase P.1 products primitive
+        // マグカップ φ50 × H100 (円筒 + 内側くぼみ + torus 取手)
+        let node = parse_lol("mug(50, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
     }
 
     #[test]
