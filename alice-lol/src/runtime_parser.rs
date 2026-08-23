@@ -1908,6 +1908,53 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── electronics-enclosure.md archetypes (Sprint 7、2026-08-23) ──
+            "raspi_case" => {
+                // raspi_case(pcb_w, pcb_d, internal_h) 3 param、他 default
+                let (pcb_w, pcb_d, int_h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::RaspiCaseSpec {
+                    pcb_width: pcb_w,
+                    pcb_depth: pcb_d,
+                    internal_height: int_h,
+                    wall_thickness: 2.0,
+                    floor_thickness: 3.0,
+                    pcb_clearance: 1.0,
+                    standoff_diameter: 6.0,
+                    standoff_height: 5.0,
+                    standoff_pilot_diameter: 2.2,
+                    standoff_inset: 3.5,
+                    port_opening_width: 60.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::raspi_case(&spec))
+            }
+            "esp32_enclosure" => {
+                // esp32_enclosure(pcb_w, pcb_d, internal_h) 3 param、他 default (USB-C 想定)
+                let (pcb_w, pcb_d, int_h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::Esp32EnclosureSpec {
+                    pcb_width: pcb_w,
+                    pcb_depth: pcb_d,
+                    internal_height: int_h,
+                    wall_thickness: 1.6,
+                    floor_thickness: 2.0,
+                    pcb_clearance: 0.5,
+                    usb_opening_width: 9.0,
+                    usb_opening_height: 5.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::esp32_enclosure(
+                    &spec,
+                ))
+            }
+            "battery_18650_holder" => {
+                // battery_18650_holder(count, wall_thickness, floor_thickness) 3 param
+                let (count, wall, floor) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::Battery18650HolderSpec {
+                    cell_count: count.round().max(1.0) as u32,
+                    wall_thickness: wall,
+                    floor_thickness: floor,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::battery_18650_holder(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2946,6 +2993,47 @@ mod tests {
             "wrench_holder(8, 19, 6)",
             "socket_rail(12.4, 22, 6)",
             "hex_bit_holder(5, 4, 12)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 7: electronics-enclosure.md 3 archetype tests ──
+
+    #[test]
+    fn test_raspi_case_rpi5() {
+        let node = parse_lol("raspi_case(85, 56, 25)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_esp32_enclosure_devkit() {
+        let node = parse_lol("esp32_enclosure(51.6, 28.4, 15)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_battery_18650_holder_row_4() {
+        let node = parse_lol("battery_18650_holder(4, 2.5, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_battery_18650_holder_count_zero_defaults_to_one() {
+        let node = parse_lol("battery_18650_holder(0, 2.5, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint7_electronics_archetypes_eval_correctly() {
+        // electronics-enclosure.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "raspi_case(85, 56, 25)",
+            "esp32_enclosure(51.6, 28.4, 15)",
+            "battery_18650_holder(4, 2.5, 0)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

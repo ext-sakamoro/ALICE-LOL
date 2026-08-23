@@ -2047,6 +2047,302 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 23. raspi_case (electronics-enclosure § 1 Raspberry Pi Cases)
+// ────────────────────────────────────────────────────────
+
+/// Raspberry Pi ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RaspiCaseSpec {
+    /// PCB 幅 (mm、RPi 5/4=85 / Zero 2W=65、default 85)
+    pub pcb_width: f32,
+    /// PCB 奥行 (mm、RPi 5/4=56 / Zero 2W=30、default 56)
+    pub pcb_depth: f32,
+    /// PCB 上の内部高さ (mm、Active Cooler=25 / bare=15、default 25)
+    pub internal_height: f32,
+    /// 外周 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+    /// PCB↔壁 clearance/side (mm、default 1.0 = 全 2mm)
+    pub pcb_clearance: f32,
+    /// standoff peg 直径 (mm、default 6.0)
+    pub standoff_diameter: f32,
+    /// standoff peg 高さ (mm、PCB 底面 clearance、default 5.0)
+    pub standoff_height: f32,
+    /// M2.5 pilot 穴径 (mm、self-tap、default 2.2)
+    pub standoff_pilot_diameter: f32,
+    /// standoff mount hole 座標 inset (PCB corner から、mm、default 3.5)
+    pub standoff_inset: f32,
+    /// port opening 幅 (mm、long side 沿い、default 60、USB+HDMI+Ethernet 集約)
+    pub port_opening_width: f32,
+}
+
+impl RaspiCaseSpec {
+    /// RPi 5 with Active Cooler 85×56×25mm (electronics-enclosure § 1 default)
+    #[must_use]
+    pub const fn rpi5_active_cooler() -> Self {
+        Self {
+            pcb_width: 85.0,
+            pcb_depth: 56.0,
+            internal_height: 25.0,
+            wall_thickness: 2.0,
+            floor_thickness: 3.0,
+            pcb_clearance: 1.0,
+            standoff_diameter: 6.0,
+            standoff_height: 5.0,
+            standoff_pilot_diameter: 2.2,
+            standoff_inset: 3.5,
+            port_opening_width: 60.0,
+        }
+    }
+}
+
+/// Raspberry Pi ケース (top 開口、4 standoff peg、片側 port opening、`to_z_up` wrap)
+///
+/// 構造 (electronics-enclosure § 1 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(pcb_w+2×(clear+wall)) × (int_h+floor) × (pcb_d+2×(clear+wall))`)
+/// - Cavity: `Box3d` (`(pcb_w+2×clear) × (int_h+1) × (pcb_d+2×clear)`)、Y+ 開口
+/// - Standoffs: 4× Y-axis `Cylinder` (r=`standoff_diameter/2`, h=`standoff_height`)、PCB corner に inset 位置
+/// - Pilot holes: 4× Y-axis `Cylinder` (r=`pilot/2`)、standoff top から subtract
+/// - Port opening: `Box3d` slot、-Z side wall (long side) 貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{raspi_case, RaspiCaseSpec};
+/// let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+/// ```
+#[must_use]
+pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
+    let ext_x = spec.pcb_width + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_z = spec.pcb_depth + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_y = spec.internal_height + spec.floor_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
+    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let standoff_r = spec.standoff_diameter * 0.5;
+    let standoff_hy = spec.standoff_height * 0.5;
+    let standoff_offset_y = -outer_hy + spec.floor_thickness + standoff_hy;
+    // Standoff 位置: PCB corner から standoff_inset だけ内側
+    let sx = spec.pcb_width * 0.5 - spec.standoff_inset;
+    let sz = spec.pcb_depth * 0.5 - spec.standoff_inset;
+
+    let pilot_r = spec.standoff_pilot_diameter * 0.5;
+    let pilot_hy = spec.standoff_height * 0.75;
+    let pilot_offset_y = standoff_offset_y + standoff_hy - pilot_hy + 0.5;
+
+    let port_hx = spec.port_opening_width * 0.5;
+    let port_hy = spec.internal_height * 0.5;
+    let port_hz = (spec.wall_thickness + 2.0) * 0.5;
+    let port_offset_y = spec.floor_thickness * 0.5 + spec.pcb_clearance + port_hy * 0.5;
+    let port_offset_z = -outer_hz + port_hz - 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // 4 corner standoffs
+    for (dx, dz) in [(-sx, -sz), (sx, -sz), (-sx, sz), (sx, sz)] {
+        let peg = translate(
+            cylinder(standoff_r, standoff_hy),
+            Vec3::new(dx, standoff_offset_y, dz),
+        );
+        result = union(result, peg);
+        let pilot = translate(
+            cylinder(pilot_r, pilot_hy),
+            Vec3::new(dx, pilot_offset_y, dz),
+        );
+        result = subtract(result, pilot);
+    }
+
+    // Port opening (long side、-Z 面)
+    let port = translate(
+        box3d(port_hx, port_hy, port_hz),
+        Vec3::new(0.0, port_offset_y, port_offset_z),
+    );
+    result = subtract(result, port);
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 24. esp32_enclosure (electronics-enclosure § 2 ESP32/Arduino Cases)
+// ────────────────────────────────────────────────────────
+
+/// ESP32/Arduino ケース spec (standoff なし、friction cradle 想定、USB 短辺 opening)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Esp32EnclosureSpec {
+    /// PCB 幅 (mm、ESP32 DevKit V1=51.6 / Arduino Uno=68.6、default 51.6)
+    pub pcb_width: f32,
+    /// PCB 奥行 (mm、ESP32=28.4 / Uno=53.4、default 28.4)
+    pub pcb_depth: f32,
+    /// PCB 上の内部高さ (mm、default 15、header 露出時 20)
+    pub internal_height: f32,
+    /// 外周 壁厚 (mm、default 1.6)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+    /// PCB↔壁 clearance/side (mm、default 0.5)
+    pub pcb_clearance: f32,
+    /// USB opening 幅 (mm、Micro-USB=7.5 / USB-C=9 / USB-B=12、default 9)
+    pub usb_opening_width: f32,
+    /// USB opening 高 (mm、Micro=3 / C=3.5 / B=11、default 5)
+    pub usb_opening_height: f32,
+}
+
+impl Esp32EnclosureSpec {
+    /// ESP32 DevKit V1 51.6×28.4×15mm (electronics-enclosure § 2 default)
+    #[must_use]
+    pub const fn esp32_devkit_v1() -> Self {
+        Self {
+            pcb_width: 51.6,
+            pcb_depth: 28.4,
+            internal_height: 15.0,
+            wall_thickness: 1.6,
+            floor_thickness: 2.0,
+            pcb_clearance: 0.5,
+            usb_opening_width: 9.0,
+            usb_opening_height: 5.0,
+        }
+    }
+}
+
+/// ESP32/Arduino ケース (top 開口、USB 短辺 opening、`to_z_up` wrap)
+///
+/// 構造 (electronics-enclosure § 2 準拠、Y-up 設計):
+/// - Outer: `RoundedBox`
+/// - Cavity: `Box3d` (Y+ 開口)
+/// - USB opening: `Box3d` slot、+X or -X 短辺 貫通 (default +X)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{esp32_enclosure, Esp32EnclosureSpec};
+/// let e = esp32_enclosure(&Esp32EnclosureSpec::esp32_devkit_v1());
+/// ```
+#[must_use]
+pub fn esp32_enclosure(spec: &Esp32EnclosureSpec) -> SdfNode {
+    let ext_x = spec.pcb_width + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_z = spec.pcb_depth + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_y = spec.internal_height + spec.floor_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
+    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let usb_hx = (spec.wall_thickness + 2.0) * 0.5;
+    let usb_hy = spec.usb_opening_height * 0.5;
+    let usb_hz = spec.usb_opening_width * 0.5;
+    let usb_offset_x = outer_hx - usb_hx + 0.5;
+    let usb_offset_y = spec.floor_thickness * 0.5 + spec.pcb_clearance + usb_hy;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let usb = translate(
+        box3d(usb_hx, usb_hy, usb_hz),
+        Vec3::new(usb_offset_x, usb_offset_y, 0.0),
+    );
+
+    to_z_up(subtract(subtract(outer, cavity), usb))
+}
+
+// ────────────────────────────────────────────────────────
+// 25. battery_18650_holder (electronics-enclosure § 3 18650 Battery Holder)
+// ────────────────────────────────────────────────────────
+
+/// 18650 リチウムイオン電池 ホルダー spec (row 状 cylindrical cavity)
+///
+/// Cell 直径 18.6mm × 長さ 68mm 固定 (Li-ion 標準 + FDM clearance)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Battery18650HolderSpec {
+    /// cell 個数 (row 方向、default 4、range 1-10)
+    pub cell_count: u32,
+    /// inter-cell wall (mm、thermal safety、default 2.5)
+    pub wall_thickness: f32,
+    /// 端部 floor 厚 (mm、0 = 両端貫通 / >0 = 片端閉塞、default 0)
+    pub floor_thickness: f32,
+}
+
+impl Battery18650HolderSpec {
+    /// 4 cell × 2.5mm wall × through (電子工作用の row 4 pack)
+    #[must_use]
+    pub const fn row_4_through() -> Self {
+        Self {
+            cell_count: 4,
+            wall_thickness: 2.5,
+            floor_thickness: 0.0,
+        }
+    }
+}
+
+/// 18650 cell 直径 (mm、18.0 + 0.3 wrapper + 0.3 clearance/side)
+const CELL_18650_DIAMETER: f32 = 18.6;
+
+/// 18650 cell 長さ (mm、flat top 65 + 3 clearance)
+const CELL_18650_LENGTH: f32 = 68.0;
+
+/// 18650 バッテリーホルダー (row 状 cylindrical cavity、`to_z_up` wrap)
+///
+/// 構造 (electronics-enclosure § 3 準拠、Y-up 設計):
+/// - Outer: `RoundedBox`
+/// - Cavities: N× Y-axis `Cylinder` (r=`CELL/2`, h=`(CELL_LEN+1)/2`)、X 方向等間隔
+/// - `floor_thickness = 0` なら両端貫通 (cell 挿入両端 open)
+/// - `floor_thickness > 0` なら片端閉塞 (positive terminal spring 保持用)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{battery_18650_holder, Battery18650HolderSpec};
+/// let b = battery_18650_holder(&Battery18650HolderSpec::row_4_through());
+/// ```
+#[must_use]
+pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
+    let count = spec.cell_count.max(1);
+    let count_f = count as f32;
+    let pitch = CELL_18650_DIAMETER + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = CELL_18650_LENGTH + 2.0 * spec.floor_thickness;
+    let ext_z = CELL_18650_DIAMETER + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cell_r = CELL_18650_DIAMETER * 0.5;
+    // cavity length: floor=0 → 貫通 (h > outer_hy)、floor>0 → 内側 CELL_LEN 範囲のみ
+    let cell_hy = (CELL_18650_LENGTH + 1.0) * 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let cavity = translate(cylinder(cell_r, cell_hy), Vec3::new(x, 0.0, 0.0));
+        result = subtract(result, cavity);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -2560,6 +2856,79 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "tools archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── electronics-enclosure.md 3 archetype (Sprint 7) ──
+
+    #[test]
+    fn raspi_case_rpi5_is_rotate_wrapped() {
+        let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+        // to_z_up wrap で top-level は Rotate
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn raspi_case_floor_is_solid() {
+        let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+        // 内部 Y-up: ext_y = 25+3 = 28, outer_hy = 14, floor Y range [-14, -11]
+        // to_z_up: world (0, 0, -13) → internal (0, -13, 0), floor 材料
+        assert!(eval(&c, Vec3::new(0.0, 0.0, -13.0)) < 0.0);
+    }
+
+    #[test]
+    fn esp32_enclosure_devkit_is_rotate_wrapped() {
+        let e = esp32_enclosure(&Esp32EnclosureSpec::esp32_devkit_v1());
+        assert!(matches!(e, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn esp32_enclosure_wall_is_solid() {
+        let e = esp32_enclosure(&Esp32EnclosureSpec::esp32_devkit_v1());
+        // ext_x = 51.6 + 2*(0.5+1.6) = 55.8, outer_hx = 27.9
+        // cavity_hx = (51.6 + 2*0.5)/2 = 26.3, 側壁 X in [26.3, 27.9]
+        // to_z_up: world (27, 0, 0) → internal (27, 0, 0), 側壁材料
+        // USB opening は +X 側なので -X 側の壁で verify
+        assert!(eval(&e, Vec3::new(-27.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn battery_18650_holder_row_4_is_rotate_wrapped() {
+        let b = battery_18650_holder(&Battery18650HolderSpec::row_4_through());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn battery_18650_holder_wall_between_cells_is_solid() {
+        let b = battery_18650_holder(&Battery18650HolderSpec::row_4_through());
+        // 4 cell、pitch = 18.6+2.5 = 21.1、x_start = -31.65
+        // cell X = [-31.65, -10.55, 10.55, 31.65]、cell 間中央 X = 0 (cells 2-3 間)
+        // Y=0 中央 (Y-axis cyl 貫通)、Z=0 中央 (cell 中心)
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0), 材料 (cell 間 wall 中央)
+        assert!(eval(&b, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn battery_18650_holder_cell_cavity_is_hollow() {
+        let b = battery_18650_holder(&Battery18650HolderSpec::row_4_through());
+        // 先頭 cell 中心 X = -31.65、Y = 0、Z = 0
+        // to_z_up: world (-31.65, 0, 0) → internal (-31.65, 0, 0), cavity 内 = 空間
+        assert!(eval(&b, Vec3::new(-31.65, 0.0, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn all_electronics_archetypes_evaluations_finite() {
+        let nodes = [
+            raspi_case(&RaspiCaseSpec::rpi5_active_cooler()),
+            esp32_enclosure(&Esp32EnclosureSpec::esp32_devkit_v1()),
+            battery_18650_holder(&Battery18650HolderSpec::row_4_through()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "electronics archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
