@@ -2000,6 +2000,51 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::pliers_rack(&spec))
             }
 
+            // ── organizer-cable-kitchen.md archetypes (Sprint 9、2026-08-23) ──
+            "spice_rack" => {
+                // spice_rack(count, jar_diameter, jar_height) 3 param、他 default
+                let (count, dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SpiceRackSpec {
+                    count: count.round().max(1.0) as u32,
+                    jar_diameter: dia,
+                    jar_height: height,
+                    recess_depth: 5.0,
+                    shelf_depth_margin: 15.0,
+                    base_thickness: 5.0,
+                    wall_thickness: 3.0,
+                    lip_height_ratio: 0.15,
+                    lip_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::spice_rack(&spec))
+            }
+            "egg_tray" => {
+                // egg_tray(rows, cols, cup_depth) 3 param、pitch は default 50mm 固定
+                let (rows, cols, cup_depth) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::EggTraySpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    cup_depth,
+                    pitch: 50.0,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::egg_tray(&spec))
+            }
+            "utensil_caddy" => {
+                // utensil_caddy(count, compartment_dia, height) 3 param、他 default
+                let (count, dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::UtensilCaddySpec {
+                    count: count.round().max(1.0) as u32,
+                    compartment_diameter: dia,
+                    height,
+                    wall_thickness: 5.0,
+                    floor_thickness: 4.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::utensil_caddy(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3114,6 +3159,41 @@ mod tests {
             "toothbrush_holder(4, 15, 70)",
             "drill_bit_holder(3, 13, 11)",
             "pliers_rack(6, 15, 60)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 9: organizer-cable-kitchen.md 3 archetype tests ──
+
+    #[test]
+    fn test_spice_rack_standard_6() {
+        let node = parse_lol("spice_rack(6, 48, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_egg_tray_4x3() {
+        let node = parse_lol("egg_tray(3, 4, 18)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_utensil_caddy_standard_4() {
+        let node = parse_lol("utensil_caddy(4, 65, 130)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint9_cable_kitchen_archetypes_eval_correctly() {
+        // organizer-cable-kitchen.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "spice_rack(6, 48, 100)",
+            "egg_tray(3, 4, 18)",
+            "utensil_caddy(4, 65, 130)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
