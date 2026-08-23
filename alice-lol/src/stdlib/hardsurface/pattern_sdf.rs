@@ -3583,6 +3583,278 @@ pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 41. wrap_holder (organizer-cable-kitchen § 6.2 Wrap/Foil Holder)
+// ────────────────────────────────────────────────────────
+
+/// wrap/foil ロールホルダー spec (長 body + 上端 半円 cradle)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WrapHolderSpec {
+    /// roll 外径 (mm、standard 12" foil=55、default 55、range 40-65)
+    pub roll_diameter: f32,
+    /// roll 幅 (mm、standard 12"=305、default 305、range 200-460)
+    pub roll_width: f32,
+    /// 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// roll clearance (mm、片側、default 1.5)
+    pub roll_clearance: f32,
+    /// cradle depth ratio (0.5 で半円、default 0.6 = 60% 埋め込み)
+    pub cradle_depth_ratio: f32,
+}
+
+impl WrapHolderSpec {
+    /// 12" foil roll (Ø55×W305mm、US standard、kitchen § 6.2 default)
+    #[must_use]
+    pub const fn foil_12inch() -> Self {
+        Self {
+            roll_diameter: 55.0,
+            roll_width: 305.0,
+            wall_thickness: 3.0,
+            roll_clearance: 1.5,
+            cradle_depth_ratio: 0.6,
+        }
+    }
+}
+
+/// wrap/foil ロールホルダー (長 body + 上端 半円 cradle、Y-up 設計 + `to_z_up`)
+///
+/// 構造 (kitchen § 6.2 準拠):
+/// - Outer: `RoundedBox` (`(roll_width+2×wall) × body_height × (roll_dia+2×(clear+wall))`)
+/// - Cradle: X-axis `Cylinder` (r=`roll_dia/2 + clearance`), 上端 (Y+) 位置に subtract
+///   → 上方から見て半円 (or 60%) の cavity、roll がここに置かれる
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{wrap_holder, WrapHolderSpec};
+/// let w = wrap_holder(&WrapHolderSpec::foil_12inch());
+/// ```
+#[must_use]
+pub fn wrap_holder(spec: &WrapHolderSpec) -> SdfNode {
+    let cradle_r = spec.roll_diameter * 0.5 + spec.roll_clearance;
+    // body height: cradle が cradle_depth_ratio × dia だけ食い込むように設計
+    let cavity_depth = spec.roll_diameter * spec.cradle_depth_ratio;
+    let body_height = cavity_depth + spec.wall_thickness + 5.0; // floor 5mm 補足
+
+    let ext_x = spec.roll_width + 2.0 * spec.wall_thickness;
+    let ext_y = body_height;
+    let ext_z = spec.roll_diameter + 2.0 * (spec.roll_clearance + spec.wall_thickness);
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    // Cradle cylinder: X-axis 沿い (roll 長方向)、Y+ 上端から subtract
+    // Cylinder default Y-axis なので、Z 軸回りに 90° 回転で X-axis に
+    let cradle_half_h = outer_hx + 1.0; // roll_width 超え、貫通 subtract
+                                        // Cylinder 中心 Y 位置: outer_hy - cavity_depth + cradle_r (中心は表面より内)
+                                        // cavity_depth 分だけ埋め込むには: cylinder 中心 Y = outer_hy - cavity_depth + cradle_r
+    let cradle_offset_y = outer_hy - cavity_depth + cradle_r;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let cradle_yaxis = cylinder(cradle_r, cradle_half_h);
+    // Y-axis → X-axis: Z 軸回りに π/2 回転
+    let cradle_xaxis = SdfNode::Rotate {
+        child: Arc::new(cradle_yaxis),
+        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    };
+    let cradle = translate(cradle_xaxis, Vec3::new(0.0, cradle_offset_y, 0.0));
+
+    to_z_up(subtract(outer, cradle))
+}
+
+// ────────────────────────────────────────────────────────
+// 42. sock_divider (organizer-drawer-wall § 3.7 Sock Divider)
+// ────────────────────────────────────────────────────────
+
+/// 靴下 divider spec (外周 frame + 内部 partition walls)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SockDividerSpec {
+    /// cell 個数 (default 4、range 2-10)
+    pub cell_count: u32,
+    /// cell 幅 (mm、default 80、range 50-150)
+    pub cell_width: f32,
+    /// height (mm、drawer 高さ、default 89、range 50-120)
+    pub height: f32,
+    /// cell 奥行 (mm、default 100、range 80-200)
+    pub cell_depth: f32,
+    /// 壁厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0、0 で底なし)
+    pub floor_thickness: f32,
+}
+
+impl SockDividerSpec {
+    /// 4 cell × W80 × H89mm (drawer § 3.7 standard sock divider)
+    #[must_use]
+    pub const fn standard_4() -> Self {
+        Self {
+            cell_count: 4,
+            cell_width: 80.0,
+            height: 89.0,
+            cell_depth: 100.0,
+            wall_thickness: 2.5,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// 靴下 divider (外周 frame + (count-1) partition walls、top 開口、`to_z_up` wrap)
+///
+/// 構造 (drawer § 3.7 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(count×cell_w+(count+1)×wall) × (height+floor) × (depth+2×wall)`)
+/// - Cavity: `Box3d` (`(count×cell_w+(count-1)×wall) × height+1 × depth`)、Y+ 開口 (frame 形成)
+/// - Partition walls: (count-1)× `Box3d` (X 方向 thin)、cell 境界に union で追加
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sock_divider, SockDividerSpec};
+/// let d = sock_divider(&SockDividerSpec::standard_4());
+/// ```
+#[must_use]
+pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
+    let count = spec.cell_count.max(1);
+    let count_f = count as f32;
+
+    // 内部合計幅 = count × cell_width + (count-1) × wall_thickness
+    let inner_x = count_f * spec.cell_width + (count_f - 1.0) * spec.wall_thickness;
+    let ext_x = inner_x + 2.0 * spec.wall_thickness;
+    let ext_y = spec.height + spec.floor_thickness;
+    let ext_z = spec.cell_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    // Cavity: 内部全体 (partition wall もまとめて subtract、後で union で追加)
+    let cavity_hx = inner_x * 0.5;
+    let cavity_hy = (spec.height + 1.0) * 0.5;
+    let cavity_hz = spec.cell_depth * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // Partition walls: (count-1) 個の thin vertical wall (X 方向 thin、Y 方向 height、Z 方向 cell_depth)
+    // 配置: 各 wall は cell 境界に (x_start + wall/2 + cell_width, x_start + 3*wall/2 + 2*cell_width, ...)
+    let wall_hy = spec.height * 0.5;
+    let wall_hz = spec.cell_depth * 0.5;
+    let wall_offset_y = spec.floor_thickness + wall_hy;
+    let x_left = -inner_x * 0.5;
+    for i in 1..count {
+        let wall_center_x =
+            x_left + i as f32 * (spec.cell_width + spec.wall_thickness) - spec.wall_thickness * 0.5;
+        let wall = translate(
+            box3d(spec.wall_thickness * 0.5, wall_hy, wall_hz),
+            Vec3::new(wall_center_x, wall_offset_y - outer_hy, 0.0),
+        );
+        result = union(result, wall);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 43. soap_tray (organizer-bathroom-garage § 7.3 Shampoo/Soap Dispenser Tray)
+// ────────────────────────────────────────────────────────
+
+/// 石鹸トレー spec (rect tray + 底面 drain slots)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SoapTraySpec {
+    /// tray 内 長 (mm、default 200、range 100-300)
+    pub tray_length: f32,
+    /// tray 内 幅 (mm、default 90、range 60-150)
+    pub tray_width: f32,
+    /// drain slot 個数 (default 6、range 2-15)
+    pub drain_slot_count: u32,
+    /// tray 内深さ (mm、default 12、range 8-20)
+    pub tray_depth: f32,
+    /// drain slot 幅 (mm、default 3.0)
+    pub drain_slot_width: f32,
+    /// 壁厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl SoapTraySpec {
+    /// L200 × W90 × 6 drain slots (bathroom § 7.3 dual-bottle tray default)
+    #[must_use]
+    pub const fn dual_bottle_l200() -> Self {
+        Self {
+            tray_length: 200.0,
+            tray_width: 90.0,
+            drain_slot_count: 6,
+            tray_depth: 12.0,
+            drain_slot_width: 3.0,
+            wall_thickness: 2.5,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// 石鹸トレー (rect tray + 底面 drain slots、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.3 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(length+2×wall) × (depth+floor) × (width+2×wall)`)
+/// - Cavity: `Box3d` (`length × depth+1 × width`)、Y+ 開口 (tray 内部)
+/// - Drain slots: N× `Box3d` slot、Z 方向 rect、X 方向等間隔、floor を貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{soap_tray, SoapTraySpec};
+/// let s = soap_tray(&SoapTraySpec::dual_bottle_l200());
+/// ```
+#[must_use]
+pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
+    let count = spec.drain_slot_count.max(1);
+    let count_f = count as f32;
+
+    let ext_x = spec.tray_length + 2.0 * spec.wall_thickness;
+    let ext_y = spec.tray_depth + spec.floor_thickness;
+    let ext_z = spec.tray_width + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = spec.tray_length * 0.5;
+    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hz = spec.tray_width * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // Drain slots: floor 貫通、X 方向等間隔配置、Z 方向は cavity_width 貫通
+    // slot 配置: slot 間 wall 厚 は残り floor に配置
+    let slot_pitch = spec.tray_length / (count_f + 1.0);
+    let slot_hx = spec.drain_slot_width * 0.5;
+    let slot_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let slot_hz = spec.tray_width * 0.5;
+    let slot_offset_y = -outer_hy + slot_hy - 0.5;
+    for i in 0..count {
+        let x = -spec.tray_length * 0.5 + slot_pitch * (i as f32 + 1.0);
+        let slot = translate(
+            box3d(slot_hx, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -4502,6 +4774,69 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint12 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 13 ミックス 3 archetype (wrap + sock_divider + soap_tray) ──
+
+    #[test]
+    fn wrap_holder_foil_12inch_is_rotate_wrapped() {
+        let w = wrap_holder(&WrapHolderSpec::foil_12inch());
+        // to_z_up wrap で top-level は Rotate
+        assert!(matches!(w, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn wrap_holder_floor_is_solid() {
+        let w = wrap_holder(&WrapHolderSpec::foil_12inch());
+        // body_height = 33+3+5 = 41、outer_hy = 20.5
+        // cradle_offset_y = 20.5 - 33 + 29 = 16.5、cradle_r = 29
+        // cradle 下端 Y = 16.5 - 29 = -12.5、floor は Y < -12.5 で material
+        // to_z_up: world (0, 0, -15) → internal (0, -15, 0)、Y=-15 は floor 材料
+        assert!(eval(&w, Vec3::new(0.0, 0.0, -15.0)) < 0.0);
+    }
+
+    #[test]
+    fn sock_divider_standard_4_is_rotate_wrapped() {
+        let d = sock_divider(&SockDividerSpec::standard_4());
+        assert!(matches!(d, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn sock_divider_frame_wall_is_solid() {
+        let d = sock_divider(&SockDividerSpec::standard_4());
+        // inner_x = 4*80 + 3*2.5 = 327.5、ext_x = 327.5 + 5 = 332.5、outer_hx = 166.25
+        // 外周 frame X=165 は wall material (outer_hx=166.25 内、cavity_hx=163.75 外)
+        assert!(eval(&d, Vec3::new(165.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn soap_tray_dual_bottle_is_rotate_wrapped() {
+        let s = soap_tray(&SoapTraySpec::dual_bottle_l200());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn soap_tray_side_wall_is_solid() {
+        let s = soap_tray(&SoapTraySpec::dual_bottle_l200());
+        // ext_x = 200+5 = 205、outer_hx = 102.5、cavity_hx = 100
+        // 側 X = 101 は wall material
+        assert!(eval(&s, Vec3::new(101.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint13_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            wrap_holder(&WrapHolderSpec::foil_12inch()),
+            sock_divider(&SockDividerSpec::standard_4()),
+            soap_tray(&SoapTraySpec::dual_bottle_l200()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint13 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

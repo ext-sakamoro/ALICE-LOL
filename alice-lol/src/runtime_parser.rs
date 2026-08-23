@@ -2183,6 +2183,47 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── Sprint 13 ミックス 2 archetypes (2026-08-23) ──
+            "wrap_holder" => {
+                // wrap_holder(roll_diameter, roll_width, wall_thickness) 3 param
+                let (dia, width, wall) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::WrapHolderSpec {
+                    roll_diameter: dia,
+                    roll_width: width,
+                    wall_thickness: wall,
+                    roll_clearance: 1.5,
+                    cradle_depth_ratio: 0.6,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::wrap_holder(&spec))
+            }
+            "sock_divider" => {
+                // sock_divider(cell_count, cell_width, height) 3 param
+                let (count, width, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SockDividerSpec {
+                    cell_count: count.round().max(1.0) as u32,
+                    cell_width: width,
+                    height,
+                    cell_depth: 100.0,
+                    wall_thickness: 2.5,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sock_divider(&spec))
+            }
+            "soap_tray" => {
+                // soap_tray(tray_length, tray_width, drain_slot_count) 3 param
+                let (length, width, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SoapTraySpec {
+                    tray_length: length,
+                    tray_width: width,
+                    drain_slot_count: count.round().max(1.0) as u32,
+                    tray_depth: 12.0,
+                    drain_slot_width: 3.0,
+                    wall_thickness: 2.5,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::soap_tray(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3438,6 +3479,41 @@ mod tests {
             "hairdryer_holder(85, 110, 3)",
             "kcup_holder(3, 4, 53)",
             "hex_key_holder(9, 1.5, 10)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 13 ミックス archetype tests ──
+
+    #[test]
+    fn test_wrap_holder_foil_12inch() {
+        let node = parse_lol("wrap_holder(55, 305, 3)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sock_divider_standard_4() {
+        let node = parse_lol("sock_divider(4, 80, 89)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_soap_tray_dual_bottle() {
+        let node = parse_lol("soap_tray(200, 90, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint13_mix_archetypes_eval_correctly() {
+        // Sprint 13 ミックス archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "wrap_holder(55, 305, 3)",
+            "sock_divider(4, 80, 89)",
+            "soap_tray(200, 90, 6)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
