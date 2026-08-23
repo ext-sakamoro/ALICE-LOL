@@ -4116,6 +4116,248 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 47. tp_holder (organizer-bathroom-garage § 7.6 Toilet Paper Holder)
+// ────────────────────────────────────────────────────────
+
+/// トイレットペーパーホルダー spec (wall-mount backplate + horizontal axle)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TpHolderSpec {
+    /// ロール内径 (mm、standard=40、default 40、range 35-50)
+    pub inner_diameter: f32,
+    /// ロール幅 = 軸長 (mm、default 110、range 90-150)
+    pub roll_width: f32,
+    /// backplate 厚 (mm、default 5、range 3-10)
+    pub wall_thickness: f32,
+}
+
+impl TpHolderSpec {
+    /// 標準トイレットペーパー (bathroom § 7.6、inner 40 × width 110)
+    #[must_use]
+    pub const fn standard() -> Self {
+        Self {
+            inner_diameter: 40.0,
+            roll_width: 110.0,
+            wall_thickness: 5.0,
+        }
+    }
+}
+
+/// トイレットペーパーホルダー (wall-mount backplate + Z-axis axle、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.6 準拠、Y-up 設計):
+/// - Backplate: `RoundedBox` (`inner_dia*2 × inner_dia*2 × wall`)、壁貼付面
+/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2 - 0.5`、h=`roll_width/2`)、backplate 中央から前方突出
+/// - Mount holes: 2× Y-axis `Cylinder` (r=2.25、M4)、backplate 上部左右
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{tp_holder, TpHolderSpec};
+/// let t = tp_holder(&TpHolderSpec::standard());
+/// ```
+#[must_use]
+pub fn tp_holder(spec: &TpHolderSpec) -> SdfNode {
+    let backplate_size = spec.inner_diameter * 2.0;
+    let outer_hx = backplate_size * 0.5;
+    let outer_hy = backplate_size * 0.5;
+    let outer_hz = spec.wall_thickness * 0.5;
+
+    // Axle: Z-axis cylinder、backplate 中央から前方 (+Z) 突出
+    let axle_r = spec.inner_diameter * 0.5 - 0.5;
+    let axle_half_h = spec.roll_width * 0.5;
+    let axle_z_center = outer_hz + axle_half_h - 5.0;
+
+    // Mount holes (M4 × 2、上部左右)
+    let mount_r = 2.25;
+    let mount_hy = spec.wall_thickness + 1.0;
+    let mount_y_offset = outer_hy * 0.6;
+    let mount_x_offset = outer_hx * 0.7;
+
+    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let axle = translate(
+        cylinder_z(axle_r, axle_half_h),
+        Vec3::new(0.0, 0.0, axle_z_center),
+    );
+    let mount_left = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
+    );
+    let mount_right = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(mount_x_offset, mount_y_offset, 0.0),
+    );
+
+    to_z_up(subtract(
+        subtract(union(backplate, axle), mount_left),
+        mount_right,
+    ))
+}
+
+// ────────────────────────────────────────────────────────
+// 48. sd_card_holder (organizer-printer-modular § 9.4 SD Card Holder)
+// ────────────────────────────────────────────────────────
+
+/// SD カードホルダー spec (2D grid narrow rect slots for SD cards)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SdCardHolderSpec {
+    /// 行数 (default 4、range 2-8)
+    pub rows: u32,
+    /// 列数 (default 4、range 2-8)
+    pub cols: u32,
+    /// カード幅 (mm、SD=24 / microSD=15、default 24)
+    pub card_width: f32,
+    /// カード高さ (mm、SD=32 / microSD=11、default 32)
+    pub card_height: f32,
+    /// カード厚 clearance (mm、SD 2.1mm + 0.4 clearance = 2.5、default 2.5)
+    pub card_thickness: f32,
+    /// slot 間 wall 厚 (mm、default 1.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl SdCardHolderSpec {
+    /// 16 slot (4×4) × SD full 24×32×2.5 (printer § 9.4 standard)
+    #[must_use]
+    pub const fn full_sd_4x4() -> Self {
+        Self {
+            rows: 4,
+            cols: 4,
+            card_width: 24.0,
+            card_height: 32.0,
+            card_thickness: 2.5,
+            wall_thickness: 1.5,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// SD カードホルダー (2D grid narrow rect slots、top 開口、`to_z_up` wrap)
+///
+/// 構造 (printer § 9.4 準拠、Y-up 設計、`swatch_holder` pattern の SD card 版):
+/// - Outer: `RoundedBox` (`(cols×pitch_x+wall) × (height+floor) × (rows×pitch_z+wall)`)
+/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z width=card_width)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sd_card_holder, SdCardHolderSpec};
+/// let s = sd_card_holder(&SdCardHolderSpec::full_sd_4x4());
+/// ```
+#[must_use]
+pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let pitch_x = spec.card_thickness + spec.wall_thickness;
+    let pitch_z = spec.card_width + spec.wall_thickness;
+
+    let ext_x = cols_f * pitch_x + spec.wall_thickness;
+    let ext_y = spec.card_height + spec.floor_thickness;
+    let ext_z = rows_f * pitch_z + spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hx = spec.card_thickness * 0.5;
+    let slot_hy = (spec.card_height + 1.0) * 0.5;
+    let slot_hz = spec.card_width * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch_x;
+            let z = z_start + r as f32 * pitch_z;
+            let slot = translate(
+                box3d(slot_hx, slot_hy, slot_hz),
+                Vec3::new(x, slot_offset_y, z),
+            );
+            result = subtract(result, slot);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 49. driver_rack (organizer-bathroom-garage § 8.5 Screwdriver Rack)
+// ────────────────────────────────────────────────────────
+
+/// ドライバーラック spec (row 状 hole、handle 用 tall + wide)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DriverRackSpec {
+    /// slot 個数 (default 8、range 4-16)
+    pub slot_count: u32,
+    /// slot 直径 (mm、handle 用、default 25、range 15-40)
+    pub slot_diameter: f32,
+    /// ラック高さ (mm、driver 全長の 1/3 目安、default 100、range 60-150)
+    pub height: f32,
+}
+
+impl DriverRackSpec {
+    /// 8 slot × Ø25 × H100mm (garage § 8.5 standard、大型 driver 混在対応)
+    #[must_use]
+    pub const fn standard_8() -> Self {
+        Self {
+            slot_count: 8,
+            slot_diameter: 25.0,
+            height: 100.0,
+        }
+    }
+}
+
+/// ドライバーラック (row 状 large cyl hole、top 開口、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.5 準拠、Y-up 設計、`toothbrush_holder` の tall + wide 版):
+/// - Outer: `RoundedBox` (`(count×pitch+wall) × height × (dia+2wall)`)
+/// - Slots: N× Y-axis `Cylinder` (r=`dia/2`、h=height-floor)、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{driver_rack, DriverRackSpec};
+/// let d = driver_rack(&DriverRackSpec::standard_8());
+/// ```
+#[must_use]
+pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let wall_thickness = 3.0;
+    let floor_thickness = 5.0;
+    let pitch = spec.slot_diameter + wall_thickness;
+    let ext_x = count_f * pitch + wall_thickness;
+    let ext_y = spec.height;
+    let ext_z = spec.slot_diameter + 2.0 * wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let hole_r = spec.slot_diameter * 0.5;
+    let hole_depth = spec.height - floor_thickness;
+    let hole_hy = (hole_depth + 1.0) * 0.5;
+    let hole_offset_y = floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -5151,6 +5393,65 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint14 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 15 ミックス 4 archetype (tp + sd_card + driver) ──
+
+    #[test]
+    fn tp_holder_standard_is_rotate_wrapped() {
+        let t = tp_holder(&TpHolderSpec::standard());
+        assert!(matches!(t, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn tp_holder_backplate_is_solid() {
+        let t = tp_holder(&TpHolderSpec::standard());
+        // backplate 中央 (0, 0, 0) は material (union で axle が加算されていても中央は元々 backplate 内)
+        assert!(eval(&t, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn sd_card_holder_full_sd_is_rotate_wrapped() {
+        let s = sd_card_holder(&SdCardHolderSpec::full_sd_4x4());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn sd_card_holder_floor_is_solid() {
+        let s = sd_card_holder(&SdCardHolderSpec::full_sd_4x4());
+        // ext_y = 32+2 = 34、outer_hy = 17、floor Y [-17, -15]、world Z = -16 は floor
+        // to_z_up: world (0, 0, -16) → internal (0, -16, 0) 材料
+        assert!(eval(&s, Vec3::new(0.0, 0.0, -16.0)) < 0.0);
+    }
+
+    #[test]
+    fn driver_rack_standard_8_is_rotate_wrapped() {
+        let d = driver_rack(&DriverRackSpec::standard_8());
+        assert!(matches!(d, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn driver_rack_floor_is_solid() {
+        let d = driver_rack(&DriverRackSpec::standard_8());
+        // ext_y = 100、outer_hy = 50、floor_thickness = 5、floor Y [-50, -45]、world Z = -48 は floor
+        // to_z_up: world (0, 0, -48) → internal (0, -48, 0) 材料
+        assert!(eval(&d, Vec3::new(0.0, 0.0, -48.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint15_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            tp_holder(&TpHolderSpec::standard()),
+            sd_card_holder(&SdCardHolderSpec::full_sd_4x4()),
+            driver_rack(&DriverRackSpec::standard_8()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint15 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

@@ -2270,6 +2270,42 @@ impl<'a> Parser<'a> {
                     &spec,
                 ))
             }
+            "tp_holder" => {
+                // tp_holder(inner_diameter, roll_width, wall_thickness) 3 param
+                let (inner_dia, roll_w, wall_t) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::TpHolderSpec {
+                    inner_diameter: inner_dia,
+                    roll_width: roll_w,
+                    wall_thickness: wall_t,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::tp_holder(&spec))
+            }
+            "sd_card_holder" => {
+                // sd_card_holder(rows, cols, card_width) 3 param、他 default
+                let (rows, cols, width) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SdCardHolderSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    card_width: width,
+                    card_height: 32.0,
+                    card_thickness: 2.5,
+                    wall_thickness: 1.5,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sd_card_holder(
+                    &spec,
+                ))
+            }
+            "driver_rack" => {
+                // driver_rack(slot_count, slot_diameter, height) 3 param
+                let (count, dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::DriverRackSpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_diameter: dia,
+                    height,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::driver_rack(&spec))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3596,6 +3632,40 @@ mod tests {
             "razor_holder(12, 22, 4.5)",
             "chopstick_holder(4, 13, 260)",
             "swatch_holder(8, 4, 32)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 15 ミックス archetype tests ──
+
+    #[test]
+    fn test_tp_holder_standard() {
+        let node = parse_lol("tp_holder(40, 110, 5)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sd_card_holder_full_sd_4x4() {
+        let node = parse_lol("sd_card_holder(4, 4, 24)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_driver_rack_standard_8() {
+        let node = parse_lol("driver_rack(8, 25, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint15_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "tp_holder(40, 110, 5)",
+            "sd_card_holder(4, 4, 24)",
+            "driver_rack(8, 25, 100)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
