@@ -2391,6 +2391,49 @@ impl<'a> Parser<'a> {
                     &spec,
                 ))
             }
+            "phone_dock" => {
+                // phone_dock(width, upright_height, cable_diameter) 3 param、他 default
+                let (w, h, cable) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PhoneDockSpec {
+                    width: w,
+                    upright_height: h,
+                    cable_diameter: cable,
+                    base_depth: 60.0,
+                    base_thickness: 6.0,
+                    upright_thickness: 4.0,
+                    tilt_angle_deg: 15.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::phone_dock(&spec))
+            }
+            "cutting_board_rack" => {
+                // cutting_board_rack(slot_count, slot_width, height) 3 param、他 default
+                let (count, width, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CuttingBoardRackSpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_width: width,
+                    height,
+                    slot_depth: 200.0,
+                    wall_thickness: 4.0,
+                    floor_thickness: 8.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::cutting_board_rack(
+                    &spec,
+                ))
+            }
+            "tape_dispenser" => {
+                // tape_dispenser(inner_diameter, roll_width, wall_thickness) 3 param、他 default
+                let (inner_dia, roll_w, wall_t) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::TapeDispenserSpec {
+                    inner_diameter: inner_dia,
+                    roll_width: roll_w,
+                    wall_thickness: wall_t,
+                    outer_diameter: 150.0,
+                    tear_angle_deg: 30.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::tape_dispenser(
+                    &spec,
+                ))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3821,6 +3864,40 @@ mod tests {
             "dry_box(2, 2, 68)",
             "outdoor_enclosure(120, 80, 45)",
             "jewelry_stand(3, 100, 100)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 18 ミックス 7 archetype tests ──
+
+    #[test]
+    fn test_phone_dock_standard() {
+        let node = parse_lol("phone_dock(80, 100, 8)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_cutting_board_rack_standard_3() {
+        let node = parse_lol("cutting_board_rack(3, 12, 220)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_tape_dispenser_packing_standard() {
+        let node = parse_lol("tape_dispenser(76, 50, 3)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint18_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "phone_dock(80, 100, 8)",
+            "cutting_board_rack(3, 12, 220)",
+            "tape_dispenser(76, 50, 3)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
