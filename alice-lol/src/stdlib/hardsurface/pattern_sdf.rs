@@ -1481,6 +1481,304 @@ pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 16. cable_clip (hobby-diy § 2 Desk Organizer / Cable Management)
+// ────────────────────────────────────────────────────────
+
+/// ケーブルクリップ spec (半月 shell、snap-fit で cable を保持)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CableClipSpec {
+    /// 対応ケーブル直径 (mm、USB-A 3.5 / Ethernet 6 / HDMI 7 / Power 8-10、default 7)
+    pub cable_diameter: f32,
+    /// クリップ長 (mm、Y 軸方向 cable 走行方向、default 28)
+    pub clip_length: f32,
+    /// 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// snap-fit 開口幅 = `cable_diameter × 本値` (default 0.7 = 30% 狭い)
+    pub opening_ratio: f32,
+}
+
+impl CableClipSpec {
+    /// HDMI ケーブル用 Ø7 × L28 (hobby-diy § 2 Clip Length 表 HDMI 行)
+    #[must_use]
+    pub const fn hdmi() -> Self {
+        Self {
+            cable_diameter: 7.0,
+            clip_length: 28.0,
+            wall_thickness: 2.0,
+            opening_ratio: 0.7,
+        }
+    }
+}
+
+/// ケーブルクリップ (Y-axis 沿い cable、+Z 開口 snap-fit)
+///
+/// 構造 (hobby-diy § 2 準拠、Z-up 直接設計、wrapper なし):
+/// - Outer: `RoundedBox` (`(cable+2w) × length × (cable+2w)`)
+/// - Cavity: Y-axis `Cylinder` (r = `cable/2 + 0.1` clearance、cable 走行方向)
+/// - Opening: `Box3d` slot (X 狭 opening、Z+ 上端から中央下へ)、snap-fit で cable を押し込む
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{cable_clip, CableClipSpec};
+/// let c = cable_clip(&CableClipSpec::hdmi());
+/// ```
+#[must_use]
+pub fn cable_clip(spec: &CableClipSpec) -> SdfNode {
+    let outer_side = spec.cable_diameter + 2.0 * spec.wall_thickness;
+    let outer_hx = outer_side * 0.5;
+    let outer_hy = spec.clip_length * 0.5;
+    let outer_hz = outer_side * 0.5;
+
+    let cavity_r = spec.cable_diameter * 0.5 + 0.1;
+    let cavity_hy = outer_hy + 1.0;
+
+    let slot_hx = spec.cable_diameter * spec.opening_ratio * 0.5;
+    let slot_hy = outer_hy + 1.0;
+    // slot: 上端 (Z+ = outer_hz+1) から cable 中心の少し下 (Z = -cable_dia*0.15) まで
+    let slot_top_z = outer_hz + 1.0;
+    let slot_bottom_z = -spec.cable_diameter * 0.15;
+    let slot_hz = (slot_top_z - slot_bottom_z) * 0.5;
+    let slot_offset_z = (slot_top_z + slot_bottom_z) * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness * 0.5);
+    let cavity = cylinder(cavity_r, cavity_hy);
+    let slot = translate(
+        box3d(slot_hx, slot_hy, slot_hz),
+        Vec3::new(0.0, 0.0, slot_offset_z),
+    );
+
+    subtract(subtract(outer, cavity), slot)
+}
+
+// ────────────────────────────────────────────────────────
+// 17. led_channel (hobby-diy § 3 LED Light Strip Channel)
+// ────────────────────────────────────────────────────────
+
+/// LED strip channel spec (U 溝、strip を top 側から挿入)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LedChannelSpec {
+    /// LED strip PCB 幅 (mm、SMD3528=8 / WS2812B=10-12、default 10)
+    pub strip_width: f32,
+    /// channel 全長 (mm、Y 軸方向、default 300)
+    pub channel_length: f32,
+    /// channel 内深さ (mm、hobby-diy § 3 inner depth 表、default 2.5)
+    pub channel_depth: f32,
+    /// 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+}
+
+impl LedChannelSpec {
+    /// WS2812B 10mm × 300mm (hobby-diy § 3 標準)
+    #[must_use]
+    pub const fn ws2812b_10mm() -> Self {
+        Self {
+            strip_width: 10.0,
+            channel_length: 300.0,
+            channel_depth: 2.5,
+            wall_thickness: 2.0,
+        }
+    }
+}
+
+/// LED strip channel (Y-axis 沿い strip、+Z 開口 U 溝、Z-up 直接設計)
+///
+/// 構造 (hobby-diy § 3 準拠):
+/// - Outer: `Box3d` (`(strip+2w) × length × (depth+floor)`)
+/// - Cavity: `Box3d` (`(strip+1mm 遊び) × length+1 × depth+1`)、Z+ 上端開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{led_channel, LedChannelSpec};
+/// let c = led_channel(&LedChannelSpec::ws2812b_10mm());
+/// ```
+#[must_use]
+pub fn led_channel(spec: &LedChannelSpec) -> SdfNode {
+    let inner_w = spec.strip_width + 1.0; // 0.5mm clearance / side
+    let outer_w = spec.strip_width + 2.0 * spec.wall_thickness;
+    let floor = 1.5;
+    let outer_h = spec.channel_depth + floor;
+
+    let outer_hx = outer_w * 0.5;
+    let outer_hy = spec.channel_length * 0.5;
+    let outer_hz = outer_h * 0.5;
+
+    let cavity_hx = inner_w * 0.5;
+    let cavity_hy = outer_hy + 1.0;
+    let cavity_hz = (spec.channel_depth + 1.0) * 0.5;
+    let cavity_offset_z = outer_hz - cavity_hz + 0.5;
+
+    let outer = box3d(outer_hx, outer_hy, outer_hz);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, 0.0, cavity_offset_z),
+    );
+
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
+// 18. card_tray (hobby-diy § 6 Board Game Inserts / Card Tray)
+// ────────────────────────────────────────────────────────
+
+/// カードトレー spec (top 開口、front edge に finger 半円 cutout)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CardTraySpec {
+    /// カード幅 (mm、Poker=63 / Mini Euro=44 / Standard Euro=59、default 63)
+    pub card_width: f32,
+    /// カード高さ (mm、Poker=88 / Mini Euro=68 / Standard Euro=92、default 88)
+    pub card_height: f32,
+    /// tray 内深さ (mm、hobby-diy § 6 depth per 50 cards ≈ 10mm、default 30 = 100-150 cards)
+    pub tray_depth: f32,
+    /// カード↔壁 clearance/side (mm、default 1.0 = 全 clearance 2mm)
+    pub card_clearance: f32,
+    /// 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 1.5)
+    pub floor_thickness: f32,
+    /// finger cutout 半径 (mm、hobby-diy § 6 15-20mm wide → r=9、default 9)
+    pub finger_notch_radius: f32,
+}
+
+impl CardTraySpec {
+    /// Poker card 63×88mm、深さ 30mm (hobby-diy § 6 Standard Poker、100-150 cards)
+    #[must_use]
+    pub const fn poker() -> Self {
+        Self {
+            card_width: 63.0,
+            card_height: 88.0,
+            tray_depth: 30.0,
+            card_clearance: 1.0,
+            wall_thickness: 2.0,
+            floor_thickness: 1.5,
+            finger_notch_radius: 9.0,
+        }
+    }
+}
+
+/// カードトレー (top 開口、front edge finger 半円 cutout、印刷正立 = 底が bed)
+///
+/// 構造 (hobby-diy § 6 Card Tray Dimensions 準拠、Y-up 設計 → `to_z_up` wrap):
+/// - Outer: `RoundedBox` (`(cw+2×(clear+wall)) × (depth+floor) × (ch+2×(clear+wall))`)
+/// - Cavity: `Box3d` (`(cw+2×clear) × (depth+1) × (ch+2×clear)`)、Y+ 上端開口
+/// - Finger notch: Y-axis `Cylinder` (r=9)、front edge (Z=-`outer_hz`) 中央、Y 全高貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{card_tray, CardTraySpec};
+/// let t = card_tray(&CardTraySpec::poker());
+/// ```
+#[must_use]
+pub fn card_tray(spec: &CardTraySpec) -> SdfNode {
+    let ext_x = spec.card_width + 2.0 * (spec.card_clearance + spec.wall_thickness);
+    let ext_z = spec.card_height + 2.0 * (spec.card_clearance + spec.wall_thickness);
+    let ext_y = spec.tray_depth + spec.floor_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = (spec.card_width + 2.0 * spec.card_clearance) * 0.5;
+    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hz = (spec.card_height + 2.0 * spec.card_clearance) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let notch_hy = outer_hy + 1.0;
+    let notch_offset_z = -outer_hz;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let notch = translate(
+        cylinder(spec.finger_notch_radius, notch_hy),
+        Vec3::new(0.0, 0.0, notch_offset_z),
+    );
+
+    to_z_up(subtract(subtract(outer, cavity), notch))
+}
+
+// ────────────────────────────────────────────────────────
+// 19. token_well (hobby-diy § 6 Board Game Inserts / Token Well)
+// ────────────────────────────────────────────────────────
+
+/// トークン井戸 spec (row 状に count 個の円筒 well、dice/meeples/miniatures)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TokenWellSpec {
+    /// well 直径 (mm、default 20)
+    pub well_diameter: f32,
+    /// well 深さ (mm、shallow=10-15 / dice=20-25 / mini=30-40、default 20)
+    pub well_depth: f32,
+    /// well 個数 (row 方向、default 4、実用 range 1-10)
+    pub well_count: u32,
+    /// well 間 clearance/side (mm、default 1.0 = 全 clearance 2mm)
+    pub well_clearance: f32,
+    /// 外周 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 1.5)
+    pub floor_thickness: f32,
+}
+
+impl TokenWellSpec {
+    /// dice 用 4 well × Ø20 × 深 20mm (hobby-diy § 6 dice/meeples 標準)
+    #[must_use]
+    pub const fn dice_4() -> Self {
+        Self {
+            well_diameter: 20.0,
+            well_depth: 20.0,
+            well_count: 4,
+            well_clearance: 1.0,
+            wall_thickness: 2.0,
+            floor_thickness: 1.5,
+        }
+    }
+}
+
+/// トークン井戸 (row 状 count well、top 開口、印刷正立、`to_z_up` wrap)
+///
+/// 構造 (hobby-diy § 6 Token Well Design 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(count×(dia+2×clear)+2×wall) × (depth+floor) × (dia+2×(clear+wall))`)
+/// - Wells: Y-axis `Cylinder` × count、X 方向等間隔、Y+ 上端開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{token_well, TokenWellSpec};
+/// let t = token_well(&TokenWellSpec::dice_4());
+/// ```
+#[must_use]
+pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
+    let count = spec.well_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.well_diameter + 2.0 * spec.well_clearance;
+    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_z = spec.well_diameter + 2.0 * (spec.well_clearance + spec.wall_thickness);
+    let ext_y = spec.well_depth + spec.floor_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let well_r = spec.well_diameter * 0.5;
+    let well_hy = (spec.well_depth + 1.0) * 0.5;
+    let well_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, 0.0));
+        result = subtract(result, well);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -1818,6 +2116,106 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "household archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── hobby-diy.md 4 archetype (Sprint 5) ──
+
+    #[test]
+    fn cable_clip_hdmi_is_subtraction() {
+        let c = cable_clip(&CableClipSpec::hdmi());
+        assert!(matches!(c, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn cable_clip_wall_is_solid() {
+        let c = cable_clip(&CableClipSpec::hdmi());
+        // outer_side = 7 + 4 = 11、outer_hz = 5.5、cavity r = 3.6、slot X 幅 = 4.9
+        // (0, 0, -5): 外周内部 (|Z|<5.5)、cavity 外 (radial from Y-axis = 5 > 3.6)、slot 外 (Z < slot_bottom = -1.05)
+        assert!(eval(&c, Vec3::new(0.0, 0.0, -5.0)) < 0.0);
+    }
+
+    #[test]
+    fn cable_clip_top_is_open() {
+        let c = cable_clip(&CableClipSpec::hdmi());
+        // (0, 0, +5): 上端 slot 内 (|X|<2.45、Z in [-1.05, 6.5]) → 空間
+        assert!(eval(&c, Vec3::new(0.0, 0.0, 5.0)) > 0.0);
+    }
+
+    #[test]
+    fn led_channel_ws2812b_is_subtraction() {
+        let c = led_channel(&LedChannelSpec::ws2812b_10mm());
+        assert!(matches!(c, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn led_channel_floor_is_solid() {
+        let c = led_channel(&LedChannelSpec::ws2812b_10mm());
+        // outer_h = 2.5 + 1.5 = 4、outer_hz = 2、cavity Z range = [-1.0, 2.5]
+        // Z=-1.5 は cavity 外、outer 内 = floor 材料
+        assert!(eval(&c, Vec3::new(0.0, 0.0, -1.5)) < 0.0);
+    }
+
+    #[test]
+    fn led_channel_top_is_open() {
+        let c = led_channel(&LedChannelSpec::ws2812b_10mm());
+        // (0, 0, +1.5): cavity 内 (Z in [-1.0, 2.5]、|X|<5.5) → 空間
+        assert!(eval(&c, Vec3::new(0.0, 0.0, 1.5)) > 0.0);
+    }
+
+    #[test]
+    fn card_tray_poker_is_rotate_wrapped() {
+        let t = card_tray(&CardTraySpec::poker());
+        // to_z_up wrap で top-level は Rotate
+        assert!(matches!(t, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn card_tray_side_wall_is_solid() {
+        let t = card_tray(&CardTraySpec::poker());
+        // 内部 Y-up: outer_hx = (63+2+4)/2 = 34.5、cavity_hx = (63+2)/2 = 32.5
+        // to_z_up (Q_x π/2): world (Wx, Wy, Wz) → internal (Wx, Wz, -Wy)
+        // world (33, 0, 0) → internal (33, 0, 0): X=33 is between cavity_hx(32.5) and outer_hx(34.5) = 側壁材料
+        assert!(eval(&t, Vec3::new(33.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn token_well_dice_is_rotate_wrapped() {
+        let t = token_well(&TokenWellSpec::dice_4());
+        assert!(matches!(t, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn token_well_floor_is_solid() {
+        let t = token_well(&TokenWellSpec::dice_4());
+        // 内部 Y-up: ext_y = 20 + 1.5 = 21.5、outer_hy = 10.75、floor Y range [-10.75, -9.25]
+        // to_z_up: world (0, 0, -10) → internal (0, -10, 0): Y=-10 in floor = 材料
+        assert!(eval(&t, Vec3::new(0.0, 0.0, -10.0)) < 0.0);
+    }
+
+    #[test]
+    fn token_well_center_of_well_is_open() {
+        let t = token_well(&TokenWellSpec::dice_4());
+        // 4 well、pitch = 22、x_start = -33、well x = [-33, -11, 11, 33]
+        // to_z_up: world (Wx, Wy, Wz) → internal (Wx, Wz, -Wy)
+        // 先頭 well 中心 world (-33, 0, 0) → internal (-33, 0, 0): Y=0 in well cavity range [-9.25, 11.75] = 空間
+        assert!(eval(&t, Vec3::new(-33.0, 0.0, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn all_hobby_diy_archetypes_evaluations_finite() {
+        let nodes = [
+            cable_clip(&CableClipSpec::hdmi()),
+            led_channel(&LedChannelSpec::ws2812b_10mm()),
+            card_tray(&CardTraySpec::poker()),
+            token_well(&TokenWellSpec::dice_4()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "hobby-diy archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

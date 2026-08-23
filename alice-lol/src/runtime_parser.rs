@@ -1810,6 +1810,58 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::storage_box(&spec))
             }
 
+            // ── hobby-diy.md archetypes (Sprint 5、2026-08-23) ──
+            "cable_clip" => {
+                // cable_clip(cable_dia, length) 2 param、wall + opening_ratio は default
+                let (dia, len) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CableClipSpec {
+                    cable_diameter: dia,
+                    clip_length: len,
+                    wall_thickness: 2.0,
+                    opening_ratio: 0.7,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::cable_clip(&spec))
+            }
+            "led_channel" => {
+                // led_channel(strip_width, length) 2 param、depth 2.5 + wall 2.0 default
+                let (sw, len) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::LedChannelSpec {
+                    strip_width: sw,
+                    channel_length: len,
+                    channel_depth: 2.5,
+                    wall_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::led_channel(&spec))
+            }
+            "card_tray" => {
+                // card_tray(card_w, card_h, depth) 3 param、他は default (clearance 1 / wall 2 / floor 1.5 / notch 9)
+                let (cw, ch, d) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CardTraySpec {
+                    card_width: cw,
+                    card_height: ch,
+                    tray_depth: d,
+                    card_clearance: 1.0,
+                    wall_thickness: 2.0,
+                    floor_thickness: 1.5,
+                    finger_notch_radius: 9.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::card_tray(&spec))
+            }
+            "token_well" => {
+                // token_well(dia, depth, count) 3 param、count は f32→u32 cast
+                // 他は default (clearance 1 / wall 2 / floor 1.5)
+                let (dia, depth, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::TokenWellSpec {
+                    well_diameter: dia,
+                    well_depth: depth,
+                    well_count: count.round().max(1.0) as u32,
+                    well_clearance: 1.0,
+                    wall_thickness: 2.0,
+                    floor_thickness: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::token_well(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2752,6 +2804,58 @@ mod tests {
             "coaster(95, 5)",
             "tissue_box_cover(231, 116, 53)",
             "storage_box(150, 100, 60)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 5: hobby-diy.md 4 archetype tests ──
+
+    #[test]
+    fn test_cable_clip_hdmi() {
+        let node = parse_lol("cable_clip(7, 28)").unwrap();
+        // cavity + slot 2 段 subtract で最終 Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_led_channel_ws2812b() {
+        let node = parse_lol("led_channel(10, 300)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_card_tray_poker() {
+        let node = parse_lol("card_tray(63, 88, 30)").unwrap();
+        // to_z_up wrap で Rotate top-level
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_token_well_dice_4() {
+        let node = parse_lol("token_well(20, 20, 4)").unwrap();
+        // to_z_up wrap で Rotate top-level
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_token_well_count_zero_defaults_to_one() {
+        // count=0 → max(1) で 1 well 生成 (defensive)
+        let node = parse_lol("token_well(15, 10, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint5_hobby_diy_archetypes_eval_correctly() {
+        // hobby-diy.md 追加 4 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "cable_clip(7, 28)",
+            "led_channel(10, 300)",
+            "card_tray(63, 88, 30)",
+            "token_well(20, 20, 4)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
