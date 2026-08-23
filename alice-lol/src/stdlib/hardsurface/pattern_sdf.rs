@@ -3341,6 +3341,248 @@ pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 38. hairdryer_holder (organizer-bathroom-garage § 7.7 Hair Dryer Holder)
+// ────────────────────────────────────────────────────────
+
+/// ヘアドライヤーホルダー spec (大径 cylindrical holster、top 開口)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HairdryerHolderSpec {
+    /// holster 内径 (mm、default 85、Dyson Supersonic 対応)
+    pub barrel_diameter: f32,
+    /// holster 深さ (mm、default 110、range 100-140)
+    pub holster_depth: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 5.0、荷重 400-700g 想定)
+    pub floor_thickness: f32,
+    /// 内 clearance (mm、default 2.0、barrel 挿入余裕)
+    pub inner_clearance: f32,
+}
+
+impl HairdryerHolderSpec {
+    /// Ø85 × H110mm (Dyson Supersonic / 汎用ドライヤー、bathroom § 7.7 default)
+    #[must_use]
+    pub const fn dyson_85() -> Self {
+        Self {
+            barrel_diameter: 85.0,
+            holster_depth: 110.0,
+            wall_thickness: 3.0,
+            floor_thickness: 5.0,
+            inner_clearance: 2.0,
+        }
+    }
+}
+
+/// ヘアドライヤーホルダー (大径 cylindrical holster、top 開口、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.7 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(barrel+2×(clear+wall))^2 × (depth+floor)`)
+/// - Cavity: Y-axis `Cylinder` (r=`barrel/2 + clearance`, h=`depth+1`)、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{hairdryer_holder, HairdryerHolderSpec};
+/// let h = hairdryer_holder(&HairdryerHolderSpec::dyson_85());
+/// ```
+#[must_use]
+pub fn hairdryer_holder(spec: &HairdryerHolderSpec) -> SdfNode {
+    let outer_side = spec.barrel_diameter + 2.0 * (spec.inner_clearance + spec.wall_thickness);
+    let outer_hx = outer_side * 0.5;
+    let outer_hz = outer_side * 0.5;
+    let outer_hy = (spec.holster_depth + spec.floor_thickness) * 0.5;
+
+    let cavity_r = spec.barrel_diameter * 0.5 + spec.inner_clearance;
+    let cavity_hy = (spec.holster_depth + 1.0) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 5.0);
+    let cavity = translate(
+        cylinder(cavity_r, cavity_hy),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+
+    to_z_up(subtract(outer, cavity))
+}
+
+// ────────────────────────────────────────────────────────
+// 39. kcup_holder (organizer-cable-kitchen § 6.7 K-Cup / Capsule Holder)
+// ────────────────────────────────────────────────────────
+
+/// K-Cup ホルダー spec (2D grid K-Cup wells、egg_tray の K-Cup 版)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KcupHolderSpec {
+    /// 行数 (default 3、range 1-6)
+    pub rows: u32,
+    /// 列数 (default 4、range 1-6)
+    pub cols: u32,
+    /// capsule 直径 (mm、K-Cup=53 / Nespresso=39 / Dolce Gusto=55、default 53)
+    pub capsule_diameter: f32,
+    /// capsule 深さ (mm、K-Cup=40 / Nespresso=22、default 40)
+    pub capsule_depth: f32,
+    /// capsule 間 clearance (mm、default 3.5)
+    pub capsule_clearance: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl KcupHolderSpec {
+    /// 4×3 = 12 K-Cup (Ø53 × D40mm、K-Cup standard、kitchen § 6.7 default)
+    #[must_use]
+    pub const fn kcup_4x3() -> Self {
+        Self {
+            rows: 3,
+            cols: 4,
+            capsule_diameter: 53.0,
+            capsule_depth: 40.0,
+            capsule_clearance: 3.5,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// K-Cup ホルダー (2D grid cylindrical wells、top 開口、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.7 準拠、Y-up 設計、egg_tray pattern の K-Cup サイズ版):
+/// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (depth+floor) × (rows×pitch+2×wall)`)
+/// - Wells: (rows×cols)× Y-axis `Cylinder` (r=`capsule/2`, h=`depth+1`)、grid 配置
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{kcup_holder, KcupHolderSpec};
+/// let k = kcup_holder(&KcupHolderSpec::kcup_4x3());
+/// ```
+#[must_use]
+pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+    let pitch = spec.capsule_diameter + spec.capsule_clearance;
+
+    let ext_x = cols_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_y = spec.capsule_depth + spec.floor_thickness;
+    let ext_z = rows_f * pitch + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let well_r = spec.capsule_diameter * 0.5;
+    let well_hy = (spec.capsule_depth + 1.0) * 0.5;
+    let well_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch;
+            let z = z_start + r as f32 * pitch;
+            let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, z));
+            result = subtract(result, well);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 40. hex_key_holder (organizer-bathroom-garage § 8.2 Hex Key Holder)
+// ────────────────────────────────────────────────────────
+
+/// ヘックスキーホルダー spec (row 状 hole、min-max mm linear interpolate)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HexKeyHolderSpec {
+    /// key 個数 (default 9、Metric standard 1.5-10mm)
+    pub count: u32,
+    /// 最小 key 幅 (mm、default 1.5)
+    pub min_key_mm: f32,
+    /// 最大 key 幅 (mm、default 10.0)
+    pub max_key_mm: f32,
+    /// hole 深さ (mm、default 18)
+    pub hole_depth: f32,
+    /// hole clearance (mm、default 0.3、key + 0.6mm total)
+    pub hole_clearance: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 4.0)
+    pub floor_thickness: f32,
+}
+
+impl HexKeyHolderSpec {
+    /// Metric 9-piece 1.5-10mm (garage § 8.2 standard、drill_bit pattern of hex keys)
+    #[must_use]
+    pub const fn metric_9() -> Self {
+        Self {
+            count: 9,
+            min_key_mm: 1.5,
+            max_key_mm: 10.0,
+            hole_depth: 18.0,
+            hole_clearance: 0.3,
+            wall_thickness: 3.0,
+            floor_thickness: 4.0,
+        }
+    }
+}
+
+/// ヘックスキーホルダー (row 状 hole、size linear interpolate、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.2 準拠、Y-up 設計、drill_bit_holder と同 pattern):
+/// - Outer: `RoundedBox`
+/// - Holes: N× Y-axis `Cylinder`、size = `min + i×(max-min)/(count-1)` + clearance
+///
+/// hex key の短腕を hole に落とし込む形式 (block-style holder、fan-style ではない)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{hex_key_holder, HexKeyHolderSpec};
+/// let h = hex_key_holder(&HexKeyHolderSpec::metric_9());
+/// ```
+#[must_use]
+pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let max_hole_dia = spec.max_key_mm + 2.0 * spec.hole_clearance;
+    let pitch = max_hole_dia + 3.0; // 3mm inter-hole wall
+
+    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_y = spec.hole_depth + spec.floor_thickness;
+    let ext_z = max_hole_dia + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let mut result = outer;
+    for i in 0..count {
+        let t = if count == 1 {
+            0.0
+        } else {
+            i as f32 / (count_f - 1.0)
+        };
+        let size = spec.min_key_mm + t * (spec.max_key_mm - spec.min_key_mm);
+        let hole_r = (size + 2.0 * spec.hole_clearance) * 0.5;
+        let x = x_start + i as f32 * pitch;
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -4200,6 +4442,66 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "drawer-wall archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 12 ミックス 3 archetype (bathroom + kitchen + garage 混合) ──
+
+    #[test]
+    fn hairdryer_holder_dyson_is_rotate_wrapped() {
+        let h = hairdryer_holder(&HairdryerHolderSpec::dyson_85());
+        assert!(matches!(h, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn hairdryer_holder_wall_is_solid() {
+        let h = hairdryer_holder(&HairdryerHolderSpec::dyson_85());
+        // outer_side = 85+2*(2+3) = 95、outer_hx=hz=47.5、cavity r = 85/2+2 = 44.5
+        // to_z_up: world (46, 0, 0) → internal (46, 0, 0) は cavity 外 (r=44.5) = wall material
+        assert!(eval(&h, Vec3::new(46.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn kcup_holder_4x3_is_rotate_wrapped() {
+        let k = kcup_holder(&KcupHolderSpec::kcup_4x3());
+        assert!(matches!(k, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn kcup_holder_floor_is_solid() {
+        let k = kcup_holder(&KcupHolderSpec::kcup_4x3());
+        // ext_y = 40+3 = 43、outer_hy = 21.5、floor Y [-21.5, -18.5]
+        // to_z_up: world (0, 0, -20) → internal (0, -20, 0) 材料
+        assert!(eval(&k, Vec3::new(0.0, 0.0, -20.0)) < 0.0);
+    }
+
+    #[test]
+    fn hex_key_holder_metric_9_is_rotate_wrapped() {
+        let h = hex_key_holder(&HexKeyHolderSpec::metric_9());
+        assert!(matches!(h, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn hex_key_holder_floor_is_solid() {
+        let h = hex_key_holder(&HexKeyHolderSpec::metric_9());
+        // ext_y = 18+4 = 22、outer_hy = 11、floor Y [-11, -7]
+        // to_z_up: world (0, 0, -9) → internal (0, -9, 0) 材料
+        assert!(eval(&h, Vec3::new(0.0, 0.0, -9.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint12_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            hairdryer_holder(&HairdryerHolderSpec::dyson_85()),
+            kcup_holder(&KcupHolderSpec::kcup_4x3()),
+            hex_key_holder(&HexKeyHolderSpec::metric_9()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint12 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

@@ -2137,6 +2137,52 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── Sprint 12 ミックス archetypes (2026-08-23) ──
+            "hairdryer_holder" => {
+                // hairdryer_holder(barrel_diameter, holster_depth, wall_thickness) 3 param
+                let (dia, depth, wall) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::HairdryerHolderSpec {
+                    barrel_diameter: dia,
+                    holster_depth: depth,
+                    wall_thickness: wall,
+                    floor_thickness: 5.0,
+                    inner_clearance: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::hairdryer_holder(
+                    &spec,
+                ))
+            }
+            "kcup_holder" => {
+                // kcup_holder(rows, cols, capsule_diameter) 3 param、depth は default 40mm
+                let (rows, cols, dia) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::KcupHolderSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    capsule_diameter: dia,
+                    capsule_depth: 40.0,
+                    capsule_clearance: 3.5,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::kcup_holder(&spec))
+            }
+            "hex_key_holder" => {
+                // hex_key_holder(count, min_key_mm, max_key_mm) 3 param、他 default
+                let (count, min_mm, max_mm) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::HexKeyHolderSpec {
+                    count: count.round().max(1.0) as u32,
+                    min_key_mm: min_mm,
+                    max_key_mm: max_mm,
+                    hole_depth: 18.0,
+                    hole_clearance: 0.3,
+                    wall_thickness: 3.0,
+                    floor_thickness: 4.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::hex_key_holder(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3357,6 +3403,41 @@ mod tests {
             "cutlery_tray(3, 35, 220)",
             "pill_organizer(7, 2, 20)",
             "magnetic_strip(8, 6, 30)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 12 ミックス archetype tests ──
+
+    #[test]
+    fn test_hairdryer_holder_dyson() {
+        let node = parse_lol("hairdryer_holder(85, 110, 3)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_kcup_holder_4x3() {
+        let node = parse_lol("kcup_holder(3, 4, 53)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_hex_key_holder_metric_9() {
+        let node = parse_lol("hex_key_holder(9, 1.5, 10)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint12_mix_archetypes_eval_correctly() {
+        // Sprint 12 ミックス archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "hairdryer_holder(85, 110, 3)",
+            "kcup_holder(3, 4, 53)",
+            "hex_key_holder(9, 1.5, 10)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
