@@ -4358,6 +4358,270 @@ pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 50. cotton_dispenser (organizer-bathroom-garage § 7.4 Cotton/Swab Dispenser)
+// ────────────────────────────────────────────────────────
+
+/// 綿棒/コットン ディスペンサー spec (open top cyl + inner cavity)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CottonDispenserSpec {
+    /// 収容目安個数 (informational、SDF に非反映、default 80)
+    pub count: u32,
+    /// cavity 内径 (mm、default 90、range 60-120)
+    pub inner_diameter: f32,
+    /// 全高 (mm、default 100、range 60-150)
+    pub height: f32,
+    /// 壁厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.5)
+    pub floor_thickness: f32,
+}
+
+impl CottonDispenserSpec {
+    /// 80 個入り × 内径 90 × 高 100mm (bathroom § 7.4 standard)
+    #[must_use]
+    pub const fn standard_80() -> Self {
+        Self {
+            count: 80,
+            inner_diameter: 90.0,
+            height: 100.0,
+            wall_thickness: 2.5,
+            floor_thickness: 2.5,
+        }
+    }
+}
+
+/// 綿棒/コットン ディスペンサー (open top cyl + inner cavity、Z-axis 直接)
+///
+/// 構造 (bathroom § 7.4 準拠、Z-up 設計、`pen_cup` pattern の large version):
+/// - Outer: `cylinder_z` (r=`inner_dia/2 + wall`、h=`height/2`)
+/// - Cavity: `cylinder_z` (r=`inner_dia/2`、h=`(height - floor + 1)/2`)、Z+ 開口
+///
+/// count は informational (収容目安)、SDF 形状には反映されない
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{cotton_dispenser, CottonDispenserSpec};
+/// let c = cotton_dispenser(&CottonDispenserSpec::standard_80());
+/// ```
+#[must_use]
+pub fn cotton_dispenser(spec: &CottonDispenserSpec) -> SdfNode {
+    let outer_r = spec.inner_diameter * 0.5 + spec.wall_thickness;
+    let outer_hz = spec.height * 0.5;
+    let inner_r = spec.inner_diameter * 0.5;
+    let inner_hz = (spec.height - spec.floor_thickness + 1.0) * 0.5;
+    let inner_offset_z = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = cylinder_z(outer_r, outer_hz);
+    let cavity = translate(
+        cylinder_z(inner_r, inner_hz),
+        Vec3::new(0.0, 0.0, inner_offset_z),
+    );
+    subtract(outer, cavity)
+}
+
+// ────────────────────────────────────────────────────────
+// 51. sink_caddy (organizer-cable-kitchen § 6.9 Sink Sponge Caddy)
+// ────────────────────────────────────────────────────────
+
+/// スポンジホルダー spec (kitchen sink 用、drain hole 付き rect tray)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SinkCaddySpec {
+    /// tray 内 長 (mm、default 200、range 150-300)
+    pub tray_length: f32,
+    /// tray 内 幅 (mm、default 100、range 80-150)
+    pub tray_width: f32,
+    /// drain hole 個数 (default 8、range 4-16)
+    pub drain_hole_count: u32,
+    /// tray 内深さ (mm、default 30、range 20-50)
+    pub tray_depth: f32,
+    /// drain hole 直径 (mm、default 6.0)
+    pub drain_hole_diameter: f32,
+    /// 壁厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.5)
+    pub floor_thickness: f32,
+}
+
+impl SinkCaddySpec {
+    /// L200 × W100 × 8 drain holes (kitchen § 6.9 standard、sponge + brush)
+    #[must_use]
+    pub const fn standard_l200() -> Self {
+        Self {
+            tray_length: 200.0,
+            tray_width: 100.0,
+            drain_hole_count: 8,
+            tray_depth: 30.0,
+            drain_hole_diameter: 6.0,
+            wall_thickness: 2.5,
+            floor_thickness: 2.5,
+        }
+    }
+}
+
+/// スポンジホルダー (rect tray + 底面 drain holes、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.9 準拠、Y-up 設計、`soap_tray` の kitchen scaled + cyl drain 版):
+/// - Outer: `RoundedBox` (`(length+2×wall) × (depth+floor) × (width+2×wall)`)
+/// - Cavity: `Box3d` (`length × depth+1 × width`)、Y+ 開口 (sponge 挿入)
+/// - Drain holes: N× Y-axis `Cylinder`、floor を貫通、X 方向等間隔
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sink_caddy, SinkCaddySpec};
+/// let s = sink_caddy(&SinkCaddySpec::standard_l200());
+/// ```
+#[must_use]
+pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
+    let count = spec.drain_hole_count.max(1);
+    let count_f = count as f32;
+
+    let ext_x = spec.tray_length + 2.0 * spec.wall_thickness;
+    let ext_y = spec.tray_depth + spec.floor_thickness;
+    let ext_z = spec.tray_width + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = spec.tray_length * 0.5;
+    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hz = spec.tray_width * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // Drain holes: floor 貫通 Y-axis cyl、X 方向等間隔
+    let hole_r = spec.drain_hole_diameter * 0.5;
+    let hole_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let hole_offset_y = -outer_hy + hole_hy - 0.5;
+    let hole_pitch = spec.tray_length / (count_f + 1.0);
+    for i in 0..count {
+        let x = -spec.tray_length * 0.5 + hole_pitch * (i as f32 + 1.0);
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 52. clamp_rack (organizer-bathroom-garage § 8.8 Clamp Wall Rack)
+// ────────────────────────────────────────────────────────
+
+/// クランプ壁掛けラック spec (row 状 hook + backplate + mount holes)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClampRackSpec {
+    /// hook 個数 (default 5、range 2-10)
+    pub hook_count: u32,
+    /// 各 hook 幅 (mm、default 30、range 20-60)
+    pub hook_width: f32,
+    /// 全高 = backplate 高さ (mm、default 150、range 100-300)
+    pub height: f32,
+    /// hook 突出深さ (mm、default 25、range 15-50)
+    pub hook_depth: f32,
+    /// backplate 厚 (mm、default 5)
+    pub wall_thickness: f32,
+    /// hook 開口 (mm、default 15、垂れ防止)
+    pub hook_opening: f32,
+}
+
+impl ClampRackSpec {
+    /// 5 hook × W30 × H150mm (garage § 8.8 standard、workshop clamp collection)
+    #[must_use]
+    pub const fn standard_5() -> Self {
+        Self {
+            hook_count: 5,
+            hook_width: 30.0,
+            height: 150.0,
+            hook_depth: 25.0,
+            wall_thickness: 5.0,
+            hook_opening: 15.0,
+        }
+    }
+}
+
+/// クランプ壁掛けラック (row 状 hook + backplate、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.8 準拠、Y-up 設計、`wall_hook` の row 状拡張版):
+/// - Backplate: `RoundedBox` (`(count×pitch+extra) × height × wall`)
+/// - Hooks: N× (`Box3d` arm + `Box3d` tip)、backplate 下寄せ、X 方向等間隔
+/// - Mount holes: 2× Y-axis `Cylinder` (r=2.25、M4)、backplate 上部左右
+///
+/// hook 形状: arm (前方突出) + tip (下向き、hook_opening 分、clamp 引っ掛け)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{clamp_rack, ClampRackSpec};
+/// let c = clamp_rack(&ClampRackSpec::standard_5());
+/// ```
+#[must_use]
+pub fn clamp_rack(spec: &ClampRackSpec) -> SdfNode {
+    let count = spec.hook_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.hook_width + 10.0;
+    let bp_ext_x = count_f * pitch + 10.0;
+
+    let outer_hx = bp_ext_x * 0.5;
+    let outer_hy = spec.height * 0.5;
+    let outer_hz = spec.wall_thickness * 0.5;
+
+    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+
+    // Hooks: X 方向等間隔、backplate 下部から arm 前方 (+Z) 突出
+    let arm_hx = spec.hook_width * 0.5;
+    let arm_hy = 4.0;
+    let arm_hz = spec.hook_depth * 0.5;
+    let tip_hy = spec.hook_opening * 0.5;
+    let hook_y_offset = -outer_hy + spec.height * 0.3;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let mut result = backplate;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let arm = translate(
+            rounded_box(arm_hx, arm_hy, arm_hz, 2.0),
+            Vec3::new(x, hook_y_offset, outer_hz + arm_hz),
+        );
+        let tip = translate(
+            rounded_box(arm_hx, tip_hy, arm_hy, 2.0),
+            Vec3::new(
+                x,
+                hook_y_offset - tip_hy - arm_hy,
+                outer_hz + spec.hook_depth,
+            ),
+        );
+        result = smooth_union(result, arm, 2.0);
+        result = smooth_union(result, tip, 2.0);
+    }
+
+    // Mount holes (M4 × 2、上部左右)
+    let mount_r = 2.25;
+    let mount_hy = spec.wall_thickness + 1.0;
+    let mount_y_offset = outer_hy * 0.7;
+    let mount_x_offset = outer_hx * 0.85;
+    let mount_left = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
+    );
+    let mount_right = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(mount_x_offset, mount_y_offset, 0.0),
+    );
+    result = subtract(result, mount_left);
+    result = subtract(result, mount_right);
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -5452,6 +5716,66 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint15 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 16 ミックス 5 archetype (cotton_dispenser + sink_caddy + clamp_rack) ──
+
+    #[test]
+    fn cotton_dispenser_standard_is_subtraction() {
+        // cotton_dispenser は Z-axis direct (to_z_up wrap なし)、pen_cup pattern
+        let c = cotton_dispenser(&CottonDispenserSpec::standard_80());
+        // Outer cyl minus cavity cyl = Subtraction SdfNode
+        assert!(matches!(c, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn cotton_dispenser_wall_is_solid() {
+        let c = cotton_dispenser(&CottonDispenserSpec::standard_80());
+        // outer_r = 47.5、inner_r = 45、wall X = [45, 47.5]、Z ~ 0 は wall (material)
+        assert!(eval(&c, Vec3::new(46.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn sink_caddy_standard_l200_is_rotate_wrapped() {
+        let s = sink_caddy(&SinkCaddySpec::standard_l200());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn sink_caddy_wall_is_solid() {
+        let s = sink_caddy(&SinkCaddySpec::standard_l200());
+        // ext_x = 205、outer_hx = 102.5、wall X = [-102.5, -100] 材料
+        // to_z_up: world (-101, 0, 0) → internal (-101, 0, 0) 材料
+        assert!(eval(&s, Vec3::new(-101.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn clamp_rack_standard_5_is_rotate_wrapped() {
+        let c = clamp_rack(&ClampRackSpec::standard_5());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn clamp_rack_backplate_center_is_solid() {
+        let c = clamp_rack(&ClampRackSpec::standard_5());
+        // backplate 中央 (world 0, 0, 0) は material (backplate 内)
+        assert!(eval(&c, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint16_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            cotton_dispenser(&CottonDispenserSpec::standard_80()),
+            sink_caddy(&SinkCaddySpec::standard_l200()),
+            clamp_rack(&ClampRackSpec::standard_5()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint16 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

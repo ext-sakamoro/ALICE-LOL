@@ -2306,6 +2306,47 @@ impl<'a> Parser<'a> {
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::driver_rack(&spec))
             }
+            "cotton_dispenser" => {
+                // cotton_dispenser(count, inner_diameter, height) 3 param、他 default
+                let (count, inner_dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CottonDispenserSpec {
+                    count: count.round().max(1.0) as u32,
+                    inner_diameter: inner_dia,
+                    height,
+                    wall_thickness: 2.5,
+                    floor_thickness: 2.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::cotton_dispenser(
+                    &spec,
+                ))
+            }
+            "sink_caddy" => {
+                // sink_caddy(tray_length, tray_width, drain_hole_count) 3 param、他 default
+                let (length, width, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SinkCaddySpec {
+                    tray_length: length,
+                    tray_width: width,
+                    drain_hole_count: count.round().max(1.0) as u32,
+                    tray_depth: 30.0,
+                    drain_hole_diameter: 6.0,
+                    wall_thickness: 2.5,
+                    floor_thickness: 2.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sink_caddy(&spec))
+            }
+            "clamp_rack" => {
+                // clamp_rack(hook_count, hook_width, height) 3 param、他 default
+                let (count, width, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ClampRackSpec {
+                    hook_count: count.round().max(1.0) as u32,
+                    hook_width: width,
+                    height,
+                    hook_depth: 25.0,
+                    wall_thickness: 5.0,
+                    hook_opening: 15.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::clamp_rack(&spec))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3666,6 +3707,41 @@ mod tests {
             "tp_holder(40, 110, 5)",
             "sd_card_holder(4, 4, 24)",
             "driver_rack(8, 25, 100)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 16 ミックス 5 archetype tests ──
+
+    #[test]
+    fn test_cotton_dispenser_standard() {
+        let node = parse_lol("cotton_dispenser(80, 90, 100)").unwrap();
+        // cotton_dispenser は Z-axis direct、to_z_up wrap なし = Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_sink_caddy_standard_l200() {
+        let node = parse_lol("sink_caddy(200, 100, 8)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_clamp_rack_standard_5() {
+        let node = parse_lol("clamp_rack(5, 30, 150)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint16_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "cotton_dispenser(80, 90, 100)",
+            "sink_caddy(200, 100, 8)",
+            "clamp_rack(5, 30, 150)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
