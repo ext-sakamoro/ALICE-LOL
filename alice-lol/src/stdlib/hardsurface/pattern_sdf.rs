@@ -2859,6 +2859,235 @@ pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 32. filament_spool_holder (organizer-printer-modular § 9.1 Filament Spool Holder)
+// ────────────────────────────────────────────────────────
+
+/// フィラメントスプールホルダー spec (base plate + 垂直 peg、spool bore over peg)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FilamentSpoolHolderSpec {
+    /// spool 外径 (mm、1kg=200 / 250g=125 / 2kg=250、default 200)
+    pub spool_outer_diameter: f32,
+    /// spool 幅 (mm、1kg=68 / 250g=45 / 2kg=80、default 68)
+    pub spool_width: f32,
+    /// spool bore 内径 (mm、standard=52 / 2kg=70、default 52)
+    pub bore_diameter: f32,
+    /// base plate 厚 (mm、default 5.0)
+    pub base_thickness: f32,
+    /// base plate 余裕 (mm、spool_od 周りの extra margin、default 30.0)
+    pub base_margin: f32,
+    /// peg 半径 減少量 (mm、bore/2 から slide fit clearance、default 1.0)
+    pub peg_clearance: f32,
+    /// peg 追加高さ (spool_width 超過分、mm、default 20.0)
+    pub peg_extra_height: f32,
+}
+
+impl FilamentSpoolHolderSpec {
+    /// 1kg standard spool (Ø200 × W68 × Ø52 bore、typical PLA/PETG)
+    #[must_use]
+    pub const fn standard_1kg() -> Self {
+        Self {
+            spool_outer_diameter: 200.0,
+            spool_width: 68.0,
+            bore_diameter: 52.0,
+            base_thickness: 5.0,
+            base_margin: 30.0,
+            peg_clearance: 1.0,
+            peg_extra_height: 20.0,
+        }
+    }
+}
+
+/// フィラメントスプールホルダー (Z-up direct、base plate + 垂直 peg)
+///
+/// 構造 (printer § 9.1 準拠、Z-up 直接設計):
+/// - Base: `RoundedBox` (`(spool_od + base_margin)^2 × base_thickness`)
+/// - Peg: Z-axis `Cylinder` (r=`bore/2 - clearance`, h=`spool_width + extra_height`)
+///
+/// spool は peg に bore over で挿入 (donut on pole style)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{filament_spool_holder, FilamentSpoolHolderSpec};
+/// let f = filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg());
+/// ```
+#[must_use]
+pub fn filament_spool_holder(spec: &FilamentSpoolHolderSpec) -> SdfNode {
+    let base_side = spec.spool_outer_diameter + spec.base_margin;
+    let base_hx = base_side * 0.5;
+    let base_hy = base_side * 0.5;
+    let base_hz = spec.base_thickness * 0.5;
+
+    let peg_r = spec.bore_diameter * 0.5 - spec.peg_clearance;
+    let peg_h = spec.spool_width + spec.peg_extra_height;
+    let peg_half_h = peg_h * 0.5;
+    let peg_offset_z = spec.base_thickness + peg_half_h - 0.5; // 0.5mm overlap with base
+
+    let base = rounded_box(base_hx, base_hy, base_hz, 3.0);
+    let peg = translate(
+        cylinder_z(peg_r, peg_half_h),
+        Vec3::new(0.0, 0.0, peg_offset_z),
+    );
+
+    union(base, peg)
+}
+
+// ────────────────────────────────────────────────────────
+// 33. nozzle_holder (organizer-printer-modular § 9.5 Nozzle Storage)
+// ────────────────────────────────────────────────────────
+
+/// ノズルホルダー spec (row 状 small hole for M6 nozzles)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NozzleHolderSpec {
+    /// hole 個数 (default 8、E3D V6 / Bambu M6 nozzle 想定)
+    pub count: u32,
+    /// hole 直径 (mm、E3D V6/Bambu M6 body=7 + clearance = 8、default 8.0)
+    pub hole_diameter: f32,
+    /// hole 深さ (mm、hex body ~5.5mm + margin、default 6.0)
+    pub hole_depth: f32,
+    /// hole 間 wall 厚 (mm、default 4.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl NozzleHolderSpec {
+    /// 8 hole × Ø8 × 深 6mm (E3D V6 / Bambu M6 standard)
+    #[must_use]
+    pub const fn m6_row_8() -> Self {
+        Self {
+            count: 8,
+            hole_diameter: 8.0,
+            hole_depth: 6.0,
+            wall_thickness: 4.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// ノズルホルダー (row 状 hole、top 開口、`to_z_up` wrap)
+///
+/// 構造 (printer § 9.5 準拠、Y-up 設計、drill_bit_holder pattern の単一サイズ版):
+/// - Outer: `RoundedBox`
+/// - Holes: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{nozzle_holder, NozzleHolderSpec};
+/// let n = nozzle_holder(&NozzleHolderSpec::m6_row_8());
+/// ```
+#[must_use]
+pub fn nozzle_holder(spec: &NozzleHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.hole_diameter + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.hole_depth + spec.floor_thickness;
+    let ext_z = spec.hole_diameter + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let hole_r = spec.hole_diameter * 0.5;
+    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 34. build_plate_rack (organizer-printer-modular § 9.6 Build Plate Storage Rack)
+// ────────────────────────────────────────────────────────
+
+/// ビルドプレートラック spec (row 状 vertical slot for 5mm-thick build plate)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BuildPlateRackSpec {
+    /// slot 個数 (default 5)
+    pub slot_count: u32,
+    /// slot center-to-center spacing (mm、default 15、range 12-20)
+    pub slot_spacing: f32,
+    /// rack 全高 = plate 側面接触幅 (mm、default 200、Ender/Bambu 235mm plate 対応)
+    pub height: f32,
+    /// slot 幅 (mm、build plate 厚 5mm + clearance 0.5、default 5.5)
+    pub slot_width: f32,
+    /// rack depth (mm、slot Y 方向、default 60)
+    pub depth: f32,
+    /// 外周 壁厚 (mm、default 5.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 5.0)
+    pub floor_thickness: f32,
+}
+
+impl BuildPlateRackSpec {
+    /// 5 slot × 15mm spacing × H200mm (Ender 3 / Bambu 235mm plate 5 枚収納)
+    #[must_use]
+    pub const fn standard_5() -> Self {
+        Self {
+            slot_count: 5,
+            slot_spacing: 15.0,
+            height: 200.0,
+            slot_width: 5.5,
+            depth: 60.0,
+            wall_thickness: 5.0,
+            floor_thickness: 5.0,
+        }
+    }
+}
+
+/// ビルドプレートラック (row 状 vertical slot、top 開口、`to_z_up` wrap)
+///
+/// 構造 (printer § 9.6 準拠、Y-up 設計、pliers_rack pattern の taller version):
+/// - Outer: `RoundedBox` (`(count×spacing+2×wall) × (height+floor) × depth`)
+/// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 全高貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{build_plate_rack, BuildPlateRackSpec};
+/// let r = build_plate_rack(&BuildPlateRackSpec::standard_5());
+/// ```
+#[must_use]
+pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let ext_x = count_f * spec.slot_spacing + 2.0 * spec.wall_thickness;
+    let ext_y = spec.height + spec.floor_thickness;
+    let ext_z = spec.depth;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hy = (spec.height + 1.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * spec.slot_spacing * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * spec.slot_spacing;
+        let slot = translate(
+            box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -3582,6 +3811,76 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "cable-kitchen archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── organizer-printer-modular.md 3 archetype (Sprint 10) ──
+
+    #[test]
+    fn filament_spool_holder_1kg_is_union() {
+        let f = filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg());
+        // Z-up direct、base + peg union で最終 Union
+        assert!(matches!(f, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn filament_spool_holder_base_is_solid() {
+        let f = filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg());
+        // base_side = 200+30 = 230、base 底 Z=0 付近 (base_hz=2.5) は material
+        // Z-up direct、no wrapper: world (0, 0, 1) は base 内部
+        assert!(eval(&f, Vec3::new(0.0, 0.0, 1.0)) < 0.0);
+    }
+
+    #[test]
+    fn filament_spool_holder_peg_is_solid() {
+        let f = filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg());
+        // peg_r = 52/2-1 = 25、peg_h = 68+20 = 88、peg 中心 Z = 5+44-0.5 = 48.5
+        // Z=48 で peg 中心近く、r=0 で peg 内 = material
+        assert!(eval(&f, Vec3::new(0.0, 0.0, 48.0)) < 0.0);
+    }
+
+    #[test]
+    fn nozzle_holder_m6_row_8_is_rotate_wrapped() {
+        let n = nozzle_holder(&NozzleHolderSpec::m6_row_8());
+        assert!(matches!(n, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn nozzle_holder_wall_between_holes_is_solid() {
+        let n = nozzle_holder(&NozzleHolderSpec::m6_row_8());
+        // pitch=12、8 hole、x_start=-42、hole X=[-42,-30,-18,-6,6,18,30,42]
+        // hole 間中央 X=0 (hole 4-5 間) は wall
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0)、|X|<4 は最寄り hole (|6-0|=6 > 4) の外 = wall material
+        assert!(eval(&n, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn build_plate_rack_standard_5_is_rotate_wrapped() {
+        let r = build_plate_rack(&BuildPlateRackSpec::standard_5());
+        assert!(matches!(r, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn build_plate_rack_floor_is_solid() {
+        let r = build_plate_rack(&BuildPlateRackSpec::standard_5());
+        // ext_y = 200+5 = 205、outer_hy = 102.5、floor Y [-102.5, -97.5]
+        // to_z_up: world (0, 0, -100) → internal (0, -100, 0) 材料
+        assert!(eval(&r, Vec3::new(0.0, 0.0, -100.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_printer_modular_archetypes_evaluations_finite() {
+        let nodes = [
+            filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg()),
+            nozzle_holder(&NozzleHolderSpec::m6_row_8()),
+            build_plate_rack(&BuildPlateRackSpec::standard_5()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "printer-modular archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
