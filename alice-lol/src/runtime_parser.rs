@@ -2045,6 +2045,52 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── organizer-printer-modular.md archetypes (Sprint 10、2026-08-23) ──
+            "filament_spool_holder" => {
+                // filament_spool_holder(spool_od, spool_width, bore_diameter) 3 param、他 default
+                let (od, width, bore) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::FilamentSpoolHolderSpec {
+                    spool_outer_diameter: od,
+                    spool_width: width,
+                    bore_diameter: bore,
+                    base_thickness: 5.0,
+                    base_margin: 30.0,
+                    peg_clearance: 1.0,
+                    peg_extra_height: 20.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::filament_spool_holder(&spec))
+            }
+            "nozzle_holder" => {
+                // nozzle_holder(count, hole_diameter, depth) 3 param、他 default
+                let (count, dia, depth) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::NozzleHolderSpec {
+                    count: count.round().max(1.0) as u32,
+                    hole_diameter: dia,
+                    hole_depth: depth,
+                    wall_thickness: 4.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::nozzle_holder(
+                    &spec,
+                ))
+            }
+            "build_plate_rack" => {
+                // build_plate_rack(slot_count, slot_spacing, height) 3 param、他 default
+                let (count, spacing, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::BuildPlateRackSpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_spacing: spacing,
+                    height,
+                    slot_width: 5.5,
+                    depth: 60.0,
+                    wall_thickness: 5.0,
+                    floor_thickness: 5.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::build_plate_rack(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3194,6 +3240,42 @@ mod tests {
             "spice_rack(6, 48, 100)",
             "egg_tray(3, 4, 18)",
             "utensil_caddy(4, 65, 130)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 10: organizer-printer-modular.md 3 archetype tests ──
+
+    #[test]
+    fn test_filament_spool_holder_1kg() {
+        let node = parse_lol("filament_spool_holder(200, 68, 52)").unwrap();
+        // Z-up direct、base + peg union
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_nozzle_holder_m6_row_8() {
+        let node = parse_lol("nozzle_holder(8, 8, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_build_plate_rack_standard_5() {
+        let node = parse_lol("build_plate_rack(5, 15, 200)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint10_printer_modular_archetypes_eval_correctly() {
+        // organizer-printer-modular.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "filament_spool_holder(200, 68, 52)",
+            "nozzle_holder(8, 8, 6)",
+            "build_plate_rack(5, 15, 200)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
