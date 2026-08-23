@@ -2585,6 +2585,280 @@ pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 29. spice_rack (organizer-cable-kitchen § 6.1 Spice Rack)
+// ────────────────────────────────────────────────────────
+
+/// スパイスラック spec (薄 shelf + jar 用 shallow recess + 前縁 lip)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpiceRackSpec {
+    /// jar 個数 (default 6、range 3-12)
+    pub count: u32,
+    /// jar 直径 (mm、small=42 / std=48 / large=52、default 48)
+    pub jar_diameter: f32,
+    /// jar 高さ (mm、default 100、lip_height 計算に使う)
+    pub jar_height: f32,
+    /// jar recess 深さ (mm、default 5.0)
+    pub recess_depth: f32,
+    /// jar 前後余白 (mm、front margin + back margin、default 15.0)
+    pub shelf_depth_margin: f32,
+    /// base 厚 (mm、default 5.0)
+    pub base_thickness: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 前縁 lip 高さ係数 (× jar_height = lip_height、default 0.15)
+    pub lip_height_ratio: f32,
+    /// 前縁 lip 厚 (mm、default 3.0)
+    pub lip_thickness: f32,
+}
+
+impl SpiceRackSpec {
+    /// 6 jars × Ø48 × H100mm (standard spice jar 6 本、kitchen § 6.1 default)
+    #[must_use]
+    pub const fn standard_6() -> Self {
+        Self {
+            count: 6,
+            jar_diameter: 48.0,
+            jar_height: 100.0,
+            recess_depth: 5.0,
+            shelf_depth_margin: 15.0,
+            base_thickness: 5.0,
+            wall_thickness: 3.0,
+            lip_height_ratio: 0.15,
+            lip_thickness: 3.0,
+        }
+    }
+}
+
+/// スパイスラック (薄 shelf + jar recess + 前縁 lip、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.1 準拠、Y-up 設計):
+/// - Base: `RoundedBox` (`(count×pitch+2×wall) × base_thickness × (jar_dia+margin)`)
+/// - Recesses: N× Y-axis `Cylinder` (r=`jar_dia/2 + 2mm`, depth=`recess_depth`)、上面 subtract
+/// - Front lip: `Box3d` union、-Z edge (前縁)、`lip_height = jar_height × ratio`
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{spice_rack, SpiceRackSpec};
+/// let s = spice_rack(&SpiceRackSpec::standard_6());
+/// ```
+#[must_use]
+pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let jar_clearance = 2.0; // 片側 2mm 余裕 (spec: +3-5mm 全径、+1.5-2.5mm 片側)
+    let pitch = spec.jar_diameter + jar_clearance * 2.0 + spec.wall_thickness;
+    let shelf_depth = spec.jar_diameter + spec.shelf_depth_margin;
+
+    let lip_height = spec.jar_height * spec.lip_height_ratio;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.base_thickness + lip_height;
+    let ext_z = shelf_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    // Base plate (Y bottom half)、lip 部分は base より Y+ 方向に飛び出す構造
+    let base_hy = spec.base_thickness * 0.5;
+    let base_offset_y = -outer_hy + base_hy;
+
+    let base = translate(
+        rounded_box(outer_hx, base_hy, outer_hz, 2.0),
+        Vec3::new(0.0, base_offset_y, 0.0),
+    );
+
+    // Front lip: -Z 側の壁 (前縁)
+    let lip_hz = spec.lip_thickness * 0.5;
+    let lip_hy = lip_height * 0.5;
+    let lip_offset_y = -outer_hy + spec.base_thickness + lip_hy;
+    let lip_offset_z = -outer_hz + lip_hz;
+    let lip = translate(
+        box3d(outer_hx, lip_hy, lip_hz),
+        Vec3::new(0.0, lip_offset_y, lip_offset_z),
+    );
+
+    let mut result = union(base, lip);
+
+    // jar recess: base 上面 (Y+) から下向きに subtract
+    let recess_r = spec.jar_diameter * 0.5 + jar_clearance;
+    let recess_hy = (spec.recess_depth + 0.5) * 0.5;
+    let recess_offset_y = -outer_hy + spec.base_thickness - recess_hy + 0.25;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let recess = translate(
+            cylinder(recess_r, recess_hy),
+            Vec3::new(x, recess_offset_y, 0.0),
+        );
+        result = subtract(result, recess);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 30. egg_tray (organizer-cable-kitchen § 6.5 Fridge Organizer / Egg)
+// ────────────────────────────────────────────────────────
+
+/// 卵トレー spec (2D grid 状 cup、egg diameter 40mm 固定)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EggTraySpec {
+    /// 行数 (Z 方向、default 3、range 1-8)
+    pub rows: u32,
+    /// 列数 (X 方向、default 4、range 1-8)
+    pub cols: u32,
+    /// cup depth (mm、default 18、range 12-25、egg が 2/3 見える程度)
+    pub cup_depth: f32,
+    /// egg pitch (cup 中心間、mm、default 50 = spec 45mm + 5mm wall)
+    pub pitch: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl EggTraySpec {
+    /// 4×3 grid × 深 18mm (12-egg tray standard、kitchen § 6.5 default)
+    #[must_use]
+    pub const fn tray_4x3() -> Self {
+        Self {
+            rows: 3,
+            cols: 4,
+            cup_depth: 18.0,
+            pitch: 50.0,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// egg cup diameter (mm、large egg spec 44-45 + 2mm clearance → 40mm recess で 2/3 保持)
+const EGG_CUP_DIAMETER: f32 = 40.0;
+
+/// 卵トレー (2D grid 状 cup、egg cup diameter 40mm 固定、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.5 準拠、Y-up 設計、hex_bit_holder の 2D grid pattern の cyl 版):
+/// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (cup_depth+floor) × (rows×pitch+2×wall)`)
+/// - Cups: (rows×cols)× Y-axis `Cylinder` (r=`20mm`, h=`cup_depth+1`)、grid 配置
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{egg_tray, EggTraySpec};
+/// let e = egg_tray(&EggTraySpec::tray_4x3());
+/// ```
+#[must_use]
+pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let ext_x = cols_f * spec.pitch + 2.0 * spec.wall_thickness;
+    let ext_y = spec.cup_depth + spec.floor_thickness;
+    let ext_z = rows_f * spec.pitch + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cup_r = EGG_CUP_DIAMETER * 0.5;
+    let cup_hy = (spec.cup_depth + 1.0) * 0.5;
+    let cup_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * spec.pitch * 0.5;
+    let z_start = -(rows_f - 1.0) * spec.pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * spec.pitch;
+            let z = z_start + r as f32 * spec.pitch;
+            let cup = translate(cylinder(cup_r, cup_hy), Vec3::new(x, cup_offset_y, z));
+            result = subtract(result, cup);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 31. utensil_caddy (organizer-cable-kitchen § 6.8 Utensil Caddy)
+// ────────────────────────────────────────────────────────
+
+/// キッチンツールキャディ spec (row 状 large cylindrical compartment)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UtensilCaddySpec {
+    /// compartment 個数 (default 4、range 1-6)
+    pub count: u32,
+    /// compartment 内径 (mm、small=45-50 / large=60-70、default 65)
+    pub compartment_diameter: f32,
+    /// compartment 高さ (mm、default 130、utensil 長 300mm の 1/3-1/2)
+    pub height: f32,
+    /// compartment 間 wall 厚 (mm、default 5.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 4.0)
+    pub floor_thickness: f32,
+}
+
+impl UtensilCaddySpec {
+    /// 4 compartment × Ø65 × H130mm (spatula/ladle/whisk/tongs 分別、kitchen § 6.8 default)
+    #[must_use]
+    pub const fn standard_4() -> Self {
+        Self {
+            count: 4,
+            compartment_diameter: 65.0,
+            height: 130.0,
+            wall_thickness: 5.0,
+            floor_thickness: 4.0,
+        }
+    }
+}
+
+/// キッチンツールキャディ (row 状 large cylindrical compartment、top 開口、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.8 準拠、Y-up 設計、toothbrush_holder pattern の大径 kitchen version):
+/// - Outer: `RoundedBox`
+/// - Compartments: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
+/// - Drainage holes は user 側で加工推奨 (sink 側で使う場合)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{utensil_caddy, UtensilCaddySpec};
+/// let u = utensil_caddy(&UtensilCaddySpec::standard_4());
+/// ```
+#[must_use]
+pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.compartment_diameter + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.height + spec.floor_thickness;
+    let ext_z = spec.compartment_diameter + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let comp_r = spec.compartment_diameter * 0.5;
+    let comp_hy = (spec.height + 1.0) * 0.5;
+    let comp_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let compartment = translate(cylinder(comp_r, comp_hy), Vec3::new(x, comp_offset_y, 0.0));
+        result = subtract(result, compartment);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -3232,6 +3506,82 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "bathroom-garage archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── organizer-cable-kitchen.md 3 archetype (Sprint 9) ──
+
+    #[test]
+    fn spice_rack_standard_6_is_rotate_wrapped() {
+        let s = spice_rack(&SpiceRackSpec::standard_6());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn spice_rack_base_is_solid() {
+        let s = spice_rack(&SpiceRackSpec::standard_6());
+        // 内部 Y-up: base 底面近く (Y=-outer_hy+1) は base material
+        // lip_height = 100*0.15 = 15, base=5, ext_y=20, outer_hy=10, base 範囲 Y=[-10, -5]
+        // to_z_up: world (0, 0, -8) → internal (0, -8, 0) 材料
+        assert!(eval(&s, Vec3::new(0.0, 0.0, -8.0)) < 0.0);
+    }
+
+    #[test]
+    fn egg_tray_4x3_is_rotate_wrapped() {
+        let e = egg_tray(&EggTraySpec::tray_4x3());
+        assert!(matches!(e, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn egg_tray_floor_is_solid() {
+        let e = egg_tray(&EggTraySpec::tray_4x3());
+        // ext_y = 18+3 = 21, outer_hy = 10.5, floor Y [-10.5, -7.5]
+        // to_z_up: world (0, 0, -9) → internal (0, -9, 0) 材料
+        assert!(eval(&e, Vec3::new(0.0, 0.0, -9.0)) < 0.0);
+    }
+
+    #[test]
+    fn egg_tray_wall_between_cups_is_solid() {
+        let e = egg_tray(&EggTraySpec::tray_4x3());
+        // 4×3 grid、pitch=50、x_start=-75、z_start=-50、cup X=[-75,-25,25,75]
+        // cup 間中央 X=0 (cup 2-3 間)、Z=-25 (row 1-2 間) は wall
+        // to_z_up: world (0, 0, -25) → internal (0, -25, 0)... Y=-25 out of range
+        // 別確認点: cup 間中央 world (0, y, z) → internal (0, z, -y)
+        // internal (0, 0, -50) は Z=-50 = z_start+0 は row 1 cup 中央
+        // wall 位置 internal (0, 0, -25) にするには world (0, 25, 0)
+        // internal Y=0 は cup 内 (cup Y range [-9.25, 9.75])、しかし X=0 は cup 2-3 間 wall
+        // X=0 → cup 中心 X 半径 20mm 圏外 (最寄り cup ±25、距離 25 > 20) = wall
+        assert!(eval(&e, Vec3::new(0.0, 25.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn utensil_caddy_standard_4_is_rotate_wrapped() {
+        let u = utensil_caddy(&UtensilCaddySpec::standard_4());
+        assert!(matches!(u, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn utensil_caddy_wall_is_solid() {
+        let u = utensil_caddy(&UtensilCaddySpec::standard_4());
+        // pitch=70、4 comp、x_start=-105、comp X = [-105, -35, 35, 105]
+        // comp 間中央 X=0 (comp 2-3 間) は wall
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0) 材料
+        assert!(eval(&u, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_cable_kitchen_archetypes_evaluations_finite() {
+        let nodes = [
+            spice_rack(&SpiceRackSpec::standard_6()),
+            egg_tray(&EggTraySpec::tray_4x3()),
+            utensil_caddy(&UtensilCaddySpec::standard_4()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "cable-kitchen archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
