@@ -3088,6 +3088,259 @@ pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 35. cutlery_tray (organizer-drawer-wall § 3.2 Cutlery Tray)
+// ────────────────────────────────────────────────────────
+
+/// カトラリートレー spec (row 状 long rect slot、drawer 引き出し用)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CutleryTraySpec {
+    /// slot 個数 (default 3、fork/knife/spoon)
+    pub slot_count: u32,
+    /// slot 幅 (mm、fork=30-35 / knife=25-30 / spoon=50-55、default 35)
+    pub slot_width: f32,
+    /// slot 長 (mm、fork/knife=220-250 / spoon=220、default 220)
+    pub slot_length: f32,
+    /// slot 深さ (mm、default 40、range 30-55)
+    pub slot_depth: f32,
+    /// slot 間 wall 厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl CutleryTraySpec {
+    /// 3 slot × W35 × L220mm (fork/knife/spoon 汎用、kitchen § 3.2 default)
+    #[must_use]
+    pub const fn standard_3() -> Self {
+        Self {
+            slot_count: 3,
+            slot_width: 35.0,
+            slot_length: 220.0,
+            slot_depth: 40.0,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// カトラリートレー (row 状 long rect slot、top 開口、`to_z_up` wrap)
+///
+/// 構造 (drawer § 3.2 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(count×pitch+wall) × (depth+floor) × (length+2×wall)`)
+/// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 開口、Z 方向 slot_length
+///
+/// pliers_rack と類似だが slot_length (Z) が長く drawer 引き出し向け
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{cutlery_tray, CutleryTraySpec};
+/// let c = cutlery_tray(&CutleryTraySpec::standard_3());
+/// ```
+#[must_use]
+pub fn cutlery_tray(spec: &CutleryTraySpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.slot_width + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.slot_depth + spec.floor_thickness;
+    let ext_z = spec.slot_length + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hz = spec.slot_length * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 36. pill_organizer (organizer-drawer-wall § 3.6 Medication Organizer)
+// ────────────────────────────────────────────────────────
+
+/// 薬箱 spec (2D grid rect cells、weekly pill box)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PillOrganizerSpec {
+    /// 行数 (default 7、weekly = 7 days)
+    pub rows: u32,
+    /// 列数 (default 2、AM/PM)
+    pub cols: u32,
+    /// cell 内寸 (mm 正方形、default 20、range 15-30)
+    pub cell_size: f32,
+    /// cell 深さ (mm、default 15)
+    pub cell_depth: f32,
+    /// cell 間 wall 厚 (mm、default 1.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 1.5)
+    pub floor_thickness: f32,
+}
+
+impl PillOrganizerSpec {
+    /// 7×2 weekly AM/PM × cell 20mm (drawer § 3.6 weekly pill box)
+    #[must_use]
+    pub const fn weekly_7x2() -> Self {
+        Self {
+            rows: 7,
+            cols: 2,
+            cell_size: 20.0,
+            cell_depth: 15.0,
+            wall_thickness: 1.5,
+            floor_thickness: 1.5,
+        }
+    }
+}
+
+/// 薬箱 (2D grid rect cells、top 開口、`to_z_up` wrap)
+///
+/// 構造 (drawer § 3.6 準拠、Y-up 設計、egg_tray の rect 版):
+/// - Outer: `RoundedBox` (`(cols×pitch+wall) × (depth+floor) × (rows×pitch+wall)`)
+/// - Cells: (rows×cols)× `Box3d` rect cavity、grid 配置、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{pill_organizer, PillOrganizerSpec};
+/// let p = pill_organizer(&PillOrganizerSpec::weekly_7x2());
+/// ```
+#[must_use]
+pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+    let pitch = spec.cell_size + spec.wall_thickness;
+
+    let ext_x = cols_f * pitch + spec.wall_thickness;
+    let ext_y = spec.cell_depth + spec.floor_thickness;
+    let ext_z = rows_f * pitch + spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cell_h = spec.cell_size * 0.5;
+    let cell_hy = (spec.cell_depth + 1.0) * 0.5;
+    let cell_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch;
+            let z = z_start + r as f32 * pitch;
+            let cell = translate(
+                box3d(cell_h, cell_hy, cell_h),
+                Vec3::new(x, cell_offset_y, z),
+            );
+            result = subtract(result, cell);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 37. magnetic_strip (organizer-drawer-wall § 4.6 Magnetic Strip Holder)
+// ────────────────────────────────────────────────────────
+
+/// マグネットストリップ spec (long thin bar with round magnet holes)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MagneticStripSpec {
+    /// magnet 個数 (default 8、range 3-15)
+    pub magnet_count: u32,
+    /// magnet 直径 (mm、standard 6mm or 8mm neodymium、default 6.0)
+    pub magnet_diameter: f32,
+    /// magnet 間 spacing = 中心間距離 (mm、default 30、range 20-50)
+    pub magnet_spacing: f32,
+    /// magnet 埋込 depth (mm、typical 2-3、default 2.0)
+    pub magnet_depth: f32,
+    /// bar 厚 (mm、bar 全厚 = magnet_depth + 3mm backing、default 5.0)
+    pub bar_thickness: f32,
+    /// bar 高さ (mm、Z 方向、default 15)
+    pub bar_height: f32,
+    /// 両端 margin (mm、default 5.0)
+    pub end_margin: f32,
+}
+
+impl MagneticStripSpec {
+    /// 8 magnet × Ø6 × spacing 30mm (kitchen knife rail / tool retention 想定)
+    #[must_use]
+    pub const fn knife_rail_8() -> Self {
+        Self {
+            magnet_count: 8,
+            magnet_diameter: 6.0,
+            magnet_spacing: 30.0,
+            magnet_depth: 2.0,
+            bar_thickness: 5.0,
+            bar_height: 15.0,
+            end_margin: 5.0,
+        }
+    }
+}
+
+/// マグネットストリップ (long thin bar + row of magnet holes、`to_z_up` wrap)
+///
+/// 構造 (wall § 4.6 準拠、Y-up 設計、nozzle_holder pattern の long thin bar 版):
+/// - Bar: `RoundedBox` (`(count×spacing+2×end_margin) × bar_thickness × bar_height`)
+/// - Magnet holes: N× Y-axis `Cylinder` (r=`magnet_dia/2`, depth=`magnet_depth`)、X 方向等間隔
+/// - hole は bar 表面 (Y+) から埋込 (Y+ 側 open)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{magnetic_strip, MagneticStripSpec};
+/// let m = magnetic_strip(&MagneticStripSpec::knife_rail_8());
+/// ```
+#[must_use]
+pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
+    let count = spec.magnet_count.max(1);
+    let count_f = count as f32;
+    let ext_x = count_f * spec.magnet_spacing + 2.0 * spec.end_margin;
+    let ext_y = spec.bar_thickness;
+    let ext_z = spec.bar_height;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let magnet_r = spec.magnet_diameter * 0.5;
+    let magnet_hy = (spec.magnet_depth + 0.5) * 0.5;
+    // magnet は Y+ 面 (bar 表面) から埋込
+    let magnet_offset_y = outer_hy - magnet_hy + 0.25;
+    let x_start = -(count_f - 1.0) * spec.magnet_spacing * 0.5;
+
+    let bar = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = bar;
+    for i in 0..count {
+        let x = x_start + i as f32 * spec.magnet_spacing;
+        let hole = translate(
+            cylinder(magnet_r, magnet_hy),
+            Vec3::new(x, magnet_offset_y, 0.0),
+        );
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -3881,6 +4134,72 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "printer-modular archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── organizer-drawer-wall.md 3 archetype (Sprint 11) ──
+
+    #[test]
+    fn cutlery_tray_standard_3_is_rotate_wrapped() {
+        let c = cutlery_tray(&CutleryTraySpec::standard_3());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn cutlery_tray_wall_between_slots_is_solid() {
+        let c = cutlery_tray(&CutleryTraySpec::standard_3());
+        // pitch = 35+3 = 38、3 slot、x_start = -38、slot X = [-38, 0, 38]
+        // slot 間中央 X=19 は wall (|X-0|>17.5=slot_half)
+        // to_z_up: world (19, 0, 0) → internal (19, 0, 0) 材料
+        assert!(eval(&c, Vec3::new(19.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn pill_organizer_weekly_7x2_is_rotate_wrapped() {
+        let p = pill_organizer(&PillOrganizerSpec::weekly_7x2());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn pill_organizer_floor_is_solid() {
+        let p = pill_organizer(&PillOrganizerSpec::weekly_7x2());
+        // ext_y = 15+1.5 = 16.5、outer_hy = 8.25、floor Y [-8.25, -6.75]
+        // to_z_up: world (0, 0, -7) → internal (0, -7, 0) 材料
+        assert!(eval(&p, Vec3::new(0.0, 0.0, -7.0)) < 0.0);
+    }
+
+    #[test]
+    fn magnetic_strip_knife_rail_is_rotate_wrapped() {
+        let m = magnetic_strip(&MagneticStripSpec::knife_rail_8());
+        assert!(matches!(m, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn magnetic_strip_bar_back_is_solid() {
+        let m = magnetic_strip(&MagneticStripSpec::knife_rail_8());
+        // ext_y = 5、outer_hy = 2.5、bar 全体 material、magnet hole は Y+ 面から 2mm 深さ埋込
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0) 材料 (最寄り magnet X=15 遠、-Y 面は hole 外)
+        // Y-2 位置 (bar 背面) は magnet hole 外 = material
+        // internal (0, -2, 0) は magnet_offset_y=2.5-1.25+0.25=1.5 に対して Y=-2 は下 3.5mm、hole 外
+        // world (0, 2, 0) → internal (0, 0, -2) …hmm 座標変換確認
+        // to_z_up (Q_x π/2): world (Wx,Wy,Wz) → internal (Wx, Wz, -Wy)
+        // world (0, 0, 0) → internal (0, 0, 0) - Y=0 は bar 中央 = material ✓
+        assert!(eval(&m, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_drawer_wall_archetypes_evaluations_finite() {
+        let nodes = [
+            cutlery_tray(&CutleryTraySpec::standard_3()),
+            pill_organizer(&PillOrganizerSpec::weekly_7x2()),
+            magnetic_strip(&MagneticStripSpec::knife_rail_8()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "drawer-wall archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
