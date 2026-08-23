@@ -1862,6 +1862,52 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::token_well(&spec))
             }
 
+            // ── tools.md archetypes (Sprint 6、2026-08-23) ──
+            "wrench_holder" => {
+                // wrench_holder(min_mm, max_mm, count) 3 param、他は default
+                let (min_mm, max_mm, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::WrenchHolderSpec {
+                    min_size_mm: min_mm,
+                    max_size_mm: max_mm,
+                    count: count.round().max(1.0) as u32,
+                    slot_depth: 22.0,
+                    slot_clearance: 0.6,
+                    thickness_ratio: 0.5,
+                    wall_thickness: 3.0,
+                    floor_thickness: 4.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::wrench_holder(
+                    &spec,
+                ))
+            }
+            "socket_rail" => {
+                // socket_rail(post_dia, post_height, count) 3 param、他は default
+                let (dia, height, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SocketRailSpec {
+                    post_diameter: dia,
+                    post_height: height,
+                    post_count: count.round().max(1.0) as u32,
+                    post_spacing: 6.0,
+                    base_thickness: 4.0,
+                    base_margin: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::socket_rail(&spec))
+            }
+            "hex_bit_holder" => {
+                // hex_bit_holder(rows, cols, spacing) 3 param、hex size + depth は default 固定
+                let (rows, cols, spacing) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::HexBitHolderSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    spacing,
+                    wall_thickness: 2.0,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::hex_bit_holder(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -2856,6 +2902,50 @@ mod tests {
             "led_channel(10, 300)",
             "card_tray(63, 88, 30)",
             "token_well(20, 20, 4)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 6: tools.md 3 archetype tests ──
+
+    #[test]
+    fn test_wrench_holder_metric_6() {
+        let node = parse_lol("wrench_holder(8, 19, 6)").unwrap();
+        // to_z_up wrap で Rotate top-level
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_socket_rail_half_inch_6() {
+        let node = parse_lol("socket_rail(12.4, 22, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_hex_bit_holder_grid_4x5() {
+        let node = parse_lol("hex_bit_holder(5, 4, 12)").unwrap();
+        // Z-up direct、hex subtract で Subtraction top-level
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_hex_bit_holder_count_zero_defaults_to_one() {
+        // rows=0 cols=0 → max(1) で 1×1 hex 生成 (defensive)
+        let node = parse_lol("hex_bit_holder(0, 0, 12)").unwrap();
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_sprint6_tools_archetypes_eval_correctly() {
+        // tools.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "wrench_holder(8, 19, 6)",
+            "socket_rail(12.4, 22, 6)",
+            "hex_bit_holder(5, 4, 12)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

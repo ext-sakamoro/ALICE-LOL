@@ -1779,6 +1779,274 @@ pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 20. wrench_holder (tools § 1 Wrench Organizer)
+// ────────────────────────────────────────────────────────
+
+/// レンチホルダー spec (row 状 slot、min〜max mm を count 等間隔で配置)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WrenchHolderSpec {
+    /// 最小レンチ幅 (mm、default 8)
+    pub min_size_mm: f32,
+    /// 最大レンチ幅 (mm、default 19)
+    pub max_size_mm: f32,
+    /// slot 個数 (default 6、min-max を linear interpolate)
+    pub count: u32,
+    /// slot depth (mm、レンチ頭部を保持する深さ、default 22)
+    pub slot_depth: f32,
+    /// slot 両側 clearance (mm、default 0.6 = 全 clearance 1.2mm、tools § 1)
+    pub slot_clearance: f32,
+    /// slot 厚み係数 (× wrench size = 頭部厚 approx、tools § 1 ISO 10102 近似、default 0.5)
+    pub thickness_ratio: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 4.0)
+    pub floor_thickness: f32,
+}
+
+impl WrenchHolderSpec {
+    /// Metric 6 slot 8-19mm (tools § 1 標準セット、8/10/12/14/16/19 相当)
+    #[must_use]
+    pub const fn metric_6_8to19() -> Self {
+        Self {
+            min_size_mm: 8.0,
+            max_size_mm: 19.0,
+            count: 6,
+            slot_depth: 22.0,
+            slot_clearance: 0.6,
+            thickness_ratio: 0.5,
+            wall_thickness: 3.0,
+            floor_thickness: 4.0,
+        }
+    }
+}
+
+/// レンチホルダー (row 状 slot、top 開口、印刷 slot 上向き、`to_z_up` wrap)
+///
+/// 構造 (tools § 1 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(count×pitch+2×wall) × (depth+floor) × (max_thickness+2×wall)`)
+/// - Slots: `Box3d` × count、X 方向等間隔、size = min + i×(max-min)/(count-1)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{wrench_holder, WrenchHolderSpec};
+/// let w = wrench_holder(&WrenchHolderSpec::metric_6_8to19());
+/// ```
+#[must_use]
+pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let max_slot_w = spec.max_size_mm + 2.0 * spec.slot_clearance;
+    let pitch = max_slot_w + 3.0; // 3mm inter-slot wall
+    let max_thickness = spec.max_size_mm * spec.thickness_ratio + 2.0 * spec.slot_clearance;
+
+    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_y = spec.slot_depth + spec.floor_thickness;
+    let ext_z = max_thickness + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let mut result = outer;
+    for i in 0..count {
+        let t = if count == 1 {
+            0.0
+        } else {
+            i as f32 / (count_f - 1.0)
+        };
+        let size = spec.min_size_mm + t * (spec.max_size_mm - spec.min_size_mm);
+        let slot_w = size + 2.0 * spec.slot_clearance;
+        let slot_thick = size * spec.thickness_ratio + 2.0 * spec.slot_clearance;
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(slot_w * 0.5, slot_hy, slot_thick * 0.5),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 21. socket_rail (tools § 2 Socket Holder/Organizer)
+// ────────────────────────────────────────────────────────
+
+/// ソケットレール spec (base plate 上に post を row 配置、ソケット差し込み)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SocketRailSpec {
+    /// post 直径 (mm、1/4"=6.0 / 3/8"=9.2 / 1/2"=12.4 / 3/4"=18.7、default 12.4)
+    pub post_diameter: f32,
+    /// post 高さ (mm、drive size に応じて 12-30、default 22)
+    pub post_height: f32,
+    /// post 個数 (row 方向、default 6)
+    pub post_count: u32,
+    /// post 間 pitch = `post_diameter + 本値` (mm、default 6.0)
+    pub post_spacing: f32,
+    /// base 厚 (mm、default 4.0)
+    pub base_thickness: f32,
+    /// base 周り 余白 (mm、default 3.0)
+    pub base_margin: f32,
+}
+
+impl SocketRailSpec {
+    /// 1/2" drive 6-post (tools § 2 中型セット、post_dia 12.4mm)
+    #[must_use]
+    pub const fn half_inch_6() -> Self {
+        Self {
+            post_diameter: 12.4,
+            post_height: 22.0,
+            post_count: 6,
+            post_spacing: 6.0,
+            base_thickness: 4.0,
+            base_margin: 3.0,
+        }
+    }
+}
+
+/// ソケットレール (base plate 上に count post、印刷 post 上向き、`to_z_up` wrap)
+///
+/// 構造 (tools § 2 準拠、Y-up 設計):
+/// - Base: `RoundedBox` (`(count×pitch+2×margin) × base_thickness × (dia+2×margin)`)
+/// - Posts: Y-axis `Cylinder` × count、X 方向等間隔、base 上に union (0.1mm overlap)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{socket_rail, SocketRailSpec};
+/// let s = socket_rail(&SocketRailSpec::half_inch_6());
+/// ```
+#[must_use]
+pub fn socket_rail(spec: &SocketRailSpec) -> SdfNode {
+    let count = spec.post_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.post_diameter + spec.post_spacing;
+    let ext_x = count_f * pitch + 2.0 * spec.base_margin;
+    let ext_y = spec.base_thickness;
+    let ext_z = spec.post_diameter + 2.0 * spec.base_margin;
+
+    let base_hx = ext_x * 0.5;
+    let base_hy = ext_y * 0.5;
+    let base_hz = ext_z * 0.5;
+
+    let post_r = spec.post_diameter * 0.5;
+    let post_hy = spec.post_height * 0.5;
+    let post_offset_y = base_hy + post_hy - 0.1; // 0.1mm overlap with base for watertight union
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let base = rounded_box(base_hx, base_hy, base_hz, spec.base_margin);
+    let mut result = base;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let post = translate(cylinder(post_r, post_hy), Vec3::new(x, post_offset_y, 0.0));
+        result = union(result, post);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 22. hex_bit_holder (tools § 3 Screwdriver/Bit Holder)
+// ────────────────────────────────────────────────────────
+
+/// ヘックスビットホルダー spec (grid 状 hex hole、1/4" bit 想定)
+///
+/// hex hole across-flats = 6.85mm 固定 (tools § 3 標準、`hex_r = 3.425`)
+/// hex depth = 14mm 固定 (25mm bit の約半分、tools § 3)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HexBitHolderSpec {
+    /// grid 行数 (Y 方向、default 5)
+    pub rows: u32,
+    /// grid 列数 (X 方向、default 4)
+    pub cols: u32,
+    /// hole 中心間 pitch (mm、default 12、min 10)
+    pub spacing: f32,
+    /// 外周 壁厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、hole depth 下の material、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl HexBitHolderSpec {
+    /// 20 hole (4×5) 標準 (tools § 3 汎用ビットセット規模)
+    #[must_use]
+    pub const fn grid_4x5() -> Self {
+        Self {
+            rows: 5,
+            cols: 4,
+            spacing: 12.0,
+            wall_thickness: 2.0,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// hex hole across-flats (mm、1/4" bit 6.35 に FDM undersize 0.3-0.5 補償の 6.85)
+const HEX_BIT_ACROSS_FLATS: f32 = 6.85;
+
+/// hex hole depth (mm、25mm bit の約半分)
+const HEX_BIT_HOLE_DEPTH: f32 = 14.0;
+
+/// ヘックスビットホルダー (grid 状 hex hole、印刷 hole 上向き、Z-up 直接設計)
+///
+/// 構造 (tools § 3 準拠、Z-up 直接、`HexPrism` の Z-axis alignment を活用):
+/// - Outer: `Box3d` (`(cols×spacing+2×wall) × (rows×spacing+2×wall) × (hole_depth+floor)`)
+/// - Holes: `HexPrism` × (rows×cols)、Z+ 上端開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{hex_bit_holder, HexBitHolderSpec};
+/// let h = hex_bit_holder(&HexBitHolderSpec::grid_4x5());
+/// ```
+#[must_use]
+pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let ext_x = cols_f * spec.spacing + 2.0 * spec.wall_thickness;
+    let ext_y = rows_f * spec.spacing + 2.0 * spec.wall_thickness;
+    let ext_z = HEX_BIT_HOLE_DEPTH + spec.floor_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let hex_r = HEX_BIT_ACROSS_FLATS * 0.5;
+    let hex_half_h = (HEX_BIT_HOLE_DEPTH + 1.0) * 0.5;
+    let hex_offset_z = outer_hz - hex_half_h + 0.5;
+    let x_start = -(cols_f - 1.0) * spec.spacing * 0.5;
+    let y_start = -(rows_f - 1.0) * spec.spacing * 0.5;
+
+    let outer = box3d(outer_hx, outer_hy, outer_hz);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * spec.spacing;
+            let y = y_start + r as f32 * spec.spacing;
+            let hex = translate(
+                SdfNode::HexPrism {
+                    hex_radius: hex_r,
+                    half_height: hex_half_h,
+                },
+                Vec3::new(x, y, hex_offset_z),
+            );
+            result = subtract(result, hex);
+        }
+    }
+
+    result
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -2216,6 +2484,82 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "hobby-diy archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── tools.md 3 archetype (Sprint 6) ──
+
+    #[test]
+    fn wrench_holder_metric_6_is_rotate_wrapped() {
+        let w = wrench_holder(&WrenchHolderSpec::metric_6_8to19());
+        // to_z_up wrap で top-level は Rotate
+        assert!(matches!(w, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn wrench_holder_wall_between_slots_is_solid() {
+        let w = wrench_holder(&WrenchHolderSpec::metric_6_8to19());
+        // 内部 Y-up: max_slot_w = 19+1.2 = 20.2、pitch = 23.2
+        // 6 slot、x_start = -57.98、slot X = [-58, -34.8, -11.6, 11.6, 34.8, 58]
+        // slot 間 wall (X = 0、Y = 0 中央、Z = 0 中央) は material
+        // to_z_up: world (Wx, Wy, Wz) → internal (Wx, Wz, -Wy)
+        // world (0, 0, 0) → internal (0, 0, 0)、slot 間中央 = material
+        assert!(eval(&w, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn socket_rail_half_inch_is_rotate_wrapped() {
+        let s = socket_rail(&SocketRailSpec::half_inch_6());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn socket_rail_post_center_is_solid() {
+        let s = socket_rail(&SocketRailSpec::half_inch_6());
+        // 内部 Y-up: post_dia=12.4、pitch=18.4、6 post、x_start=-46
+        // post 位置 X = [-46, -27.6, -9.2, 9.2, 27.6, 46]、post 中心 Y = base_hy + post_hy - 0.1 = 2 + 11 - 0.1 = 12.9
+        // to_z_up: world (0, 12.9, -9.2) → internal (0, -9.2, -12.9)... 逆算
+        // world (Wx, Wy, Wz) samples internal (Wx, Wz, -Wy)
+        // 先頭 post 中心 internal (-46, 12.9, 0) を確認するには world (-46, 0, 12.9) を sample
+        assert!(eval(&s, Vec3::new(-46.0, 0.0, 12.9)) < 0.0);
+    }
+
+    #[test]
+    fn hex_bit_holder_grid_4x5_is_subtraction() {
+        let h = hex_bit_holder(&HexBitHolderSpec::grid_4x5());
+        // Z-up direct、hex 全 subtract で Subtraction
+        assert!(matches!(h, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn hex_bit_holder_floor_is_solid() {
+        let h = hex_bit_holder(&HexBitHolderSpec::grid_4x5());
+        // Z-up direct: outer_hz = 8、hex_offset_z = 8 - 7.5 + 0.5 = 1、hex Z range [-6.5, 8.5]
+        // 底 Z=-7 は hex 外、outer 内 = 材料
+        assert!(eval(&h, Vec3::new(0.0, 0.0, -7.0)) < 0.0);
+    }
+
+    #[test]
+    fn hex_bit_holder_wall_between_holes_is_solid() {
+        let h = hex_bit_holder(&HexBitHolderSpec::grid_4x5());
+        // grid 4×5、spacing=12、x_start=-18、y_start=-24、hex 位置格子中央 (0, 0) 上端付近
+        // hex 間 wall (X=6, Y=-18) は hole 外 (最寄り hole X=6,Y=-24 = 距離 6mm > hex_r=3.425)
+        assert!(eval(&h, Vec3::new(6.0, -18.0, 5.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_tools_archetypes_evaluations_finite() {
+        let nodes = [
+            wrench_holder(&WrenchHolderSpec::metric_6_8to19()),
+            socket_rail(&SocketRailSpec::half_inch_6()),
+            hex_bit_holder(&HexBitHolderSpec::grid_4x5()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "tools archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
