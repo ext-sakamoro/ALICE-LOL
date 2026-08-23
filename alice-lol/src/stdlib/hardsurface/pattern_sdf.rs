@@ -4898,6 +4898,294 @@ pub fn jewelry_stand(spec: &JewelryStandSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 56. phone_dock (electronics § 4 Charging Dock with USB-C through-hole)
+// ────────────────────────────────────────────────────────
+
+/// 充電ドック spec (base + tilted upright + USB-C ケーブル貫通)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PhoneDockSpec {
+    /// base 幅 (mm、default 80、range 60-120)
+    pub width: f32,
+    /// upright 高さ (mm、default 100、range 60-150)
+    pub upright_height: f32,
+    /// USB-C 貫通穴直径 (mm、standard=8、default 8、range 6-12)
+    pub cable_diameter: f32,
+    /// base 奥行 (mm、default 60)
+    pub base_depth: f32,
+    /// base 厚 (mm、default 6)
+    pub base_thickness: f32,
+    /// upright 厚 (mm、default 4)
+    pub upright_thickness: f32,
+    /// upright 傾斜角 (deg、Y から後ろへ、default 15)
+    pub tilt_angle_deg: f32,
+}
+
+impl PhoneDockSpec {
+    /// 80×100mm × Ø8 (electronics § 4 standard、USB-C 貫通、iPhone/Android 汎用)
+    #[must_use]
+    pub const fn standard_80x100() -> Self {
+        Self {
+            width: 80.0,
+            upright_height: 100.0,
+            cable_diameter: 8.0,
+            base_depth: 60.0,
+            base_thickness: 6.0,
+            upright_thickness: 4.0,
+            tilt_angle_deg: 15.0,
+        }
+    }
+}
+
+/// 充電ドック (base + tilted upright + **新 pattern: through-hole vertical**、`to_z_up` wrap)
+///
+/// 構造 (electronics § 4 準拠、Y-up 設計、multi-component composite):
+/// - Base: `RoundedBox` (`width × base_thickness × base_depth`)、bed に設置
+/// - Upright: `RoundedBox` (`width × upright_height × upright_thickness`)、base 後端に直立、Z 方向 (奥) に傾斜
+/// - Through-hole: Y-axis `Cylinder` (r=`cable_dia/2`、h=`base_thickness+1`)、base 中央貫通 (upright 手前 20mm、charger 下配線)
+///
+/// 単一 print で multi-component 合成、upright 傾斜は `Rotate` (X 軸周り negative angle = 奥へ倒れる)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{phone_dock, PhoneDockSpec};
+/// let d = phone_dock(&PhoneDockSpec::standard_80x100());
+/// ```
+#[must_use]
+pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
+    let base_hx = spec.width * 0.5;
+    let base_hy = spec.base_thickness * 0.5;
+    let base_hz = spec.base_depth * 0.5;
+
+    // Upright: base 後端 (Z-) に立てる、Z 方向 (+奥) に傾斜
+    let upright_hx = spec.width * 0.5;
+    let upright_hy = spec.upright_height * 0.5;
+    let upright_hz = spec.upright_thickness * 0.5;
+    let tilt_rad = spec.tilt_angle_deg.to_radians();
+    let upright_rotation = Quat::from_rotation_x(-tilt_rad);
+    let upright_offset_y = base_hy + upright_hy * tilt_rad.cos();
+    let upright_offset_z = -base_hz + upright_hz + upright_hy * tilt_rad.sin();
+
+    let base = rounded_box(base_hx, base_hy, base_hz, 2.0);
+    let upright_raw = rounded_box(upright_hx, upright_hy, upright_hz, 2.0);
+    let upright = translate(
+        SdfNode::Rotate {
+            child: Arc::new(upright_raw),
+            rotation: upright_rotation,
+        },
+        Vec3::new(0.0, upright_offset_y, upright_offset_z),
+    );
+
+    // Through-hole: base 中央貫通 (Y-axis cyl、upright 手前 20mm)
+    let hole_r = spec.cable_diameter * 0.5;
+    let hole_hy = spec.base_thickness + 1.0;
+    let hole_offset_y = 0.0;
+    let hole_offset_z = -base_hz + 20.0;
+    let hole = translate(
+        cylinder(hole_r, hole_hy),
+        Vec3::new(0.0, hole_offset_y, hole_offset_z),
+    );
+
+    let combined = union(base, upright);
+    to_z_up(subtract(combined, hole))
+}
+
+// ────────────────────────────────────────────────────────
+// 57. cutting_board_rack (organizer-cable-kitchen § 6.6 Cutting Board Rack)
+// ────────────────────────────────────────────────────────
+
+/// まな板ラック spec (tall vertical slots、build_plate_rack pattern の tall + deep 版)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CuttingBoardRackSpec {
+    /// slot 個数 (default 3、range 2-6)
+    pub slot_count: u32,
+    /// slot 幅 = まな板厚 clearance (mm、default 12、range 8-25)
+    pub slot_width: f32,
+    /// ラック高さ (mm、default 220、range 150-350)
+    pub height: f32,
+    /// slot 深さ = 内部奥行 (mm、default 200、range 150-300)
+    pub slot_depth: f32,
+    /// slot 間 wall 厚 (mm、default 4)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 8、まな板重量支え)
+    pub floor_thickness: f32,
+}
+
+impl CuttingBoardRackSpec {
+    /// 3 slot × W12 × H220mm (kitchen § 6.6 standard、大中小 board 収納)
+    #[must_use]
+    pub const fn standard_3() -> Self {
+        Self {
+            slot_count: 3,
+            slot_width: 12.0,
+            height: 220.0,
+            slot_depth: 200.0,
+            wall_thickness: 4.0,
+            floor_thickness: 8.0,
+        }
+    }
+}
+
+/// まな板ラック (tall vertical slots、`build_plate_rack` の kitchen tall + deep 版、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.6 準拠、Y-up 設計、multi-component:base + N 垂直 slot):
+/// - Outer: `RoundedBox` (`(count×pitch+wall) × height × (slot_depth+2×wall)`)
+/// - Slots: N× `Box3d` slot (X thin、Y height-floor、Z slot_depth)、Y+ 開口 + X 貫通で挿入
+///
+/// build_plate_rack との違い: slot_depth (Z) が大幅 deep = まな板の長辺方向、height (Y) が tall (200+mm)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{cutting_board_rack, CuttingBoardRackSpec};
+/// let c = cutting_board_rack(&CuttingBoardRackSpec::standard_3());
+/// ```
+#[must_use]
+pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.slot_width + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.height;
+    let ext_z = spec.slot_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hx = spec.slot_width * 0.5;
+    let slot_hy = (spec.height - spec.floor_thickness + 1.0) * 0.5;
+    let slot_hz = spec.slot_depth * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(slot_hx, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 58. tape_dispenser (organizer-bathroom-garage § 8.3 Tape Dispenser)
+// ────────────────────────────────────────────────────────
+
+/// テープ dispenser spec (base + Z-axis axle + integrated hood + tear edge、multi-part composite)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TapeDispenserSpec {
+    /// テープロール内径 (mm、standard=76、default 76、range 25-100)
+    pub inner_diameter: f32,
+    /// テープロール幅 (mm、default 50、range 12-100)
+    pub roll_width: f32,
+    /// 壁厚 (mm、default 3、default 3-8)
+    pub wall_thickness: f32,
+    /// テープロール外径 (mm、default 150、hood 覆う直径判定用)
+    pub outer_diameter: f32,
+    /// tear edge 傾斜角 (deg、default 30)
+    pub tear_angle_deg: f32,
+}
+
+impl TapeDispenserSpec {
+    /// 内径76 × W50mm (garage § 8.3 standard、包装用テープ 標準サイズ)
+    #[must_use]
+    pub const fn packing_tape_standard() -> Self {
+        Self {
+            inner_diameter: 76.0,
+            roll_width: 50.0,
+            wall_thickness: 3.0,
+            outer_diameter: 150.0,
+            tear_angle_deg: 30.0,
+        }
+    }
+}
+
+/// テープ dispenser (base plate + Z-axis axle + hood over roll + tear edge、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.3 準拠、Y-up 設計、multi-component composite):
+/// - Base plate: `RoundedBox` (`(outer_dia+2×wall) × wall × (outer_dia/2+roll_width+2×wall)`)、bed に設置
+/// - Hood: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 上方 (Y+) 覆い
+/// - Back wall: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 後方 (Z-) 支え
+/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2-0.5`、h=`roll_width/2`)、Y=outer_dia/2 中央、Z=0
+/// - Tear edge: `Box3d` 傾斜 slot、hood 前端 (Y+ 上部)
+///
+/// 単一 print で 4 component (base + hood + back + axle) を union で結合、cotton_dispenser より複雑
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{tape_dispenser, TapeDispenserSpec};
+/// let t = tape_dispenser(&TapeDispenserSpec::packing_tape_standard());
+/// ```
+#[must_use]
+pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
+    let outer_r = spec.outer_diameter * 0.5;
+    let full_x = spec.outer_diameter + 2.0 * spec.wall_thickness;
+    let full_z = outer_r + spec.roll_width + 2.0 * spec.wall_thickness;
+
+    // Base plate: 全体を底面に敷く
+    let base_hx = full_x * 0.5;
+    let base_hy = spec.wall_thickness * 0.5;
+    let base_hz = full_z * 0.5;
+    let base = rounded_box(base_hx, base_hy, base_hz, 2.0);
+
+    // Back wall: base 後端 (Z-)、roll 支え
+    let back_hy = outer_r * 0.5;
+    let back_hz = spec.wall_thickness * 0.5;
+    let back_offset_y = spec.wall_thickness + back_hy;
+    let back_offset_z = -base_hz + back_hz;
+    let back = translate(
+        rounded_box(base_hx, back_hy, back_hz, 2.0),
+        Vec3::new(0.0, back_offset_y, back_offset_z),
+    );
+
+    // Hood: roll 上方 (Y+) 覆い、Z 方向は base と同じ全長
+    let hood_hy = spec.wall_thickness * 0.5;
+    let hood_offset_y = spec.wall_thickness + outer_r;
+    let hood = translate(
+        rounded_box(base_hx, hood_hy, base_hz, 2.0),
+        Vec3::new(0.0, hood_offset_y, 0.0),
+    );
+
+    // Axle: Z-axis cylinder、roll 中央 (Y=outer_r + wall、Z=roll 中央)
+    let axle_r = spec.inner_diameter * 0.5 - 0.5;
+    let axle_half_h = spec.roll_width * 0.5;
+    let axle_offset_y = spec.wall_thickness + outer_r * 0.5;
+    let axle_offset_z = -base_hz + spec.wall_thickness * 2.0 + outer_r + axle_half_h;
+    let axle = translate(
+        cylinder_z(axle_r, axle_half_h),
+        Vec3::new(0.0, axle_offset_y, axle_offset_z),
+    );
+
+    let combined = union(union(union(base, back), hood), axle);
+
+    // Tear edge: hood 前端 (Y+ の front)、傾斜 box3d subtract で刃形状
+    let tear_hx = base_hx + 1.0;
+    let tear_hy = 3.0;
+    let tear_hz = 2.0;
+    let tear_offset_y = spec.wall_thickness + outer_r * 2.0 - 1.0;
+    let tear_offset_z = base_hz - 2.0;
+    let tear_rad = spec.tear_angle_deg.to_radians();
+    let tear_rotation = Quat::from_rotation_x(tear_rad);
+    let tear_raw = box3d(tear_hx, tear_hy, tear_hz);
+    let tear = translate(
+        SdfNode::Rotate {
+            child: Arc::new(tear_raw),
+            rotation: tear_rotation,
+        },
+        Vec3::new(0.0, tear_offset_y, tear_offset_z),
+    );
+
+    to_z_up(subtract(combined, tear))
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -6111,6 +6399,65 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint17 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 18 ミックス 7 archetype (phone_dock + cutting_board_rack + tape_dispenser) ──
+
+    #[test]
+    fn phone_dock_standard_is_rotate_wrapped() {
+        let d = phone_dock(&PhoneDockSpec::standard_80x100());
+        assert!(matches!(d, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn phone_dock_base_is_solid() {
+        let d = phone_dock(&PhoneDockSpec::standard_80x100());
+        // base 中央 (0, 3, 0) は material (through-hole は Z=-10 に配置)
+        assert!(eval(&d, Vec3::new(0.0, 3.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn cutting_board_rack_standard_3_is_rotate_wrapped() {
+        let c = cutting_board_rack(&CuttingBoardRackSpec::standard_3());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn cutting_board_rack_wall_is_solid() {
+        let c = cutting_board_rack(&CuttingBoardRackSpec::standard_3());
+        // ext_x = 3×16+4 = 52、outer_hx = 26、wall X [-26, -24] 材料
+        // to_z_up: world (-25, 0, 0) → internal (-25, 0, 0) 材料
+        assert!(eval(&c, Vec3::new(-25.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn tape_dispenser_standard_is_rotate_wrapped() {
+        let t = tape_dispenser(&TapeDispenserSpec::packing_tape_standard());
+        assert!(matches!(t, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn tape_dispenser_base_center_is_solid() {
+        let t = tape_dispenser(&TapeDispenserSpec::packing_tape_standard());
+        // base 中央 (0, 1.5, 0) は material (base plate 厚 wall=3)
+        // to_z_up: world (0, 0, 1.5) → internal (0, 1.5, 0) 材料
+        assert!(eval(&t, Vec3::new(0.0, 0.0, 1.5)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint18_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            phone_dock(&PhoneDockSpec::standard_80x100()),
+            cutting_board_rack(&CuttingBoardRackSpec::standard_3()),
+            tape_dispenser(&TapeDispenserSpec::packing_tape_standard()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint18 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
