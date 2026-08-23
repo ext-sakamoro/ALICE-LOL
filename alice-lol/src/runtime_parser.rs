@@ -2091,6 +2091,52 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── organizer-drawer-wall.md archetypes (Sprint 11、2026-08-23) ──
+            "cutlery_tray" => {
+                // cutlery_tray(slot_count, slot_width, slot_length) 3 param、他 default
+                let (count, width, length) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CutleryTraySpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_width: width,
+                    slot_length: length,
+                    slot_depth: 40.0,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::cutlery_tray(&spec))
+            }
+            "pill_organizer" => {
+                // pill_organizer(rows, cols, cell_size) 3 param、他 default
+                let (rows, cols, cell) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PillOrganizerSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    cell_size: cell,
+                    cell_depth: 15.0,
+                    wall_thickness: 1.5,
+                    floor_thickness: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::pill_organizer(
+                    &spec,
+                ))
+            }
+            "magnetic_strip" => {
+                // magnetic_strip(magnet_count, magnet_diameter, spacing) 3 param、他 default
+                let (count, dia, spacing) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::MagneticStripSpec {
+                    magnet_count: count.round().max(1.0) as u32,
+                    magnet_diameter: dia,
+                    magnet_spacing: spacing,
+                    magnet_depth: 2.0,
+                    bar_thickness: 5.0,
+                    bar_height: 15.0,
+                    end_margin: 5.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::magnetic_strip(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3276,6 +3322,41 @@ mod tests {
             "filament_spool_holder(200, 68, 52)",
             "nozzle_holder(8, 8, 6)",
             "build_plate_rack(5, 15, 200)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 11: organizer-drawer-wall.md 3 archetype tests ──
+
+    #[test]
+    fn test_cutlery_tray_standard_3() {
+        let node = parse_lol("cutlery_tray(3, 35, 220)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_pill_organizer_weekly_7x2() {
+        let node = parse_lol("pill_organizer(7, 2, 20)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_magnetic_strip_knife_rail_8() {
+        let node = parse_lol("magnetic_strip(8, 6, 30)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint11_drawer_wall_archetypes_eval_correctly() {
+        // organizer-drawer-wall.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "cutlery_tray(3, 35, 220)",
+            "pill_organizer(7, 2, 20)",
+            "magnetic_strip(8, 6, 30)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
