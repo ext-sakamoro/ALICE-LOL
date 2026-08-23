@@ -2347,6 +2347,50 @@ impl<'a> Parser<'a> {
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::clamp_rack(&spec))
             }
+            "dry_box" => {
+                // dry_box(rows, cols, filament_diameter) 3 param、他 default
+                let (rows, cols, dia) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::DryBoxSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    filament_diameter: dia,
+                    spool_width: 70.0,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::dry_box(&spec))
+            }
+            "outdoor_enclosure" => {
+                // outdoor_enclosure(internal_w, internal_d, internal_h) 3 param
+                let (w, d, h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::OutdoorEnclosureSpec {
+                    internal_width: w,
+                    internal_depth: d,
+                    internal_height: h,
+                    wall_thickness: 3.5,
+                    floor_thickness: 3.5,
+                    gasket_width: 2.0,
+                    gasket_depth: 1.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::outdoor_enclosure(
+                    &spec,
+                ))
+            }
+            "jewelry_stand" => {
+                // jewelry_stand(tier_count, bottom_tier_dia, height) 3 param、他 default
+                let (count, dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::JewelryStandSpec {
+                    tier_count: count.round().max(1.0) as u32,
+                    bottom_tier_diameter: dia,
+                    height,
+                    tier_thickness: 5.0,
+                    pillar_diameter: 10.0,
+                    tier_ratio: 0.7,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::jewelry_stand(
+                    &spec,
+                ))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3742,6 +3786,41 @@ mod tests {
             "cotton_dispenser(80, 90, 100)",
             "sink_caddy(200, 100, 8)",
             "clamp_rack(5, 30, 150)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 17 ミックス 6 archetype tests ──
+
+    #[test]
+    fn test_dry_box_standard_2x2() {
+        let node = parse_lol("dry_box(2, 2, 68)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_outdoor_enclosure_ip54() {
+        let node = parse_lol("outdoor_enclosure(120, 80, 45)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_jewelry_stand_standard_3_tier() {
+        let node = parse_lol("jewelry_stand(3, 100, 100)").unwrap();
+        // jewelry_stand は Z-axis direct + tier disk union、to_z_up wrap なし
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_sprint17_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "dry_box(2, 2, 68)",
+            "outdoor_enclosure(120, 80, 45)",
+            "jewelry_stand(3, 100, 100)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

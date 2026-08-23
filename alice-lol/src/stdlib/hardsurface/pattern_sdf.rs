@@ -4622,6 +4622,282 @@ pub fn clamp_rack(spec: &ClampRackSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 53. dry_box (organizer-printer-modular § 9.3 Filament Dry Box)
+// ────────────────────────────────────────────────────────
+
+/// フィラメント dry box spec (2D grid で spool 収納、lid 別途)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DryBoxSpec {
+    /// spool 行数 (default 2、range 1-4)
+    pub rows: u32,
+    /// spool 列数 (default 2、range 1-4)
+    pub cols: u32,
+    /// spool 外径 (mm、1kg 標準=68、default 68、range 60-90)
+    pub filament_diameter: f32,
+    /// spool 幅 (mm、1kg 標準=70、default 70、range 60-90)
+    pub spool_width: f32,
+    /// 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl DryBoxSpec {
+    /// 4 spool (2×2) × Ø68 × W70mm (printer § 9.3 standard、1kg PLA 4本)
+    #[must_use]
+    pub const fn standard_2x2() -> Self {
+        Self {
+            rows: 2,
+            cols: 2,
+            filament_diameter: 68.0,
+            spool_width: 70.0,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// フィラメント dry box (2D grid cyl cavity for spools、`to_z_up` wrap)
+///
+/// 構造 (printer § 9.3 準拠、Y-up 設計、`utensil_caddy` の 2D grid 版):
+/// - Outer: `RoundedBox` (`(cols×pitch+wall) × (width+floor) × (rows×pitch+wall)`)
+/// - Cavities: (rows×cols)× Y-axis `Cylinder` (r=`dia/2`、h=`width-floor`)、Y+ 開口
+///
+/// lid + 除湿剤 slot は separate print (本 primitive は base のみ)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{dry_box, DryBoxSpec};
+/// let d = dry_box(&DryBoxSpec::standard_2x2());
+/// ```
+#[must_use]
+pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let pitch = spec.filament_diameter + spec.wall_thickness;
+    let ext_x = cols_f * pitch + spec.wall_thickness;
+    let ext_y = spec.spool_width + spec.floor_thickness;
+    let ext_z = rows_f * pitch + spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_r = spec.filament_diameter * 0.5;
+    let cavity_hy = (spec.spool_width - spec.floor_thickness + 1.0) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch;
+            let z = z_start + r as f32 * pitch;
+            let cavity = translate(
+                cylinder(cavity_r, cavity_hy),
+                Vec3::new(x, cavity_offset_y, z),
+            );
+            result = subtract(result, cavity);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 54. outdoor_enclosure (electronics § 5 Outdoor IP54 Enclosure)
+// ────────────────────────────────────────────────────────
+
+/// 屋外用 IP54 密閉筐体 spec (raspi_case + gasket groove、lid seam)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OutdoorEnclosureSpec {
+    /// 内部 幅 (mm、default 120、range 80-200)
+    pub internal_width: f32,
+    /// 内部 奥行 (mm、default 80、range 60-150)
+    pub internal_depth: f32,
+    /// 内部 高さ (mm、default 45、range 30-100)
+    pub internal_height: f32,
+    /// 壁厚 (mm、default 3.5、IP54 で 3mm+)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.5)
+    pub floor_thickness: f32,
+    /// gasket groove 幅 (mm、standard O-ring = 2mm)
+    pub gasket_width: f32,
+    /// gasket groove 深さ (mm、standard O-ring = 1.5mm)
+    pub gasket_depth: f32,
+}
+
+impl OutdoorEnclosureSpec {
+    /// 120×80×45mm 内部 (electronics § 5 IP54 standard、Arduino UNO + 電源)
+    #[must_use]
+    pub const fn ip54_120x80() -> Self {
+        Self {
+            internal_width: 120.0,
+            internal_depth: 80.0,
+            internal_height: 45.0,
+            wall_thickness: 3.5,
+            floor_thickness: 3.5,
+            gasket_width: 2.0,
+            gasket_depth: 1.5,
+        }
+    }
+}
+
+/// 屋外用 IP54 密閉筐体 (raspi_case pattern + gasket groove for O-ring seal、`to_z_up` wrap)
+///
+/// 構造 (electronics § 5 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
+/// - Cavity: `Box3d` (`width × height+1 × depth`)、Y+ 開口 (lid で seal)
+/// - Gasket groove: 4× `Box3d` slot、outer top rim を囲む矩形溝
+///
+/// lid は separate print (本 primitive は base + gasket groove のみ)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{outdoor_enclosure, OutdoorEnclosureSpec};
+/// let e = outdoor_enclosure(&OutdoorEnclosureSpec::ip54_120x80());
+/// ```
+#[must_use]
+pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
+    let ext_x = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_y = spec.internal_height + spec.floor_thickness;
+    let ext_z = spec.internal_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = spec.internal_width * 0.5;
+    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hz = spec.internal_depth * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // Gasket groove: outer top rim を囲む矩形溝 (4 slot union)
+    // 位置: wall 中央 (X±=cavity_hx + wall/2、Z±=cavity_hz + wall/2)
+    let groove_offset_y = outer_hy - spec.gasket_depth * 0.5 + 0.5;
+    let groove_hy = (spec.gasket_depth + 1.0) * 0.5;
+    let wall_mid_x = cavity_hx + spec.wall_thickness * 0.5;
+    let wall_mid_z = cavity_hz + spec.wall_thickness * 0.5;
+
+    // X 方向長 slot (Z-facing wall 2 本)
+    let slot_x_long = translate(
+        box3d(cavity_hx, groove_hy, spec.gasket_width * 0.5),
+        Vec3::new(0.0, groove_offset_y, wall_mid_z),
+    );
+    let slot_x_long_n = translate(
+        box3d(cavity_hx, groove_hy, spec.gasket_width * 0.5),
+        Vec3::new(0.0, groove_offset_y, -wall_mid_z),
+    );
+    // Z 方向長 slot (X-facing wall 2 本)
+    let slot_z_long = translate(
+        box3d(spec.gasket_width * 0.5, groove_hy, cavity_hz),
+        Vec3::new(wall_mid_x, groove_offset_y, 0.0),
+    );
+    let slot_z_long_n = translate(
+        box3d(spec.gasket_width * 0.5, groove_hy, cavity_hz),
+        Vec3::new(-wall_mid_x, groove_offset_y, 0.0),
+    );
+
+    result = subtract(result, slot_x_long);
+    result = subtract(result, slot_x_long_n);
+    result = subtract(result, slot_z_long);
+    result = subtract(result, slot_z_long_n);
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 55. jewelry_stand (organizer-drawer-wall § 3.4 Multi-Tier Jewelry Stand)
+// ────────────────────────────────────────────────────────
+
+/// ジュエリー段付きスタンド spec (multi-tier disk stack、necklace/bracelet 用)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct JewelryStandSpec {
+    /// tier 段数 (default 3、range 2-5)
+    pub tier_count: u32,
+    /// 最下段直径 (mm、default 100、range 60-150)
+    pub bottom_tier_diameter: f32,
+    /// 全高 (mm、default 100、range 60-200)
+    pub height: f32,
+    /// tier 厚 (mm、default 5)
+    pub tier_thickness: f32,
+    /// 中央 pillar 直径 (mm、default 10)
+    pub pillar_diameter: f32,
+    /// 各段 diameter 減少率 (default 0.7、= 70% 減少)
+    pub tier_ratio: f32,
+}
+
+impl JewelryStandSpec {
+    /// 3 tier × Ø100 base × H100mm (drawer § 3.4 standard、ring/necklace/bracelet)
+    #[must_use]
+    pub const fn standard_3_tier() -> Self {
+        Self {
+            tier_count: 3,
+            bottom_tier_diameter: 100.0,
+            height: 100.0,
+            tier_thickness: 5.0,
+            pillar_diameter: 10.0,
+            tier_ratio: 0.7,
+        }
+    }
+}
+
+/// ジュエリー段付きスタンド (multi-tier disk stack + central pillar、Z-axis 直接)
+///
+/// 構造 (drawer § 3.4 準拠、Z-up 設計、**新 pattern: multi-tier disk stack**):
+/// - Pillar: `cylinder_z` (r=`pillar_dia/2`、h=`height/2`)、中央 Z 軸
+/// - Tiers: N× `cylinder_z` disk (r=`bottom_dia/2 × ratio^i`、h=`tier_thickness/2`)、Z 方向等間隔
+///
+/// tier_ratio で上段ほど小径 (wedding cake style)、Z=0 が最下段
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{jewelry_stand, JewelryStandSpec};
+/// let j = jewelry_stand(&JewelryStandSpec::standard_3_tier());
+/// ```
+#[must_use]
+pub fn jewelry_stand(spec: &JewelryStandSpec) -> SdfNode {
+    let count = spec.tier_count.max(1);
+    let count_f = count as f32;
+
+    let pillar_r = spec.pillar_diameter * 0.5;
+    let pillar_hz = spec.height * 0.5;
+    let pillar_offset_z = pillar_hz;
+
+    let pillar = translate(
+        cylinder_z(pillar_r, pillar_hz),
+        Vec3::new(0.0, 0.0, pillar_offset_z),
+    );
+
+    let mut result = pillar;
+    let tier_spacing = spec.height / count_f;
+    let tier_hz = spec.tier_thickness * 0.5;
+    for i in 0..count {
+        let tier_r = spec.bottom_tier_diameter * 0.5 * spec.tier_ratio.powi(i as i32);
+        let tier_z = tier_spacing * (i as f32 + 1.0) - tier_hz;
+        let tier = translate(cylinder_z(tier_r, tier_hz), Vec3::new(0.0, 0.0, tier_z));
+        result = union(result, tier);
+    }
+
+    result
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -5776,6 +6052,65 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint16 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 17 ミックス 6 archetype (dry_box + outdoor_enclosure + jewelry_stand) ──
+
+    #[test]
+    fn dry_box_standard_2x2_is_rotate_wrapped() {
+        let d = dry_box(&DryBoxSpec::standard_2x2());
+        assert!(matches!(d, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn dry_box_wall_is_solid() {
+        let d = dry_box(&DryBoxSpec::standard_2x2());
+        // ext_x = 2×71+3 = 145、outer_hx = 72.5、wall X [-72.5, -71] 材料
+        // to_z_up: world (-72, 0, 0) → internal (-72, 0, 0) 材料
+        assert!(eval(&d, Vec3::new(-72.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn outdoor_enclosure_ip54_is_rotate_wrapped() {
+        let e = outdoor_enclosure(&OutdoorEnclosureSpec::ip54_120x80());
+        assert!(matches!(e, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn outdoor_enclosure_wall_is_solid() {
+        let e = outdoor_enclosure(&OutdoorEnclosureSpec::ip54_120x80());
+        // ext_x = 120+7 = 127、outer_hx = 63.5、wall X [-63.5, -60] 材料
+        assert!(eval(&e, Vec3::new(-62.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn jewelry_stand_standard_3_tier_is_union() {
+        let j = jewelry_stand(&JewelryStandSpec::standard_3_tier());
+        // jewelry_stand は Z-axis direct + N tier disk を union で結合、to_z_up wrap なし
+        assert!(matches!(j, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn jewelry_stand_pillar_center_is_solid() {
+        let j = jewelry_stand(&JewelryStandSpec::standard_3_tier());
+        // 中央 pillar (r=5、Z=50 中間) は material
+        assert!(eval(&j, Vec3::new(0.0, 0.0, 50.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint17_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            dry_box(&DryBoxSpec::standard_2x2()),
+            outdoor_enclosure(&OutdoorEnclosureSpec::ip54_120x80()),
+            jewelry_stand(&JewelryStandSpec::standard_3_tier()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint17 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
