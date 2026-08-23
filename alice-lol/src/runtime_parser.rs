@@ -2224,6 +2224,53 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::soap_tray(&spec))
             }
 
+            // ── Sprint 14 ミックス 3 archetypes (2026-08-23) ──
+            "razor_holder" => {
+                // razor_holder(slot_width, slot_depth, mount_hole_diameter) 3 param
+                let (slot_w, slot_d, mount_dia) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::RazorHolderSpec {
+                    slot_width: slot_w,
+                    slot_depth: slot_d,
+                    mount_hole_diameter: mount_dia,
+                    blade_clearance_width: 55.0,
+                    backplate_width: 80.0,
+                    total_height: 60.0,
+                    wall_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::razor_holder(&spec))
+            }
+            "chopstick_holder" => {
+                // chopstick_holder(pair_count, slot_width, slot_length) 3 param
+                let (count, width, length) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ChopstickHolderSpec {
+                    pair_count: count.round().max(1.0) as u32,
+                    slot_width: width,
+                    slot_length: length,
+                    slot_depth: 15.0,
+                    wall_thickness: 2.5,
+                    floor_thickness: 2.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::chopstick_holder(
+                    &spec,
+                ))
+            }
+            "swatch_holder" => {
+                // swatch_holder(rows, cols, swatch_width) 3 param、他 default
+                let (rows, cols, width) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SwatchHolderSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    swatch_width: width,
+                    swatch_height: 70.0,
+                    swatch_thickness: 4.5,
+                    wall_thickness: 2.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::swatch_holder(
+                    &spec,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3514,6 +3561,41 @@ mod tests {
             "wrap_holder(55, 305, 3)",
             "sock_divider(4, 80, 89)",
             "soap_tray(200, 90, 6)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 14 ミックス archetype tests ──
+
+    #[test]
+    fn test_razor_holder_cartridge() {
+        let node = parse_lol("razor_holder(12, 22, 4.5)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_chopstick_holder_adult_4() {
+        let node = parse_lol("chopstick_holder(4, 13, 260)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_swatch_holder_standard_8x4() {
+        let node = parse_lol("swatch_holder(8, 4, 32)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint14_mix_archetypes_eval_correctly() {
+        // Sprint 14 ミックス archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "razor_holder(12, 22, 4.5)",
+            "chopstick_holder(4, 13, 260)",
+            "swatch_holder(8, 4, 32)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

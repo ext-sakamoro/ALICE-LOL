@@ -3855,6 +3855,267 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 44. razor_holder (organizer-bathroom-garage § 7.2 Razor Holder)
+// ────────────────────────────────────────────────────────
+
+/// カミソリホルダー spec (wall-mount narrow slot + M4 mount hole)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RazorHolderSpec {
+    /// slot 幅 (mm、razor stem 用、default 12、range 8-16)
+    pub slot_width: f32,
+    /// slot 深さ (mm、default 22、range 15-30)
+    pub slot_depth: f32,
+    /// mount hole 直径 (mm、M4=4.5、default 4.5、range 3-6)
+    pub mount_hole_diameter: f32,
+    /// blade clearance 幅 (mm、slot 上部 head 用、default 55)
+    pub blade_clearance_width: f32,
+    /// backplate 幅 (mm、default 80)
+    pub backplate_width: f32,
+    /// 全高 (mm、default 60、slot + blade clearance)
+    pub total_height: f32,
+    /// 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+}
+
+impl RazorHolderSpec {
+    /// Mach3/Fusion cartridge razor (bathroom § 7.2 standard)
+    #[must_use]
+    pub const fn cartridge_razor() -> Self {
+        Self {
+            slot_width: 12.0,
+            slot_depth: 22.0,
+            mount_hole_diameter: 4.5,
+            blade_clearance_width: 55.0,
+            backplate_width: 80.0,
+            total_height: 60.0,
+            wall_thickness: 3.0,
+        }
+    }
+}
+
+/// カミソリホルダー (wall-mount narrow slot + mount hole、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.2 準拠、Y-up 設計):
+/// - Backplate: `RoundedBox` (`backplate_w × total_h × wall`)
+/// - Slot: `Box3d` slot (`slot_w × slot_depth × wall+1`)、backplate 中央 Z+ 開口
+/// - Mount hole: Y-axis `Cylinder` (r=`mount_hole/2`, h=wall+1)、backplate 上部 中央
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{razor_holder, RazorHolderSpec};
+/// let r = razor_holder(&RazorHolderSpec::cartridge_razor());
+/// ```
+#[must_use]
+pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
+    let ext_x = spec.backplate_width;
+    let ext_y = spec.total_height;
+    let ext_z = spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    // Slot: 下部 (Y-) から depth 分挿入 (razor stem 下向き入れ)
+    let slot_hx = spec.slot_width * 0.5;
+    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hz = outer_hz + 1.0;
+    let slot_offset_y = -outer_hy + slot_hy - 0.5;
+
+    // Mount hole: 上部 (Y+) 中央
+    let mount_r = spec.mount_hole_diameter * 0.5;
+    let mount_hy = outer_hz + 1.0;
+    let mount_offset_y = outer_hy - spec.wall_thickness * 2.0;
+
+    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let slot = translate(
+        box3d(slot_hx, slot_hy, slot_hz),
+        Vec3::new(0.0, slot_offset_y, 0.0),
+    );
+    let mount = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(0.0, mount_offset_y, 0.0),
+    );
+
+    to_z_up(subtract(subtract(backplate, slot), mount))
+}
+
+// ────────────────────────────────────────────────────────
+// 45. chopstick_holder (organizer-drawer-wall § 3.3 Japanese Chopstick Holder)
+// ────────────────────────────────────────────────────────
+
+/// 箸ホルダー spec (row 状 narrow long slots for chopstick pairs)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChopstickHolderSpec {
+    /// pair 個数 (default 4、range 2-10)
+    pub pair_count: u32,
+    /// slot 幅 (mm、pair 用 12-15、default 13)
+    pub slot_width: f32,
+    /// slot 長 (mm、default 260、range 200-330)
+    pub slot_length: f32,
+    /// slot 深さ (mm、default 15、range 10-25)
+    pub slot_depth: f32,
+    /// slot 間 wall 厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.0)
+    pub floor_thickness: f32,
+}
+
+impl ChopstickHolderSpec {
+    /// 4 pair × W13 × L260mm (drawer § 3.3 standard、adult chopsticks)
+    #[must_use]
+    pub const fn adult_4() -> Self {
+        Self {
+            pair_count: 4,
+            slot_width: 13.0,
+            slot_length: 260.0,
+            slot_depth: 15.0,
+            wall_thickness: 2.5,
+            floor_thickness: 2.0,
+        }
+    }
+}
+
+/// 箸ホルダー (row 状 narrow long slots、top 開口、`to_z_up` wrap)
+///
+/// 構造 (drawer § 3.3 準拠、Y-up 設計、cutlery_tray より narrow slot):
+/// - Outer: `RoundedBox` (`(count×pitch+wall) × (depth+floor) × (length+2×wall)`)
+/// - Slots: N× `Box3d` slot (X thin、Y depth、Z long)、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{chopstick_holder, ChopstickHolderSpec};
+/// let c = chopstick_holder(&ChopstickHolderSpec::adult_4());
+/// ```
+#[must_use]
+pub fn chopstick_holder(spec: &ChopstickHolderSpec) -> SdfNode {
+    let count = spec.pair_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.slot_width + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.slot_depth + spec.floor_thickness;
+    let ext_z = spec.slot_length + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hz = spec.slot_length * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 46. swatch_holder (organizer-printer-modular § 9.7 Filament Swatch Holder)
+// ────────────────────────────────────────────────────────
+
+/// フィラメントスウォッチホルダー spec (2D grid narrow rect slots for filament sample cards)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SwatchHolderSpec {
+    /// 行数 (default 8、range 2-20)
+    pub rows: u32,
+    /// 列数 (default 4、range 1-10)
+    pub cols: u32,
+    /// swatch 幅 (mm、standard card=32 / small=24、default 32)
+    pub swatch_width: f32,
+    /// swatch 高さ (mm、default 70、range 24-120)
+    pub swatch_height: f32,
+    /// swatch 厚 clearance (mm、default 4.5、card 4mm + 0.5 clearance)
+    pub swatch_thickness: f32,
+    /// slot 間 wall 厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl SwatchHolderSpec {
+    /// 32 slot (8×4) × standard card 32×70mm × 4.5 (printer § 9.7 standard)
+    #[must_use]
+    pub const fn standard_8x4() -> Self {
+        Self {
+            rows: 8,
+            cols: 4,
+            swatch_width: 32.0,
+            swatch_height: 70.0,
+            swatch_thickness: 4.5,
+            wall_thickness: 2.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// フィラメントスウォッチホルダー (2D grid narrow rect slots、top 開口、`to_z_up` wrap)
+///
+/// 構造 (printer § 9.7 準拠、Y-up 設計、pill_organizer pattern の narrow rect 版):
+/// - Outer: `RoundedBox` (`(cols×pitch_x+wall) × (height+floor) × (rows×pitch_z+wall)`)
+/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z width=swatch_width)
+///
+/// swatch カード立てて挿入する形式 (Z 方向に幅、X 方向に厚みで、多数の swatch を並べる)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{swatch_holder, SwatchHolderSpec};
+/// let s = swatch_holder(&SwatchHolderSpec::standard_8x4());
+/// ```
+#[must_use]
+pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let pitch_x = spec.swatch_thickness + spec.wall_thickness;
+    let pitch_z = spec.swatch_width + spec.wall_thickness;
+
+    let ext_x = cols_f * pitch_x + spec.wall_thickness;
+    let ext_y = spec.swatch_height + spec.floor_thickness;
+    let ext_z = rows_f * pitch_z + spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hx = spec.swatch_thickness * 0.5;
+    let slot_hy = (spec.swatch_height + 1.0) * 0.5;
+    let slot_hz = spec.swatch_width * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch_x;
+            let z = z_start + r as f32 * pitch_z;
+            let slot = translate(
+                box3d(slot_hx, slot_hy, slot_hz),
+                Vec3::new(x, slot_offset_y, z),
+            );
+            result = subtract(result, slot);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -4837,6 +5098,59 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint13 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 14 ミックス 3 archetype (razor + chopstick + swatch) ──
+
+    #[test]
+    fn razor_holder_cartridge_is_rotate_wrapped() {
+        let r = razor_holder(&RazorHolderSpec::cartridge_razor());
+        assert!(matches!(r, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn chopstick_holder_adult_4_is_rotate_wrapped() {
+        let c = chopstick_holder(&ChopstickHolderSpec::adult_4());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn chopstick_holder_wall_is_solid() {
+        let c = chopstick_holder(&ChopstickHolderSpec::adult_4());
+        // pitch = 13+2.5 = 15.5、4 pair、x_start = -23.25、slot X = [-23.25, -7.75, 7.75, 23.25]
+        // slot 間 X = 0 (slot 2-3 間) は wall
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0) 材料
+        assert!(eval(&c, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn swatch_holder_standard_8x4_is_rotate_wrapped() {
+        let s = swatch_holder(&SwatchHolderSpec::standard_8x4());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn swatch_holder_floor_is_solid() {
+        let s = swatch_holder(&SwatchHolderSpec::standard_8x4());
+        // ext_y = 70+3 = 73、outer_hy = 36.5、floor Y [-36.5, -33.5]
+        // to_z_up: world (0, 0, -35) → internal (0, -35, 0) 材料
+        assert!(eval(&s, Vec3::new(0.0, 0.0, -35.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint14_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            razor_holder(&RazorHolderSpec::cartridge_razor()),
+            chopstick_holder(&ChopstickHolderSpec::adult_4()),
+            swatch_holder(&SwatchHolderSpec::standard_8x4()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint14 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
