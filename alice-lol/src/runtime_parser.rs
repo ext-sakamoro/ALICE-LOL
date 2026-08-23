@@ -1955,6 +1955,51 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::battery_18650_holder(&spec))
             }
 
+            // ── organizer-bathroom-garage.md archetypes (Sprint 8、2026-08-23) ──
+            "toothbrush_holder" => {
+                // toothbrush_holder(count, hole_diameter, height) 3 param、他 default
+                let (count, dia, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ToothbrushHolderSpec {
+                    count: count.round().max(1.0) as u32,
+                    hole_diameter: dia,
+                    hole_depth: height,
+                    wall_thickness: 6.0,
+                    floor_thickness: 4.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::toothbrush_holder(
+                    &spec,
+                ))
+            }
+            "drill_bit_holder" => {
+                // drill_bit_holder(min_mm, max_mm, count) 3 param、他 default
+                let (min_mm, max_mm, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::DrillBitHolderSpec {
+                    min_size_mm: min_mm,
+                    max_size_mm: max_mm,
+                    count: count.round().max(1.0) as u32,
+                    hole_depth: 22.0,
+                    hole_clearance: 0.25,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::drill_bit_holder(
+                    &spec,
+                ))
+            }
+            "pliers_rack" => {
+                // pliers_rack(slot_count, slot_width, slot_depth) 3 param、他 default
+                let (count, width, depth) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PliersRackSpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_width: width,
+                    slot_depth: depth,
+                    slot_height: 35.0,
+                    wall_thickness: 5.0,
+                    floor_thickness: 5.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::pliers_rack(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -3034,6 +3079,41 @@ mod tests {
             "raspi_case(85, 56, 25)",
             "esp32_enclosure(51.6, 28.4, 15)",
             "battery_18650_holder(4, 2.5, 0)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 8: organizer-bathroom-garage.md 3 archetype tests ──
+
+    #[test]
+    fn test_toothbrush_holder_manual_4() {
+        let node = parse_lol("toothbrush_holder(4, 15, 70)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_drill_bit_holder_metric() {
+        let node = parse_lol("drill_bit_holder(3, 13, 11)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_pliers_rack_standard_6() {
+        let node = parse_lol("pliers_rack(6, 15, 60)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint8_bathroom_garage_archetypes_eval_correctly() {
+        // organizer-bathroom-garage.md 追加 3 archetype の parse + eval sanity
+        use alice_sdf::eval;
+        for lol in [
+            "toothbrush_holder(4, 15, 70)",
+            "drill_bit_holder(3, 13, 11)",
+            "pliers_rack(6, 15, 60)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

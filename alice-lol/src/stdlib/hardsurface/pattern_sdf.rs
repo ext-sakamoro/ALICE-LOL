@@ -2343,6 +2343,248 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 26. toothbrush_holder (organizer-bathroom-garage § 7.1 Toothbrush Holder)
+// ────────────────────────────────────────────────────────
+
+/// 歯ブラシホルダー spec (row 状 cylindrical hole、top 開口)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ToothbrushHolderSpec {
+    /// hole 個数 (default 4)
+    pub count: u32,
+    /// hole 直径 (mm、manual=15 / electric=40、default 15)
+    pub hole_diameter: f32,
+    /// hole 深さ = 全体 height (mm、default 70)
+    pub hole_depth: f32,
+    /// hole 間 wall 厚 (mm、default 6.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 4.0、drainage 想定で少し厚め)
+    pub floor_thickness: f32,
+}
+
+impl ToothbrushHolderSpec {
+    /// 4 hole × Ø15 × H70mm (manual toothbrush 4 本用、bathroom § 7.1 default)
+    #[must_use]
+    pub const fn manual_4() -> Self {
+        Self {
+            count: 4,
+            hole_diameter: 15.0,
+            hole_depth: 70.0,
+            wall_thickness: 6.0,
+            floor_thickness: 4.0,
+        }
+    }
+}
+
+/// 歯ブラシホルダー (row 状 cylindrical hole、top 開口、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.1 準拠、Y-up 設計):
+/// - Outer: `RoundedBox`
+/// - Holes: N× Y-axis `Cylinder` (r=`dia/2`, h=`(depth+1)/2`)、X 方向等間隔
+/// - top 開口 (Y+)、floor 部分は material (drainage 穴は user 側で加工推奨)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{toothbrush_holder, ToothbrushHolderSpec};
+/// let t = toothbrush_holder(&ToothbrushHolderSpec::manual_4());
+/// ```
+#[must_use]
+pub fn toothbrush_holder(spec: &ToothbrushHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.hole_diameter + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.hole_depth + spec.floor_thickness;
+    let ext_z = spec.hole_diameter + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let hole_r = spec.hole_diameter * 0.5;
+    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 27. drill_bit_holder (organizer-bathroom-garage § 8.1 Drill Bit Holder)
+// ────────────────────────────────────────────────────────
+
+/// ドリルビットホルダー spec (row 状 hole、min-max mm を count 等間隔補間)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrillBitHolderSpec {
+    /// 最小ビット径 (mm、default 3.0)
+    pub min_size_mm: f32,
+    /// 最大ビット径 (mm、default 13.0)
+    pub max_size_mm: f32,
+    /// hole 個数 (default 11、Metric 3-13mm 1mm step)
+    pub count: u32,
+    /// hole 深さ (mm、default 22)
+    pub hole_depth: f32,
+    /// 片側 clearance (mm、default 0.25 = 全 0.5mm)
+    pub hole_clearance: f32,
+    /// 外周 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl DrillBitHolderSpec {
+    /// Metric 11 hole 3-13mm (garage § 8.1 標準セット、1mm step 相当)
+    #[must_use]
+    pub const fn metric_11_3to13() -> Self {
+        Self {
+            min_size_mm: 3.0,
+            max_size_mm: 13.0,
+            count: 11,
+            hole_depth: 22.0,
+            hole_clearance: 0.25,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// ドリルビットホルダー (row 状 hole、size linear interpolate、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.1 準拠、Y-up 設計、wrench_holder 類似だが hole 円形):
+/// - Outer: `RoundedBox` (`(count×pitch+2×wall) × (depth+floor) × (max_dia+2×wall)`)
+/// - Holes: N× Y-axis `Cylinder`、size = `min + i×(max-min)/(count-1)` + clearance
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{drill_bit_holder, DrillBitHolderSpec};
+/// let d = drill_bit_holder(&DrillBitHolderSpec::metric_11_3to13());
+/// ```
+#[must_use]
+pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let max_hole_dia = spec.max_size_mm + 2.0 * spec.hole_clearance;
+    let pitch = max_hole_dia + 4.0; // 4mm inter-hole wall
+
+    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_y = spec.hole_depth + spec.floor_thickness;
+    let ext_z = max_hole_dia + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let mut result = outer;
+    for i in 0..count {
+        let t = if count == 1 {
+            0.0
+        } else {
+            i as f32 / (count_f - 1.0)
+        };
+        let size = spec.min_size_mm + t * (spec.max_size_mm - spec.min_size_mm);
+        let hole_r = (size + 2.0 * spec.hole_clearance) * 0.5;
+        let x = x_start + i as f32 * pitch;
+        let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
+        result = subtract(result, hole);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 28. pliers_rack (organizer-bathroom-garage § 8.4 Pliers Rack)
+// ────────────────────────────────────────────────────────
+
+/// プライヤーラック spec (row 状 rectangular slot、pliers 挿入)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PliersRackSpec {
+    /// slot 個数 (default 6)
+    pub slot_count: u32,
+    /// slot 幅 (mm、needle-nose=10 / combi=15 / tongue-groove=20-25、default 15)
+    pub slot_width: f32,
+    /// slot 深さ (mm、handle 挿入深さ、default 60、range 40-80)
+    pub slot_depth: f32,
+    /// slot 高さ = rack 厚 (mm、default 35)
+    pub slot_height: f32,
+    /// slot 間 wall 厚 (mm、default 5.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 5.0)
+    pub floor_thickness: f32,
+}
+
+impl PliersRackSpec {
+    /// 6 slot × W15 × D60mm (garage § 8.4 標準セット、combination pliers 6 本)
+    #[must_use]
+    pub const fn standard_6() -> Self {
+        Self {
+            slot_count: 6,
+            slot_width: 15.0,
+            slot_depth: 60.0,
+            slot_height: 35.0,
+            wall_thickness: 5.0,
+            floor_thickness: 5.0,
+        }
+    }
+}
+
+/// プライヤーラック (row 状 rectangular slot、top 開口、`to_z_up` wrap)
+///
+/// 構造 (garage § 8.4 準拠、Y-up 設計):
+/// - Outer: `RoundedBox` (`(count×pitch+2×wall) × (depth+floor) × slot_height`)
+/// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{pliers_rack, PliersRackSpec};
+/// let p = pliers_rack(&PliersRackSpec::standard_6());
+/// ```
+#[must_use]
+pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.slot_width + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.slot_depth + spec.floor_thickness;
+    let ext_z = spec.slot_height;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -2929,6 +3171,67 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "electronics archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── organizer-bathroom-garage.md 3 archetype (Sprint 8) ──
+
+    #[test]
+    fn toothbrush_holder_manual_4_is_rotate_wrapped() {
+        let t = toothbrush_holder(&ToothbrushHolderSpec::manual_4());
+        assert!(matches!(t, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn toothbrush_holder_wall_is_solid() {
+        let t = toothbrush_holder(&ToothbrushHolderSpec::manual_4());
+        // pitch=21、x_start=-31.5、hole X = [-31.5, -10.5, 10.5, 31.5]、間 X=0 は wall
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0) 材料
+        assert!(eval(&t, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn drill_bit_holder_metric_is_rotate_wrapped() {
+        let d = drill_bit_holder(&DrillBitHolderSpec::metric_11_3to13());
+        assert!(matches!(d, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn drill_bit_holder_floor_is_solid() {
+        let d = drill_bit_holder(&DrillBitHolderSpec::metric_11_3to13());
+        // ext_y = 22+3 = 25、outer_hy = 12.5、floor Y [-12.5, -9.5]
+        // to_z_up: world (0, 0, -11) → internal (0, -11, 0) 材料
+        assert!(eval(&d, Vec3::new(0.0, 0.0, -11.0)) < 0.0);
+    }
+
+    #[test]
+    fn pliers_rack_standard_6_is_rotate_wrapped() {
+        let p = pliers_rack(&PliersRackSpec::standard_6());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn pliers_rack_wall_between_slots_is_solid() {
+        let p = pliers_rack(&PliersRackSpec::standard_6());
+        // pitch=20、6 slot、x_start=-50、slot X = [-50, -30, -10, 10, 30, 50]
+        // slot 間 X=0 は wall (slot_width=15、|X|<7.5 が slot 内)
+        // to_z_up: world (0, 0, 0) → internal (0, 0, 0) 材料
+        assert!(eval(&p, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_bathroom_garage_archetypes_evaluations_finite() {
+        let nodes = [
+            toothbrush_holder(&ToothbrushHolderSpec::manual_4()),
+            drill_bit_holder(&DrillBitHolderSpec::metric_11_3to13()),
+            pliers_rack(&PliersRackSpec::standard_6()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "bathroom-garage archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
