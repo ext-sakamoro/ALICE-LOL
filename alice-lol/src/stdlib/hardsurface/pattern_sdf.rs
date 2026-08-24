@@ -5186,6 +5186,321 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 59. shower_caddy (organizer-bathroom-garage § 7.5 Shower Caddy)
+// ────────────────────────────────────────────────────────
+
+/// シャワー用棚 spec (multi-tier wall-mount tray + drain hole、multi-component composite)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShowerCaddySpec {
+    /// tier 段数 (default 2、range 1-4)
+    pub tier_count: u32,
+    /// tier 内 長 (mm、default 250、range 150-350)
+    pub tier_length: f32,
+    /// tier 内 奥行 (mm、default 120、range 80-180)
+    pub tier_depth: f32,
+    /// tier 深さ (mm、default 40、range 25-70)
+    pub tier_height: f32,
+    /// tier 間隔 (mm、default 100、range 60-150)
+    pub tier_spacing: f32,
+    /// 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+    /// drain hole 直径 (mm、default 5.0)
+    pub drain_hole_diameter: f32,
+    /// 各 tier あたり drain hole 個数 (default 6)
+    pub drains_per_tier: u32,
+    /// mount hole 直径 (mm、M4=4.5、default 4.5)
+    pub mount_hole_diameter: f32,
+}
+
+impl ShowerCaddySpec {
+    /// 2 tier × L250 × D120mm (bathroom § 7.5 standard、shampoo + soap)
+    #[must_use]
+    pub const fn standard_2_tier() -> Self {
+        Self {
+            tier_count: 2,
+            tier_length: 250.0,
+            tier_depth: 120.0,
+            tier_height: 40.0,
+            tier_spacing: 100.0,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+            drain_hole_diameter: 5.0,
+            drains_per_tier: 6,
+            mount_hole_diameter: 4.5,
+        }
+    }
+}
+
+/// シャワー用棚 (multi-tier wall-mount tray + drain + mount holes、`to_z_up` wrap)
+///
+/// 構造 (bathroom § 7.5 準拠、Y-up 設計、**新 pattern: multi-tier wall-mount tray**):
+/// - Backplate: `RoundedBox` (`(length+2×wall) × total_height × wall`)、壁貼付面 (Z-)
+/// - Tiers: N× (`RoundedBox` tray + `Box3d` cavity subtract)、Y 方向等間隔、Z+ に突出
+/// - Drain holes: 各 tier に (drains_per_tier)× Y-axis `Cylinder`、tray floor 貫通、X 方向等間隔
+/// - Mount holes: 2× Y-axis `Cylinder` (M4)、backplate 上端左右
+///
+/// 3-component composite = backplate + N tier trays + mount holes
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{shower_caddy, ShowerCaddySpec};
+/// let s = shower_caddy(&ShowerCaddySpec::standard_2_tier());
+/// ```
+#[must_use]
+pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
+    let count = spec.tier_count.max(1);
+    let count_f = count as f32;
+
+    let bp_ext_x = spec.tier_length + 2.0 * spec.wall_thickness;
+    let bp_ext_y = count_f * spec.tier_spacing + spec.tier_height + spec.wall_thickness * 2.0;
+    let bp_ext_z = spec.wall_thickness;
+    let bp_hx = bp_ext_x * 0.5;
+    let bp_hy = bp_ext_y * 0.5;
+    let bp_hz = bp_ext_z * 0.5;
+
+    let backplate = rounded_box(bp_hx, bp_hy, bp_hz, 3.0);
+    let mut result = backplate;
+
+    // tier X 方向 outer / cavity 定数
+    let tier_outer_hx = (spec.tier_length + 2.0 * spec.wall_thickness) * 0.5;
+    let tier_outer_hy = (spec.tier_height + spec.floor_thickness) * 0.5;
+    let tier_outer_hz = (spec.tier_depth + spec.wall_thickness) * 0.5;
+    let cavity_hx = spec.tier_length * 0.5;
+    let cavity_hy = (spec.tier_height + 1.0) * 0.5;
+    let cavity_hz = spec.tier_depth * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let drain_r = spec.drain_hole_diameter * 0.5;
+    let drain_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let drain_offset_y = -tier_outer_hy + drain_hy - 0.5;
+    let drains = spec.drains_per_tier.max(1);
+    let drain_pitch = spec.tier_length / (drains as f32 + 1.0);
+
+    for i in 0..count {
+        let tier_y = -bp_hy + spec.wall_thickness + tier_outer_hy + (i as f32) * spec.tier_spacing;
+        let tier_z = bp_hz + tier_outer_hz;
+
+        let outer = rounded_box(tier_outer_hx, tier_outer_hy, tier_outer_hz, 3.0);
+        let cavity = translate(
+            box3d(cavity_hx, cavity_hy, cavity_hz),
+            Vec3::new(0.0, cavity_offset_y, spec.wall_thickness * 0.5),
+        );
+        let mut tier = subtract(outer, cavity);
+        for k in 0..drains {
+            let x = -spec.tier_length * 0.5 + drain_pitch * (k as f32 + 1.0);
+            let drain = translate(
+                cylinder(drain_r, drain_hy),
+                Vec3::new(x, drain_offset_y, spec.wall_thickness * 0.5),
+            );
+            tier = subtract(tier, drain);
+        }
+        let tier_placed = translate(tier, Vec3::new(0.0, tier_y, tier_z));
+        result = union(result, tier_placed);
+    }
+
+    // Mount holes (M4 × 2、backplate 上端左右)
+    let mount_r = spec.mount_hole_diameter * 0.5;
+    let mount_hy = spec.wall_thickness + 1.0;
+    let mount_y_offset = bp_hy - spec.wall_thickness * 2.0;
+    let mount_x_offset = bp_hx * 0.85;
+    let mount_left = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
+    );
+    let mount_right = translate(
+        cylinder(mount_r, mount_hy),
+        Vec3::new(mount_x_offset, mount_y_offset, 0.0),
+    );
+    result = subtract(result, mount_left);
+    result = subtract(result, mount_right);
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 60. caliper_holder (tools § 4 Caliper Holder)
+// ────────────────────────────────────────────────────────
+
+/// ノギスホルダー spec (wall-mount backplate + jaw slot + hanging tab、multi-component)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaliperHolderSpec {
+    /// ノギス最大長 (mm、150mm 標準、default 150、range 100-300)
+    pub jaw_length: f32,
+    /// ノギス throat 深さ (mm、default 40、range 25-60)
+    pub throat_depth: f32,
+    /// 収納個数 (default 3、range 1-6)
+    pub count: u32,
+    /// slot 幅 (mm、caliper 厚 + clearance、default 15)
+    pub slot_width: f32,
+    /// backplate 厚 (mm、default 5)
+    pub wall_thickness: f32,
+    /// mount hole 直径 (mm、M4、default 4.5)
+    pub mount_hole_diameter: f32,
+}
+
+impl CaliperHolderSpec {
+    /// 3 caliper × L150 × 40mm throat (tools § 4 standard、Mitutoyo 150mm digital)
+    #[must_use]
+    pub const fn standard_3() -> Self {
+        Self {
+            jaw_length: 150.0,
+            throat_depth: 40.0,
+            count: 3,
+            slot_width: 15.0,
+            wall_thickness: 5.0,
+            mount_hole_diameter: 4.5,
+        }
+    }
+}
+
+/// ノギスホルダー (wall-mount backplate + N caliper slots、`to_z_up` wrap)
+///
+/// 構造 (tools § 4 準拠、Y-up 設計、multi-component composite):
+/// - Backplate: `RoundedBox` (`(count×pitch+wall) × jaw_length+wall × wall`)、壁貼付面
+/// - Slots: N× `Box3d` slot (X thin=slot_width、Y jaw_length、Z through)、backplate 貫通で挿入
+/// - Mount holes: 4× Y-axis `Cylinder` (M4)、backplate 4 隅
+///
+/// 単一 print composite (backplate + slot subtract)、caliper は下から差し込み
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{caliper_holder, CaliperHolderSpec};
+/// let c = caliper_holder(&CaliperHolderSpec::standard_3());
+/// ```
+#[must_use]
+pub fn caliper_holder(spec: &CaliperHolderSpec) -> SdfNode {
+    let count = spec.count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.throat_depth + 10.0;
+    let bp_ext_x = count_f * pitch + 10.0;
+    let bp_ext_y = spec.jaw_length + 20.0;
+
+    let outer_hx = bp_ext_x * 0.5;
+    let outer_hy = bp_ext_y * 0.5;
+    let outer_hz = spec.wall_thickness * 0.5;
+
+    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+
+    // Slots: X 方向等間隔、backplate 下部から挿入 (Y-)
+    let slot_hx = spec.slot_width * 0.5;
+    let slot_hy = spec.jaw_length * 0.5;
+    let slot_hz = spec.wall_thickness + 1.0;
+    let slot_offset_y = -outer_hy + slot_hy + 5.0;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let mut result = backplate;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(slot_hx, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    // Mount holes (M4 × 4、backplate 4 隅)
+    let mount_r = spec.mount_hole_diameter * 0.5;
+    let mount_hy = spec.wall_thickness + 1.0;
+    let mount_y_off = outer_hy - 8.0;
+    let mount_x_off = outer_hx - 8.0;
+    for (mx, my) in [
+        (-mount_x_off, mount_y_off),
+        (mount_x_off, mount_y_off),
+        (-mount_x_off, -mount_y_off),
+        (mount_x_off, -mount_y_off),
+    ] {
+        let mount = translate(cylinder(mount_r, mount_hy), Vec3::new(mx, my, 0.0));
+        result = subtract(result, mount);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 61. bag_clip_org (organizer-cable-kitchen § 6.3 Bag Clip Organizer)
+// ────────────────────────────────────────────────────────
+
+/// 袋クリップ整理 spec (縦 slot rack、magnetic_strip の vertical 変種)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BagClipOrgSpec {
+    /// slot 個数 (default 8、range 4-16)
+    pub slot_count: u32,
+    /// slot 幅 (mm、clip 厚 用、default 8、range 5-15)
+    pub slot_width: f32,
+    /// 全高 = clip 挿入深さ (mm、default 100、range 60-150)
+    pub height: f32,
+    /// slot 間 wall 厚 (mm、default 2.5)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+    /// slot 奥行 (mm、default 30、range 20-50)
+    pub slot_depth: f32,
+}
+
+impl BagClipOrgSpec {
+    /// 8 slot × W8 × H100mm (kitchen § 6.3 standard、chip bag clip 8 個)
+    #[must_use]
+    pub const fn standard_8() -> Self {
+        Self {
+            slot_count: 8,
+            slot_width: 8.0,
+            height: 100.0,
+            wall_thickness: 2.5,
+            floor_thickness: 3.0,
+            slot_depth: 30.0,
+        }
+    }
+}
+
+/// 袋クリップ整理 (縦 slot rack、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.3 準拠、Y-up 設計、`magnetic_strip` の vertical 変種):
+/// - Outer: `RoundedBox` (`(count×pitch+wall) × (height+floor) × (slot_depth+2×wall)`)
+/// - Slots: N× `Box3d` slot (X narrow=clip thickness、Y height、Z slot_depth)、Y+ 開口
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{bag_clip_org, BagClipOrgSpec};
+/// let b = bag_clip_org(&BagClipOrgSpec::standard_8());
+/// ```
+#[must_use]
+pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
+    let count = spec.slot_count.max(1);
+    let count_f = count as f32;
+    let pitch = spec.slot_width + spec.wall_thickness;
+    let ext_x = count_f * pitch + spec.wall_thickness;
+    let ext_y = spec.height + spec.floor_thickness;
+    let ext_z = spec.slot_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let slot_hx = spec.slot_width * 0.5;
+    let slot_hy = (spec.height + 1.0) * 0.5;
+    let slot_hz = spec.slot_depth * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(count_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for i in 0..count {
+        let x = x_start + i as f32 * pitch;
+        let slot = translate(
+            box3d(slot_hx, slot_hy, slot_hz),
+            Vec3::new(x, slot_offset_y, 0.0),
+        );
+        result = subtract(result, slot);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -6458,6 +6773,65 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint18 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 19 ミックス 8 archetype (shower_caddy + caliper_holder + bag_clip_org) ──
+
+    #[test]
+    fn shower_caddy_standard_2_tier_is_rotate_wrapped() {
+        let s = shower_caddy(&ShowerCaddySpec::standard_2_tier());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn shower_caddy_backplate_center_is_solid() {
+        let s = shower_caddy(&ShowerCaddySpec::standard_2_tier());
+        // backplate 中央 (world 0, 0, 0) は material (backplate 内)
+        assert!(eval(&s, Vec3::new(0.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn caliper_holder_standard_3_is_rotate_wrapped() {
+        let c = caliper_holder(&CaliperHolderSpec::standard_3());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn caliper_holder_wall_between_slots_is_solid() {
+        let c = caliper_holder(&CaliperHolderSpec::standard_3());
+        // slots at X=-50, 0, 50 (half-width 7.5)、between slots X=25 (in [7.5, 42.5] wall)
+        // world (25, 0, 60) → internal (25, 60, 0) = backplate wall material (not slot)
+        assert!(eval(&c, Vec3::new(25.0, 0.0, 60.0)) < 0.0);
+    }
+
+    #[test]
+    fn bag_clip_org_standard_8_is_rotate_wrapped() {
+        let b = bag_clip_org(&BagClipOrgSpec::standard_8());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn bag_clip_org_floor_is_solid() {
+        let b = bag_clip_org(&BagClipOrgSpec::standard_8());
+        // ext_y = 100+3 = 103、outer_hy = 51.5、floor Y [-51.5, -48.5]
+        // to_z_up: world (0, 0, -50) → internal (0, -50, 0) = floor 材料
+        assert!(eval(&b, Vec3::new(0.0, 0.0, -50.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint19_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            shower_caddy(&ShowerCaddySpec::standard_2_tier()),
+            caliper_holder(&CaliperHolderSpec::standard_3()),
+            bag_clip_org(&BagClipOrgSpec::standard_8()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint19 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
