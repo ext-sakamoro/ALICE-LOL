@@ -2479,6 +2479,50 @@ impl<'a> Parser<'a> {
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::bag_clip_org(&spec))
             }
+            "can_rack" => {
+                // can_rack(rows, can_diameter, tilt_angle_deg) 3 param、他 default
+                let (rows, dia, tilt) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CanRackSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    can_diameter: dia,
+                    tilt_angle_deg: tilt,
+                    cans_per_row: 6,
+                    wall_thickness: 3.0,
+                    shelf_thickness: 3.0,
+                    front_lip_height: 15.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::can_rack(&spec))
+            }
+            "led_hub_box" => {
+                // led_hub_box(internal_w, internal_d, internal_h) 3 param、他 default
+                let (w, d, h) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::LedHubBoxSpec {
+                    internal_width: w,
+                    internal_depth: d,
+                    internal_height: h,
+                    led_window_width: 40.0,
+                    led_window_height: 15.0,
+                    antenna_hole_diameter: 12.0,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::led_hub_box(&spec))
+            }
+            "makeup_organizer" => {
+                // makeup_organizer(rows, cols, cell_size) 3 param、他 default
+                let (rows, cols, size) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::MakeupOrganizerSpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    cell_size: size,
+                    cell_depth: 40.0,
+                    wall_thickness: 2.0,
+                    floor_thickness: 2.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::makeup_organizer(
+                    &spec,
+                ))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3977,6 +4021,40 @@ mod tests {
             "shower_caddy(2, 250, 120)",
             "caliper_holder(150, 40, 3)",
             "bag_clip_org(8, 8, 100)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 20 ミックス 9 archetype tests ──
+
+    #[test]
+    fn test_can_rack_standard_2_tier() {
+        let node = parse_lol("can_rack(2, 66, 10)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_led_hub_box_standard() {
+        let node = parse_lol("led_hub_box(80, 60, 30)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_makeup_organizer_standard_3x4() {
+        let node = parse_lol("makeup_organizer(3, 4, 45)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint20_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "can_rack(2, 66, 10)",
+            "led_hub_box(80, 60, 30)",
+            "makeup_organizer(3, 4, 45)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

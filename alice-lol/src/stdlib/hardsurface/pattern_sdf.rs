@@ -5501,6 +5501,332 @@ pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
+// 62. can_rack (organizer-cable-kitchen § 6.4 Gravity Feed Can Rack)
+// ────────────────────────────────────────────────────────
+
+/// 缶ラック spec (gravity feed 多段傾斜、cans が転がって前へ)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CanRackSpec {
+    /// 段数 (default 2、range 1-4)
+    pub rows: u32,
+    /// 缶直径 (mm、Coke 350ml=66、short=55、default 66、range 50-80)
+    pub can_diameter: f32,
+    /// 傾斜角 (deg、gravity feed 用、default 10、range 5-20)
+    pub tilt_angle_deg: f32,
+    /// 段当り 缶数 (default 6、shelf_length 決定用)
+    pub cans_per_row: u32,
+    /// 側壁厚 (mm、default 3)
+    pub wall_thickness: f32,
+    /// shelf 厚 (mm、default 3)
+    pub shelf_thickness: f32,
+    /// 前端 lip 高さ (mm、can 抜け防止、default 15)
+    pub front_lip_height: f32,
+}
+
+impl CanRackSpec {
+    /// 2 tier × Coke 350ml × 10deg × 6 缶/段 (kitchen § 6.4 standard)
+    #[must_use]
+    pub const fn standard_2_tier() -> Self {
+        Self {
+            rows: 2,
+            can_diameter: 66.0,
+            tilt_angle_deg: 10.0,
+            cans_per_row: 6,
+            wall_thickness: 3.0,
+            shelf_thickness: 3.0,
+            front_lip_height: 15.0,
+        }
+    }
+}
+
+/// 缶ラック (multi-tier gravity feed、**新 pattern: tilted shelf**、`to_z_up` wrap)
+///
+/// 構造 (kitchen § 6.4 準拠、Y-up 設計、multi-component composite):
+/// - Side walls: 2× `Box3d` (`wall × total_height × total_depth`)、X 両側
+/// - Shelves: N× `Box3d` shelf、Y 方向等間隔、X-axis 傾斜 (gravity feed)
+/// - Front lips: N× `Box3d`、各 shelf 前端 (can 抜け防止)
+///
+/// 缶は shelf を転がって前 lip で停止、gravity feed pattern
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{can_rack, CanRackSpec};
+/// let c = can_rack(&CanRackSpec::standard_2_tier());
+/// ```
+#[must_use]
+pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let rows_f = rows as f32;
+    let cans_f = spec.cans_per_row.max(1) as f32;
+
+    let shelf_depth = cans_f * (spec.can_diameter + 2.0);
+    let shelf_width = spec.can_diameter + 8.0;
+    let tier_spacing = spec.can_diameter + 15.0;
+    let total_height = rows_f * tier_spacing + spec.wall_thickness;
+
+    let ext_x = shelf_width + 2.0 * spec.wall_thickness;
+    let ext_y = total_height;
+    let ext_z = shelf_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    // Side walls
+    let side_hy = outer_hy;
+    let side_hz = outer_hz;
+    let side_hx = spec.wall_thickness * 0.5;
+    let side_offset_x = outer_hx - side_hx;
+    let side_l = translate(
+        box3d(side_hx, side_hy, side_hz),
+        Vec3::new(-side_offset_x, 0.0, 0.0),
+    );
+    let side_r = translate(
+        box3d(side_hx, side_hy, side_hz),
+        Vec3::new(side_offset_x, 0.0, 0.0),
+    );
+
+    // Back wall
+    let back_hx = shelf_width * 0.5;
+    let back_hy = outer_hy;
+    let back_hz = spec.wall_thickness * 0.5;
+    let back_offset_z = -outer_hz + back_hz;
+    let back = translate(
+        box3d(back_hx, back_hy, back_hz),
+        Vec3::new(0.0, 0.0, back_offset_z),
+    );
+
+    let mut result = union(union(side_l, side_r), back);
+
+    // N tilted shelves + front lips
+    let tilt_rad = spec.tilt_angle_deg.to_radians();
+    let shelf_hx = shelf_width * 0.5;
+    let shelf_hy = spec.shelf_thickness * 0.5;
+    let shelf_hz = shelf_depth * 0.5;
+    let lip_hy = spec.front_lip_height * 0.5;
+    let lip_hz = spec.wall_thickness * 0.5;
+    for i in 0..rows {
+        // Shelf Y offset (bottom → top、+X 軸傾斜で back → front 下がる)
+        let tier_y = -outer_hy + spec.wall_thickness + tier_spacing * (i as f32) + shelf_hy;
+        // Shelf 傾斜 = X axis 周り negative rotation (back Z- 高 → front Z+ 低)
+        let shelf_raw = box3d(shelf_hx, shelf_hy, shelf_hz);
+        let shelf_rotated = SdfNode::Rotate {
+            child: Arc::new(shelf_raw),
+            rotation: Quat::from_rotation_x(-tilt_rad),
+        };
+        let shelf = translate(shelf_rotated, Vec3::new(0.0, tier_y, 0.0));
+
+        // Front lip: shelf 前端 (Z+) に垂直 wall
+        let lip_offset_z = outer_hz - lip_hz;
+        let lip_offset_y = tier_y + lip_hy;
+        let lip = translate(
+            box3d(shelf_hx, lip_hy, lip_hz),
+            Vec3::new(0.0, lip_offset_y, lip_offset_z),
+        );
+
+        result = union(result, shelf);
+        result = union(result, lip);
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 63. led_hub_box (electronics § 6 LED Hub Enclosure)
+// ────────────────────────────────────────────────────────
+
+/// LED hub 筐体 spec (raspi_case + front LED window + antenna keep-out)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LedHubBoxSpec {
+    /// 内部 幅 (mm、default 80、range 60-150)
+    pub internal_width: f32,
+    /// 内部 奥行 (mm、default 60、range 40-120)
+    pub internal_depth: f32,
+    /// 内部 高さ (mm、default 30、range 20-80)
+    pub internal_height: f32,
+    /// LED window 幅 (mm、default 40)
+    pub led_window_width: f32,
+    /// LED window 高さ (mm、default 15)
+    pub led_window_height: f32,
+    /// アンテナ keep-out 直径 (mm、hole diameter for antenna、default 12)
+    pub antenna_hole_diameter: f32,
+    /// 壁厚 (mm、default 3.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 3.0)
+    pub floor_thickness: f32,
+}
+
+impl LedHubBoxSpec {
+    /// 80×60×30mm 内部 + LED window 40×15mm + antenna Ø12mm (electronics § 6 standard)
+    #[must_use]
+    pub const fn standard_80x60() -> Self {
+        Self {
+            internal_width: 80.0,
+            internal_depth: 60.0,
+            internal_height: 30.0,
+            led_window_width: 40.0,
+            led_window_height: 15.0,
+            antenna_hole_diameter: 12.0,
+            wall_thickness: 3.0,
+            floor_thickness: 3.0,
+        }
+    }
+}
+
+/// LED hub 筐体 (raspi_case + front LED opening + top antenna hole、multi-component、`to_z_up` wrap)
+///
+/// 構造 (electronics § 6 準拠、Y-up 設計、3-component composite):
+/// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
+/// - Cavity: `Box3d` (`width × height+1 × depth`)、Y+ 開口
+/// - LED window: `Box3d` (`led_w × led_h × wall+1`)、front face (Z+) 中央
+/// - Antenna hole: Y-axis `Cylinder` (r=`antenna_dia/2`、h=`floor+wall`)、top corner 貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{led_hub_box, LedHubBoxSpec};
+/// let l = led_hub_box(&LedHubBoxSpec::standard_80x60());
+/// ```
+#[must_use]
+pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
+    let ext_x = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_y = spec.internal_height + spec.floor_thickness;
+    let ext_z = spec.internal_depth + 2.0 * spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cavity_hx = spec.internal_width * 0.5;
+    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hz = spec.internal_depth * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let cavity = translate(
+        box3d(cavity_hx, cavity_hy, cavity_hz),
+        Vec3::new(0.0, cavity_offset_y, 0.0),
+    );
+    let mut result = subtract(outer, cavity);
+
+    // LED window: front face (Z+) 中央、Z 貫通
+    let led_hx = spec.led_window_width * 0.5;
+    let led_hy = spec.led_window_height * 0.5;
+    let led_hz = spec.wall_thickness + 1.0;
+    let led_offset_y = cavity_offset_y;
+    let led_offset_z = outer_hz - spec.wall_thickness * 0.5;
+    let led = translate(
+        box3d(led_hx, led_hy, led_hz),
+        Vec3::new(0.0, led_offset_y, led_offset_z),
+    );
+    result = subtract(result, led);
+
+    // Antenna hole: top-right corner (Y+ top face、X+ Z-)、Y 貫通
+    let antenna_r = spec.antenna_hole_diameter * 0.5;
+    let antenna_hy = spec.floor_thickness + spec.wall_thickness + 1.0;
+    let antenna_offset_x = outer_hx - antenna_r - spec.wall_thickness;
+    let antenna_offset_y = outer_hy - antenna_hy * 0.5 + 0.5;
+    let antenna_offset_z = -outer_hz + antenna_r + spec.wall_thickness;
+    let antenna = translate(
+        cylinder(antenna_r, antenna_hy),
+        Vec3::new(antenna_offset_x, antenna_offset_y, antenna_offset_z),
+    );
+    result = subtract(result, antenna);
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
+// 64. makeup_organizer (organizer-drawer-wall § 3.5 Makeup Organizer)
+// ────────────────────────────────────────────────────────
+
+/// メイク整理 spec (2D grid multi-cell、pill_organizer の large + variable-size cell)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MakeupOrganizerSpec {
+    /// 行数 (default 3、range 2-6)
+    pub rows: u32,
+    /// 列数 (default 4、range 2-8)
+    pub cols: u32,
+    /// cell 一辺 (mm、default 45、range 25-80)
+    pub cell_size: f32,
+    /// cell 深さ (mm、default 40、range 20-80)
+    pub cell_depth: f32,
+    /// cell 間 wall 厚 (mm、default 2.0)
+    pub wall_thickness: f32,
+    /// 底厚 (mm、default 2.5)
+    pub floor_thickness: f32,
+}
+
+impl MakeupOrganizerSpec {
+    /// 12 cell (3×4) × 45mm square × 40mm depth (drawer § 3.5 standard)
+    #[must_use]
+    pub const fn standard_3x4() -> Self {
+        Self {
+            rows: 3,
+            cols: 4,
+            cell_size: 45.0,
+            cell_depth: 40.0,
+            wall_thickness: 2.0,
+            floor_thickness: 2.5,
+        }
+    }
+}
+
+/// メイク整理 (2D grid multi-cell、pill_organizer pattern の large 版、`to_z_up` wrap)
+///
+/// 構造 (drawer § 3.5 準拠、Y-up 設計、pill_organizer と同 structure):
+/// - Outer: `RoundedBox` (`(cols×pitch+wall) × (depth+floor) × (rows×pitch+wall)`)
+/// - Cells: (rows×cols)× `Box3d` square (X=Z=cell_size、Y=cell_depth+1)、Y+ 開口
+///
+/// pill_organizer より大きい cell (45mm square、makeup brush / lipstick / palette 用)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{makeup_organizer, MakeupOrganizerSpec};
+/// let m = makeup_organizer(&MakeupOrganizerSpec::standard_3x4());
+/// ```
+#[must_use]
+pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let pitch = spec.cell_size + spec.wall_thickness;
+    let ext_x = cols_f * pitch + spec.wall_thickness;
+    let ext_y = spec.cell_depth + spec.floor_thickness;
+    let ext_z = rows_f * pitch + spec.wall_thickness;
+
+    let outer_hx = ext_x * 0.5;
+    let outer_hy = ext_y * 0.5;
+    let outer_hz = ext_z * 0.5;
+
+    let cell_h_side = spec.cell_size * 0.5;
+    let cell_hy = (spec.cell_depth + 1.0) * 0.5;
+    let cell_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let x_start = -(cols_f - 1.0) * pitch * 0.5;
+    let z_start = -(rows_f - 1.0) * pitch * 0.5;
+
+    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let mut result = outer;
+    for r in 0..rows {
+        for c in 0..cols {
+            let x = x_start + c as f32 * pitch;
+            let z = z_start + r as f32 * pitch;
+            let cell = translate(
+                box3d(cell_h_side, cell_hy, cell_h_side),
+                Vec3::new(x, cell_offset_y, z),
+            );
+            result = subtract(result, cell);
+        }
+    }
+
+    to_z_up(result)
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -6832,6 +7158,66 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint19 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 20 ミックス 9 archetype (can_rack + led_hub_box + makeup_organizer) ──
+
+    #[test]
+    fn can_rack_standard_2_tier_is_rotate_wrapped() {
+        let c = can_rack(&CanRackSpec::standard_2_tier());
+        assert!(matches!(c, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn can_rack_side_wall_is_solid() {
+        let c = can_rack(&CanRackSpec::standard_2_tier());
+        // side wall X=±(outer_hx - wall/2) は material
+        // outer_hx = (66+8+6)/2 = 40、side wall X ~ ±38.5
+        // to_z_up: world (38, 0, 0) → internal (38, 0, 0) 側壁 material
+        assert!(eval(&c, Vec3::new(38.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn led_hub_box_standard_is_rotate_wrapped() {
+        let l = led_hub_box(&LedHubBoxSpec::standard_80x60());
+        assert!(matches!(l, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn led_hub_box_wall_is_solid() {
+        let l = led_hub_box(&LedHubBoxSpec::standard_80x60());
+        // ext_x = 80+6 = 86、outer_hx = 43、wall X [-43, -40] material
+        assert!(eval(&l, Vec3::new(-42.0, 0.0, 0.0)) < 0.0);
+    }
+
+    #[test]
+    fn makeup_organizer_standard_3x4_is_rotate_wrapped() {
+        let m = makeup_organizer(&MakeupOrganizerSpec::standard_3x4());
+        assert!(matches!(m, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn makeup_organizer_floor_is_solid() {
+        let m = makeup_organizer(&MakeupOrganizerSpec::standard_3x4());
+        // ext_y = 40+2.5 = 42.5、outer_hy = 21.25、floor Y [-21.25, -18.75]
+        // to_z_up: world (0, 0, -20) → internal (0, -20, 0) floor material
+        assert!(eval(&m, Vec3::new(0.0, 0.0, -20.0)) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint20_mix_archetypes_evaluations_finite() {
+        let nodes = [
+            can_rack(&CanRackSpec::standard_2_tier()),
+            led_hub_box(&LedHubBoxSpec::standard_80x60()),
+            makeup_organizer(&MakeupOrganizerSpec::standard_3x4()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint20 mix archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
