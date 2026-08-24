@@ -2434,6 +2434,51 @@ impl<'a> Parser<'a> {
                     &spec,
                 ))
             }
+            "shower_caddy" => {
+                // shower_caddy(tier_count, tier_length, tier_depth) 3 param、他 default
+                let (count, length, depth) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ShowerCaddySpec {
+                    tier_count: count.round().max(1.0) as u32,
+                    tier_length: length,
+                    tier_depth: depth,
+                    tier_height: 40.0,
+                    tier_spacing: 100.0,
+                    wall_thickness: 3.0,
+                    floor_thickness: 3.0,
+                    drain_hole_diameter: 5.0,
+                    drains_per_tier: 6,
+                    mount_hole_diameter: 4.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::shower_caddy(&spec))
+            }
+            "caliper_holder" => {
+                // caliper_holder(jaw_length, throat_depth, count) 3 param、他 default
+                let (jaw, throat, count) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CaliperHolderSpec {
+                    jaw_length: jaw,
+                    throat_depth: throat,
+                    count: count.round().max(1.0) as u32,
+                    slot_width: 15.0,
+                    wall_thickness: 5.0,
+                    mount_hole_diameter: 4.5,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::caliper_holder(
+                    &spec,
+                ))
+            }
+            "bag_clip_org" => {
+                // bag_clip_org(slot_count, slot_width, height) 3 param、他 default
+                let (count, width, height) = self.parse_3f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::BagClipOrgSpec {
+                    slot_count: count.round().max(1.0) as u32,
+                    slot_width: width,
+                    height,
+                    wall_thickness: 2.5,
+                    floor_thickness: 3.0,
+                    slot_depth: 30.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::bag_clip_org(&spec))
+            }
 
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
@@ -3898,6 +3943,40 @@ mod tests {
             "phone_dock(80, 100, 8)",
             "cutting_board_rack(3, 12, 220)",
             "tape_dispenser(76, 50, 3)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 19 ミックス 8 archetype tests ──
+
+    #[test]
+    fn test_shower_caddy_standard_2_tier() {
+        let node = parse_lol("shower_caddy(2, 250, 120)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_caliper_holder_standard_3() {
+        let node = parse_lol("caliper_holder(150, 40, 3)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_bag_clip_org_standard_8() {
+        let node = parse_lol("bag_clip_org(8, 8, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint19_mix_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "shower_caddy(2, 250, 120)",
+            "caliper_holder(150, 40, 3)",
+            "bag_clip_org(8, 8, 100)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
