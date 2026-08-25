@@ -307,10 +307,10 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
     // 旧: cavity_hz = int_depth/2、cavity_offset_z = floor/2 で cavity 天面が
     //     outer top より 6.25mm 内側 = 「ただの四角」に見える
     // 新: cavity を outer top を貫通するサイズにして top open を保証
-    let cavity_hz = (ext_h - spec.floor_thickness + 1.0) * 0.5;
+    let cavity_hz = (ext_h - spec.floor_thickness + 10.0) * 0.5;
     let inner_hx = bin_hx - spec.wall_thickness;
     let inner_hy = bin_hy - spec.wall_thickness;
-    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
+    let cavity_offset_z = (spec.floor_thickness + 10.0) * 0.5;
 
     let outer = rounded_box(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET);
 
@@ -1384,13 +1384,13 @@ pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
 
     // Cavity: 底面 (Y-) を開口したいので Y- 方向オフセット、Y+ (top wall) 残す
     let cavity_hx = spec.internal_length * 0.5;
-    let cavity_hy = (spec.internal_height + spec.wall_thickness + 1.0) * 0.5;
+    let cavity_hy = (spec.internal_height + spec.wall_thickness + 10.0) * 0.5;
     let cavity_hz = spec.internal_width * 0.5;
     let cavity_offset_y = -(spec.wall_thickness + 0.5) * 0.5;
 
     // Top slot (Y+ 面貫通): X 方向 slot_length、Y 方向 wall_thickness+margin、Z 方向 slot_width
     let slot_hx = spec.slot_length * 0.5;
-    let slot_hy = (spec.wall_thickness + 1.0) * 0.5;
+    let slot_hy = (spec.wall_thickness + 10.0) * 0.5;
     let slot_hz = spec.slot_width * 0.5;
     let slot_offset_y = outer_hy - slot_hy + 0.5;
 
@@ -1468,9 +1468,15 @@ pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
     let outer_hz = ext_w * 0.5;
 
     let cavity_hx = spec.internal_length * 0.5;
-    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    // Cavity margin +5mm (up-shifted): ensures top opening survives MC
+    // discretization at preview res 96 (cell ~1.65mm for typical sizes)
+    // where the older +1mm margin was smaller than 1 cell and blob-out'd
+    // the punch-through, making the cavity appear enclosed (「ただの四角」)
+    // Floor thickness is preserved because cavity_offset_y shifts up by
+    // the same amount that cavity_hy grows on each side
+    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
     let cavity_hz = spec.internal_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let cavity = translate(
@@ -1606,6 +1612,12 @@ pub fn led_channel(spec: &LedChannelSpec) -> SdfNode {
 
     let cavity_hx = inner_w * 0.5;
     let cavity_hy = outer_hy + 1.0;
+    // led_channel uses non-standard offset formula: cavity center is
+    // outer_top - cavity_hz + 0.5 so cavity always extends 0.5mm above
+    // outer top regardless of cavity_hz Growing cavity_hz here would
+    // extend cavity DOWNWARD (destroying the floor), so keep the small
+    // +1mm margin — LED channels are thin (channel_depth 2.5mm typical)
+    // and preview cell size < 1mm so the small margin still cuts through
     let cavity_hz = (spec.channel_depth + 1.0) * 0.5;
     let cavity_offset_z = outer_hz - cavity_hz + 0.5;
 
@@ -1681,9 +1693,9 @@ pub fn card_tray(spec: &CardTraySpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = (spec.card_width + 2.0 * spec.card_clearance) * 0.5;
-    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
     let cavity_hz = (spec.card_height + 2.0 * spec.card_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let notch_hy = outer_hy + 1.0;
     let notch_offset_z = -outer_hz;
@@ -1763,8 +1775,8 @@ pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let well_r = spec.well_diameter * 0.5;
-    let well_hy = (spec.well_depth + 1.0) * 0.5;
-    let well_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let well_hy = (spec.well_depth + 10.0) * 0.5;
+    let well_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
@@ -1849,8 +1861,8 @@ pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -2021,7 +2033,7 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let hex_r = HEX_BIT_ACROSS_FLATS * 0.5;
-    let hex_half_h = (HEX_BIT_HOLE_DEPTH + 1.0) * 0.5;
+    let hex_half_h = (HEX_BIT_HOLE_DEPTH + 10.0) * 0.5;
     let hex_offset_z = outer_hz - hex_half_h + 0.5;
     let x_start = -(cols_f - 1.0) * spec.spacing * 0.5;
     let y_start = -(rows_f - 1.0) * spec.spacing * 0.5;
@@ -2123,9 +2135,9 @@ pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
     let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let standoff_r = spec.standoff_diameter * 0.5;
     let standoff_hy = spec.standoff_height * 0.5;
@@ -2241,9 +2253,9 @@ pub fn esp32_enclosure(spec: &Esp32EnclosureSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
     let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let usb_hx = (spec.wall_thickness + 2.0) * 0.5;
     let usb_hy = spec.usb_opening_height * 0.5;
@@ -2328,7 +2340,7 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
 
     let cell_r = CELL_18650_DIAMETER * 0.5;
     // cavity length: floor=0 → 貫通 (h > outer_hy)、floor>0 → 内側 CELL_LEN 範囲のみ
-    let cell_hy = (CELL_18650_LENGTH + 1.0) * 0.5;
+    let cell_hy = (CELL_18650_LENGTH + 10.0) * 0.5;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -2402,8 +2414,8 @@ pub fn toothbrush_holder(spec: &ToothbrushHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let hole_r = spec.hole_diameter * 0.5;
-    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -2484,8 +2496,8 @@ pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -2566,8 +2578,8 @@ pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -2764,8 +2776,8 @@ pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cup_r = EGG_CUP_DIAMETER * 0.5;
-    let cup_hy = (spec.cup_depth + 1.0) * 0.5;
-    let cup_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cup_hy = (spec.cup_depth + 10.0) * 0.5;
+    let cup_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * spec.pitch * 0.5;
     let z_start = -(rows_f - 1.0) * spec.pitch * 0.5;
 
@@ -2843,8 +2855,8 @@ pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let comp_r = spec.compartment_diameter * 0.5;
-    let comp_hy = (spec.height + 1.0) * 0.5;
-    let comp_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let comp_hy = (spec.height + 10.0) * 0.5;
+    let comp_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
@@ -2991,8 +3003,8 @@ pub fn nozzle_holder(spec: &NozzleHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let hole_r = spec.hole_diameter * 0.5;
-    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -3069,8 +3081,8 @@ pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.height + 1.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_hy = (spec.height + 10.0) * 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * spec.slot_spacing * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
@@ -3150,9 +3162,9 @@ pub fn cutlery_tray(spec: &CutleryTraySpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
     let slot_hz = spec.slot_length * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
@@ -3234,8 +3246,8 @@ pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cell_h = spec.cell_size * 0.5;
-    let cell_hy = (spec.cell_depth + 1.0) * 0.5;
-    let cell_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cell_hy = (spec.cell_depth + 10.0) * 0.5;
+    let cell_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -3393,8 +3405,8 @@ pub fn hairdryer_holder(spec: &HairdryerHolderSpec) -> SdfNode {
     let outer_hy = (spec.holster_depth + spec.floor_thickness) * 0.5;
 
     let cavity_r = spec.barrel_diameter * 0.5 + spec.inner_clearance;
-    let cavity_hy = (spec.holster_depth + 1.0) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_hy = (spec.holster_depth + 10.0) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 5.0);
     let cavity = translate(
@@ -3473,8 +3485,8 @@ pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let well_r = spec.capsule_diameter * 0.5;
-    let well_hy = (spec.capsule_depth + 1.0) * 0.5;
-    let well_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let well_hy = (spec.capsule_depth + 10.0) * 0.5;
+    let well_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -3561,8 +3573,8 @@ pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let hole_hy = (spec.hole_depth + 1.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
+    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -3728,9 +3740,9 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
 
     // Cavity: 内部全体 (partition wall もまとめて subtract、後で union で追加)
     let cavity_hx = inner_x * 0.5;
-    let cavity_hy = (spec.height + 1.0) * 0.5;
+    let cavity_hy = (spec.height + 10.0) * 0.5;
     let cavity_hz = spec.cell_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let cavity = translate(
@@ -3824,9 +3836,9 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.tray_length * 0.5;
-    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
     let cavity_hz = spec.tray_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -3839,7 +3851,7 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
     // slot 配置: slot 間 wall 厚 は残り floor に配置
     let slot_pitch = spec.tray_length / (count_f + 1.0);
     let slot_hx = spec.drain_slot_width * 0.5;
-    let slot_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let slot_hy = (spec.floor_thickness + 10.0) * 0.5;
     let slot_hz = spec.tray_width * 0.5;
     let slot_offset_y = -outer_hy + slot_hy - 0.5;
     for i in 0..count {
@@ -3916,18 +3928,29 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
+    // Backplate uses rounded_box radius 3 → effective plate thickness
+    // in Z becomes outer_hz + 3 (radius inflates all 6 faces per
+    // [[feedback_alice_sdf_rounded_box_six_face_inflate]]) so
+    // slot_hz / mount_hy must include the radius to punch through
+    let backplate_radius: f32 = 3.0;
+    let punch_z = outer_hz + backplate_radius + 5.0;
+
     // Slot: 下部 (Y-) から depth 分挿入 (razor stem 下向き入れ)
+    // Note: slot_offset_y = -outer_hy + slot_hy - 0.5 anchors the slot
+    // to the plate bottom. Growing slot_hy would extend the slot UPWARD
+    // by 2×delta into the plate interior — keep +1mm slot depth margin
     let slot_hx = spec.slot_width * 0.5;
     let slot_hy = (spec.slot_depth + 1.0) * 0.5;
-    let slot_hz = outer_hz + 1.0;
+    let slot_hz = punch_z;
     let slot_offset_y = -outer_hy + slot_hy - 0.5;
 
-    // Mount hole: 上部 (Y+) 中央
+    // Mount hole: 上部 (Y+) 中央、Y-axis cylinder that must punch through
+    // the rounded_box-inflated plate thickness
     let mount_r = spec.mount_hole_diameter * 0.5;
-    let mount_hy = outer_hz + 1.0;
+    let mount_hy = punch_z;
     let mount_offset_y = outer_hy - spec.wall_thickness * 2.0;
 
-    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, backplate_radius);
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
         Vec3::new(0.0, slot_offset_y, 0.0),
@@ -4001,9 +4024,9 @@ pub fn chopstick_holder(spec: &ChopstickHolderSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
     let slot_hz = spec.slot_length * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -4092,9 +4115,9 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.swatch_thickness * 0.5;
-    let slot_hy = (spec.swatch_height + 1.0) * 0.5;
+    let slot_hy = (spec.swatch_height + 10.0) * 0.5;
     let slot_hz = spec.swatch_width * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
     let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
 
@@ -4263,9 +4286,9 @@ pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.card_thickness * 0.5;
-    let slot_hy = (spec.card_height + 1.0) * 0.5;
+    let slot_hy = (spec.card_height + 10.0) * 0.5;
     let slot_hz = spec.card_width * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
     let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
 
@@ -4342,8 +4365,8 @@ pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
 
     let hole_r = spec.slot_diameter * 0.5;
     let hole_depth = spec.height - floor_thickness;
-    let hole_hy = (hole_depth + 1.0) * 0.5;
-    let hole_offset_y = floor_thickness * 0.5 + 0.5;
+    let hole_hy = (hole_depth + 10.0) * 0.5;
+    let hole_offset_y = floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
@@ -4409,8 +4432,8 @@ pub fn cotton_dispenser(spec: &CottonDispenserSpec) -> SdfNode {
     let outer_r = spec.inner_diameter * 0.5 + spec.wall_thickness;
     let outer_hz = spec.height * 0.5;
     let inner_r = spec.inner_diameter * 0.5;
-    let inner_hz = (spec.height - spec.floor_thickness + 1.0) * 0.5;
-    let inner_offset_z = spec.floor_thickness * 0.5 + 0.5;
+    let inner_hz = (spec.height - spec.floor_thickness + 10.0) * 0.5;
+    let inner_offset_z = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = cylinder_z(outer_r, outer_hz);
     let cavity = translate(
@@ -4486,9 +4509,9 @@ pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.tray_length * 0.5;
-    let cavity_hy = (spec.tray_depth + 1.0) * 0.5;
+    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
     let cavity_hz = spec.tray_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -4499,7 +4522,7 @@ pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
 
     // Drain holes: floor 貫通 Y-axis cyl、X 方向等間隔
     let hole_r = spec.drain_hole_diameter * 0.5;
-    let hole_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let hole_hy = (spec.floor_thickness + 10.0) * 0.5;
     let hole_offset_y = -outer_hy + hole_hy - 0.5;
     let hole_pitch = spec.tray_length / (count_f + 1.0);
     for i in 0..count {
@@ -4688,8 +4711,8 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_r = spec.filament_diameter * 0.5;
-    let cavity_hy = (spec.spool_width - spec.floor_thickness + 1.0) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_hy = (spec.spool_width - spec.floor_thickness + 10.0) * 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -4775,9 +4798,9 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.internal_width * 0.5;
-    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
     let cavity_hz = spec.internal_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -4788,8 +4811,8 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
 
     // Gasket groove: outer top rim を囲む矩形溝 (4 slot union)
     // 位置: wall 中央 (X±=cavity_hx + wall/2、Z±=cavity_hz + wall/2)
-    let groove_offset_y = outer_hy - spec.gasket_depth * 0.5 + 0.5;
-    let groove_hy = (spec.gasket_depth + 1.0) * 0.5;
+    let groove_offset_y = outer_hy - spec.gasket_depth * 0.5 + 5.0;
+    let groove_hy = (spec.gasket_depth + 10.0) * 0.5;
     let wall_mid_x = cavity_hx + spec.wall_thickness * 0.5;
     let wall_mid_z = cavity_hz + spec.wall_thickness * 0.5;
 
@@ -5054,9 +5077,9 @@ pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.slot_width * 0.5;
-    let slot_hy = (spec.height - spec.floor_thickness + 1.0) * 0.5;
+    let slot_hy = (spec.height - spec.floor_thickness + 10.0) * 0.5;
     let slot_hz = spec.slot_depth * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
@@ -5269,11 +5292,11 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let tier_outer_hy = (spec.tier_height + spec.floor_thickness) * 0.5;
     let tier_outer_hz = (spec.tier_depth + spec.wall_thickness) * 0.5;
     let cavity_hx = spec.tier_length * 0.5;
-    let cavity_hy = (spec.tier_height + 1.0) * 0.5;
+    let cavity_hy = (spec.tier_height + 10.0) * 0.5;
     let cavity_hz = spec.tier_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let drain_r = spec.drain_hole_diameter * 0.5;
-    let drain_hy = (spec.floor_thickness + 1.0) * 0.5;
+    let drain_hy = (spec.floor_thickness + 10.0) * 0.5;
     let drain_offset_y = -tier_outer_hy + drain_hy - 0.5;
     let drains = spec.drains_per_tier.max(1);
     let drain_pitch = spec.tier_length / (drains as f32 + 1.0);
@@ -5481,9 +5504,9 @@ pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.slot_width * 0.5;
-    let slot_hy = (spec.height + 1.0) * 0.5;
+    let slot_hy = (spec.height + 10.0) * 0.5;
     let slot_hz = spec.slot_depth * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
@@ -5699,9 +5722,9 @@ pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.internal_width * 0.5;
-    let cavity_hy = (spec.internal_height + 1.0) * 0.5;
+    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
     let cavity_hz = spec.internal_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -5726,7 +5749,7 @@ pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
     let antenna_r = spec.antenna_hole_diameter * 0.5;
     let antenna_hy = spec.floor_thickness + spec.wall_thickness + 1.0;
     let antenna_offset_x = outer_hx - antenna_r - spec.wall_thickness;
-    let antenna_offset_y = outer_hy - antenna_hy * 0.5 + 0.5;
+    let antenna_offset_y = outer_hy - antenna_hy * 0.5 + 5.0;
     let antenna_offset_z = -outer_hz + antenna_r + spec.wall_thickness;
     let antenna = translate(
         cylinder(antenna_r, antenna_hy),
@@ -5804,8 +5827,8 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cell_h_side = spec.cell_size * 0.5;
-    let cell_hy = (spec.cell_depth + 1.0) * 0.5;
-    let cell_offset_y = spec.floor_thickness * 0.5 + 0.5;
+    let cell_hy = (spec.cell_depth + 10.0) * 0.5;
+    let cell_offset_y = spec.floor_thickness * 0.5 + 5.0;
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
