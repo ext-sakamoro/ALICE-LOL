@@ -6078,6 +6078,644 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
     to_z_up(result)
 }
 
+// ────────────────────────────────────────────────────────
+// Sprint 21 Phase X.1 追加 8 archetype (2026-08-27)
+// ────────────────────────────────────────────────────────
+
+/// 2020 T-slot 直角ブラケット spec (両 arm に M5 counterbore、depth = Z 軸)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TSlotBracket2020Spec {
+    /// arm 長 (mm、X 軸 / Y 軸、default 20 = 2020 対応)
+    pub arm_size: f32,
+    /// depth (mm、Z 軸)
+    pub depth: f32,
+    /// plate 厚 (mm、default 3)
+    pub plate_thickness: f32,
+    /// fillet R (mm、default 3)
+    pub fillet_radius: f32,
+}
+
+impl TSlotBracket2020Spec {
+    /// 標準 20mm arm × depth 20mm × 3mm 厚 (2020 プロファイル 1 ホールタイプ)
+    #[must_use]
+    pub const fn standard_20() -> Self {
+        Self {
+            arm_size: 20.0,
+            depth: 20.0,
+            plate_thickness: 3.0,
+            fillet_radius: 3.0,
+        }
+    }
+
+    /// 大型 40mm arm × depth 40mm × 4mm 厚 (2020 プロファイル 2 ホールタイプ)
+    #[must_use]
+    pub const fn heavy_40() -> Self {
+        Self {
+            arm_size: 40.0,
+            depth: 40.0,
+            plate_thickness: 4.0,
+            fillet_radius: 4.0,
+        }
+    }
+}
+
+/// 2020 T-slot 直角ブラケット (両 arm 中央に M5 counterbore、Z-up viewer 向き)
+///
+/// 構造: `bracket_l(arm_size, arm_size, plate_t, depth, fillet_r)` + 両 arm 中央に M5 counterbore
+/// 2020 プロファイルの T-slot に M5 バタフライナット固定を想定
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{t_slot_bracket_2020, TSlotBracket2020Spec};
+/// let b = t_slot_bracket_2020(&TSlotBracket2020Spec::standard_20());
+/// ```
+#[must_use]
+pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{counterbore, MetricSize};
+    use crate::stdlib::hardsurface::mount::bracket_l;
+
+    let arm = spec.arm_size.max(spec.plate_thickness + 5.0);
+    let bracket = bracket_l(
+        arm,
+        arm,
+        spec.plate_thickness,
+        spec.depth,
+        spec.fillet_radius,
+    );
+    let hole = counterbore(MetricSize::M5, spec.plate_thickness);
+
+    let h_hole = translate(hole.clone(), Vec3::new(0.0, 0.0, 0.0));
+    let v_hole_rotated = SdfNode::Rotate {
+        child: Arc::new(hole),
+        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    };
+    let v_hole = translate(
+        v_hole_rotated,
+        Vec3::new(
+            -(arm - spec.plate_thickness) * 0.5,
+            (arm + spec.plate_thickness) * 0.5,
+            0.0,
+        ),
+    );
+
+    let result = subtract(subtract(bracket, h_hole), v_hole);
+    to_z_up(result)
+}
+
+/// Raspberry Pi マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RaspiMountPlateSpec {
+    /// Pi model (4=Pi4B、5=Pi5、3=Pi3B+ = 58×49、0=Zero = 58×23)
+    pub model: u32,
+    /// 外周 M4 追加穴数 (0-4、VESA-like 4 隅配置、0=なし)
+    pub extra_m4_holes: u32,
+    /// 板厚 (mm、default 4)
+    pub plate_thickness: f32,
+    /// 板 X/Z マージン (mm、Pi footprint + 2*margin = 外形、default 15)
+    pub plate_margin: f32,
+    /// M2.5 clearance 穴径 (mm、default 2.8)
+    pub m25_hole_dia: f32,
+}
+
+impl RaspiMountPlateSpec {
+    /// Pi 4B / Pi 5 標準 (58×49mm 4-hole pattern、板厚 4mm、VESA 4 隅穴)
+    #[must_use]
+    pub const fn pi_4b_vesa() -> Self {
+        Self {
+            model: 4,
+            extra_m4_holes: 4,
+            plate_thickness: 4.0,
+            plate_margin: 15.0,
+            m25_hole_dia: 2.8,
+        }
+    }
+
+    /// Pi Zero 標準 (58×23mm 4-hole pattern、板厚 3mm、外周穴なし)
+    #[must_use]
+    pub const fn pi_zero_bare() -> Self {
+        Self {
+            model: 0,
+            extra_m4_holes: 0,
+            plate_thickness: 3.0,
+            plate_margin: 10.0,
+            m25_hole_dia: 2.8,
+        }
+    }
+}
+
+/// Raspberry Pi マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
+///
+/// 構造: 板 (`RoundedBox`) から Pi model 別 M2.5 穴 4 個 + optional M4 穴 4 隅を Subtraction
+/// Pi 3B+/4B/5: 58×49mm rectangular pattern
+/// Pi Zero: 58×23mm pattern (原点対称)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{raspi_mount_plate, RaspiMountPlateSpec};
+/// let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+/// ```
+#[must_use]
+pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+
+    let (pattern_x, pattern_z) = match spec.model {
+        0 => (58.0_f32, 23.0_f32),
+        _ => (58.0, 49.0),
+    };
+    let footprint_x = pattern_x + 20.0;
+    let footprint_z = pattern_z + 20.0;
+
+    let plate_extent_x = footprint_x + 2.0 * spec.plate_margin;
+    let plate_extent_z = footprint_z + 2.0 * spec.plate_margin;
+
+    let outer_hx = plate_extent_x * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_extent_z * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+
+    let m25_hole = SdfNode::Cylinder {
+        radius: spec.m25_hole_dia * 0.5,
+        half_height: spec.plate_thickness * 0.5 + 5.0,
+    };
+    let half_x = pattern_x * 0.5;
+    let half_z = pattern_z * 0.5;
+    let pi_corners = [
+        Vec3::new(half_x, 0.0, half_z),
+        Vec3::new(-half_x, 0.0, half_z),
+        Vec3::new(half_x, 0.0, -half_z),
+        Vec3::new(-half_x, 0.0, -half_z),
+    ];
+
+    let mut result = plate;
+    for c in pi_corners {
+        result = subtract(result, translate(m25_hole.clone(), c));
+    }
+
+    if spec.extra_m4_holes >= 4 {
+        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 5.0);
+        let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
+        let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
+        for c in [
+            Vec3::new(vesa_x, 0.0, vesa_z),
+            Vec3::new(-vesa_x, 0.0, vesa_z),
+            Vec3::new(vesa_x, 0.0, -vesa_z),
+            Vec3::new(-vesa_x, 0.0, -vesa_z),
+        ] {
+            result = subtract(result, translate(m4_hole.clone(), c));
+        }
+    }
+
+    to_z_up(result)
+}
+
+/// Heat-set insert grid plate spec (McMaster / Voxel8 準拠、板上に穴 grid)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeatSetArraySpec {
+    /// 行数 (Z 軸、>= 1)
+    pub rows: u32,
+    /// 列数 (X 軸、>= 1)
+    pub cols: u32,
+    /// insert 規格 (M3/M4/M5/M6/M8)
+    pub insert_size: crate::stdlib::hardsurface::fastener::MetricSize,
+    /// 穴中心間ピッチ (mm、insert 頭径 × 2 以上推奨)
+    pub pitch: f32,
+    /// 板厚 (mm、insert 埋込深さ + 2 以上推奨)
+    pub base_thickness: f32,
+    /// 板 X/Z 端マージン (mm、default 10)
+    pub margin: f32,
+}
+
+impl HeatSetArraySpec {
+    /// M3 2×2 grid pitch 20mm 板厚 6mm
+    #[must_use]
+    pub const fn m3_2x2() -> Self {
+        Self {
+            rows: 2,
+            cols: 2,
+            insert_size: crate::stdlib::hardsurface::fastener::MetricSize::M3,
+            pitch: 20.0,
+            base_thickness: 6.0,
+            margin: 10.0,
+        }
+    }
+
+    /// M4 3×3 grid pitch 25mm 板厚 8mm
+    #[must_use]
+    pub const fn m4_3x3() -> Self {
+        Self {
+            rows: 3,
+            cols: 3,
+            insert_size: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+            pitch: 25.0,
+            base_thickness: 8.0,
+            margin: 10.0,
+        }
+    }
+}
+
+/// Heat-set insert boss array (板 + 格子状 heat-set 穴、Z-up viewer 向き)
+///
+/// 構造: 板 (`RoundedBox`) から `heat_set_insert_hole` を rows×cols grid で Subtraction
+/// 穴は板上面 (Y+) 側から埋込深さまで
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{heat_set_array, HeatSetArraySpec};
+/// let h = heat_set_array(&HeatSetArraySpec::m3_2x2());
+/// ```
+#[must_use]
+pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::heat_set_insert_hole;
+
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let plate_extent_x = (cols_f - 1.0) * spec.pitch + 2.0 * spec.margin;
+    let plate_extent_z = (rows_f - 1.0) * spec.pitch + 2.0 * spec.margin;
+
+    let outer_hx = plate_extent_x * 0.5;
+    let outer_hy = spec.base_thickness * 0.5;
+    let outer_hz = plate_extent_z * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+
+    let hole_template = heat_set_insert_hole(spec.insert_size);
+    let insert_depth = spec.insert_size.heat_set_insert_depth() + 0.3;
+    let hole_y_offset = outer_hy - insert_depth * 0.5;
+
+    let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
+    let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
+
+    let mut result = plate;
+    for r in 0..rows {
+        for c in 0..cols {
+            let cx = start_x + c as f32 * spec.pitch;
+            let cz = start_z + r as f32 * spec.pitch;
+            result = subtract(
+                result.clone(),
+                translate(hole_template.clone(), Vec3::new(cx, hole_y_offset, cz)),
+            );
+        }
+    }
+
+    to_z_up(result)
+}
+
+/// Flange mount spec (円形フランジ、PCD 上に M size 穴、Z-up 向き)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FlangeMountSpec {
+    /// 外径 (mm、`flange_circular::od`)
+    pub outer_dia: f32,
+    /// 締結ネジ規格 (M3/M4/M5/M6/M8、`bolt_dia = nominal + 0.2` H2D clearance)
+    pub bolt_size: crate::stdlib::hardsurface::fastener::MetricSize,
+    /// PCD 上の bolt 穴個数 (3-8 推奨)
+    pub hole_count: u32,
+    /// フランジ厚 (mm)
+    pub thickness: f32,
+    /// PCD 比 (`outer_dia * bcd_ratio` = PCD、default 0.7)
+    pub bcd_ratio: f32,
+    /// 中央 through 穴径 (mm、0 なら中央穴なし)
+    pub center_bore_dia: f32,
+}
+
+impl FlangeMountSpec {
+    /// Φ80 M5×4 標準 (板厚 6mm、PCD 56mm、中央穴なし)
+    #[must_use]
+    pub const fn od80_m5_4() -> Self {
+        Self {
+            outer_dia: 80.0,
+            bolt_size: crate::stdlib::hardsurface::fastener::MetricSize::M5,
+            hole_count: 4,
+            thickness: 6.0,
+            bcd_ratio: 0.7,
+            center_bore_dia: 0.0,
+        }
+    }
+
+    /// Φ100 M6×6 大型 (板厚 8mm、PCD 70mm、中央 Φ30 穴)
+    #[must_use]
+    pub const fn od100_m6_6() -> Self {
+        Self {
+            outer_dia: 100.0,
+            bolt_size: crate::stdlib::hardsurface::fastener::MetricSize::M6,
+            hole_count: 6,
+            thickness: 8.0,
+            bcd_ratio: 0.7,
+            center_bore_dia: 30.0,
+        }
+    }
+}
+
+/// Flange mount (円形フランジ、PCD 上に M size clearance 穴、Z-up viewer 向き)
+///
+/// 構造: `mount::flange_circular` を H2D clearance (呼び径 + 0.2mm) 適用で呼出、Z-up 変換
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{flange_mount, FlangeMountSpec};
+/// let f = flange_mount(&FlangeMountSpec::od80_m5_4());
+/// ```
+#[must_use]
+pub fn flange_mount(spec: &FlangeMountSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::CLEARANCE_H2D_FDM;
+    use crate::stdlib::hardsurface::mount::flange_circular;
+
+    let bolt_dia = spec.bolt_size.nominal_diameter() + CLEARANCE_H2D_FDM;
+    let pcd = spec.outer_dia * spec.bcd_ratio;
+    let count = spec.hole_count.max(1);
+
+    let flange = flange_circular(
+        spec.outer_dia,
+        spec.center_bore_dia,
+        spec.thickness,
+        pcd,
+        count,
+        bolt_dia,
+    );
+    to_z_up(flange)
+}
+
+/// Dovetail joint pair spec (アリ継ぎ、male/female 選択、Z-up 向き)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DovetailPairSpec {
+    /// 台形底辺幅 (mm)
+    pub base_width: f32,
+    /// 台形高 (mm)
+    pub height: f32,
+    /// 押出深さ (mm、Z 軸)
+    pub depth: f32,
+    /// 0 = male tenon、1 = female socket (matching plate に負型)
+    pub gender: u8,
+    /// female の場合の外板寸法マージン (mm、片側)
+    pub female_margin: f32,
+    /// female の場合の外板厚 (mm、height 側追加)
+    pub female_plate_thickness: f32,
+}
+
+impl DovetailPairSpec {
+    /// male 標準 (底辺 20×高 15×深 10mm)
+    #[must_use]
+    pub const fn male_20() -> Self {
+        Self {
+            base_width: 20.0,
+            height: 15.0,
+            depth: 10.0,
+            gender: 0,
+            female_margin: 10.0,
+            female_plate_thickness: 8.0,
+        }
+    }
+
+    /// female 標準 (male に合う受け側)
+    #[must_use]
+    pub const fn female_20() -> Self {
+        Self {
+            base_width: 20.0,
+            height: 15.0,
+            depth: 10.0,
+            gender: 1,
+            female_margin: 10.0,
+            female_plate_thickness: 8.0,
+        }
+    }
+}
+
+/// Dovetail joint pair (male: 台形 tenon、female: 板 - male 型、Z-up viewer 向き)
+///
+/// male: `joint::dovetail` 直呼出
+/// female: 外板 `Box3d` から male 型 (+0.3mm clearance) を Subtraction
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{dovetail_pair, DovetailPairSpec};
+/// let m = dovetail_pair(&DovetailPairSpec::male_20());
+/// let f = dovetail_pair(&DovetailPairSpec::female_20());
+/// ```
+#[must_use]
+pub fn dovetail_pair(spec: &DovetailPairSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::joint::dovetail;
+
+    let tenon = dovetail(spec.base_width, spec.height, spec.depth);
+    if spec.gender == 0 {
+        to_z_up(tenon)
+    } else {
+        let outer_w = spec.base_width + 2.0 * spec.female_margin;
+        let outer_h = spec.height + spec.female_plate_thickness;
+        let outer = box3d(outer_w * 0.5, outer_h * 0.5, spec.depth * 0.5);
+        let pocket = dovetail(spec.base_width + 0.3, spec.height + 0.15, spec.depth + 0.2);
+        let pocket_placed = translate(
+            pocket,
+            Vec3::new(0.0, -(spec.female_plate_thickness) * 0.5, 0.0),
+        );
+        to_z_up(subtract(outer, pocket_placed))
+    }
+}
+
+/// 押し出しプロファイル spec (2020 / 3030 選択、Z-up 向き)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProfileExtrusionSpec {
+    /// kind: 20 = 2020、30 = 3030
+    pub kind: u32,
+    /// 長さ (mm、Y 軸方向)
+    pub length: f32,
+}
+
+impl ProfileExtrusionSpec {
+    /// 2020 標準 100mm
+    #[must_use]
+    pub const fn p2020_100() -> Self {
+        Self {
+            kind: 20,
+            length: 100.0,
+        }
+    }
+
+    /// 3030 標準 100mm
+    #[must_use]
+    pub const fn p3030_100() -> Self {
+        Self {
+            kind: 30,
+            length: 100.0,
+        }
+    }
+}
+
+/// 押し出しプロファイル可視化 (2020 or 3030、Z-up viewer 向き)
+///
+/// `mount::profile_2020` / `profile_3030` を kind 別に dispatch、Z-up 変換
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{profile_extrusion, ProfileExtrusionSpec};
+/// let p = profile_extrusion(&ProfileExtrusionSpec::p2020_100());
+/// ```
+#[must_use]
+pub fn profile_extrusion(spec: &ProfileExtrusionSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::mount::{profile_2020, profile_3030};
+    let profile = if spec.kind >= 30 {
+        profile_3030(spec.length)
+    } else {
+        profile_2020(spec.length)
+    };
+    to_z_up(profile)
+}
+
+/// Snap-fit cantilever wrap spec (LOL DSL 経由で joint::snap_fit_cantilever に露出)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SnapFitPairSpec {
+    /// 梁長 (mm、X 軸)
+    pub length: f32,
+    /// 梁幅 (mm、Z 軸)
+    pub width: f32,
+    /// 梁厚 (mm、Y 軸)
+    pub thickness: f32,
+    /// hook 突出高 (mm)
+    pub hook_height: f32,
+}
+
+impl SnapFitPairSpec {
+    /// PLA 標準 20×5×2mm、hook 1mm
+    #[must_use]
+    pub const fn standard() -> Self {
+        Self {
+            length: 20.0,
+            width: 5.0,
+            thickness: 2.0,
+            hook_height: 1.0,
+        }
+    }
+}
+
+/// Snap-fit cantilever (単体、Z-up viewer 向き)
+///
+/// `joint::snap_fit_cantilever` を直呼出、`hook_offset = hook_height * 3` を internal default
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{snap_fit_pair, SnapFitPairSpec};
+/// let s = snap_fit_pair(&SnapFitPairSpec::standard());
+/// ```
+#[must_use]
+pub fn snap_fit_pair(spec: &SnapFitPairSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::joint::{snap_fit_cantilever, SnapFitCantileverSpec};
+
+    let joint_spec = SnapFitCantileverSpec {
+        length: spec.length,
+        width: spec.width,
+        thickness: spec.thickness,
+        hook_height: spec.hook_height,
+        hook_offset: spec.hook_height * 3.0,
+    };
+    to_z_up(snap_fit_cantilever(joint_spec))
+}
+
+/// Boss array spec (ネジ受け柱の格子、板 + boss grid、Z-up 向き)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BossArraySpec {
+    /// 行数 (Z 軸、>= 1)
+    pub rows: u32,
+    /// 列数 (X 軸、>= 1)
+    pub cols: u32,
+    /// ネジ規格 (M3/M4/M5/M6/M8)
+    pub screw_size: crate::stdlib::hardsurface::fastener::MetricSize,
+    /// boss 全高 (mm、Y 軸、板厚を含む)
+    pub boss_height: f32,
+    /// boss 中心間ピッチ (mm、boss 外径 × 1.5 以上推奨)
+    pub pitch: f32,
+    /// 板厚 (mm、boss 根本厚)
+    pub base_thickness: f32,
+}
+
+impl BossArraySpec {
+    /// M3 2×2 grid pitch 20mm boss 高 10mm 板厚 2mm
+    #[must_use]
+    pub const fn m3_2x2() -> Self {
+        Self {
+            rows: 2,
+            cols: 2,
+            screw_size: crate::stdlib::hardsurface::fastener::MetricSize::M3,
+            boss_height: 10.0,
+            pitch: 20.0,
+            base_thickness: 2.0,
+        }
+    }
+
+    /// M4 3×3 grid pitch 25mm boss 高 15mm 板厚 3mm
+    #[must_use]
+    pub const fn m4_3x3() -> Self {
+        Self {
+            rows: 3,
+            cols: 3,
+            screw_size: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+            boss_height: 15.0,
+            pitch: 25.0,
+            base_thickness: 3.0,
+        }
+    }
+}
+
+/// Boss array (板 + ネジ受け柱格子、Z-up viewer 向き)
+///
+/// 構造: 板 (`Box3d`) 上面に `reinforcement::boss` を rows×cols grid で Union
+/// 各 boss は板上面 (Y+) から `boss_height - base_thickness` 突出
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{boss_array, BossArraySpec};
+/// let b = boss_array(&BossArraySpec::m3_2x2());
+/// ```
+#[must_use]
+pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
+    use crate::stdlib::hardsurface::reinforcement::boss;
+
+    let rows = spec.rows.max(1);
+    let cols = spec.cols.max(1);
+    let rows_f = rows as f32;
+    let cols_f = cols as f32;
+
+    let plate_extent_x = (cols_f - 1.0) * spec.pitch + spec.pitch;
+    let plate_extent_z = (rows_f - 1.0) * spec.pitch + spec.pitch;
+
+    let outer_hx = plate_extent_x * 0.5;
+    let outer_hy = spec.base_thickness * 0.5;
+    let outer_hz = plate_extent_z * 0.5;
+
+    let plate = box3d(outer_hx, outer_hy, outer_hz);
+
+    let screw_nominal = spec.screw_size.nominal_diameter();
+    let boss_body_height = (spec.boss_height - spec.base_thickness).max(1.0);
+    let boss_template = boss(screw_nominal, boss_body_height);
+    let boss_y = outer_hy + boss_body_height * 0.5;
+
+    let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
+    let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
+
+    let mut result = plate;
+    for r in 0..rows {
+        for c in 0..cols {
+            let cx = start_x + c as f32 * spec.pitch;
+            let cz = start_z + r as f32 * spec.pitch;
+            result = union(
+                result.clone(),
+                translate(boss_template.clone(), Vec3::new(cx, boss_y, cz)),
+            );
+        }
+    }
+
+    to_z_up(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7522,6 +8160,103 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint21 mechanical archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 21 Phase X.1 追加 8 archetype tests ──
+
+    #[test]
+    fn t_slot_bracket_2020_standard_is_rotate_wrapped() {
+        let b = t_slot_bracket_2020(&TSlotBracket2020Spec::standard_20());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn raspi_mount_plate_pi_4b_is_rotate_wrapped() {
+        let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn raspi_mount_plate_center_is_solid() {
+        let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+        // 板中心 (原点) は solid (Pi mount 穴は 4 隅、板中心は空きスペース)
+        assert!(eval(&p, Vec3::ZERO) < 0.0);
+    }
+
+    #[test]
+    fn heat_set_array_m3_2x2_is_rotate_wrapped() {
+        let h = heat_set_array(&HeatSetArraySpec::m3_2x2());
+        assert!(matches!(h, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn flange_mount_od80_is_rotate_wrapped() {
+        let f = flange_mount(&FlangeMountSpec::od80_m5_4());
+        assert!(matches!(f, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn dovetail_pair_male_is_rotate_wrapped() {
+        let m = dovetail_pair(&DovetailPairSpec::male_20());
+        assert!(matches!(m, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn dovetail_pair_female_is_rotate_wrapped() {
+        let f = dovetail_pair(&DovetailPairSpec::female_20());
+        assert!(matches!(f, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn profile_extrusion_2020_is_rotate_wrapped() {
+        let p = profile_extrusion(&ProfileExtrusionSpec::p2020_100());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn profile_extrusion_3030_is_rotate_wrapped() {
+        let p = profile_extrusion(&ProfileExtrusionSpec::p3030_100());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn snap_fit_pair_standard_is_rotate_wrapped() {
+        let s = snap_fit_pair(&SnapFitPairSpec::standard());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn boss_array_m3_2x2_is_rotate_wrapped() {
+        let b = boss_array(&BossArraySpec::m3_2x2());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn all_sprint21_extra8_archetypes_evaluations_finite() {
+        let nodes = [
+            t_slot_bracket_2020(&TSlotBracket2020Spec::standard_20()),
+            t_slot_bracket_2020(&TSlotBracket2020Spec::heavy_40()),
+            raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa()),
+            raspi_mount_plate(&RaspiMountPlateSpec::pi_zero_bare()),
+            heat_set_array(&HeatSetArraySpec::m3_2x2()),
+            heat_set_array(&HeatSetArraySpec::m4_3x3()),
+            flange_mount(&FlangeMountSpec::od80_m5_4()),
+            flange_mount(&FlangeMountSpec::od100_m6_6()),
+            dovetail_pair(&DovetailPairSpec::male_20()),
+            dovetail_pair(&DovetailPairSpec::female_20()),
+            profile_extrusion(&ProfileExtrusionSpec::p2020_100()),
+            profile_extrusion(&ProfileExtrusionSpec::p3030_100()),
+            snap_fit_pair(&SnapFitPairSpec::standard()),
+            boss_array(&BossArraySpec::m3_2x2()),
+            boss_array(&BossArraySpec::m4_3x3()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint21 extra8 archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
