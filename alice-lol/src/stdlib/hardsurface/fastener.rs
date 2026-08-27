@@ -52,12 +52,17 @@ pub const HEAT_SET_SINK_MARGIN: f32 = 0.3;
 // ISO metric サイズ enum
 // ────────────────────────────────────────────────────────
 
-/// ISO metric ボルト / ネジ サイズ (M3-M8 対応、Phase A.1 範囲)
+/// ISO metric ボルト / ネジ サイズ (M2-M8 対応、Phase X.2 で M2/M2.5 追加)
 ///
 /// 各 method は ISO 4762 (ソケットキャップ) / ISO 10642 (皿頭) 規格値を返す
 /// M10 以上は Phase A.4 (mount) で追加予定 (2020 profile / 3030 profile の締結軸として)
+/// M2/M2.5 は Raspberry Pi / Arduino / spring hinge 等の小型基板・センサー用途で頻出
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetricSize {
+    /// M2 (呼び径 2mm、小型基板 / センサー)
+    M2,
+    /// M2.5 (呼び径 2.5mm、Raspberry Pi / Arduino 標準)
+    M2_5,
     /// M3 (呼び径 3mm)
     M3,
     /// M4 (呼び径 4mm)
@@ -75,6 +80,8 @@ impl MetricSize {
     #[must_use]
     pub const fn nominal_diameter(self) -> f32 {
         match self {
+            Self::M2 => 2.0,
+            Self::M2_5 => 2.5,
             Self::M3 => 3.0,
             Self::M4 => 4.0,
             Self::M5 => 5.0,
@@ -87,6 +94,8 @@ impl MetricSize {
     #[must_use]
     pub const fn head_diameter_socket(self) -> f32 {
         match self {
+            Self::M2 => 3.8,
+            Self::M2_5 => 4.5,
             Self::M3 => 5.5,
             Self::M4 => 7.0,
             Self::M5 => 8.5,
@@ -99,6 +108,8 @@ impl MetricSize {
     #[must_use]
     pub const fn head_height_socket(self) -> f32 {
         match self {
+            Self::M2 => 2.0,
+            Self::M2_5 => 2.5,
             Self::M3 => 3.0,
             Self::M4 => 4.0,
             Self::M5 => 5.0,
@@ -111,6 +122,8 @@ impl MetricSize {
     #[must_use]
     pub const fn head_diameter_countersunk(self) -> f32 {
         match self {
+            Self::M2 => 4.0,
+            Self::M2_5 => 4.5,
             Self::M3 => 6.0,
             Self::M4 => 8.0,
             Self::M5 => 10.0,
@@ -123,6 +136,8 @@ impl MetricSize {
     #[must_use]
     pub const fn heat_set_insert_diameter(self) -> f32 {
         match self {
+            Self::M2 => 3.2,
+            Self::M2_5 => 3.6,
             Self::M3 => 4.0,
             Self::M4 => 5.6,
             Self::M5 => 6.4,
@@ -135,6 +150,8 @@ impl MetricSize {
     #[must_use]
     pub const fn heat_set_insert_depth(self) -> f32 {
         match self {
+            Self::M2 => 3.0,
+            Self::M2_5 => 3.3,
             Self::M3 => 3.8,
             Self::M4 => 5.7,
             Self::M5 => 5.7,
@@ -145,13 +162,15 @@ impl MetricSize {
 
     /// f32 呼び径 (mm) を対応 `MetricSize` に最近接 snap する
     ///
-    /// 3.0/4.0/5.0/6.0/8.0 は完全一致、それ以外は最近接に snap
+    /// 2.0/2.5/3.0/4.0/5.0/6.0/8.0 は完全一致、それ以外は最近接に snap
     /// LLM / runtime_parser が「M4.5」等の非規格値を渡した時のフォールバック用
     ///
     /// # 使用例
     ///
     /// ```
     /// use alice_lol::stdlib::hardsurface::fastener::MetricSize;
+    /// assert_eq!(MetricSize::from_f32_snap(2.0), MetricSize::M2);
+    /// assert_eq!(MetricSize::from_f32_snap(2.5), MetricSize::M2_5);
     /// assert_eq!(MetricSize::from_f32_snap(3.0), MetricSize::M3);
     /// assert_eq!(MetricSize::from_f32_snap(4.5), MetricSize::M4); // 4.5 → M4 (最近接)
     /// assert_eq!(MetricSize::from_f32_snap(7.0), MetricSize::M6); // 7.0 → M6 (M8 より近い)
@@ -160,7 +179,9 @@ impl MetricSize {
     #[must_use]
     pub fn from_f32_snap(nominal: f32) -> Self {
         let candidates = [
-            (3.0_f32, Self::M3),
+            (2.0_f32, Self::M2),
+            (2.5, Self::M2_5),
+            (3.0, Self::M3),
             (4.0, Self::M4),
             (5.0, Self::M5),
             (6.0, Self::M6),
@@ -550,6 +571,8 @@ mod tests {
 
     #[test]
     fn from_f32_snap_exact_matches() {
+        assert_eq!(MetricSize::from_f32_snap(2.0), MetricSize::M2);
+        assert_eq!(MetricSize::from_f32_snap(2.5), MetricSize::M2_5);
         assert_eq!(MetricSize::from_f32_snap(3.0), MetricSize::M3);
         assert_eq!(MetricSize::from_f32_snap(4.0), MetricSize::M4);
         assert_eq!(MetricSize::from_f32_snap(5.0), MetricSize::M5);
@@ -569,13 +592,57 @@ mod tests {
         assert_eq!(MetricSize::from_f32_snap(4.1), MetricSize::M4);
         // 5.9 は明確に M6
         assert_eq!(MetricSize::from_f32_snap(5.9), MetricSize::M6);
+        // 2.3 は M2.5 (dist 0.2) が M2 (dist 0.3) より近い
+        assert_eq!(MetricSize::from_f32_snap(2.3), MetricSize::M2_5);
+        // 2.1 は M2 (dist 0.1) が近い
+        assert_eq!(MetricSize::from_f32_snap(2.1), MetricSize::M2);
     }
 
     #[test]
     fn from_f32_snap_out_of_range_clamps() {
         // 上限外 → M8
         assert_eq!(MetricSize::from_f32_snap(100.0), MetricSize::M8);
-        // 下限外 → M3
-        assert_eq!(MetricSize::from_f32_snap(0.5), MetricSize::M3);
+        // 下限外 → M2 (M3 でなく M2 に snap、Phase X.2 で追加)
+        assert_eq!(MetricSize::from_f32_snap(0.5), MetricSize::M2);
+    }
+
+    #[test]
+    fn m2_dimensions_are_iso_compliant() {
+        // ISO 4762 M2: nominal 2.0, head_dia 3.8, head_h 2.0
+        assert!((MetricSize::M2.nominal_diameter() - 2.0).abs() < 1e-6);
+        assert!((MetricSize::M2.head_diameter_socket() - 3.8).abs() < 1e-6);
+        assert!((MetricSize::M2.head_height_socket() - 2.0).abs() < 1e-6);
+        // ISO 10642 M2 皿頭 = 4.0mm
+        assert!((MetricSize::M2.head_diameter_countersunk() - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn m2_5_dimensions_are_pi_compliant() {
+        // Raspberry Pi 標準 M2.5: nominal 2.5
+        assert!((MetricSize::M2_5.nominal_diameter() - 2.5).abs() < 1e-6);
+        assert!((MetricSize::M2_5.head_diameter_socket() - 4.5).abs() < 1e-6);
+        assert!((MetricSize::M2_5.head_height_socket() - 2.5).abs() < 1e-6);
+        assert!((MetricSize::M2_5.head_diameter_countersunk() - 4.5).abs() < 1e-6);
+        // Heat-set insert (McMaster)
+        assert!((MetricSize::M2_5.heat_set_insert_diameter() - 3.6).abs() < 1e-6);
+        assert!((MetricSize::M2_5.heat_set_insert_depth() - 3.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn m2_all_holes_evaluate_negative_at_origin() {
+        use alice_sdf::eval;
+        let plate_thickness = 6.0;
+        for size in [MetricSize::M2, MetricSize::M2_5] {
+            let sh = screw_hole(size, plate_thickness);
+            assert!(eval(&sh, Vec3::ZERO) < 0.0, "screw_hole {size:?}");
+            let th = tap_hole(size, plate_thickness, DEFAULT_ACCURACY);
+            assert!(eval(&th, Vec3::ZERO) < 0.0, "tap_hole {size:?}");
+            let cb = counterbore(size, plate_thickness);
+            assert!(eval(&cb, Vec3::ZERO) < 0.0, "counterbore {size:?}");
+            let cs = countersink(size, plate_thickness);
+            assert!(eval(&cs, Vec3::ZERO) < 0.0, "countersink {size:?}");
+            let hs = heat_set_insert_hole(size);
+            assert!(eval(&hs, Vec3::ZERO) < 0.0, "heat_set_insert_hole {size:?}");
+        }
     }
 }
