@@ -2667,6 +2667,125 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::boss_array(&spec))
             }
 
+            // ── Sprint 22 Phase X.2 fastener 低レベル primitive (2026-08-27) ──
+            // 全て Y-up native (raw)、Z-up 変換 (to_z_up) は user が組合せる時に指定
+            "screw_hole" => {
+                // screw_hole(m_size, depth) 2 param、H2D +0.2mm clearance
+                let (m_size, depth) = self.parse_2f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::screw_hole(m, depth))
+            }
+            "tap_hole" => {
+                // tap_hole(m_size, depth) 2 param、accuracy default 0.1
+                let (m_size, depth) = self.parse_2f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::tap_hole(
+                    m,
+                    depth,
+                    crate::stdlib::hardsurface::fastener::DEFAULT_ACCURACY,
+                ))
+            }
+            "counterbore" => {
+                // counterbore(m_size, plate_thickness) 2 param
+                let (m_size, plate_t) = self.parse_2f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::counterbore(
+                    m, plate_t,
+                ))
+            }
+            "countersink" => {
+                // countersink(m_size, plate_thickness) 2 param
+                let (m_size, plate_t) = self.parse_2f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::countersink(
+                    m, plate_t,
+                ))
+            }
+            "heat_set_hole" => {
+                // heat_set_hole(m_size) 1 param、McMaster/Voxel8 spec
+                let m_size = self.parse_1f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::heat_set_insert_hole(
+                    m,
+                ))
+            }
+            "bolt" => {
+                // bolt(m_size, shank_length) 2 param、可視化用 (頭 + 軸 Union)
+                let (m_size, shank) = self.parse_2f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                Ok(crate::stdlib::hardsurface::fastener::bolt(m, shank))
+            }
+
+            // ── Sprint 22 Phase X.2 mount / joint / reinforcement 低レベル primitive ──
+            "bracket_l" => {
+                // bracket_l(w, h, plate_t, depth, fillet_r) 5 param、raw Y-up
+                let (w, h, plate_t, depth, fillet) = self.parse_5f()?;
+                Ok(crate::stdlib::hardsurface::mount::bracket_l(
+                    w, h, plate_t, depth, fillet,
+                ))
+            }
+            "flange_circular" => {
+                // flange_circular(od, center_bore, thickness, pcd, bolt_count, bolt_dia) 6 param
+                let (od, cb, thick, pcd, count, bolt_dia) = self.parse_6f()?;
+                Ok(crate::stdlib::hardsurface::mount::flange_circular(
+                    od,
+                    cb,
+                    thick,
+                    pcd,
+                    count.round().max(1.0) as u32,
+                    bolt_dia,
+                ))
+            }
+            "t_slot_2020" => {
+                // t_slot_2020(length) 1 param、Y-up T-slot cavity
+                let length = self.parse_1f()?;
+                Ok(crate::stdlib::hardsurface::joint::t_slot_2020(length))
+            }
+            "profile_2020" => {
+                // profile_2020(length) 1 param、Y-up 2020 プロファイル外形
+                let length = self.parse_1f()?;
+                Ok(crate::stdlib::hardsurface::mount::profile_2020(length))
+            }
+            "profile_3030" => {
+                // profile_3030(length) 1 param、Y-up 3030 プロファイル外形
+                let length = self.parse_1f()?;
+                Ok(crate::stdlib::hardsurface::mount::profile_3030(length))
+            }
+            "dovetail" => {
+                // dovetail(base_width, height, depth) 3 param、10° テーパー台形
+                let (bw, h, d) = self.parse_3f()?;
+                Ok(crate::stdlib::hardsurface::joint::dovetail(bw, h, d))
+            }
+            "slot" => {
+                // slot(length, width, depth) 3 param、両端 rounded
+                let (l, w, d) = self.parse_3f()?;
+                Ok(crate::stdlib::hardsurface::joint::slot(l, w, d))
+            }
+            "snap_fit_annular" => {
+                // snap_fit_annular(shaft_dia, shaft_length, bulge_height, bulge_y_offset) 4 param
+                let (sd, sl, bh, by) = self.parse_4f()?;
+                Ok(crate::stdlib::hardsurface::joint::snap_fit_annular(
+                    sd, sl, bh, by,
+                ))
+            }
+            "pin_hinge_knuckle" => {
+                // pin_hinge_knuckle(pin_dia, knuckle_length, knuckle_od) 3 param
+                let (pd, kl, ko) = self.parse_3f()?;
+                Ok(crate::stdlib::hardsurface::joint::pin_hinge_knuckle(
+                    pd, kl, ko,
+                ))
+            }
+            "boss" => {
+                // boss(screw_dia, height) 2 param、raw float 呼び径
+                let (dia, height) = self.parse_2f()?;
+                Ok(crate::stdlib::hardsurface::reinforcement::boss(dia, height))
+            }
+            "rib" => {
+                // rib(length, height, thickness) 3 param、Box3d wrapper
+                let (l, h, t) = self.parse_3f()?;
+                Ok(crate::stdlib::hardsurface::reinforcement::rib(l, h, t))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4337,6 +4456,215 @@ mod tests {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
             assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 22 Phase X.2 fastener 6 primitive tests ──
+
+    #[test]
+    fn test_screw_hole_m4() {
+        let node = parse_lol("screw_hole(4, 10)").unwrap();
+        // screw_hole returns Cylinder (Y-up native)
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_screw_hole_m2_5_pi() {
+        // Raspberry Pi M2.5 = snap to M2_5
+        let node = parse_lol("screw_hole(2.5, 8)").unwrap();
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_tap_hole_m3() {
+        let node = parse_lol("tap_hole(3, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_counterbore_m4() {
+        let node = parse_lol("counterbore(4, 8)").unwrap();
+        // counterbore returns Union (through hole + bore)
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_countersink_m4() {
+        let node = parse_lol("countersink(4, 8)").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_heat_set_hole_m3() {
+        let node = parse_lol("heat_set_hole(3)").unwrap();
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_heat_set_hole_m2_pi() {
+        // M2 Pi Zero mount
+        let node = parse_lol("heat_set_hole(2)").unwrap();
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_bolt_m5() {
+        let node = parse_lol("bolt(5, 20)").unwrap();
+        // bolt returns Union (shank + head)
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    // ── Sprint 22 Phase X.2 low-level mount / joint / reinforcement tests ──
+
+    #[test]
+    fn test_bracket_l_raw() {
+        let node = parse_lol("bracket_l(60, 40, 4, 40, 3)").unwrap();
+        // bracket_l with fillet returns SmoothUnion
+        assert!(matches!(node, SdfNode::SmoothUnion { .. }));
+    }
+
+    #[test]
+    fn test_flange_circular_raw() {
+        let node = parse_lol("flange_circular(60, 20, 6, 45, 4, 4.2)").unwrap();
+        // flange with center_bore returns Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_t_slot_2020_raw() {
+        let node = parse_lol("t_slot_2020(100)").unwrap();
+        // t_slot_2020 returns Union (opening + inner)
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_profile_2020_raw() {
+        let node = parse_lol("profile_2020(100)").unwrap();
+        // profile is composite, just parses
+        use alice_sdf::eval;
+        let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+        assert!(d.is_finite());
+    }
+
+    #[test]
+    fn test_profile_3030_raw() {
+        let node = parse_lol("profile_3030(100)").unwrap();
+        use alice_sdf::eval;
+        let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+        assert!(d.is_finite());
+    }
+
+    #[test]
+    fn test_dovetail_raw() {
+        let node = parse_lol("dovetail(10, 5, 20)").unwrap();
+        // dovetail returns Intersection (base ∩ 2 planes)
+        assert!(matches!(node, SdfNode::Intersection { .. }));
+    }
+
+    #[test]
+    fn test_slot_raw() {
+        let node = parse_lol("slot(20, 4, 6)").unwrap();
+        // slot returns nested Union
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_snap_fit_annular_raw() {
+        let node = parse_lol("snap_fit_annular(8, 20, 0.5, 7)").unwrap();
+        assert!(matches!(node, SdfNode::Union { .. }));
+    }
+
+    #[test]
+    fn test_pin_hinge_knuckle_raw() {
+        let node = parse_lol("pin_hinge_knuckle(3, 8, 8)").unwrap();
+        // barrel - pin = Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_boss_raw() {
+        let node = parse_lol("boss(3, 8)").unwrap();
+        // boss = barrel - tap_hole = Subtraction
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_rib_raw() {
+        let node = parse_lol("rib(20, 10, 2)").unwrap();
+        assert!(matches!(node, SdfNode::Box3d { .. }));
+    }
+
+    #[test]
+    fn test_sprint22_phase_x2_primitives_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            // fastener 6
+            "screw_hole(4, 10)",
+            "screw_hole(2.5, 8)",
+            "tap_hole(3, 6)",
+            "counterbore(4, 8)",
+            "countersink(4, 8)",
+            "heat_set_hole(3)",
+            "heat_set_hole(2)",
+            "bolt(5, 20)",
+            // mount / joint / reinforcement 11
+            "bracket_l(60, 40, 4, 40, 3)",
+            "flange_circular(60, 20, 6, 45, 4, 4.2)",
+            "t_slot_2020(100)",
+            "profile_2020(100)",
+            "profile_3030(100)",
+            "dovetail(10, 5, 20)",
+            "slot(20, 4, 6)",
+            "snap_fit_annular(8, 20, 0.5, 7)",
+            "pin_hinge_knuckle(3, 8, 8)",
+            "boss(3, 8)",
+            "rib(20, 10, 2)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    #[test]
+    fn test_sprint22_composition_example() {
+        // 「M4 貫通穴 4 隅の 60×5×60 プレート」を LOL DSL 組合せで
+        // subtract(rounded_box(30, 2.5, 30, 3), translate(screw_hole(4, 10), ...))
+        // という pattern が parse できるか確認 (LLM が生成する典型例)
+        let lol = "subtract(rounded_box(30, 2.5, 30, 3), screw_hole(4, 10))";
+        let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    // ── Sprint 22 Phase X.2 MetricSize::M2 / M2_5 f32 snap tests ──
+
+    #[test]
+    fn test_metric_size_m2_snap_via_screw_hole() {
+        use alice_sdf::SdfNode as S;
+        // screw_hole(2.0, ...) should map to M2 → Cylinder radius = (2.0 + 0.2) / 2 = 1.1
+        let node = parse_lol("screw_hole(2, 5)").unwrap();
+        if let S::Cylinder { radius, .. } = node {
+            assert!(
+                (radius - 1.1).abs() < 1e-4,
+                "M2 clearance radius = 1.1, got {radius}"
+            );
+        } else {
+            panic!("expected Cylinder");
+        }
+    }
+
+    #[test]
+    fn test_metric_size_m2_5_snap_via_screw_hole() {
+        use alice_sdf::SdfNode as S;
+        // screw_hole(2.5, ...) → M2_5 → radius = (2.5 + 0.2) / 2 = 1.35
+        let node = parse_lol("screw_hole(2.5, 5)").unwrap();
+        if let S::Cylinder { radius, .. } = node {
+            assert!(
+                (radius - 1.35).abs() < 1e-4,
+                "M2.5 clearance radius = 1.35, got {radius}"
+            );
+        } else {
+            panic!("expected Cylinder");
         }
     }
 }
