@@ -142,6 +142,41 @@ impl MetricSize {
             Self::M8 => 10.0,
         }
     }
+
+    /// f32 呼び径 (mm) を対応 `MetricSize` に最近接 snap する
+    ///
+    /// 3.0/4.0/5.0/6.0/8.0 は完全一致、それ以外は最近接に snap
+    /// LLM / runtime_parser が「M4.5」等の非規格値を渡した時のフォールバック用
+    ///
+    /// # 使用例
+    ///
+    /// ```
+    /// use alice_lol::stdlib::hardsurface::fastener::MetricSize;
+    /// assert_eq!(MetricSize::from_f32_snap(3.0), MetricSize::M3);
+    /// assert_eq!(MetricSize::from_f32_snap(4.5), MetricSize::M4); // 4.5 → M4 (最近接)
+    /// assert_eq!(MetricSize::from_f32_snap(7.0), MetricSize::M6); // 7.0 → M6 (M8 より近い)
+    /// assert_eq!(MetricSize::from_f32_snap(100.0), MetricSize::M8); // 上限 clamp
+    /// ```
+    #[must_use]
+    pub fn from_f32_snap(nominal: f32) -> Self {
+        let candidates = [
+            (3.0_f32, Self::M3),
+            (4.0, Self::M4),
+            (5.0, Self::M5),
+            (6.0, Self::M6),
+            (8.0, Self::M8),
+        ];
+        let mut best = Self::M4;
+        let mut best_dist = f32::INFINITY;
+        for (nom, size) in candidates {
+            let d = (nom - nominal).abs();
+            if d < best_dist {
+                best_dist = d;
+                best = size;
+            }
+        }
+        best
+    }
 }
 
 // ────────────────────────────────────────────────────────
@@ -511,5 +546,36 @@ mod tests {
             let hs = heat_set_insert_hole(size);
             assert!(eval(&hs, Vec3::ZERO) < 0.0, "heat_set_insert_hole {size:?}");
         }
+    }
+
+    #[test]
+    fn from_f32_snap_exact_matches() {
+        assert_eq!(MetricSize::from_f32_snap(3.0), MetricSize::M3);
+        assert_eq!(MetricSize::from_f32_snap(4.0), MetricSize::M4);
+        assert_eq!(MetricSize::from_f32_snap(5.0), MetricSize::M5);
+        assert_eq!(MetricSize::from_f32_snap(6.0), MetricSize::M6);
+        assert_eq!(MetricSize::from_f32_snap(8.0), MetricSize::M8);
+    }
+
+    #[test]
+    fn from_f32_snap_near_matches_pick_closest() {
+        // 4.5 は M4 と M5 で等距離、first-wins で M4
+        assert_eq!(MetricSize::from_f32_snap(4.5), MetricSize::M4);
+        // 3.5 は M3 と M4 で等距離、first-wins で M3
+        assert_eq!(MetricSize::from_f32_snap(3.5), MetricSize::M3);
+        // 7.0 は M6 (dist 1) より M8 (dist 1) と同距離、first-wins で M6
+        assert_eq!(MetricSize::from_f32_snap(7.0), MetricSize::M6);
+        // 4.1 は明確に M4
+        assert_eq!(MetricSize::from_f32_snap(4.1), MetricSize::M4);
+        // 5.9 は明確に M6
+        assert_eq!(MetricSize::from_f32_snap(5.9), MetricSize::M6);
+    }
+
+    #[test]
+    fn from_f32_snap_out_of_range_clamps() {
+        // 上限外 → M8
+        assert_eq!(MetricSize::from_f32_snap(100.0), MetricSize::M8);
+        // 下限外 → M3
+        assert_eq!(MetricSize::from_f32_snap(0.5), MetricSize::M3);
     }
 }

@@ -2524,6 +2524,38 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── Sprint 21 Phase X.1 機械要素 (2026-08-27) ──
+            "vesa_mount" => {
+                // vesa_mount(size, plate_t, m_size) 3 param、bore_kind default 1 (counterbore)
+                let (size, plate_t, m_size) = self.parse_3f()?;
+                let hole = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let spec = crate::stdlib::hardsurface::pattern_sdf::VesaMountSpec {
+                    vesa_size: size,
+                    plate_thickness: plate_t,
+                    plate_margin: 15.0,
+                    corner_radius: 3.0,
+                    hole_size: hole,
+                    bore_kind: 1,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::vesa_mount(&spec))
+            }
+            "l_bracket" => {
+                // l_bracket(w, h, plate_t, m_size, holes_per_arm) 5 param、bore_kind default 0 (through)
+                let (w, h, plate_t, m_size, holes) = self.parse_5f()?;
+                let hole = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let spec = crate::stdlib::hardsurface::pattern_sdf::LBracketSpec {
+                    arm_width: w,
+                    arm_height: h,
+                    plate_thickness: plate_t,
+                    depth: 40.0,
+                    fillet_radius: 3.0,
+                    hole_size: hole,
+                    holes_per_arm: holes.round().max(1.0) as u32,
+                    bore_kind: 0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::l_bracket(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4055,6 +4087,47 @@ mod tests {
             "can_rack(2, 66, 10)",
             "led_hub_box(80, 60, 30)",
             "makeup_organizer(3, 4, 45)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 21 Phase X.1 機械要素 tests ──
+
+    #[test]
+    fn test_vesa_mount_75_m4() {
+        let node = parse_lol("vesa_mount(75, 5, 4)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_vesa_mount_100_m5() {
+        let node = parse_lol("vesa_mount(100, 6, 5)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_l_bracket_m4_2holes() {
+        let node = parse_lol("l_bracket(60, 60, 4, 4, 2)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_l_bracket_m5_3holes() {
+        let node = parse_lol("l_bracket(80, 80, 5, 5, 3)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint21_mechanical_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "vesa_mount(75, 5, 4)",
+            "vesa_mount(100, 6, 5)",
+            "l_bracket(60, 60, 4, 4, 2)",
+            "l_bracket(80, 80, 5, 5, 3)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
