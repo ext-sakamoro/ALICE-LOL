@@ -2556,6 +2556,117 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::pattern_sdf::l_bracket(&spec))
             }
 
+            // ── Sprint 21 Phase X.1 追加 8 archetype (2026-08-27) ──
+            "t_slot_bracket_2020" => {
+                // t_slot_bracket_2020(arm_size, depth) 2 param、他 default
+                let (arm, depth) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::TSlotBracket2020Spec {
+                    arm_size: arm,
+                    depth,
+                    plate_thickness: 3.0,
+                    fillet_radius: 3.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::t_slot_bracket_2020(&spec))
+            }
+            "raspi_mount_plate" => {
+                // raspi_mount_plate(model, extra_m4_holes) 2 param
+                let (model, extras) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::RaspiMountPlateSpec {
+                    model: model.round().max(0.0) as u32,
+                    extra_m4_holes: extras.round().max(0.0) as u32,
+                    plate_thickness: 4.0,
+                    plate_margin: 15.0,
+                    m25_hole_dia: 2.8,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::raspi_mount_plate(
+                    &spec,
+                ))
+            }
+            "heat_set_array" => {
+                // heat_set_array(rows, cols, m_size, pitch, base_t) 5 param
+                let (rows, cols, m_size, pitch, base_t) = self.parse_5f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let spec = crate::stdlib::hardsurface::pattern_sdf::HeatSetArraySpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    insert_size: m,
+                    pitch,
+                    base_thickness: base_t,
+                    margin: 10.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::heat_set_array(
+                    &spec,
+                ))
+            }
+            "flange_mount" => {
+                // flange_mount(od, m_size, hole_count) 3 param、thickness default 6
+                let (od, m_size, count) = self.parse_3f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let spec = crate::stdlib::hardsurface::pattern_sdf::FlangeMountSpec {
+                    outer_dia: od,
+                    bolt_size: m,
+                    hole_count: count.round().max(1.0) as u32,
+                    thickness: 6.0,
+                    bcd_ratio: 0.7,
+                    center_bore_dia: 0.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::flange_mount(&spec))
+            }
+            "dovetail_pair" => {
+                // dovetail_pair(w, h, d, gender) 4 param、gender: 0=male / 1=female
+                let (w, h, d, gender) = self.parse_4f()?;
+                let g = if gender >= 0.5 { 1_u8 } else { 0_u8 };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::DovetailPairSpec {
+                    base_width: w,
+                    height: h,
+                    depth: d,
+                    gender: g,
+                    female_margin: 10.0,
+                    female_plate_thickness: 8.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::dovetail_pair(
+                    &spec,
+                ))
+            }
+            "profile_extrusion" => {
+                // profile_extrusion(kind, length) 2 param、kind: 20=2020 / 30=3030
+                let (kind, length) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ProfileExtrusionSpec {
+                    kind: kind.round().max(20.0) as u32,
+                    length,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::profile_extrusion(
+                    &spec,
+                ))
+            }
+            "snap_fit_pair" => {
+                // snap_fit_pair(length, width, thickness, hook_height) 4 param
+                let (l, w, t, hook_d) = self.parse_4f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SnapFitPairSpec {
+                    length: l,
+                    width: w,
+                    thickness: t,
+                    hook_height: hook_d,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::snap_fit_pair(
+                    &spec,
+                ))
+            }
+            "boss_array" => {
+                // boss_array(rows, cols, m_size, height, pitch, base_t) 6 param
+                let (rows, cols, m_size, height, pitch, base_t) = self.parse_6f()?;
+                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let spec = crate::stdlib::hardsurface::pattern_sdf::BossArraySpec {
+                    rows: rows.round().max(1.0) as u32,
+                    cols: cols.round().max(1.0) as u32,
+                    screw_size: m,
+                    boss_height: height,
+                    pitch,
+                    base_thickness: base_t,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::boss_array(&spec))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4128,6 +4239,100 @@ mod tests {
             "vesa_mount(100, 6, 5)",
             "l_bracket(60, 60, 4, 4, 2)",
             "l_bracket(80, 80, 5, 5, 3)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Sprint 21 Phase X.1 追加 8 archetype tests ──
+
+    #[test]
+    fn test_t_slot_bracket_2020_standard() {
+        let node = parse_lol("t_slot_bracket_2020(20, 20)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_raspi_mount_plate_pi4b() {
+        let node = parse_lol("raspi_mount_plate(4, 4)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_raspi_mount_plate_zero() {
+        let node = parse_lol("raspi_mount_plate(0, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_heat_set_array_m3_2x2() {
+        let node = parse_lol("heat_set_array(2, 2, 3, 20, 6)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_flange_mount_od80_m5_4() {
+        let node = parse_lol("flange_mount(80, 5, 4)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_dovetail_pair_male() {
+        let node = parse_lol("dovetail_pair(20, 15, 10, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_dovetail_pair_female() {
+        let node = parse_lol("dovetail_pair(20, 15, 10, 1)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_profile_extrusion_2020() {
+        let node = parse_lol("profile_extrusion(20, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_profile_extrusion_3030() {
+        let node = parse_lol("profile_extrusion(30, 100)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_snap_fit_pair_standard() {
+        let node = parse_lol("snap_fit_pair(20, 5, 2, 1)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_boss_array_m3_2x2() {
+        let node = parse_lol("boss_array(2, 2, 3, 10, 20, 2)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_sprint21_extra8_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "t_slot_bracket_2020(20, 20)",
+            "t_slot_bracket_2020(40, 40)",
+            "raspi_mount_plate(4, 4)",
+            "raspi_mount_plate(0, 0)",
+            "heat_set_array(2, 2, 3, 20, 6)",
+            "heat_set_array(3, 3, 4, 25, 8)",
+            "flange_mount(80, 5, 4)",
+            "flange_mount(100, 6, 6)",
+            "dovetail_pair(20, 15, 10, 0)",
+            "dovetail_pair(20, 15, 10, 1)",
+            "profile_extrusion(20, 100)",
+            "profile_extrusion(30, 100)",
+            "snap_fit_pair(20, 5, 2, 1)",
+            "boss_array(2, 2, 3, 10, 20, 2)",
+            "boss_array(3, 3, 4, 15, 25, 3)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
