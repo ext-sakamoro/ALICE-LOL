@@ -5853,6 +5853,231 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
 // テスト
 // ────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────
+// Sprint 21 Phase X.1 機械要素 archetype (2026-08-27)
+// ────────────────────────────────────────────────────────
+
+/// VESA モニターマウント板 spec (75/100 規格 + 4 隅穴)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VesaMountSpec {
+    /// VESA 規格 (mm、75 or 100 が標準、任意値も可)
+    pub vesa_size: f32,
+    /// 板厚 (mm、Y 軸、5-8mm 推奨)
+    pub plate_thickness: f32,
+    /// 板 X/Z 追加マージン (mm、規格外径 = vesa_size + 2*margin)
+    pub plate_margin: f32,
+    /// 板 corner 半径 (mm、RoundedBox radius)
+    pub corner_radius: f32,
+    /// 締結ネジ規格 (M3/M4/M5/M6/M8)
+    pub hole_size: crate::stdlib::hardsurface::fastener::MetricSize,
+    /// 穴タイプ (0 = through only、1 = counterbore、2 = countersink)
+    pub bore_kind: u8,
+}
+
+impl VesaMountSpec {
+    /// VESA 75 標準 (75×75mm、M4 counterbore、板厚 5mm)
+    #[must_use]
+    pub const fn vesa_75_m4_cb() -> Self {
+        Self {
+            vesa_size: 75.0,
+            plate_thickness: 5.0,
+            plate_margin: 15.0,
+            corner_radius: 3.0,
+            hole_size: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+            bore_kind: 1,
+        }
+    }
+
+    /// VESA 100 標準 (100×100mm、M5 counterbore、板厚 6mm)
+    #[must_use]
+    pub const fn vesa_100_m5_cb() -> Self {
+        Self {
+            vesa_size: 100.0,
+            plate_thickness: 6.0,
+            plate_margin: 15.0,
+            corner_radius: 3.0,
+            hole_size: crate::stdlib::hardsurface::fastener::MetricSize::M5,
+            bore_kind: 1,
+        }
+    }
+}
+
+/// VESA モニターマウント板 (75/100 規格、4 隅にネジ穴、Z-up viewer 向き)
+///
+/// 構造: `RoundedBox` 板 (Y 軸厚) から 4 隅 (X/Z 平面) に `screw_hole` / `counterbore` / `countersink` を Subtraction
+/// `to_z_up` で Z-up viewer に整列 (板が bed 上に flat 置き)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{vesa_mount, VesaMountSpec};
+/// let m = vesa_mount(&VesaMountSpec::vesa_75_m4_cb());
+/// ```
+#[must_use]
+pub fn vesa_mount(spec: &VesaMountSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{counterbore, countersink, screw_hole};
+
+    let plate_extent = spec.vesa_size + 2.0 * spec.plate_margin;
+    let outer_hx = plate_extent * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_extent * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
+
+    let half_pcd = spec.vesa_size * 0.5;
+    let punch_depth = spec.plate_thickness + 10.0;
+    let corners = [
+        Vec3::new(half_pcd, 0.0, half_pcd),
+        Vec3::new(-half_pcd, 0.0, half_pcd),
+        Vec3::new(half_pcd, 0.0, -half_pcd),
+        Vec3::new(-half_pcd, 0.0, -half_pcd),
+    ];
+
+    let mut result = plate;
+    for corner in corners {
+        let hole = match spec.bore_kind {
+            1 => counterbore(spec.hole_size, spec.plate_thickness),
+            2 => countersink(spec.hole_size, spec.plate_thickness),
+            _ => screw_hole(spec.hole_size, punch_depth),
+        };
+        result = subtract(result, translate(hole, corner));
+    }
+
+    to_z_up(result)
+}
+
+/// L 型ブラケット (両 arm にネジ穴列) spec
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LBracketSpec {
+    /// 水平 arm 長 (mm、X 軸)
+    pub arm_width: f32,
+    /// 垂直 arm 高 (mm、Y 軸)
+    pub arm_height: f32,
+    /// 板厚 (mm、両 arm 共通)
+    pub plate_thickness: f32,
+    /// 奥行 (mm、Z 軸、両 arm 共通)
+    pub depth: f32,
+    /// 内角 fillet R (mm、0 なら fillet なし)
+    pub fillet_radius: f32,
+    /// 穴規格 (M3/M4/M5/M6/M8)
+    pub hole_size: crate::stdlib::hardsurface::fastener::MetricSize,
+    /// 各 arm あたりの穴個数 (1-4、Z 軸に等間隔配置)
+    pub holes_per_arm: u32,
+    /// 穴タイプ (0 = through、1 = counterbore)
+    pub bore_kind: u8,
+}
+
+impl LBracketSpec {
+    /// M4 × 2 穴 標準 (60×60×4mm、depth 40、fillet 3)
+    #[must_use]
+    pub const fn m4_2holes() -> Self {
+        Self {
+            arm_width: 60.0,
+            arm_height: 60.0,
+            plate_thickness: 4.0,
+            depth: 40.0,
+            fillet_radius: 3.0,
+            hole_size: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+            holes_per_arm: 2,
+            bore_kind: 0,
+        }
+    }
+
+    /// M5 × 3 穴 大型 (80×80×5mm、depth 50、fillet 4)
+    #[must_use]
+    pub const fn m5_3holes() -> Self {
+        Self {
+            arm_width: 80.0,
+            arm_height: 80.0,
+            plate_thickness: 5.0,
+            depth: 50.0,
+            fillet_radius: 4.0,
+            hole_size: crate::stdlib::hardsurface::fastener::MetricSize::M5,
+            holes_per_arm: 3,
+            bore_kind: 0,
+        }
+    }
+}
+
+/// L 型ブラケット (両 arm にネジ穴列、内角 fillet 統合、Z-up viewer 向き)
+///
+/// 構造: `mount::bracket_l` (Y-up 内部) の水平/垂直 arm 両方にネジ穴列を配置、
+/// 穴は arm の Z 軸方向に `holes_per_arm` 個等間隔 (端から板厚 2 個分マージン)
+/// `to_z_up` で Z-up viewer に整列
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{l_bracket, LBracketSpec};
+/// let b = l_bracket(&LBracketSpec::m4_2holes());
+/// ```
+#[must_use]
+pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{counterbore, screw_hole};
+    use crate::stdlib::hardsurface::mount::bracket_l;
+
+    let arm_width = spec.arm_width.max(spec.plate_thickness + 1.0);
+    let arm_height = spec.arm_height.max(spec.plate_thickness + 1.0);
+    let holes = spec.holes_per_arm.clamp(1, 4);
+
+    let bracket = bracket_l(
+        arm_width,
+        arm_height,
+        spec.plate_thickness,
+        spec.depth,
+        spec.fillet_radius,
+    );
+
+    let make_hole = |plate_thickness: f32| -> SdfNode {
+        if spec.bore_kind == 1 {
+            counterbore(spec.hole_size, plate_thickness)
+        } else {
+            screw_hole(spec.hole_size, plate_thickness + 10.0)
+        }
+    };
+
+    // 穴配置: 各 arm の Z 軸方向に holes 個等間隔、両端は板厚分マージン
+    let z_margin = spec.plate_thickness + spec.hole_size.head_diameter_socket() * 0.5;
+    let usable_z = (spec.depth - 2.0 * z_margin).max(0.0);
+    let step_z = if holes > 1 {
+        usable_z / (holes - 1) as f32
+    } else {
+        0.0
+    };
+    let start_z = -usable_z * 0.5;
+
+    let horizontal_hole_x =
+        (arm_width - spec.plate_thickness - spec.hole_size.head_diameter_socket()) * 0.5;
+    let vertical_hole_y = (arm_height + spec.plate_thickness) * 0.5;
+    let vertical_hole_x = -(arm_width - spec.plate_thickness) * 0.5;
+
+    let mut result = bracket;
+    for i in 0..holes {
+        let z = start_z + step_z * i as f32;
+        // 水平 arm: Y 軸方向下向きに穴 (Y=0 が水平 arm 中心)
+        let h_hole = make_hole(spec.plate_thickness);
+        result = subtract(
+            result,
+            translate(h_hole, Vec3::new(horizontal_hole_x, 0.0, z)),
+        );
+        // 垂直 arm: 水平方向 (X 軸) に穴 = X 軸周り 90° 回転
+        let v_hole_raw = make_hole(spec.plate_thickness);
+        let v_hole_rotated = SdfNode::Rotate {
+            child: Arc::new(v_hole_raw),
+            rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        };
+        result = subtract(
+            result,
+            translate(
+                v_hole_rotated,
+                Vec3::new(vertical_hole_x, vertical_hole_y, z),
+            ),
+        );
+    }
+
+    to_z_up(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7241,6 +7466,62 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint20 mix archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 21 Phase X.1 機械要素 tests (2026-08-27) ──
+
+    #[test]
+    fn vesa_75_m4_cb_is_rotate_wrapped() {
+        let m = vesa_mount(&VesaMountSpec::vesa_75_m4_cb());
+        assert!(matches!(m, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn vesa_75_m4_cb_has_solid_center() {
+        let m = vesa_mount(&VesaMountSpec::vesa_75_m4_cb());
+        // 板中心 (0, 0, 0) は solid、to_z_up 後も原点は板中心
+        assert!(eval(&m, Vec3::ZERO) < 0.0);
+    }
+
+    #[test]
+    fn vesa_75_m4_cb_has_hole_at_corner() {
+        let m = vesa_mount(&VesaMountSpec::vesa_75_m4_cb());
+        // VESA 75 = 4 隅穴が (±37.5, ±37.5) at Z=0 (to_z_up 後 X/Y 平面に穴軸が Z 向き)
+        // 内部座標 (37.5, 0, 37.5) → 世界座標 to_z_up: (Y, -Z, X) → (37.5, -37.5, 0)?
+        // to_z_up = Rotate X 90°、内部 (x,y,z) → 世界 (x, -z, y)、なので corner 内部 (37.5, 0, 37.5) は世界 (37.5, -37.5, 0)
+        // 穴軸は内部 Y 軸 → 世界 -Z 軸、板厚 5mm なので世界 (37.5, -37.5, 0) は穴空間
+        let d = eval(&m, Vec3::new(37.5, -37.5, 0.0));
+        assert!(d > 0.0, "corner should be a hole (empty), got d={d}");
+    }
+
+    #[test]
+    fn l_bracket_m4_2holes_is_rotate_wrapped() {
+        let b = l_bracket(&LBracketSpec::m4_2holes());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn l_bracket_horizontal_arm_center_solid() {
+        let b = l_bracket(&LBracketSpec::m4_2holes());
+        // 水平 arm 中心 (0, 0, 0) は solid (穴は端に配置)
+        assert!(eval(&b, Vec3::ZERO) < 0.0);
+    }
+
+    #[test]
+    fn all_sprint21_mechanical_archetypes_evaluations_finite() {
+        let nodes = [
+            vesa_mount(&VesaMountSpec::vesa_75_m4_cb()),
+            vesa_mount(&VesaMountSpec::vesa_100_m5_cb()),
+            l_bracket(&LBracketSpec::m4_2holes()),
+            l_bracket(&LBracketSpec::m5_3holes()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint21 mechanical archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
