@@ -6905,6 +6905,222 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
     to_z_up(result)
 }
 
+// ────────────────────────────────────────────────────────
+// Multi-domain 展開 (2026-08-28、家具 + 建築)
+// ────────────────────────────────────────────────────────
+
+/// デスク配線通しグロメット spec (家具 flat-pack、Ø60 標準)
+///
+/// 板穴 (grommet_od) にリング状 body が入り、上部フランジで板上に乗る
+/// 中央 inner_dia で配線が通過
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CableGrommetSpec {
+    /// リング body 外径 (mm、default 60 = デスク穴 Φ60 対応)
+    pub outer_dia: f32,
+    /// grommet 全高 (mm、板厚以上、default 15)
+    pub height: f32,
+    /// 上部フランジ厚 (mm、default 3)
+    pub flange_thickness: f32,
+    /// 上部フランジ張り出し (mm、片側、default 4)
+    pub flange_overhang: f32,
+    /// 中央配線通過穴径 (mm、default outer_dia - 10)
+    pub inner_dia: f32,
+}
+
+impl CableGrommetSpec {
+    /// 標準 Ø60 デスク grommet
+    #[must_use]
+    pub const fn standard_60() -> Self {
+        Self {
+            outer_dia: 60.0,
+            height: 15.0,
+            flange_thickness: 3.0,
+            flange_overhang: 4.0,
+            inner_dia: 50.0,
+        }
+    }
+
+    /// 大型 Ø80 デスク grommet (heavy cable)
+    #[must_use]
+    pub const fn large_80() -> Self {
+        Self {
+            outer_dia: 80.0,
+            height: 20.0,
+            flange_thickness: 4.0,
+            flange_overhang: 5.0,
+            inner_dia: 68.0,
+        }
+    }
+}
+
+/// デスク配線通しグロメット (家具 flat-pack、Ø60 標準、Z-up viewer 向き)
+///
+/// 構造: 上部フランジ (od + 2*overhang) + body cylinder (outer_dia) の Union、
+/// 中央 inner_dia の Cylinder で貫通穴
+/// フランジは Y+ 側 (板上)、body は Y- 側 (板穴に挿入)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{cable_grommet, CableGrommetSpec};
+/// let g = cable_grommet(&CableGrommetSpec::standard_60());
+/// ```
+#[must_use]
+pub fn cable_grommet(spec: &CableGrommetSpec) -> SdfNode {
+    let body_r = spec.outer_dia * 0.5;
+    let body_hh = spec.height * 0.5;
+    let flange_r = body_r + spec.flange_overhang;
+    let flange_hh = spec.flange_thickness * 0.5;
+    let inner_r = spec.inner_dia * 0.5;
+
+    let body = cylinder(body_r, body_hh);
+    // フランジは body 上端 (Y+) に配置
+    let flange = translate(
+        cylinder(flange_r, flange_hh),
+        Vec3::new(0.0, body_hh + flange_hh, 0.0),
+    );
+    let outer = union(body, flange);
+
+    // 中央貫通穴 (body 全高 + フランジ全高、余裕込み)
+    let punch_hh = (spec.height + spec.flange_thickness) * 0.5 + 5.0;
+    let punch = cylinder(inner_r, punch_hh);
+
+    to_z_up(subtract(outer, punch))
+}
+
+/// カーテンレール壁掛けブラケット spec (建築 interior mount)
+///
+/// L 型 (壁固定板 + 水平 arm + rod cradle)、rod は cradle に挿入
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CurtainRodBracketSpec {
+    /// rod 直径 (mm、default 25)
+    pub rod_dia: f32,
+    /// 壁からの突出 (mm、default 120)
+    pub projection: f32,
+    /// 壁面 plate 幅 X (mm、default 40)
+    pub wall_plate_w: f32,
+    /// 壁面 plate 高 Y (mm、default 80)
+    pub wall_plate_h: f32,
+    /// plate 厚 (mm、default 4)
+    pub plate_thickness: f32,
+    /// arm 太さ (Y 軸厚、mm、default 8)
+    pub arm_thickness: f32,
+    /// arm 幅 (Z 軸、mm、default 20)
+    pub arm_width: f32,
+    /// 壁面固定ネジ規格
+    pub wall_screw: crate::stdlib::hardsurface::fastener::MetricSize,
+}
+
+impl CurtainRodBracketSpec {
+    /// Ø25 標準 (レール Ø25、M4 壁固定)
+    #[must_use]
+    pub const fn standard_25() -> Self {
+        Self {
+            rod_dia: 25.0,
+            projection: 120.0,
+            wall_plate_w: 40.0,
+            wall_plate_h: 80.0,
+            plate_thickness: 4.0,
+            arm_thickness: 8.0,
+            arm_width: 20.0,
+            wall_screw: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+        }
+    }
+
+    /// Ø30 大型 (heavy curtain、M5 壁固定)
+    #[must_use]
+    pub const fn large_30() -> Self {
+        Self {
+            rod_dia: 30.0,
+            projection: 150.0,
+            wall_plate_w: 50.0,
+            wall_plate_h: 100.0,
+            plate_thickness: 5.0,
+            arm_thickness: 10.0,
+            arm_width: 25.0,
+            wall_screw: crate::stdlib::hardsurface::fastener::MetricSize::M5,
+        }
+    }
+}
+
+/// カーテンレール壁掛けブラケット (Z-up viewer 向き)
+///
+/// 構造: 壁面 plate (Y-up の X-Y 平面板) + 水平 arm (X 軸方向、壁から突出) + rod cradle (arm 先端 cylinder)
+/// 壁面 plate に 4 隅 counterbore、cradle は rod_dia + 0.5mm clearance
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{curtain_rod_bracket, CurtainRodBracketSpec};
+/// let b = curtain_rod_bracket(&CurtainRodBracketSpec::standard_25());
+/// ```
+#[must_use]
+pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::counterbore;
+
+    // 壁面 plate: 中心 X=0 (thickness 方向)、Y は縦 (rod は上下対称)、Z は幅
+    let plate_hx = spec.plate_thickness * 0.5;
+    let plate_hy = spec.wall_plate_h * 0.5;
+    let plate_hz = spec.wall_plate_w * 0.5;
+    let wall_plate = box3d(plate_hx, plate_hy, plate_hz);
+
+    // arm: 壁面 plate から +X 方向に突出、中央 Y=0
+    let arm_hx = spec.projection * 0.5;
+    let arm_hy = spec.arm_thickness * 0.5;
+    let arm_hz = spec.arm_width * 0.5;
+    let arm_raw = box3d(arm_hx, arm_hy, arm_hz);
+    let arm = translate(arm_raw, Vec3::new(plate_hx + arm_hx, 0.0, 0.0));
+
+    // rod cradle: arm 先端 (X = plate_hx + projection) に配置
+    // rod は Z 軸方向 (床と平行)、cradle は upside-open (Y+ 側 open) の半円 pocket
+    let cradle_r = (spec.rod_dia + 0.5) * 0.5;
+    let cradle_hh = spec.arm_width * 0.5 + 2.0;
+    // rod cradle center: X = plate_hx + projection、Y = arm 上端 + rod 半径
+    let cradle_x = plate_hx + spec.projection;
+    let cradle_y = arm_hy + cradle_r;
+    // cylinder Y-axis → rotate X 90° で Z-axis alignment (rod と同軸)
+    let cradle_hole = SdfNode::Rotate {
+        child: Arc::new(cylinder(cradle_r, cradle_hh)),
+        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+    };
+
+    // 半円 cradle: box wrapper で rod pocket を作る (arm 上に乗る cylinder wall)
+    // 簡易実装: cradle_body cylinder + subtract 中央穴
+    let cradle_body_r = cradle_r + 3.0; // wall 3mm
+    let cradle_body = SdfNode::Rotate {
+        child: Arc::new(cylinder(cradle_body_r, cradle_hh)),
+        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+    };
+    let cradle_placed = translate(cradle_body, Vec3::new(cradle_x, cradle_y, 0.0));
+    let hole_placed = translate(cradle_hole, Vec3::new(cradle_x, cradle_y, 0.0));
+
+    // 4 隅の counterbore in wall plate
+    let bore = counterbore(spec.wall_screw, spec.plate_thickness);
+    // counterbore is Y-axis native、我々の wall plate は X-axis normal なので Z 軸周り 90° 回転
+    let bore_rotated = SdfNode::Rotate {
+        child: Arc::new(bore),
+        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    };
+    let bore_offset_y = plate_hy - 12.0;
+    let bore_offset_z = plate_hz - 8.0;
+    let bore_positions = [
+        Vec3::new(0.0, bore_offset_y, bore_offset_z),
+        Vec3::new(0.0, bore_offset_y, -bore_offset_z),
+        Vec3::new(0.0, -bore_offset_y, bore_offset_z),
+        Vec3::new(0.0, -bore_offset_y, -bore_offset_z),
+    ];
+
+    // 組立: wall_plate + arm + cradle body、subtract wall screw holes + subtract cradle hole
+    let assembly = union(union(wall_plate, arm), cradle_placed);
+    let mut result = assembly;
+    for pos in bore_positions {
+        result = subtract(result, translate(bore_rotated.clone(), pos));
+    }
+    result = subtract(result, hole_placed);
+
+    to_z_up(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8505,6 +8721,44 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint22 bearing archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Multi-domain 展開 tests (家具 + 建築、2026-08-28) ──
+
+    #[test]
+    fn cable_grommet_standard_60_is_rotate_wrapped() {
+        let g = cable_grommet(&CableGrommetSpec::standard_60());
+        assert!(matches!(g, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn cable_grommet_center_is_hole() {
+        let g = cable_grommet(&CableGrommetSpec::standard_60());
+        // 中央は貫通穴、原点で SDF > 0
+        assert!(eval(&g, Vec3::ZERO) > 0.0, "grommet center is a hole");
+    }
+
+    #[test]
+    fn curtain_rod_bracket_standard_25_is_rotate_wrapped() {
+        let b = curtain_rod_bracket(&CurtainRodBracketSpec::standard_25());
+        assert!(matches!(b, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn all_multidomain_archetypes_evaluations_finite() {
+        let nodes = [
+            cable_grommet(&CableGrommetSpec::standard_60()),
+            cable_grommet(&CableGrommetSpec::large_80()),
+            curtain_rod_bracket(&CurtainRodBracketSpec::standard_25()),
+            curtain_rod_bracket(&CurtainRodBracketSpec::large_30()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "multi-domain archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
