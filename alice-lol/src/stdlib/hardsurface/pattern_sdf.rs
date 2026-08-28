@@ -6255,7 +6255,8 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
     }
 
     if spec.extra_m4_holes >= 4 {
-        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 5.0);
+        // +10.0 = 5mm each side、preview MC で Ø4.2 穴を確実に punch through
+        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 10.0);
         let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
         let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
         for c in [
@@ -7243,9 +7244,11 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
     // M3 hole pattern: board 外形 -3mm inset の 4 隅
+    // +10.0 = 5mm each side、preview MC (cell ~0.9mm) で Ø3.2 穴を確実に punch through
+    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
     let hole_x = bw * 0.5 - 3.0;
     let hole_z = bh * 0.5 - 3.0;
-    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 5.0);
+    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 10.0);
 
     let mut result = plate;
     for c in [
@@ -7257,9 +7260,9 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
         result = subtract(result, translate(m3_hole.clone(), c));
     }
 
-    // Optional M4 VESA 4 隅穴
+    // Optional M4 VESA 4 隅穴 (+10.0 = 5mm each side、cavity margin rule)
     if spec.extra_m4_holes >= 4 {
-        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 5.0);
+        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 10.0);
         let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
         let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
         for c in [
@@ -7345,9 +7348,9 @@ pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
-    // M3 hole pattern
+    // M3 hole pattern (+10.0 = 5mm each side、preview MC で Ø3.2 穴を確実に punch through)
     let half_pat = spec.hole_pattern_size * 0.5;
-    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 5.0);
+    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 10.0);
 
     let mut result = plate;
     for c in [
@@ -7493,7 +7496,8 @@ pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
         ServoKind::Sg90 => MetricSize::M2,
         ServoKind::Mg996r => MetricSize::M3,
     };
-    let mount_hole = screw_hole(hole_size, spec.plate_thickness + 5.0);
+    // +10.0 = 5mm each side、preview MC で Ø2.2/Ø3.2 穴を確実に punch through
+    let mount_hole = screw_hole(hole_size, spec.plate_thickness + 10.0);
     let hole_x = spec.servo.mount_span() * 0.5;
 
     let with_cutout = subtract(plate, cutout);
