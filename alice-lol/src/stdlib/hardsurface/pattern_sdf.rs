@@ -6716,6 +6716,195 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     to_z_up(result)
 }
 
+// ────────────────────────────────────────────────────────
+// Sprint 22 続行 mechanical archetype (2026-08-28、bearing seat)
+// ────────────────────────────────────────────────────────
+
+/// 標準 skate / miniature bearing 寸法 (mm、深溝玉軸受)
+///
+/// 各 method は ISO 15 / NSK / SKF spec 準拠
+/// - `608ZZ`: OD 22 × ID 8 × W 7 (最頻用、skateboard / spinner / drone)
+/// - `688ZZ`: OD 16 × ID 8 × W 5 (小型ホビー / モーター)
+/// - `6001ZZ`: OD 28 × ID 12 × W 8 (中型)
+/// - `6202ZZ`: OD 35 × ID 15 × W 11 (大型)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BearingKind {
+    /// 608ZZ (OD 22, ID 8, W 7)
+    B608,
+    /// 688ZZ (OD 16, ID 8, W 5)
+    B688,
+    /// 6001ZZ (OD 28, ID 12, W 8)
+    B6001,
+    /// 6202ZZ (OD 35, ID 15, W 11)
+    B6202,
+}
+
+impl BearingKind {
+    /// 外径 (mm)
+    #[must_use]
+    pub const fn outer_dia(self) -> f32 {
+        match self {
+            Self::B608 => 22.0,
+            Self::B688 => 16.0,
+            Self::B6001 => 28.0,
+            Self::B6202 => 35.0,
+        }
+    }
+
+    /// 内径 (mm、シャフト通し穴目安)
+    #[must_use]
+    pub const fn inner_dia(self) -> f32 {
+        match self {
+            Self::B608 => 8.0,
+            Self::B688 => 8.0,
+            Self::B6001 => 12.0,
+            Self::B6202 => 15.0,
+        }
+    }
+
+    /// 幅 (mm、ベアリング厚)
+    #[must_use]
+    pub const fn width(self) -> f32 {
+        match self {
+            Self::B608 => 7.0,
+            Self::B688 => 5.0,
+            Self::B6001 => 8.0,
+            Self::B6202 => 11.0,
+        }
+    }
+
+    /// f32 サイズ (mm、outer_dia の目安) を対応 `BearingKind` に最近接 snap
+    #[must_use]
+    pub fn from_f32_snap(size: f32) -> Self {
+        let candidates = [
+            (16.0_f32, Self::B688),
+            (22.0, Self::B608),
+            (28.0, Self::B6001),
+            (35.0, Self::B6202),
+        ];
+        let mut best = Self::B608;
+        let mut best_dist = f32::INFINITY;
+        for (od, kind) in candidates {
+            let d = (od - size).abs();
+            if d < best_dist {
+                best_dist = d;
+                best = kind;
+            }
+        }
+        best
+    }
+}
+
+/// 軸受マウント板 spec (Bearing seat、Z-up viewer 向き)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BearingSeatSpec {
+    /// bearing 種別
+    pub bearing: BearingKind,
+    /// 板厚 (mm、bearing width より小さいと bearing 突出する仕様)
+    pub plate_thickness: f32,
+    /// 板 X/Z 端マージン (mm、外形 = bearing_od + 2*margin)
+    pub plate_margin: f32,
+    /// 板 corner 半径 (mm)
+    pub corner_radius: f32,
+    /// 取付スタイル: 0 = press-fit (OD -0.05mm 圧入)、1 = slip fit (OD +0.1mm はめ込み)、2 = through with shoulder (座付貫通、shaft 側から挿入)
+    pub style: u8,
+}
+
+impl BearingSeatSpec {
+    /// 608ZZ press-fit 標準 (skateboard / spinner、板厚 5mm)
+    #[must_use]
+    pub const fn b608_press_fit() -> Self {
+        Self {
+            bearing: BearingKind::B608,
+            plate_thickness: 5.0,
+            plate_margin: 10.0,
+            corner_radius: 3.0,
+            style: 0,
+        }
+    }
+
+    /// 608ZZ slip fit (簡易組立、板厚 5mm)
+    #[must_use]
+    pub const fn b608_slip_fit() -> Self {
+        Self {
+            bearing: BearingKind::B608,
+            plate_thickness: 5.0,
+            plate_margin: 10.0,
+            corner_radius: 3.0,
+            style: 1,
+        }
+    }
+
+    /// 688ZZ press-fit (小型モーター / ホビー、板厚 4mm)
+    #[must_use]
+    pub const fn b688_press_fit() -> Self {
+        Self {
+            bearing: BearingKind::B688,
+            plate_thickness: 4.0,
+            plate_margin: 8.0,
+            corner_radius: 2.5,
+            style: 0,
+        }
+    }
+}
+
+/// 軸受マウント板 (板 + bearing pocket + shaft 貫通穴、Z-up viewer 向き)
+///
+/// 構造: `RoundedBox` 板 中心に bearing OD の cylinder pocket を Subtraction
+/// style=0 (press-fit): pocket dia = OD - 0.05mm (圧入)、shaft 貫通穴 = inner_dia + 0.5mm clearance
+/// style=1 (slip fit): pocket dia = OD + 0.1mm (はめ込み)、shaft 貫通穴 = inner_dia + 0.5mm
+/// style=2 (through with shoulder): 板厚 > bearing width の場合のみ shoulder 残す、それ以外は貫通
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{bearing_seat, BearingSeatSpec};
+/// let s = bearing_seat(&BearingSeatSpec::b608_press_fit());
+/// ```
+#[must_use]
+pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
+    let od = spec.bearing.outer_dia();
+    let id = spec.bearing.inner_dia();
+    let width = spec.bearing.width();
+
+    let plate_extent = od + 2.0 * spec.plate_margin;
+    let outer_hx = plate_extent * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_extent * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
+
+    // Bearing pocket
+    let pocket_dia = match spec.style {
+        0 => od - 0.05, // press-fit
+        1 => od + 0.1,  // slip fit
+        _ => od + 0.1,  // through with shoulder = slip fit + shoulder
+    };
+    // pocket 深さ: press-fit / slip fit は貫通、shoulder style は shaft 側から width まで
+    let pocket_depth = if spec.style == 2 {
+        width.min(spec.plate_thickness - 1.0).max(1.0)
+    } else {
+        spec.plate_thickness + 5.0
+    };
+    let pocket = cylinder(pocket_dia * 0.5, pocket_depth * 0.5);
+    // pocket 中心 offset: shoulder style は Y+ 側 (bearing 側) に、他は板中心
+    let pocket_y_offset = if spec.style == 2 {
+        (spec.plate_thickness - pocket_depth) * 0.5
+    } else {
+        0.0
+    };
+    let pocket_placed = translate(pocket, Vec3::new(0.0, pocket_y_offset, 0.0));
+
+    // Shaft through hole (常に貫通、板中心)
+    let shaft_dia = id + 0.5; // clearance for shaft fit
+    let shaft = cylinder(shaft_dia * 0.5, spec.plate_thickness * 0.5 + 5.0);
+
+    let with_pocket = subtract(plate, pocket_placed);
+    let result = subtract(with_pocket, shaft);
+
+    to_z_up(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8257,6 +8446,65 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "sprint21 extra8 archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── Sprint 22 続行 bearing_seat tests ──
+
+    #[test]
+    fn bearing_kind_from_f32_snap_exact() {
+        assert_eq!(BearingKind::from_f32_snap(22.0), BearingKind::B608);
+        assert_eq!(BearingKind::from_f32_snap(16.0), BearingKind::B688);
+        assert_eq!(BearingKind::from_f32_snap(28.0), BearingKind::B6001);
+        assert_eq!(BearingKind::from_f32_snap(35.0), BearingKind::B6202);
+    }
+
+    #[test]
+    fn bearing_kind_from_f32_snap_near() {
+        // 24.0 は 22 (dist 2) が近い
+        assert_eq!(BearingKind::from_f32_snap(24.0), BearingKind::B608);
+        // 30.0 は 28 (dist 2) が近い
+        assert_eq!(BearingKind::from_f32_snap(30.0), BearingKind::B6001);
+        // 100.0 は 35 clamp
+        assert_eq!(BearingKind::from_f32_snap(100.0), BearingKind::B6202);
+    }
+
+    #[test]
+    fn bearing_608_dimensions_are_standard() {
+        // 608ZZ: OD 22 × ID 8 × W 7 (NSK/SKF spec)
+        assert!((BearingKind::B608.outer_dia() - 22.0).abs() < 1e-6);
+        assert!((BearingKind::B608.inner_dia() - 8.0).abs() < 1e-6);
+        assert!((BearingKind::B608.width() - 7.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bearing_seat_608_press_fit_is_rotate_wrapped() {
+        let s = bearing_seat(&BearingSeatSpec::b608_press_fit());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn bearing_seat_has_shaft_hole_at_center() {
+        let s = bearing_seat(&BearingSeatSpec::b608_press_fit());
+        // shaft through hole 中心 = 板中心 = 原点、必ず穴 (SDF > 0)
+        // to_z_up 後の原点は世界 (0, 0, 0)、内部 (0, 0, 0)
+        let d = eval(&s, Vec3::ZERO);
+        assert!(d > 0.0, "shaft through hole 中心は穴、got d={d}");
+    }
+
+    #[test]
+    fn all_sprint22_bearing_archetypes_evaluations_finite() {
+        let nodes = [
+            bearing_seat(&BearingSeatSpec::b608_press_fit()),
+            bearing_seat(&BearingSeatSpec::b608_slip_fit()),
+            bearing_seat(&BearingSeatSpec::b688_press_fit()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "sprint22 bearing archetype {i} produced non-finite SDF: {d}"
             );
         }
     }
