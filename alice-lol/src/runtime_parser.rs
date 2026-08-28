@@ -2786,6 +2786,45 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::reinforcement::rib(l, h, t))
             }
 
+            // ── Sprint 22 続行 mechanical primitive (2026-08-28) ──
+            "bearing_seat" => {
+                // bearing_seat(size, plate_t, style) 3 param
+                // size (f32、OD) → BearingKind::from_f32_snap で最近接標準
+                // style: 0=press-fit, 1=slip fit, 2=through with shoulder
+                let (size, plate_t, style) = self.parse_3f()?;
+                let bearing =
+                    crate::stdlib::hardsurface::pattern_sdf::BearingKind::from_f32_snap(size);
+                let plate_margin = 10.0;
+                let corner_radius = plate_margin * 0.3;
+                let style_u8 = if style >= 1.5 {
+                    2_u8
+                } else if style >= 0.5 {
+                    1_u8
+                } else {
+                    0_u8
+                };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::BearingSeatSpec {
+                    bearing,
+                    plate_thickness: plate_t,
+                    plate_margin,
+                    corner_radius,
+                    style: style_u8,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::bearing_seat(&spec))
+            }
+            "rack_shelf" => {
+                // rack_shelf(length, thickness, width, notch_pitch, notch_dia, notch_count) 6 param、Y-up raw
+                let (length, thickness, width, pitch, dia, count) = self.parse_6f()?;
+                Ok(crate::stdlib::hardsurface::mount::rack_shelf(
+                    length,
+                    thickness,
+                    width,
+                    pitch,
+                    dia,
+                    count.round().max(0.0) as u32,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4665,6 +4704,51 @@ mod tests {
             );
         } else {
             panic!("expected Cylinder");
+        }
+    }
+
+    // ── Sprint 22 続行 mechanical primitive tests (2026-08-28) ──
+
+    #[test]
+    fn test_bearing_seat_608_press_fit() {
+        let node = parse_lol("bearing_seat(22, 5, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_bearing_seat_608_slip_fit() {
+        let node = parse_lol("bearing_seat(22, 5, 1)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_bearing_seat_688_snap() {
+        // 16.0 は B688 に snap
+        let node = parse_lol("bearing_seat(16, 4, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_rack_shelf_raw_5_notch() {
+        // rack_shelf(length, thickness, width, notch_pitch, notch_dia, notch_count)
+        let node = parse_lol("rack_shelf(200, 5, 30, 25, 6, 2)").unwrap();
+        // rack_shelf returns Subtraction (plate - notch_row)
+        assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_sprint22_mechanical_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "bearing_seat(22, 5, 0)",
+            "bearing_seat(22, 5, 1)",
+            "bearing_seat(16, 4, 0)",
+            "rack_shelf(200, 5, 30, 25, 6, 2)",
+            "rack_shelf(400, 6, 40, 35, 8, 3)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
         }
     }
 }
