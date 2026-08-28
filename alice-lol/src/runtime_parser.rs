@@ -2869,6 +2869,59 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── 電子工作 domain 展開 (Arduino / Pixhawk / Servo / JST-PH、2026-08-28) ──
+            "arduino_mount_plate" => {
+                // arduino_mount_plate(board_type, extras) 2 param、1=Uno / 2=Mega / 3=Nano
+                let (board_type, extras) = self.parse_2f()?;
+                let board = crate::stdlib::hardsurface::pattern_sdf::ArduinoBoard::from_f32_snap(
+                    board_type,
+                );
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ArduinoMountPlateSpec {
+                    board,
+                    plate_thickness: 4.0,
+                    plate_margin: 10.0,
+                    extra_m4_holes: extras.round().max(0.0) as u32,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::arduino_mount_plate(&spec))
+            }
+            "pixhawk_mount" => {
+                // pixhawk_mount(size, damper_style) 2 param、size = hole pattern (45 / 30)
+                let (size, damper) = self.parse_2f()?;
+                let damper_u8 = if damper >= 0.5 { 1_u8 } else { 0_u8 };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::PixhawkMountSpec {
+                    hole_pattern_size: size,
+                    plate_thickness: 4.0,
+                    plate_margin: 12.0,
+                    damper_style: damper_u8,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::pixhawk_mount(
+                    &spec,
+                ))
+            }
+            "servo_mount" => {
+                // servo_mount(servo_type) 1 param、1=SG90 / 2=MG996R
+                let servo_type = self.parse_1f()?;
+                let servo =
+                    crate::stdlib::hardsurface::pattern_sdf::ServoKind::from_f32_snap(servo_type);
+                let plate_thickness = match servo {
+                    crate::stdlib::hardsurface::pattern_sdf::ServoKind::Sg90 => 3.0,
+                    crate::stdlib::hardsurface::pattern_sdf::ServoKind::Mg996r => 4.0,
+                };
+                let spec = crate::stdlib::hardsurface::pattern_sdf::ServoMountSpec {
+                    servo,
+                    plate_thickness,
+                    flange_margin: 5.0,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::servo_mount(&spec))
+            }
+            "jst_ph_slot" => {
+                // jst_ph_slot(pins) 1 param、2/3/4/5 pin 対応、raw Y-up Box3d
+                let pins = self.parse_1f()?;
+                Ok(crate::stdlib::hardsurface::joint::jst_ph_slot(
+                    pins.round().max(2.0) as u32,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4851,6 +4904,79 @@ mod tests {
             "dowel_hole(6, 10)",
             "wood_screw_pilot(4, 0)",
             "wood_screw_pilot(5, 1)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── 電子工作 domain tests (Arduino / Pixhawk / Servo / JST-PH、2026-08-28) ──
+
+    #[test]
+    fn test_arduino_mount_uno() {
+        let node = parse_lol("arduino_mount_plate(1, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_arduino_mount_uno_vesa() {
+        let node = parse_lol("arduino_mount_plate(1, 4)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_arduino_mount_nano() {
+        let node = parse_lol("arduino_mount_plate(3, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_pixhawk_45_solid() {
+        let node = parse_lol("pixhawk_mount(45, 0)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_pixhawk_45_damper() {
+        let node = parse_lol("pixhawk_mount(45, 1)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_servo_sg90() {
+        let node = parse_lol("servo_mount(1)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_servo_mg996r() {
+        let node = parse_lol("servo_mount(2)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_jst_ph_slot_4pin() {
+        let node = parse_lol("jst_ph_slot(4)").unwrap();
+        // JST-PH slot returns raw Box3d (Y-up)
+        assert!(matches!(node, SdfNode::Box3d { .. }));
+    }
+
+    #[test]
+    fn test_electronics_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "arduino_mount_plate(1, 0)",
+            "arduino_mount_plate(1, 4)",
+            "arduino_mount_plate(2, 0)",
+            "arduino_mount_plate(3, 0)",
+            "pixhawk_mount(45, 0)",
+            "pixhawk_mount(45, 1)",
+            "pixhawk_mount(30, 0)",
+            "servo_mount(1)",
+            "servo_mount(2)",
+            "jst_ph_slot(2)",
+            "jst_ph_slot(4)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));

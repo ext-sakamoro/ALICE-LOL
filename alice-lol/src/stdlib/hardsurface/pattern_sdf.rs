@@ -7121,6 +7121,394 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     to_z_up(result)
 }
 
+// ────────────────────────────────────────────────────────
+// 電子工作 domain 展開 (2026-08-28、Multi-domain 3rd)
+// ────────────────────────────────────────────────────────
+
+/// Arduino board type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ArduinoBoard {
+    /// Arduino Uno / Duemilanove (68.6 × 53.4mm、4 M3)
+    Uno,
+    /// Arduino Mega 2560 (101.5 × 53.4mm、4 M3)
+    Mega,
+    /// Arduino Nano (43.2 × 17.8mm、4 M3 corners)
+    Nano,
+}
+
+impl ArduinoBoard {
+    /// board width (mm、X 軸)
+    #[must_use]
+    pub const fn board_width(self) -> f32 {
+        match self {
+            Self::Uno => 68.6,
+            Self::Mega => 101.5,
+            Self::Nano => 43.2,
+        }
+    }
+
+    /// board height (mm、Z 軸)
+    #[must_use]
+    pub const fn board_height(self) -> f32 {
+        match self {
+            Self::Uno => 53.4,
+            Self::Mega => 53.4,
+            Self::Nano => 17.8,
+        }
+    }
+
+    /// f32 引数から board 種別を snap (1=Uno, 2=Mega, 3=Nano)
+    #[must_use]
+    pub fn from_f32_snap(v: f32) -> Self {
+        match v.round() as i32 {
+            2 => Self::Mega,
+            3 => Self::Nano,
+            _ => Self::Uno,
+        }
+    }
+}
+
+/// Arduino mount plate spec (Uno / Mega / Nano、M3 mount + VESA 拡張)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArduinoMountPlateSpec {
+    /// board 種別
+    pub board: ArduinoBoard,
+    /// 板厚 (mm)
+    pub plate_thickness: f32,
+    /// 板 X/Z 端マージン (mm、片側)
+    pub plate_margin: f32,
+    /// 外周 M4 追加穴数 (0=なし / 4=VESA-compat 4 隅)
+    pub extra_m4_holes: u32,
+}
+
+impl ArduinoMountPlateSpec {
+    /// Uno 標準 (板厚 4mm、bare)
+    #[must_use]
+    pub const fn uno_bare() -> Self {
+        Self {
+            board: ArduinoBoard::Uno,
+            plate_thickness: 4.0,
+            plate_margin: 10.0,
+            extra_m4_holes: 0,
+        }
+    }
+
+    /// Uno + VESA compat (VESA 75 対応 4 M4 隅穴)
+    #[must_use]
+    pub const fn uno_vesa() -> Self {
+        Self {
+            board: ArduinoBoard::Uno,
+            plate_thickness: 4.0,
+            plate_margin: 10.0,
+            extra_m4_holes: 4,
+        }
+    }
+
+    /// Nano 標準 (板厚 3mm、bare)
+    #[must_use]
+    pub const fn nano_bare() -> Self {
+        Self {
+            board: ArduinoBoard::Nano,
+            plate_thickness: 3.0,
+            plate_margin: 8.0,
+            extra_m4_holes: 0,
+        }
+    }
+}
+
+/// Arduino mount plate (Uno/Mega/Nano、M3 4-hole 簡易対称 pattern、Z-up viewer 向き)
+///
+/// 構造: `RoundedBox` 板 + M3 隅穴 4 個 (board 外形 - 6mm inset)、optional M4 VESA 4 隅穴
+/// M3 hole pattern は Uno/Mega 実 hole 非対称を簡易対称化 (± hole 座標が board 外形から 3mm inset)
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{arduino_mount_plate, ArduinoMountPlateSpec};
+/// let p = arduino_mount_plate(&ArduinoMountPlateSpec::uno_bare());
+/// ```
+#[must_use]
+pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+
+    let bw = spec.board.board_width();
+    let bh = spec.board.board_height();
+    let plate_extent_x = bw + 2.0 * spec.plate_margin;
+    let plate_extent_z = bh + 2.0 * spec.plate_margin;
+
+    let outer_hx = plate_extent_x * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_extent_z * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+
+    // M3 hole pattern: board 外形 -3mm inset の 4 隅
+    let hole_x = bw * 0.5 - 3.0;
+    let hole_z = bh * 0.5 - 3.0;
+    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 5.0);
+
+    let mut result = plate;
+    for c in [
+        Vec3::new(hole_x, 0.0, hole_z),
+        Vec3::new(-hole_x, 0.0, hole_z),
+        Vec3::new(hole_x, 0.0, -hole_z),
+        Vec3::new(-hole_x, 0.0, -hole_z),
+    ] {
+        result = subtract(result, translate(m3_hole.clone(), c));
+    }
+
+    // Optional M4 VESA 4 隅穴
+    if spec.extra_m4_holes >= 4 {
+        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 5.0);
+        let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
+        let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
+        for c in [
+            Vec3::new(vesa_x, 0.0, vesa_z),
+            Vec3::new(-vesa_x, 0.0, vesa_z),
+            Vec3::new(vesa_x, 0.0, -vesa_z),
+            Vec3::new(-vesa_x, 0.0, -vesa_z),
+        ] {
+            result = subtract(result, translate(m4_hole.clone(), c));
+        }
+    }
+
+    to_z_up(result)
+}
+
+/// Pixhawk autopilot mount spec (drone / FPV、M3 4-hole square + optional damper)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PixhawkMountSpec {
+    /// hole pattern サイズ (mm、default 45 = Pixhawk 4/6C 標準)
+    pub hole_pattern_size: f32,
+    /// 板厚 (mm)
+    pub plate_thickness: f32,
+    /// 板 X/Z 端マージン (mm、片側)
+    pub plate_margin: f32,
+    /// vibration damper pocket 有無 (0=solid、1=Ø10 damper pocket 4 隅)
+    pub damper_style: u8,
+}
+
+impl PixhawkMountSpec {
+    /// Pixhawk 標準 45×45mm 4 M3 (solid、板厚 4mm)
+    #[must_use]
+    pub const fn standard_45_solid() -> Self {
+        Self {
+            hole_pattern_size: 45.0,
+            plate_thickness: 4.0,
+            plate_margin: 12.0,
+            damper_style: 0,
+        }
+    }
+
+    /// Pixhawk 標準 45×45mm 4 M3 (damper pocket 付、vibration isolation)
+    #[must_use]
+    pub const fn standard_45_damper() -> Self {
+        Self {
+            hole_pattern_size: 45.0,
+            plate_thickness: 4.0,
+            plate_margin: 15.0,
+            damper_style: 1,
+        }
+    }
+
+    /// Pixhawk mini 30×30mm 4 M3 (solid、コンパクト機体用)
+    #[must_use]
+    pub const fn mini_30_solid() -> Self {
+        Self {
+            hole_pattern_size: 30.0,
+            plate_thickness: 3.0,
+            plate_margin: 10.0,
+            damper_style: 0,
+        }
+    }
+}
+
+/// Pixhawk autopilot mount plate (drone / FPV、M3 4-hole square pattern、Z-up viewer 向き)
+///
+/// 構造: `RoundedBox` 板 + M3 隅穴 4 個 + optional Ø10 vibration damper pocket
+/// damper style=1 は隅の damper pocket (深さ = 板厚半分) をボード外側に追加
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{pixhawk_mount, PixhawkMountSpec};
+/// let p = pixhawk_mount(&PixhawkMountSpec::standard_45_solid());
+/// ```
+#[must_use]
+pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+
+    let plate_extent = spec.hole_pattern_size + 2.0 * spec.plate_margin;
+    let outer_hx = plate_extent * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_extent * 0.5;
+
+    let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+
+    // M3 hole pattern
+    let half_pat = spec.hole_pattern_size * 0.5;
+    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 5.0);
+
+    let mut result = plate;
+    for c in [
+        Vec3::new(half_pat, 0.0, half_pat),
+        Vec3::new(-half_pat, 0.0, half_pat),
+        Vec3::new(half_pat, 0.0, -half_pat),
+        Vec3::new(-half_pat, 0.0, -half_pat),
+    ] {
+        result = subtract(result, translate(m3_hole.clone(), c));
+    }
+
+    // Optional damper pocket (Ø10 × 深さ = 板厚半分、板外周に配置)
+    if spec.damper_style >= 1 {
+        let damper_r = 5.0;
+        let damper_depth = spec.plate_thickness * 0.5;
+        let damper_pocket = cylinder(damper_r, damper_depth * 0.5);
+        let damper_x = plate_extent * 0.5 - spec.plate_margin * 0.5;
+        let damper_z = plate_extent * 0.5 - spec.plate_margin * 0.5;
+        let damper_y = outer_hy - damper_depth * 0.5;
+        for c in [
+            Vec3::new(damper_x, damper_y, damper_z),
+            Vec3::new(-damper_x, damper_y, damper_z),
+            Vec3::new(damper_x, damper_y, -damper_z),
+            Vec3::new(-damper_x, damper_y, -damper_z),
+        ] {
+            result = subtract(result, translate(damper_pocket.clone(), c));
+        }
+    }
+
+    to_z_up(result)
+}
+
+/// Servo type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ServoKind {
+    /// SG90 mini (23 × 12.5 × 22mm、mount span 32.5mm、M2)
+    Sg90,
+    /// MG996R standard (40.7 × 19.7 × 42.9mm、mount span 49mm、M3)
+    Mg996r,
+}
+
+impl ServoKind {
+    /// body 幅 (mm、X 軸)
+    #[must_use]
+    pub const fn body_width(self) -> f32 {
+        match self {
+            Self::Sg90 => 23.0,
+            Self::Mg996r => 40.7,
+        }
+    }
+
+    /// body 奥行 (mm、Z 軸)
+    #[must_use]
+    pub const fn body_depth(self) -> f32 {
+        match self {
+            Self::Sg90 => 12.5,
+            Self::Mg996r => 19.7,
+        }
+    }
+
+    /// mount flange span (mm、X 軸、両フランジ穴中心間距離)
+    #[must_use]
+    pub const fn mount_span(self) -> f32 {
+        match self {
+            Self::Sg90 => 32.5,
+            Self::Mg996r => 49.0,
+        }
+    }
+
+    /// f32 引数から servo 種別を snap (1=SG90, 2=MG996R)
+    #[must_use]
+    pub fn from_f32_snap(v: f32) -> Self {
+        match v.round() as i32 {
+            2 => Self::Mg996r,
+            _ => Self::Sg90,
+        }
+    }
+}
+
+/// Servo mount plate spec (SG90 / MG996R)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ServoMountSpec {
+    /// servo 種別
+    pub servo: ServoKind,
+    /// 板厚 (mm)
+    pub plate_thickness: f32,
+    /// flange 端マージン (mm、板 X 全長 = mount_span + 2*margin)
+    pub flange_margin: f32,
+}
+
+impl ServoMountSpec {
+    /// SG90 標準 (板厚 3mm)
+    #[must_use]
+    pub const fn sg90_standard() -> Self {
+        Self {
+            servo: ServoKind::Sg90,
+            plate_thickness: 3.0,
+            flange_margin: 5.0,
+        }
+    }
+
+    /// MG996R 標準 (板厚 4mm)
+    #[must_use]
+    pub const fn mg996r_standard() -> Self {
+        Self {
+            servo: ServoKind::Mg996r,
+            plate_thickness: 4.0,
+            flange_margin: 6.0,
+        }
+    }
+}
+
+/// Servo mount plate (SG90 / MG996R、中央 body 切欠 + 両 flange mount 穴、Z-up viewer 向き)
+///
+/// 構造: `Box3d` 板 (X = mount_span + 2*flange_margin、Z = body_depth + 2mm) から
+/// 中央 body 切欠 + 両 flange mount 穴 2 個 (SG90=M2、MG996R=M3) を Subtract
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{servo_mount, ServoMountSpec};
+/// let s = servo_mount(&ServoMountSpec::sg90_standard());
+/// ```
+#[must_use]
+pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+
+    let plate_x = spec.servo.mount_span() + 2.0 * spec.flange_margin;
+    let plate_z = spec.servo.body_depth() + 4.0;
+    let outer_hx = plate_x * 0.5;
+    let outer_hy = spec.plate_thickness * 0.5;
+    let outer_hz = plate_z * 0.5;
+
+    let plate = box3d(outer_hx, outer_hy, outer_hz);
+
+    // 中央 body 切欠 (body_width × body_depth + 0.5mm clearance)
+    let cutout_hx = (spec.servo.body_width() + 0.5) * 0.5;
+    let cutout_hz = (spec.servo.body_depth() + 0.5) * 0.5;
+    let cutout = box3d(cutout_hx, outer_hy + 5.0, cutout_hz);
+
+    // Flange mount 穴 (SG90=M2、MG996R=M3)、両端中央
+    let hole_size = match spec.servo {
+        ServoKind::Sg90 => MetricSize::M2,
+        ServoKind::Mg996r => MetricSize::M3,
+    };
+    let mount_hole = screw_hole(hole_size, spec.plate_thickness + 5.0);
+    let hole_x = spec.servo.mount_span() * 0.5;
+
+    let with_cutout = subtract(plate, cutout);
+    let with_left = subtract(
+        with_cutout,
+        translate(mount_hole.clone(), Vec3::new(hole_x, 0.0, 0.0)),
+    );
+    let result = subtract(
+        with_left,
+        translate(mount_hole, Vec3::new(-hole_x, 0.0, 0.0)),
+    );
+
+    to_z_up(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8759,6 +9147,69 @@ mod tests {
             assert!(
                 d.is_finite(),
                 "multi-domain archetype {i} produced non-finite SDF: {d}"
+            );
+        }
+    }
+
+    // ── 電子工作 domain tests (Arduino / Pixhawk / Servo、2026-08-28) ──
+
+    #[test]
+    fn arduino_board_dimensions_are_standard() {
+        assert!((ArduinoBoard::Uno.board_width() - 68.6).abs() < 1e-4);
+        assert!((ArduinoBoard::Mega.board_width() - 101.5).abs() < 1e-4);
+        assert!((ArduinoBoard::Nano.board_width() - 43.2).abs() < 1e-4);
+    }
+
+    #[test]
+    fn arduino_board_from_f32_snap() {
+        assert_eq!(ArduinoBoard::from_f32_snap(1.0), ArduinoBoard::Uno);
+        assert_eq!(ArduinoBoard::from_f32_snap(2.0), ArduinoBoard::Mega);
+        assert_eq!(ArduinoBoard::from_f32_snap(3.0), ArduinoBoard::Nano);
+        // 未定義値は Uno に fallback
+        assert_eq!(ArduinoBoard::from_f32_snap(10.0), ArduinoBoard::Uno);
+    }
+
+    #[test]
+    fn arduino_uno_bare_is_rotate_wrapped() {
+        let p = arduino_mount_plate(&ArduinoMountPlateSpec::uno_bare());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn pixhawk_45_solid_is_rotate_wrapped() {
+        let p = pixhawk_mount(&PixhawkMountSpec::standard_45_solid());
+        assert!(matches!(p, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn servo_kind_from_f32_snap() {
+        assert_eq!(ServoKind::from_f32_snap(1.0), ServoKind::Sg90);
+        assert_eq!(ServoKind::from_f32_snap(2.0), ServoKind::Mg996r);
+    }
+
+    #[test]
+    fn servo_sg90_is_rotate_wrapped() {
+        let s = servo_mount(&ServoMountSpec::sg90_standard());
+        assert!(matches!(s, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn all_arduino_pixhawk_servo_evaluations_finite() {
+        let nodes = [
+            arduino_mount_plate(&ArduinoMountPlateSpec::uno_bare()),
+            arduino_mount_plate(&ArduinoMountPlateSpec::uno_vesa()),
+            arduino_mount_plate(&ArduinoMountPlateSpec::nano_bare()),
+            pixhawk_mount(&PixhawkMountSpec::standard_45_solid()),
+            pixhawk_mount(&PixhawkMountSpec::standard_45_damper()),
+            pixhawk_mount(&PixhawkMountSpec::mini_30_solid()),
+            servo_mount(&ServoMountSpec::sg90_standard()),
+            servo_mount(&ServoMountSpec::mg996r_standard()),
+        ];
+        for (i, node) in nodes.iter().enumerate() {
+            let d = eval(node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(
+                d.is_finite(),
+                "arduino/pixhawk/servo archetype {i} produced non-finite SDF: {d}"
             );
         }
     }

@@ -412,6 +412,44 @@ pub fn pin_hinge_knuckle(pin_diameter: f32, knuckle_length: f32, knuckle_od: f32
 }
 
 // ────────────────────────────────────────────────────────
+// 7. JST-PH connector slot (電子工作 2.0mm pitch コネクタ)
+// ────────────────────────────────────────────────────────
+
+/// JST-PH 2.0mm pitch コネクタ (電子工作標準)
+///
+/// - 2-pin: 6mm 幅 (JST S2B-PH-K spec)
+/// - 3-pin: 8mm 幅 (S3B-PH-K)
+/// - 4-pin: 10mm 幅 (S4B-PH-K)
+/// - 5-pin: 12mm 幅 (S5B-PH-K)
+///
+/// depth (Y 軸) = 4.5mm (コネクタ housing 幅)、height (Z 軸) = 5.5mm (housing 高)
+/// 配線用途で enclosure 壁面に開ける slot として使う
+pub const JST_PH_PITCH: f32 = 2.0;
+
+/// JST-PH コネクタ slot primitive (2.0mm pitch、Y-up native)
+///
+/// 構造: Box3d、幅 = `JST_PH_PITCH * (pins + 1)` mm、depth 4.5mm、height 5.5mm
+/// user 側で enclosure 壁面から `subtract` して開口部を作る
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::joint::jst_ph_slot;
+/// let slot = jst_ph_slot(4);
+/// // JST S4B-PH-K 用 slot: 10mm x 4.5mm x 5.5mm
+/// ```
+#[must_use]
+pub fn jst_ph_slot(pins: u32) -> SdfNode {
+    let pins_f = pins.max(2).min(12) as f32;
+    let width = JST_PH_PITCH * (pins_f + 1.0);
+    let depth = 4.5;
+    let height = 5.5;
+    SdfNode::Box3d {
+        half_extents: Vec3::new(width * 0.5, depth * 0.5, height * 0.5),
+    }
+}
+
+// ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
 
@@ -565,6 +603,33 @@ mod tests {
                 d.is_finite(),
                 "primitive {i} produced non-finite SDF at (0.1,0.1,0.1): {d}"
             );
+        }
+    }
+
+    #[test]
+    fn jst_ph_slot_4pin_width() {
+        // 4-pin JST-PH: width = 2.0 * (4 + 1) = 10mm
+        let node = jst_ph_slot(4);
+        if let SdfNode::Box3d { half_extents } = node {
+            assert!(approx_eq(half_extents.x, 5.0), "4-pin width half = 5.0");
+            assert!(approx_eq(half_extents.y, 2.25), "depth half = 2.25 (4.5mm)");
+            assert!(
+                approx_eq(half_extents.z, 2.75),
+                "height half = 2.75 (5.5mm)"
+            );
+        } else {
+            panic!("expected Box3d");
+        }
+    }
+
+    #[test]
+    fn jst_ph_slot_2pin_min() {
+        // 2-pin: width = 2.0 * 3 = 6mm
+        let node = jst_ph_slot(2);
+        if let SdfNode::Box3d { half_extents } = node {
+            assert!(approx_eq(half_extents.x, 3.0), "2-pin width half = 3.0");
+        } else {
+            panic!("expected Box3d");
         }
     }
 }
