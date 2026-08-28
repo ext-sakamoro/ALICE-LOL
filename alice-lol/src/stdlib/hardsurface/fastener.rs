@@ -392,6 +392,56 @@ pub fn heat_set_insert_hole(size: MetricSize) -> SdfNode {
     }
 }
 
+/// ダウエル (dowel pin) 挿入穴 (家具 flat-pack joinery、Ø8 標準)
+///
+/// 直径 = `dia` + 0.1mm (接着剤余裕、圧入 vs slip fit は user 判断)
+/// 中心 = 原点、軸 = Y、全長 = `depth`
+///
+/// 家具 flat-pack (IKEA/自作) の 8mm dowel joint、時計台の Ø6、大型棚の Ø10 等
+/// user 側で `subtract(plate, dowel_hole(8, 15))` として使う
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::fastener::dowel_hole;
+/// let hole = dowel_hole(8.0, 15.0);
+/// // Ø8.1mm × 深 15mm dowel 用穴
+/// ```
+#[must_use]
+pub fn dowel_hole(dia: f32, depth: f32) -> SdfNode {
+    let hole_dia = dia + 0.1;
+    SdfNode::Cylinder {
+        radius: hole_dia * 0.5,
+        half_height: depth * 0.5,
+    }
+}
+
+/// 木ネジ下穴 (wood screw pilot、softwood / hardwood 別公式)
+///
+/// - softwood (`hardwood = false`): dia = `screw_dia` × 0.7 (パイン / スギ / SPF、割れ防止)
+/// - hardwood (`hardwood = true`): dia = `screw_dia` × 0.9 (オーク / ウォールナット、ネジ切れ防止)
+///
+/// depth = `screw_dia` × 5 (rule of thumb、ネジ長 ~5× dia が典型)
+/// 中心 = 原点、軸 = Y
+///
+/// # 使用例
+///
+/// ```
+/// use alice_lol::stdlib::hardsurface::fastener::wood_screw_pilot;
+/// let pilot = wood_screw_pilot(4.0, false); // #8 相当 softwood
+/// // Ø2.8mm × 深 20mm 下穴
+/// ```
+#[must_use]
+pub fn wood_screw_pilot(screw_dia: f32, hardwood: bool) -> SdfNode {
+    let factor = if hardwood { 0.9 } else { 0.7 };
+    let hole_dia = screw_dia * factor;
+    let depth = screw_dia * 5.0;
+    SdfNode::Cylinder {
+        radius: hole_dia * 0.5,
+        half_height: depth * 0.5,
+    }
+}
+
 // ────────────────────────────────────────────────────────
 // テスト
 // ────────────────────────────────────────────────────────
@@ -643,6 +693,50 @@ mod tests {
             assert!(eval(&cs, Vec3::ZERO) < 0.0, "countersink {size:?}");
             let hs = heat_set_insert_hole(size);
             assert!(eval(&hs, Vec3::ZERO) < 0.0, "heat_set_insert_hole {size:?}");
+        }
+    }
+
+    #[test]
+    fn dowel_hole_standard_8mm() {
+        // Ø8 dowel + 0.1 glue expansion = Ø8.1
+        let node = dowel_hole(8.0, 15.0);
+        if let SdfNode::Cylinder {
+            radius,
+            half_height,
+        } = node
+        {
+            assert!(approx_eq(radius, 4.05), "dowel radius = 4.05, got {radius}");
+            assert!(approx_eq(half_height, 7.5), "dowel half_height = 7.5");
+        } else {
+            panic!("expected Cylinder");
+        }
+    }
+
+    #[test]
+    fn wood_screw_pilot_softwood_formula() {
+        // #8 (dia 4mm) softwood pilot = 4 × 0.7 = 2.8mm
+        let node = wood_screw_pilot(4.0, false);
+        if let SdfNode::Cylinder {
+            radius,
+            half_height,
+        } = node
+        {
+            assert!(approx_eq(radius, 1.4), "softwood pilot radius = 1.4");
+            // depth = 4 × 5 = 20mm, half_height = 10
+            assert!(approx_eq(half_height, 10.0));
+        } else {
+            panic!("expected Cylinder");
+        }
+    }
+
+    #[test]
+    fn wood_screw_pilot_hardwood_formula() {
+        // #8 (dia 4mm) hardwood pilot = 4 × 0.9 = 3.6mm
+        let node = wood_screw_pilot(4.0, true);
+        if let SdfNode::Cylinder { radius, .. } = node {
+            assert!(approx_eq(radius, 1.8), "hardwood pilot radius = 1.8");
+        } else {
+            panic!("expected Cylinder");
         }
     }
 }

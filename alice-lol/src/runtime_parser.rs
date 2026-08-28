@@ -2825,6 +2825,50 @@ impl<'a> Parser<'a> {
                 ))
             }
 
+            // ── Multi-domain 展開 (家具 + 建築、2026-08-28) ──
+            "cable_grommet" => {
+                // cable_grommet(outer_dia, height) 2 param、他 default
+                let (od, h) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CableGrommetSpec {
+                    outer_dia: od,
+                    height: h,
+                    flange_thickness: 3.0,
+                    flange_overhang: 4.0,
+                    inner_dia: (od - 10.0).max(4.0),
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::cable_grommet(
+                    &spec,
+                ))
+            }
+            "curtain_rod_bracket" => {
+                // curtain_rod_bracket(rod_dia, projection) 2 param、他 default (M4 wall screw)
+                let (rod, proj) = self.parse_2f()?;
+                let spec = crate::stdlib::hardsurface::pattern_sdf::CurtainRodBracketSpec {
+                    rod_dia: rod,
+                    projection: proj,
+                    wall_plate_w: 40.0,
+                    wall_plate_h: 80.0,
+                    plate_thickness: 4.0,
+                    arm_thickness: 8.0,
+                    arm_width: 20.0,
+                    wall_screw: crate::stdlib::hardsurface::fastener::MetricSize::M4,
+                };
+                Ok(crate::stdlib::hardsurface::pattern_sdf::curtain_rod_bracket(&spec))
+            }
+            "dowel_hole" => {
+                // dowel_hole(dia, depth) 2 param、家具 flat-pack joinery、raw Y-up
+                let (dia, depth) = self.parse_2f()?;
+                Ok(crate::stdlib::hardsurface::fastener::dowel_hole(dia, depth))
+            }
+            "wood_screw_pilot" => {
+                // wood_screw_pilot(screw_dia, hardwood_flag) 2 param、0=softwood / 1=hardwood
+                let (dia, hw) = self.parse_2f()?;
+                let hardwood = hw >= 0.5;
+                Ok(crate::stdlib::hardsurface::fastener::wood_screw_pilot(
+                    dia, hardwood,
+                ))
+            }
+
             other => Err(ParseError {
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
@@ -4745,6 +4789,68 @@ mod tests {
             "bearing_seat(16, 4, 0)",
             "rack_shelf(200, 5, 30, 25, 6, 2)",
             "rack_shelf(400, 6, 40, 35, 8, 3)",
+        ] {
+            let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
+            let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
+            assert!(d.is_finite(), "{lol}: non-finite SDF at (0.1,0.1,0.1)");
+        }
+    }
+
+    // ── Multi-domain 展開 tests (家具 + 建築、2026-08-28) ──
+
+    #[test]
+    fn test_cable_grommet_standard_60() {
+        let node = parse_lol("cable_grommet(60, 15)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_curtain_rod_bracket_standard() {
+        let node = parse_lol("curtain_rod_bracket(25, 120)").unwrap();
+        assert!(matches!(node, SdfNode::Rotate { .. }));
+    }
+
+    #[test]
+    fn test_dowel_hole_standard_8() {
+        let node = parse_lol("dowel_hole(8, 15)").unwrap();
+        // dowel_hole returns raw Cylinder (Y-up)
+        assert!(matches!(node, SdfNode::Cylinder { .. }));
+    }
+
+    #[test]
+    fn test_wood_screw_pilot_softwood() {
+        let node = parse_lol("wood_screw_pilot(4, 0)").unwrap();
+        if let SdfNode::Cylinder { radius, .. } = node {
+            // 4 × 0.7 = 2.8 → radius 1.4
+            assert!((radius - 1.4).abs() < 1e-4, "softwood #8 radius = 1.4");
+        } else {
+            panic!("expected Cylinder");
+        }
+    }
+
+    #[test]
+    fn test_wood_screw_pilot_hardwood() {
+        let node = parse_lol("wood_screw_pilot(4, 1)").unwrap();
+        if let SdfNode::Cylinder { radius, .. } = node {
+            // 4 × 0.9 = 3.6 → radius 1.8
+            assert!((radius - 1.8).abs() < 1e-4, "hardwood #8 radius = 1.8");
+        } else {
+            panic!("expected Cylinder");
+        }
+    }
+
+    #[test]
+    fn test_multidomain_archetypes_eval_correctly() {
+        use alice_sdf::eval;
+        for lol in [
+            "cable_grommet(60, 15)",
+            "cable_grommet(80, 20)",
+            "curtain_rod_bracket(25, 120)",
+            "curtain_rod_bracket(30, 150)",
+            "dowel_hole(8, 15)",
+            "dowel_hole(6, 10)",
+            "wood_screw_pilot(4, 0)",
+            "wood_screw_pilot(5, 1)",
         ] {
             let node = parse_lol(lol).unwrap_or_else(|e| panic!("{lol}: {e:?}"));
             let d = eval(&node, Vec3::new(0.1, 0.1, 0.1));
