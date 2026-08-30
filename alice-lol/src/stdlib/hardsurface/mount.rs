@@ -159,9 +159,10 @@ pub fn flange_circular(
         half_height: thickness * 0.5,
     };
     // Bolt 穴の 1 個目を X = bolt_pcd/2 位置に配置し、PolarRepeat で count 個回転コピー
+    // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
     let single_bolt = SdfNode::Cylinder {
         radius: bolt_dia * 0.5,
-        half_height: thickness * 0.5 + 0.1,
+        half_height: thickness * 0.5 + 5.0,
     };
     let bolt_offset = SdfNode::Translate {
         child: Arc::new(single_bolt),
@@ -176,9 +177,10 @@ pub fn flange_circular(
         b: Arc::new(bolt_ring),
     };
     if center_bore_dia > 0.0 {
+        // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
         let center_bore = SdfNode::Cylinder {
             radius: center_bore_dia * 0.5,
-            half_height: thickness * 0.5 + 0.1,
+            half_height: thickness * 0.5 + 5.0,
         };
         SdfNode::Subtraction {
             a: Arc::new(with_bolts),
@@ -227,9 +229,10 @@ pub fn rack_shelf(
     let plate = SdfNode::Box3d {
         half_extents: Vec3::new(length * 0.5, thickness * 0.5, width * 0.5),
     };
+    // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
     let notch = SdfNode::Cylinder {
         radius: notch_dia * 0.5,
-        half_height: thickness * 0.5 + 0.1,
+        half_height: thickness * 0.5 + 5.0,
     };
     let notch_row = SdfNode::RepeatFinite {
         child: Arc::new(notch),
@@ -308,9 +311,10 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
     }
     // 中央 through bore (Y 軸)
     if center_bore_dia > 0.0 {
+        // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
         let bore = SdfNode::Cylinder {
             radius: center_bore_dia * 0.5,
-            half_height: length * 0.5 + 0.1,
+            half_height: length * 0.5 + 5.0,
         };
         SdfNode::Subtraction {
             a: Arc::new(with_slots),
