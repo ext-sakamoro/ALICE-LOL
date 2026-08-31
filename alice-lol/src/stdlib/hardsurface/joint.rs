@@ -400,10 +400,11 @@ pub fn pin_hinge_knuckle(pin_diameter: f32, knuckle_length: f32, knuckle_od: f32
         radius: knuckle_od * 0.5,
         half_height: knuckle_length * 0.5,
     };
-    // Pin hole は barrel より少し長く取り、端面での端数を防ぐ
+    // Pin hole は barrel より 5mm each side 長く取り、preview MC で確実 punch through
+    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
     let hole = SdfNode::Cylinder {
         radius: (pin_diameter + HINGE_CLEARANCE) * 0.5,
-        half_height: knuckle_length * 0.5 + 0.1,
+        half_height: knuckle_length * 0.5 + 5.0,
     };
     SdfNode::Subtraction {
         a: Arc::new(barrel),

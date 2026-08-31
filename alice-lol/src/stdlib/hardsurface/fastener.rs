@@ -280,7 +280,9 @@ pub fn tap_hole(size: MetricSize, depth: f32, accuracy: f32) -> SdfNode {
 pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let head_dia = size.head_diameter_socket();
     let bore_depth = size.head_height_socket() + 0.5;
-    let through = screw_hole(size, plate_thickness);
+    // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
+    // [[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    let through = screw_hole(size, plate_thickness + 10.0);
     let bore = SdfNode::Cylinder {
         radius: head_dia * 0.5,
         half_height: bore_depth * 0.5,
@@ -312,7 +314,9 @@ pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let head_dia = size.head_diameter_countersunk();
     // 90° 皿頭 → cone 高さ = head_dia / 2 (テーパー半角 45°、tan(45°)=1)
     let cone_h = head_dia * 0.5;
-    let through = screw_hole(size, plate_thickness);
+    // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
+    // [[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    let through = screw_hole(size, plate_thickness + 10.0);
     // SdfNode::Cone は base at -half_height, tip at +half_height
     // 皿頭は tip を下 (板内部) に向けたいので X 軸周り 180° 回転
     let cone = SdfNode::Cone {
