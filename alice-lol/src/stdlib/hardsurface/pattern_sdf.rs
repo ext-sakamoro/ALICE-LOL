@@ -6856,6 +6856,8 @@ impl BearingSeatSpec {
 /// ```
 #[must_use]
 pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
+    use crate::stdlib::hardsurface::cavity::{subtract_blind_pocket, subtract_through_cylinder};
+
     let od = spec.bearing.outer_dia();
     let id = spec.bearing.inner_dia();
     let width = spec.bearing.width();
@@ -6867,39 +6869,31 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
 
-    // Bearing pocket
+    // Bearing pocket (cavity margin rule intrinsic in helper)
     let pocket_dia = match spec.style {
         0 => od - 0.05, // press-fit
         1 => od + 0.1,  // slip fit
         _ => od + 0.1,  // through with shoulder = slip fit + shoulder
     };
-    // Preview MC (cell ~1mm) で pocket 開口を確実 punch through するため 5mm 上方 margin 追加
-    // (物理仕様 = pocket 深度と shoulder 位置は不変、印刷結果同一)
-    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
-    let punch_margin = 5.0;
-    let (pocket_cyl_len, pocket_y_offset) = if spec.style == 2 {
-        // Blind pocket with shoulder: bottom は plate 内 (shoulder 残す)、top は plate 上端 + 5mm 突出
+    let with_pocket = if spec.style == 2 {
+        // Blind pocket with shoulder: bottom は plate 内 (shoulder 残す = plate_t - 1mm 深)
         let physical_depth = width.min(spec.plate_thickness - 1.0).max(1.0);
-        let cyl_len = physical_depth + punch_margin;
-        // Pocket bottom Y = outer_hy - physical_depth (shoulder 残高保持)
-        // Pocket top Y = outer_hy + punch_margin
-        // Center = outer_hy + (punch_margin - physical_depth) * 0.5
-        let y_offset = outer_hy + (punch_margin - physical_depth) * 0.5;
-        (cyl_len, y_offset)
+        subtract_blind_pocket(
+            plate,
+            pocket_dia,
+            spec.plate_thickness,
+            physical_depth,
+            0.0,
+            0.0,
+        )
     } else {
-        // Through pocket (press-fit / slip fit): plate 貫通 + 5mm each side margin
-        // 旧 +5.0 total (2.5mm each side) → +10.0 total (5mm each side) preventive bump
-        (spec.plate_thickness + 2.0 * punch_margin, 0.0)
+        // Through pocket (press-fit / slip fit): plate 貫通 + 5mm each side auto
+        subtract_through_cylinder(plate, pocket_dia, spec.plate_thickness, 0.0, 0.0)
     };
-    let pocket = cylinder(pocket_dia * 0.5, pocket_cyl_len * 0.5);
-    let pocket_placed = translate(pocket, Vec3::new(0.0, pocket_y_offset, 0.0));
 
-    // Shaft through hole (常に貫通、板中心)
+    // Shaft through hole (常に貫通、板中心、cavity margin rule intrinsic)
     let shaft_dia = id + 0.5; // clearance for shaft fit
-    let shaft = cylinder(shaft_dia * 0.5, spec.plate_thickness * 0.5 + 5.0);
-
-    let with_pocket = subtract(plate, pocket_placed);
-    let result = subtract(with_pocket, shaft);
+    let result = subtract_through_cylinder(with_pocket, shaft_dia, spec.plate_thickness, 0.0, 0.0);
 
     to_z_up(result)
 }
