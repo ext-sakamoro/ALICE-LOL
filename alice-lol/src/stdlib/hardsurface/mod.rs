@@ -11,6 +11,7 @@
 //! - [`thin_sdf`] — 薄物 SDF primitive (shopping cart coin 単純 Cylinder、Phase 3''.2、Dual Contouring 経路推奨、旧 `thin` polygon 経路は Phase 4 で削除済)
 //! - [`skadis_sdf`] — SKADIS panel 純 SDF (Phase 3''、Dual Contouring 経路推奨)
 //! - [`pattern_sdf`] — Bamboo Rust generator を SdfNode 直接構築に翻訳した完成 pattern 4 種 (Phase B.1.b、wall_hook / gridfinity_bin / drawer_organizer / shelf_divider)
+//! - [`cavity`] — Subtract 系 helper (Phase C 根本 refactor 2026-09-01、cavity margin +5mm rule intrinsic 化、archetype 側の rule 忘却事故を primitive API で防ぐ)
 //!
 //! ## 準拠 formulas (ALICE-Bamboo `src/formulas.rs`)
 //!
@@ -26,6 +27,7 @@
 //! (drawer / gridfinity / hook / shelf_divider / skadis) が本 module の骨格となる
 //! ハードサーフェス pattern の実プリント合格 baseline
 
+pub mod cavity;
 pub mod fastener;
 pub mod joint;
 pub mod mount;
