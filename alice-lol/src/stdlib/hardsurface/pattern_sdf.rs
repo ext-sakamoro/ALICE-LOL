@@ -6330,7 +6330,7 @@ impl HeatSetArraySpec {
 /// ```
 #[must_use]
 pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::heat_set_insert_hole;
+    use crate::stdlib::hardsurface::fastener::{CLEARANCE_H2D_FDM, HEAT_SET_SINK_MARGIN};
 
     let rows = spec.rows.max(1);
     let cols = spec.cols.max(1);
@@ -6346,9 +6346,22 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
 
-    let hole_template = heat_set_insert_hole(spec.insert_size);
-    let insert_depth = spec.insert_size.heat_set_insert_depth() + 0.3;
-    let hole_y_offset = outer_hy - insert_depth * 0.5;
+    // Insert pocket 物理仕様 (McMaster/Voxel8 準拠、pocket 実深度)
+    let insert_dia = spec.insert_size.heat_set_insert_diameter() + CLEARANCE_H2D_FDM;
+    let actual_pocket_depth = spec.insert_size.heat_set_insert_depth() + HEAT_SET_SINK_MARGIN;
+    // Preview MC (cell ~1mm) で top opening を確実 punch through するため
+    // pocket cylinder を上方 5mm 延長 (物理 pocket 深度は不変、印刷結果同一)
+    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    let punch_margin = 5.0;
+    let cylinder_len = actual_pocket_depth + punch_margin;
+    let hole_template = SdfNode::Cylinder {
+        radius: insert_dia * 0.5,
+        half_height: cylinder_len * 0.5,
+    };
+    // Pocket bottom は物理仕様通り Y = outer_hy - actual_pocket_depth に置く
+    // pocket top は Y = outer_hy + punch_margin (plate 上端から 5mm 突出)
+    // Cylinder center = 上下平均 = outer_hy + (punch_margin - actual_pocket_depth) * 0.5
+    let hole_y_offset = outer_hy + (punch_margin - actual_pocket_depth) * 0.5;
 
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
