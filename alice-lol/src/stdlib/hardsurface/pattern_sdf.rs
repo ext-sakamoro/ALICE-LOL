@@ -5915,7 +5915,9 @@ impl VesaMountSpec {
 /// ```
 #[must_use]
 pub fn vesa_mount(spec: &VesaMountSpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{counterbore, countersink, screw_hole};
+    use crate::stdlib::hardsurface::cavity::{
+        subtract_through_counterbore, subtract_through_countersink, subtract_through_screw_hole,
+    };
 
     let plate_extent = spec.vesa_size + 2.0 * spec.plate_margin;
     let outer_hx = plate_extent * 0.5;
@@ -5925,22 +5927,20 @@ pub fn vesa_mount(spec: &VesaMountSpec) -> SdfNode {
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
 
     let half_pcd = spec.vesa_size * 0.5;
-    let punch_depth = spec.plate_thickness + 10.0;
     let corners = [
-        Vec3::new(half_pcd, 0.0, half_pcd),
-        Vec3::new(-half_pcd, 0.0, half_pcd),
-        Vec3::new(half_pcd, 0.0, -half_pcd),
-        Vec3::new(-half_pcd, 0.0, -half_pcd),
+        (half_pcd, half_pcd),
+        (-half_pcd, half_pcd),
+        (half_pcd, -half_pcd),
+        (-half_pcd, -half_pcd),
     ];
 
     let mut result = plate;
-    for corner in corners {
-        let hole = match spec.bore_kind {
-            1 => counterbore(spec.hole_size, spec.plate_thickness),
-            2 => countersink(spec.hole_size, spec.plate_thickness),
-            _ => screw_hole(spec.hole_size, punch_depth),
+    for (x, z) in corners {
+        result = match spec.bore_kind {
+            1 => subtract_through_counterbore(result, spec.hole_size, spec.plate_thickness, x, z),
+            2 => subtract_through_countersink(result, spec.hole_size, spec.plate_thickness, x, z),
+            _ => subtract_through_screw_hole(result, spec.hole_size, spec.plate_thickness, x, z),
         };
-        result = subtract(result, translate(hole, corner));
     }
 
     to_z_up(result)
@@ -6328,7 +6328,7 @@ impl HeatSetArraySpec {
 /// ```
 #[must_use]
 pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{CLEARANCE_H2D_FDM, HEAT_SET_SINK_MARGIN};
+    use crate::stdlib::hardsurface::cavity::subtract_blind_heat_set;
 
     let rows = spec.rows.max(1);
     let cols = spec.cols.max(1);
@@ -6344,35 +6344,16 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
 
-    // Insert pocket 物理仕様 (McMaster/Voxel8 準拠、pocket 実深度)
-    let insert_dia = spec.insert_size.heat_set_insert_diameter() + CLEARANCE_H2D_FDM;
-    let actual_pocket_depth = spec.insert_size.heat_set_insert_depth() + HEAT_SET_SINK_MARGIN;
-    // Preview MC (cell ~1mm) で top opening を確実 punch through するため
-    // pocket cylinder を上方 5mm 延長 (物理 pocket 深度は不変、印刷結果同一)
-    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
-    let punch_margin = 5.0;
-    let cylinder_len = actual_pocket_depth + punch_margin;
-    let hole_template = SdfNode::Cylinder {
-        radius: insert_dia * 0.5,
-        half_height: cylinder_len * 0.5,
-    };
-    // Pocket bottom は物理仕様通り Y = outer_hy - actual_pocket_depth に置く
-    // pocket top は Y = outer_hy + punch_margin (plate 上端から 5mm 突出)
-    // Cylinder center = 上下平均 = outer_hy + (punch_margin - actual_pocket_depth) * 0.5
-    let hole_y_offset = outer_hy + (punch_margin - actual_pocket_depth) * 0.5;
-
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
 
+    // McMaster/Voxel8 spec + cavity margin rule (5mm 上方 punch) は helper intrinsic
     let mut result = plate;
     for r in 0..rows {
         for c in 0..cols {
             let cx = start_x + c as f32 * spec.pitch;
             let cz = start_z + r as f32 * spec.pitch;
-            result = subtract(
-                result.clone(),
-                translate(hole_template.clone(), Vec3::new(cx, hole_y_offset, cz)),
-            );
+            result = subtract_blind_heat_set(result, spec.insert_size, spec.base_thickness, cx, cz);
         }
     }
 
