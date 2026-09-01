@@ -6218,7 +6218,10 @@ impl RaspiMountPlateSpec {
 /// ```
 #[must_use]
 pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+    use crate::stdlib::hardsurface::cavity::{
+        subtract_through_cylinder, subtract_through_screw_hole,
+    };
+    use crate::stdlib::hardsurface::fastener::MetricSize;
 
     let (pattern_x, pattern_z) = match spec.model {
         0 => (58.0_f32, 23.0_f32),
@@ -6236,36 +6239,31 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
-    let m25_hole = SdfNode::Cylinder {
-        radius: spec.m25_hole_dia * 0.5,
-        half_height: spec.plate_thickness * 0.5 + 5.0,
-    };
+    // M2.5 mount hole (raw dia、MetricSize::M2_5 未使用で hardcoded、cavity margin rule intrinsic)
     let half_x = pattern_x * 0.5;
     let half_z = pattern_z * 0.5;
-    let pi_corners = [
-        Vec3::new(half_x, 0.0, half_z),
-        Vec3::new(-half_x, 0.0, half_z),
-        Vec3::new(half_x, 0.0, -half_z),
-        Vec3::new(-half_x, 0.0, -half_z),
-    ];
-
     let mut result = plate;
-    for c in pi_corners {
-        result = subtract(result, translate(m25_hole.clone(), c));
+    for (x, z) in [
+        (half_x, half_z),
+        (-half_x, half_z),
+        (half_x, -half_z),
+        (-half_x, -half_z),
+    ] {
+        result = subtract_through_cylinder(result, spec.m25_hole_dia, spec.plate_thickness, x, z);
     }
 
     if spec.extra_m4_holes >= 4 {
-        // +10.0 = 5mm each side、preview MC で Ø4.2 穴を確実に punch through
-        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 10.0);
+        // Optional M4 VESA 4 隅穴 (cavity margin rule intrinsic in helper)
         let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
         let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
-        for c in [
-            Vec3::new(vesa_x, 0.0, vesa_z),
-            Vec3::new(-vesa_x, 0.0, vesa_z),
-            Vec3::new(vesa_x, 0.0, -vesa_z),
-            Vec3::new(-vesa_x, 0.0, -vesa_z),
+        for (x, z) in [
+            (vesa_x, vesa_z),
+            (-vesa_x, vesa_z),
+            (vesa_x, -vesa_z),
+            (-vesa_x, -vesa_z),
         ] {
-            result = subtract(result, translate(m4_hole.clone(), c));
+            result =
+                subtract_through_screw_hole(result, MetricSize::M4, spec.plate_thickness, x, z);
         }
     }
 
@@ -7249,7 +7247,8 @@ impl ArduinoMountPlateSpec {
 /// ```
 #[must_use]
 pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+    use crate::stdlib::hardsurface::cavity::subtract_through_screw_hole;
+    use crate::stdlib::hardsurface::fastener::MetricSize;
 
     let bw = spec.board.board_width();
     let bh = spec.board.board_height();
@@ -7262,35 +7261,32 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
-    // M3 hole pattern: board 外形 -3mm inset の 4 隅
-    // +10.0 = 5mm each side、preview MC (cell ~0.9mm) で Ø3.2 穴を確実に punch through
-    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    // M3 hole pattern: board 外形 -3mm inset の 4 隅 (cavity margin rule intrinsic in helper)
     let hole_x = bw * 0.5 - 3.0;
     let hole_z = bh * 0.5 - 3.0;
-    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 10.0);
 
     let mut result = plate;
-    for c in [
-        Vec3::new(hole_x, 0.0, hole_z),
-        Vec3::new(-hole_x, 0.0, hole_z),
-        Vec3::new(hole_x, 0.0, -hole_z),
-        Vec3::new(-hole_x, 0.0, -hole_z),
+    for (x, z) in [
+        (hole_x, hole_z),
+        (-hole_x, hole_z),
+        (hole_x, -hole_z),
+        (-hole_x, -hole_z),
     ] {
-        result = subtract(result, translate(m3_hole.clone(), c));
+        result = subtract_through_screw_hole(result, MetricSize::M3, spec.plate_thickness, x, z);
     }
 
-    // Optional M4 VESA 4 隅穴 (+10.0 = 5mm each side、cavity margin rule)
+    // Optional M4 VESA 4 隅穴
     if spec.extra_m4_holes >= 4 {
-        let m4_hole = screw_hole(MetricSize::M4, spec.plate_thickness + 10.0);
         let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
         let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
-        for c in [
-            Vec3::new(vesa_x, 0.0, vesa_z),
-            Vec3::new(-vesa_x, 0.0, vesa_z),
-            Vec3::new(vesa_x, 0.0, -vesa_z),
-            Vec3::new(-vesa_x, 0.0, -vesa_z),
+        for (x, z) in [
+            (vesa_x, vesa_z),
+            (-vesa_x, vesa_z),
+            (vesa_x, -vesa_z),
+            (-vesa_x, -vesa_z),
         ] {
-            result = subtract(result, translate(m4_hole.clone(), c));
+            result =
+                subtract_through_screw_hole(result, MetricSize::M4, spec.plate_thickness, x, z);
         }
     }
 
@@ -7358,7 +7354,8 @@ impl PixhawkMountSpec {
 /// ```
 #[must_use]
 pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+    use crate::stdlib::hardsurface::cavity::{subtract_blind_pocket, subtract_through_screw_hole};
+    use crate::stdlib::hardsurface::fastener::MetricSize;
 
     let plate_extent = spec.hole_pattern_size + 2.0 * spec.plate_margin;
     let outer_hx = plate_extent * 0.5;
@@ -7367,35 +7364,33 @@ pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
 
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
-    // M3 hole pattern (+10.0 = 5mm each side、preview MC で Ø3.2 穴を確実に punch through)
+    // M3 hole pattern (cavity margin rule intrinsic in helper)
     let half_pat = spec.hole_pattern_size * 0.5;
-    let m3_hole = screw_hole(MetricSize::M3, spec.plate_thickness + 10.0);
 
     let mut result = plate;
-    for c in [
-        Vec3::new(half_pat, 0.0, half_pat),
-        Vec3::new(-half_pat, 0.0, half_pat),
-        Vec3::new(half_pat, 0.0, -half_pat),
-        Vec3::new(-half_pat, 0.0, -half_pat),
+    for (x, z) in [
+        (half_pat, half_pat),
+        (-half_pat, half_pat),
+        (half_pat, -half_pat),
+        (-half_pat, -half_pat),
     ] {
-        result = subtract(result, translate(m3_hole.clone(), c));
+        result = subtract_through_screw_hole(result, MetricSize::M3, spec.plate_thickness, x, z);
     }
 
-    // Optional damper pocket (Ø10 × 深さ = 板厚半分、板外周に配置)
+    // Optional damper pocket (Ø10 × 深さ = 板厚半分、板外周に配置、cavity margin rule 経由で +5mm 上方 punch margin auto)
     if spec.damper_style >= 1 {
-        let damper_r = 5.0;
+        let damper_dia = 10.0;
         let damper_depth = spec.plate_thickness * 0.5;
-        let damper_pocket = cylinder(damper_r, damper_depth * 0.5);
         let damper_x = plate_extent * 0.5 - spec.plate_margin * 0.5;
         let damper_z = plate_extent * 0.5 - spec.plate_margin * 0.5;
-        let damper_y = outer_hy - damper_depth * 0.5;
-        for c in [
-            Vec3::new(damper_x, damper_y, damper_z),
-            Vec3::new(-damper_x, damper_y, damper_z),
-            Vec3::new(damper_x, damper_y, -damper_z),
-            Vec3::new(-damper_x, damper_y, -damper_z),
+        for (x, z) in [
+            (damper_x, damper_z),
+            (-damper_x, damper_z),
+            (damper_x, -damper_z),
+            (-damper_x, -damper_z),
         ] {
-            result = subtract(result, translate(damper_pocket.clone(), c));
+            result =
+                subtract_blind_pocket(result, damper_dia, spec.plate_thickness, damper_depth, x, z);
         }
     }
 
@@ -7495,7 +7490,8 @@ impl ServoMountSpec {
 /// ```
 #[must_use]
 pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
-    use crate::stdlib::hardsurface::fastener::{screw_hole, MetricSize};
+    use crate::stdlib::hardsurface::cavity::subtract_through_screw_hole;
+    use crate::stdlib::hardsurface::fastener::MetricSize;
 
     let plate_x = spec.servo.mount_span() + 2.0 * spec.flange_margin;
     let plate_z = spec.servo.body_depth() + 4.0;
@@ -7505,29 +7501,23 @@ pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
 
     let plate = box3d(outer_hx, outer_hy, outer_hz);
 
-    // 中央 body 切欠 (body_width × body_depth + 0.5mm clearance)
+    // 中央 body 切欠 (body_width × body_depth + 0.5mm clearance、cutout は Y 貫通で +5mm each side 自作)
     let cutout_hx = (spec.servo.body_width() + 0.5) * 0.5;
     let cutout_hz = (spec.servo.body_depth() + 0.5) * 0.5;
     let cutout = box3d(cutout_hx, outer_hy + 5.0, cutout_hz);
 
-    // Flange mount 穴 (SG90=M2、MG996R=M3)、両端中央
+    // Flange mount 穴 (SG90=M2、MG996R=M3)、両端中央 (cavity margin rule intrinsic in helper)
     let hole_size = match spec.servo {
         ServoKind::Sg90 => MetricSize::M2,
         ServoKind::Mg996r => MetricSize::M3,
     };
-    // +10.0 = 5mm each side、preview MC で Ø2.2/Ø3.2 穴を確実に punch through
-    let mount_hole = screw_hole(hole_size, spec.plate_thickness + 10.0);
     let hole_x = spec.servo.mount_span() * 0.5;
 
     let with_cutout = subtract(plate, cutout);
-    let with_left = subtract(
-        with_cutout,
-        translate(mount_hole.clone(), Vec3::new(hole_x, 0.0, 0.0)),
-    );
-    let result = subtract(
-        with_left,
-        translate(mount_hole, Vec3::new(-hole_x, 0.0, 0.0)),
-    );
+    let with_left =
+        subtract_through_screw_hole(with_cutout, hole_size, spec.plate_thickness, hole_x, 0.0);
+    let result =
+        subtract_through_screw_hole(with_left, hole_size, spec.plate_thickness, -hole_x, 0.0);
 
     to_z_up(result)
 }
