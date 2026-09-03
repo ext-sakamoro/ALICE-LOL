@@ -1,0 +1,76 @@
+name: 'ALICE-LOL Optional Bridge Stubs'
+description: |
+  Create empty stub crates for the ALICE-LOL sibling path deps
+  (alice-sdf / alice-llm / alice-physics). alice-sdf は mandatory (glsl feature)、
+  alice-llm / alice-physics は optional feature (llm-bridge / physics)。
+
+  Canonical CI template: [[reference_alice_ci_canonical_template]]
+
+  license = "MIT OR Apache-2.0" 必須 (canonical 罠 #2、cargo-deny "unlicensed" reject 予防)
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+
+        # ALICE-SDF stub (mandatory dep、`glsl` feature 有効化前提)
+        mkdir -p "../ALICE-SDF/src"
+        cat > "../ALICE-SDF/Cargo.toml" <<'TOML'
+        [package]
+        name = "alice-sdf"
+        version = "1.7.4"
+        edition = "2021"
+        license = "MIT OR Apache-2.0"
+
+        [features]
+        default = ["glsl"]
+        glsl = []
+        gpu = []
+        hlsl = []
+        physics = []
+
+        [lib]
+        path = "src/lib.rs"
+        TOML
+        : > "../ALICE-SDF/src/lib.rs"
+
+        # ALICE-LLM stub (llm-bridge feature 用、実 crate は AGPL-3.0-or-later)
+        # stub は CI 内 fake、実 license は反映しない (permissive で cargo-deny 通過)
+        mkdir -p "../ALICE-LLM/src"
+        cat > "../ALICE-LLM/Cargo.toml" <<'TOML'
+        [package]
+        name = "alice-llm"
+        version = "1.3.0"
+        edition = "2021"
+        license = "MIT OR Apache-2.0"
+
+        [features]
+        default = []
+        grammar = []
+
+        [lib]
+        path = "src/lib.rs"
+        TOML
+        : > "../ALICE-LLM/src/lib.rs"
+
+        # ALICE-Physics stub (physics feature 用、実 crate は AGPL-3.0)
+        mkdir -p "../ALICE-Physics/src"
+        cat > "../ALICE-Physics/Cargo.toml" <<'TOML'
+        [package]
+        name = "alice-physics"
+        version = "0.12.0"
+        edition = "2021"
+        license = "MIT OR Apache-2.0"
+
+        [features]
+        default = ["std"]
+        std = []
+
+        [lib]
+        path = "src/lib.rs"
+        TOML
+        : > "../ALICE-Physics/src/lib.rs"
+
+        echo "Created stubs: alice-sdf / alice-llm / alice-physics (all with license = MIT OR Apache-2.0)"
