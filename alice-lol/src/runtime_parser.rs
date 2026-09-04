@@ -253,6 +253,36 @@ impl<'a> Parser<'a> {
         Ok((a, b))
     }
 
+    /// SKADIS panel の variadic arg 解析 0/1/2/3-arg を許容し不足分は
+    /// SKADIS canonical default (300mm 板 / 5mm 厚 / 5mm corner_r) で補完
+    /// LLM 出力の arity ズレ (「SKADISパネル 10✖10」→ `skadis_panel(10, 10)` 等)
+    /// を parse fail させないための forgiving 動作 (2026-09-04 追加)
+    fn parse_skadis_panel_args(&mut self) -> Result<(f32, f32, f32), ParseError> {
+        const DEFAULT_SIZE: f32 = 300.0;
+        const DEFAULT_THICKNESS: f32 = 5.0;
+        const DEFAULT_CORNER_R: f32 = 5.0;
+
+        if self.at_rparen()? {
+            self.expect_rparen()?;
+            return Ok((DEFAULT_SIZE, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
+        }
+        let size = self.expect_number()?;
+        if self.at_rparen()? {
+            self.expect_rparen()?;
+            return Ok((size, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
+        }
+        self.expect_comma()?;
+        let thickness = self.expect_number()?;
+        if self.at_rparen()? {
+            self.expect_rparen()?;
+            return Ok((size, thickness, DEFAULT_CORNER_R));
+        }
+        self.expect_comma()?;
+        let corner_r = self.expect_number()?;
+        self.expect_rparen()?;
+        Ok((size, thickness, corner_r))
+    }
+
     /// f32 値 3 個
     fn parse_3f(&mut self) -> Result<(f32, f32, f32), ParseError> {
         let a = self.expect_number()?;
@@ -1541,7 +1571,11 @@ impl<'a> Parser<'a> {
                 Ok(crate::stdlib::hardsurface::thin_sdf::shopping_cart_coin_sdf(dia, thickness))
             }
             "skadis_panel" => {
-                let (size, thickness, corner_r) = self.parse_3f()?;
+                // Variadic 0/1/2/3-arg 対応 defaults は SKADIS canonical
+                // (300×5×5、ALICE-Bamboo `~/ALICE-Bamboo/models/wall-organizer/skadis-300x300/`)
+                // LLM 側で「SKADISパネル 10✖10」等の曖昧入力を parse fail させず
+                // canonical に丸める β UX 用の forgiving 動作 (2026-09-04 追加)
+                let (size, thickness, corner_r) = self.parse_skadis_panel_args()?;
                 Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_panel_sdf(
                     size, thickness, corner_r,
                 ))
@@ -3624,6 +3658,32 @@ mod tests {
     fn test_skadis_panel() {
         let node = parse_lol("skadis_panel(300, 5, 5)").unwrap();
         assert!(matches!(node, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn test_skadis_panel_variadic_defaults() {
+        // 0-arg → SKADIS canonical (300 × 5 × 5) 全 case で
+        // SdfNode 生成成功のみ verify (defaults の絶対値は
+        // skadis_sdf::skadis_panel_sdf の canonical unit test に委ねる)
+        // LLM UX 用の forgiving 動作 (2026-09-04 追加、text-to-print β
+        // で LLM が「SKADISパネル 10✖10」→ `skadis_panel(10, 10)` 出力
+        // する parse fail 事案由来)
+        assert!(matches!(
+            parse_lol("skadis_panel()").unwrap(),
+            SdfNode::Subtraction { .. }
+        ));
+        assert!(matches!(
+            parse_lol("skadis_panel(400)").unwrap(),
+            SdfNode::Subtraction { .. }
+        ));
+        assert!(matches!(
+            parse_lol("skadis_panel(10, 10)").unwrap(),
+            SdfNode::Subtraction { .. }
+        ));
+        assert!(matches!(
+            parse_lol("skadis_panel(300, 5, 5)").unwrap(),
+            SdfNode::Subtraction { .. }
+        ));
     }
 
     #[test]
