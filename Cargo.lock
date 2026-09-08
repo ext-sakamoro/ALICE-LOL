@@ -16,6 +16,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-kinematics"
+version = "0.1.0"
+dependencies = [
+ "alice-lol",
+]
+
+[[package]]
 name = "alice-llm"
 version = "1.6.0"
 
@@ -56,6 +63,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "alice-lol-robot"
+version = "0.1.0"
+dependencies = [
+ "alice-kinematics",
+ "alice-lol",
+ "alice-lol-humanoid",
+ "glam",
 ]
 
 [[package]]

@@ -92,4 +92,26 @@ runs:
         TOML
         : > "../ALICE-Foundry/src/lib.rs"
 
-        echo "Created stubs: alice-sdf / alice-llm / alice-physics / alice-foundry (all with license = MIT OR Apache-2.0)"
+        # ALICE-Kinematics stub (alice-lol-robot の kinematics feature 経由、
+        # 実 crate は MIT (encoder feature のみ AGPL-3.0))
+        # cargo audit / deny / machete 用の manifest-only stub
+        mkdir -p "../ALICE-Kinematics/src"
+        cat > "../ALICE-Kinematics/Cargo.toml" <<'TOML'
+        [package]
+        name = "alice-kinematics"
+        version = "0.1.0"
+        edition = "2021"
+        license = "MIT OR Apache-2.0"
+
+        [features]
+        default = []
+        std = []
+        encoder = []
+        lol = []
+
+        [lib]
+        path = "src/lib.rs"
+        TOML
+        : > "../ALICE-Kinematics/src/lib.rs"
+
+        echo "Created stubs: alice-sdf / alice-llm / alice-physics / alice-foundry / alice-kinematics (all with license = MIT OR Apache-2.0)"

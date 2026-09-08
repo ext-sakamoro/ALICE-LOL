@@ -1,0 +1,44 @@
+[package]
+name = "alice-lol-robot"
+version = "0.1.0"
+edition = "2021"
+description = "Robot template for ALICE-LOL DSL — Phase 3 Intent verb → humanoid FK + 8-byte Kinematics packet. Wires intent.rs + alice-lol-humanoid + alice-kinematics."
+license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol-robot"
+readme = "../README.md"
+keywords = ["dsl", "sdf", "robot", "intent", "kinematics"]
+categories = ["graphics", "game-development", "robotics"]
+
+[dependencies]
+alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
+alice-lol-humanoid = { path = "../alice-lol-humanoid", version = "0.1", default-features = false }
+glam = "0.29"
+
+# Kinematics 8-byte Intent packet bridge (default on、本 crate の主目的)
+# alice-kinematics は ALICE-LOL の sibling repo (../../ALICE-Kinematics)、
+# CI では public repo として actions/checkout で並列取得
+alice-kinematics = { path = "../../ALICE-Kinematics", version = "0.1", default-features = false, features = ["lol", "std"], optional = true }
+
+[features]
+default = ["kinematics"]
+# LOL IntentNode → Kinematics 8-byte packet 翻訳 (Path C 結線)
+kinematics = ["dep:alice-kinematics"]
+
+# feature-gated dep は cargo-machete が unused false-positive で報告するため ignore
+[package.metadata.cargo-machete]
+ignored = ["alice-kinematics"]
+
+[[example]]
+name = "robot_grasp"
+required-features = ["kinematics"]
+
+[[example]]
+name = "robot_walk"
+required-features = ["kinematics"]
+
+[[example]]
+name = "robot_dance"
+required-features = ["kinematics"]
