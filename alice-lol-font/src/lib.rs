@@ -43,6 +43,8 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 
 pub mod ascii;
+#[cfg(feature = "foundry")]
+pub mod foundry;
 pub mod glyph;
 pub mod layout;
 pub mod params;
@@ -51,6 +53,11 @@ pub mod stdlib;
 pub mod stroke;
 
 pub use ascii::ascii_uppercase;
+#[cfg(feature = "foundry")]
+pub use foundry::{
+    char_count as foundry_char_count, cjk_glyph, cjk_glyph_3d, cjk_string, cjk_string_3d,
+    supports as foundry_supports, FoundryWeight,
+};
 pub use glyph::{Glyph, DEFAULT_BEZIER_SAMPLES};
 pub use layout::{layout_string_2d, layout_string_3d, measure_string, LayoutConfig};
 pub use params::MetaFontParams;
