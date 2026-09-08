@@ -332,7 +332,10 @@ mod tests {
         let d = alice_sdf::eval(&node, glam::Vec3::new(0.25, 0.35, 0.0));
         assert!(d.is_finite(), "eval must be finite");
         // stroke thickness = pen.half_width ≈ 0.046 em → 中点近傍は SDF ≤ 0 or 極小
-        assert!(d < 0.05, "point near stroke center should be near/inside (d < 0.05), got {d}");
+        assert!(
+            d < 0.05,
+            "point near stroke center should be near/inside (d < 0.05), got {d}"
+        );
     }
 
     #[test]

@@ -216,7 +216,10 @@ mod tests {
         let g = ascii_uppercase('A').unwrap();
         let node = g.to_sdf2d(&pen).unwrap();
         let d = alice_sdf::sdf2d::eval_2d(&node, [0.25, 0.35]);
-        assert!(d <= 0.05, "A left leg midpoint should be near/inside stroke, got d={d}");
+        assert!(
+            d <= 0.05,
+            "A left leg midpoint should be near/inside stroke, got d={d}"
+        );
     }
 
     #[test]

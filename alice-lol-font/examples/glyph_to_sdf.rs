@@ -24,9 +24,9 @@ fn main() {
     // (letter, interior sample, exterior sample) の期待点
     let cases = [
         ('A', [0.25_f32, 0.35_f32], [0.5_f32, 0.5_f32]), // interior: 左脚中点、exterior: 三角形内部空洞
-        ('H', [0.5, 0.35], [0.5, 0.6]), // interior: 中央横棒、exterior: 上部空洞
+        ('H', [0.5, 0.35], [0.5, 0.6]),                  // interior: 中央横棒、exterior: 上部空洞
         ('I', [0.25, 0.35], [0.0, 0.35]), // interior: 縦棒中点、exterior: 左側 (I 外)
-        ('O', [1.0, 0.35], [0.5, 0.35]), // interior: 右端 stroke、exterior: 楕円中心 hollow
+        ('O', [1.0, 0.35], [0.5, 0.35]),  // interior: 右端 stroke、exterior: 楕円中心 hollow
         ('T', [0.5, 0.7], [0.8, 0.35]), // interior: 上部横棒中央、exterior: 右下 (中央縦棒 x=0.5 より右)
     ];
 

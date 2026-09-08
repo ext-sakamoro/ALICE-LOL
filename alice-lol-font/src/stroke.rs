@@ -214,13 +214,7 @@ impl Stroke {
 /// Standard cubic Bernstein basis:
 /// `B(t) = (1-t)³ P₀ + 3(1-t)² t P₁ + 3(1-t) t² P₂ + t³ P₃`
 #[must_use]
-pub fn cubic_bezier_at(
-    p0: [f32; 2],
-    p1: [f32; 2],
-    p2: [f32; 2],
-    p3: [f32; 2],
-    t: f32,
-) -> [f32; 2] {
+pub fn cubic_bezier_at(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2] {
     let mt = 1.0 - t;
     let mt2 = mt * mt;
     let t2 = t * t;
@@ -229,14 +223,8 @@ pub fn cubic_bezier_at(
     let b2 = 3.0 * mt * t2;
     let b3 = t2 * t;
     [
-        b3.mul_add(
-            p3[0],
-            b2.mul_add(p2[0], b1.mul_add(p1[0], b0 * p0[0])),
-        ),
-        b3.mul_add(
-            p3[1],
-            b2.mul_add(p2[1], b1.mul_add(p1[1], b0 * p0[1])),
-        ),
+        b3.mul_add(p3[0], b2.mul_add(p2[0], b1.mul_add(p1[0], b0 * p0[0]))),
+        b3.mul_add(p3[1], b2.mul_add(p2[1], b1.mul_add(p1[1], b0 * p0[1]))),
     ]
 }
 
@@ -522,8 +510,7 @@ mod tests {
         let segs = s.sample_segments(6);
         for w in segs.windows(2) {
             assert!(
-                (w[0].1[0] - w[1].0[0]).abs() < 1e-5
-                    && (w[0].1[1] - w[1].0[1]).abs() < 1e-5,
+                (w[0].1[0] - w[1].0[0]).abs() < 1e-5 && (w[0].1[1] - w[1].0[1]).abs() < 1e-5,
                 "chain discontinuity: seg[i].end {:?} != seg[i+1].start {:?}",
                 w[0].1,
                 w[1].0
@@ -561,6 +548,10 @@ mod tests {
             "symmetric bezier at t=0.5: mid.x = 0.5, got {}",
             mid[0]
         );
-        assert!(mid[1] > 0.3 && mid[1] < 0.4, "mid.y ≈ 0.375, got {}", mid[1]);
+        assert!(
+            mid[1] > 0.3 && mid[1] < 0.4,
+            "mid.y ≈ 0.375, got {}",
+            mid[1]
+        );
     }
 }
