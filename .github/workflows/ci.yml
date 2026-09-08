@@ -48,6 +48,13 @@ jobs:
           repository: ext-sakamoro/ALICE-LLM
           path: ALICE-LLM
 
+      # alice-lol-robot (default features) の mandatory path dep
+      # (kinematics feature 経由の 8-byte packet bridge)
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -114,6 +121,13 @@ jobs:
           repository: ext-sakamoro/ALICE-LLM
           path: ALICE-LLM
 
+      # alice-lol-robot (default features) の mandatory path dep
+      # (kinematics feature 経由の 8-byte packet bridge)
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -170,6 +184,12 @@ jobs:
         with:
           repository: ext-sakamoro/ALICE-LLM
           path: ALICE-LLM
+
+      # alice-lol-robot (default features) の mandatory path dep
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
 
       - name: Create SDF dependency stubs
         run: |
