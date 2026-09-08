@@ -19,9 +19,11 @@ glam = "0.29"
 # Opt-in AGPL cascade — 有効化すると ALICE-Foundry 経由で BIZ UDPGothic
 # 3344 CJK outline + Foundry procedural render pipeline が使えるが、下流全体が
 # AGPL-3.0-or-later に切り替わる 商用 license 保有者以外での有効化は非推奨
-# Phase 1-8 で foundry.rs module に実装追加予定、それまで src で参照されない
-# (cargo-machete は unused false-positive で報告するため metadata.ignored に登録)
 alice-foundry = { path = "../../ALICE-Foundry", version = "0.1", default-features = false, features = ["lol"], optional = true }
+
+# Opt-in STL/3MF export (MIT/Apache、cascade なし、alice-lol::print_export 経由)
+# marching cubes mesh + mesh repair + STL/3MF file 書き出しの canonical pipeline
+alice-lol = { path = "../alice-lol", version = "0.2", default-features = false, optional = true }
 
 [features]
 default = ["parametric"]
@@ -29,12 +31,17 @@ default = ["parametric"]
 parametric = []
 # Opt-in AGPL cascade — Foundry lol_bridge 経由
 foundry = ["dep:alice-foundry"]
+# Opt-in STL/3MF export via alice-lol::print_export (MIT/Apache、cascade なし)
+stl-export = ["dep:alice-lol"]
 
-# alice-foundry は #[cfg(feature = "foundry")] gated module 内でのみ参照
-# cargo-machete は feature-gated dep を false-positive 報告するため ignore に登録
+# feature-gated dep は cargo-machete が unused false-positive で報告するため ignore
 [package.metadata.cargo-machete]
-ignored = ["alice-foundry"]
+ignored = ["alice-foundry", "alice-lol"]
 
 [[example]]
 name = "foundry_outline"
 required-features = ["foundry"]
+
+[[example]]
+name = "stl_hello"
+required-features = ["stl-export"]

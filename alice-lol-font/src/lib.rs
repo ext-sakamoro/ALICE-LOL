@@ -50,6 +50,8 @@ pub mod layout;
 pub mod params;
 pub mod pen;
 pub mod stdlib;
+#[cfg(feature = "stl-export")]
+pub mod stl_export;
 pub mod stroke;
 
 pub use ascii::ascii_uppercase;
@@ -65,5 +67,9 @@ pub use pen::PenModel;
 pub use stdlib::{
     preset_glyph_2d, preset_glyph_3d, preset_text_2d, preset_text_2d_with_config, preset_text_3d,
     preset_text_3d_with_config, FontPreset,
+};
+#[cfg(feature = "stl-export")]
+pub use stl_export::{
+    glyph_to_3mf, glyph_to_stl, preset_text_to_3mf, preset_text_to_stl, text_to_3mf, text_to_stl,
 };
 pub use stroke::{cubic_bezier_at, strokes_to_sdf2d, Stroke, StrokeWeight};
