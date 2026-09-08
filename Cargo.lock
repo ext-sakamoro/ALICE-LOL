@@ -35,7 +35,6 @@ name = "alice-lol-font"
 version = "0.1.0"
 dependencies = [
  "alice-foundry",
- "alice-lol",
  "alice-sdf",
  "glam",
 ]
