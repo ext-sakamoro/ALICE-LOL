@@ -49,7 +49,10 @@ fn main() {
     // 4 sample point で eval
     let cases = [
         (Vec3::new(0.5, 0.35, 0.0), "O center (hollow expected)"),
-        (Vec3::new(1.0, 0.35, 0.0), "O right stroke (inside expected)"),
+        (
+            Vec3::new(1.0, 0.35, 0.0),
+            "O right stroke (inside expected)",
+        ),
         (Vec3::new(2.0, 0.35, 0.0), "sphere center (inside expected)"),
         (Vec3::new(3.5, 0.35, 0.0), "far right (outside expected)"),
     ];
