@@ -30,6 +30,11 @@ parametric = []
 # Opt-in AGPL cascade — Foundry lol_bridge 経由
 foundry = ["dep:alice-foundry"]
 
-# alice-foundry は Phase 1-8 実装まで src で参照されない (optional dep 宣言のみ)
+# alice-foundry は #[cfg(feature = "foundry")] gated module 内でのみ参照
+# cargo-machete は feature-gated dep を false-positive 報告するため ignore に登録
 [package.metadata.cargo-machete]
 ignored = ["alice-foundry"]
+
+[[example]]
+name = "foundry_outline"
+required-features = ["foundry"]
