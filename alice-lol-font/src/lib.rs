@@ -47,6 +47,7 @@ pub mod glyph;
 pub mod layout;
 pub mod params;
 pub mod pen;
+pub mod stdlib;
 pub mod stroke;
 
 pub use ascii::ascii_uppercase;
@@ -54,4 +55,8 @@ pub use glyph::{Glyph, DEFAULT_BEZIER_SAMPLES};
 pub use layout::{layout_string_2d, layout_string_3d, measure_string, LayoutConfig};
 pub use params::MetaFontParams;
 pub use pen::PenModel;
+pub use stdlib::{
+    preset_glyph_2d, preset_glyph_3d, preset_text_2d, preset_text_2d_with_config, preset_text_3d,
+    preset_text_3d_with_config, FontPreset,
+};
 pub use stroke::{cubic_bezier_at, strokes_to_sdf2d, Stroke, StrokeWeight};
