@@ -61,7 +61,8 @@ jobs:
             "ALICE-Physics:alice-physics" \
             "ALICE-Codec:alice-codec" \
             "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Cache:alice-cache"; do
+            "ALICE-Cache:alice-cache" \
+            "ALICE-Foundry:alice-foundry"; do
             dir=$(echo "$crate_info" | cut -d: -f1)
             pkg=$(echo "$crate_info" | cut -d: -f2)
             mkdir -p "$dir/src"
@@ -75,6 +76,7 @@ jobs:
           [features]
           default = []
           std = []
+          lol = []
           TOML
             echo "" > "$dir/src/lib.rs"
           done
@@ -127,7 +129,8 @@ jobs:
             "ALICE-Physics:alice-physics" \
             "ALICE-Codec:alice-codec" \
             "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Cache:alice-cache"; do
+            "ALICE-Cache:alice-cache" \
+            "ALICE-Foundry:alice-foundry"; do
             dir=$(echo "$crate_info" | cut -d: -f1)
             pkg=$(echo "$crate_info" | cut -d: -f2)
             mkdir -p "$dir/src"
@@ -141,6 +144,7 @@ jobs:
           [features]
           default = []
           std = []
+          lol = []
           TOML
             echo "" > "$dir/src/lib.rs"
           done
@@ -169,10 +173,10 @@ jobs:
 
       - name: Create SDF dependency stubs
         run: |
-          for crate_info in "ALICE-Physics:alice-physics" "ALICE-Codec:alice-codec" "ALICE-Streaming-Protocol:libasp" "ALICE-Cache:alice-cache"; do
+          for crate_info in "ALICE-Physics:alice-physics" "ALICE-Codec:alice-codec" "ALICE-Streaming-Protocol:libasp" "ALICE-Cache:alice-cache" "ALICE-Foundry:alice-foundry"; do
             dir=$(echo "$crate_info" | cut -d: -f1); pkg=$(echo "$crate_info" | cut -d: -f2)
             mkdir -p "$dir/src"
-            printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\n' "$pkg" > "$dir/Cargo.toml"
+            printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\nlol = []\n' "$pkg" > "$dir/Cargo.toml"
             echo "" > "$dir/src/lib.rs"
           done
 

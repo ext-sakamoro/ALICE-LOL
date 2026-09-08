@@ -1,8 +1,8 @@
 name: 'ALICE-LOL Optional Bridge Stubs'
 description: |
   Create empty stub crates for the ALICE-LOL sibling path deps
-  (alice-sdf / alice-llm / alice-physics). alice-sdf は mandatory (glsl feature)、
-  alice-llm / alice-physics は optional feature (llm-bridge / physics)。
+  (alice-sdf / alice-llm / alice-physics / alice-foundry). alice-sdf は mandatory
+  (glsl feature)、他 3 crate は optional feature (llm-bridge / physics / foundry) 用。
 
   Canonical CI template: [[reference_alice_ci_canonical_template]]
 
@@ -73,4 +73,23 @@ runs:
         TOML
         : > "../ALICE-Physics/src/lib.rs"
 
-        echo "Created stubs: alice-sdf / alice-llm / alice-physics (all with license = MIT OR Apache-2.0)"
+        # ALICE-Foundry stub (foundry feature 用、alice-lol-font 経由、
+        # 実 crate は AGPL-3.0-or-later dual license)
+        mkdir -p "../ALICE-Foundry/src"
+        cat > "../ALICE-Foundry/Cargo.toml" <<'TOML'
+        [package]
+        name = "alice-foundry"
+        version = "0.1.0"
+        edition = "2021"
+        license = "MIT OR Apache-2.0"
+
+        [features]
+        default = []
+        lol = []
+
+        [lib]
+        path = "src/lib.rs"
+        TOML
+        : > "../ALICE-Foundry/src/lib.rs"
+
+        echo "Created stubs: alice-sdf / alice-llm / alice-physics / alice-foundry (all with license = MIT OR Apache-2.0)"
