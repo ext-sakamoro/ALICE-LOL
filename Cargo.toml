@@ -1,3 +1,3 @@
 [workspace]
-members = ["alice-lol-macro", "alice-lol", "alice-lol-humanoid", "alice-lol-font", "alice-lol-robot", "alice-lol-ui"]
+members = ["alice-lol-macro", "alice-lol", "alice-lol-humanoid", "alice-lol-robot", "alice-lol-ui"]
 resolver = "2"
