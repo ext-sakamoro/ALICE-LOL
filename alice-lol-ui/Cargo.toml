@@ -1,0 +1,30 @@
+[package]
+name = "alice-lol-ui"
+version = "0.1.0"
+edition = "2021"
+description = "UI/UX template for ALICE-LOL DSL — parametric Button/Card/Panel/Icon → SdfNode + Flex/Grid/Stack layout + WCAG a11y law checker."
+license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol-ui"
+readme = "../README.md"
+keywords = ["dsl", "sdf", "ui", "ux", "a11y"]
+categories = ["graphics", "gui", "no-std"]
+
+[dependencies]
+alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false }
+glam = "0.29"
+
+[features]
+default = []
+
+[[example]]
+name = "ui_button_showcase"
+
+[[example]]
+name = "ui_card_grid"
+
+[[example]]
+name = "ui_form_layout"
