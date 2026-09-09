@@ -63,7 +63,6 @@ let glsl = alice_lol::to_glsl(&scene);
 | `alice-lol-macro` | proc-macro | LOL DSL パーサー + `SdfNode` コード生成 |
 | `alice-lol` | rlib | Re-export + トランスパイル関数 + 法則チェッカー + 空間枝刈り + Intent IR (14 verb) |
 | `alice-lol-humanoid` | rlib (sibling) | Humanoid template (16 joint FK + VRM/BVH import) |
-| `alice-lol-font` | rlib (sibling) | Font template (parametric Bezier stroke → `SdfNode`) |
 | `alice-lol-robot` | rlib (sibling) | Robot template (Intent verb → humanoid FK + 8-byte Kinematics packet + ISO 10218 参考 safety law) |
 | `alice-lol-ui` | rlib (sibling) | UI/UX template (Button / Card / Panel / Icon / Divider / InputField / Badge / Chip → SdfNode + Flex/Grid/Stack layout + WCAG AA a11y law checker) |
 

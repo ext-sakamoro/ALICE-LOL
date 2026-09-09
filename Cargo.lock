@@ -3,19 +3,6 @@
 version = 4
 
 [[package]]
-name = "alice-font"
-version = "0.7.5"
-
-[[package]]
-name = "alice-foundry"
-version = "0.1.0"
-dependencies = [
- "alice-font",
- "alice-lol",
- "alice-sdf",
-]
-
-[[package]]
 name = "alice-kinematics"
 version = "0.1.0"
 dependencies = [
@@ -33,16 +20,6 @@ dependencies = [
  "alice-llm",
  "alice-lol-macro",
  "alice-physics",
- "alice-sdf",
- "glam",
-]
-
-[[package]]
-name = "alice-lol-font"
-version = "0.1.0"
-dependencies = [
- "alice-foundry",
- "alice-lol",
  "alice-sdf",
  "glam",
 ]

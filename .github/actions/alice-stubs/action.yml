@@ -73,8 +73,10 @@ runs:
         TOML
         : > "../ALICE-Physics/src/lib.rs"
 
-        # ALICE-Foundry stub (foundry feature 用、alice-lol-font 経由、
+        # ALICE-Foundry stub (現状 public workspace 内に foundry 依存 crate なし、
+        # future の foundry feature 用 crate 追加時のための予備 stub、
         # 実 crate は AGPL-3.0-or-later dual license)
+        # 注: alice-lol-font は 2026-09-09 に private repo (ext-sakamoro/alice-lol-font) に分離済
         mkdir -p "../ALICE-Foundry/src"
         cat > "../ALICE-Foundry/Cargo.toml" <<'TOML'
         [package]
