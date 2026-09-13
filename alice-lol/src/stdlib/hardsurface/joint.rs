@@ -441,7 +441,7 @@ pub const JST_PH_PITCH: f32 = 2.0;
 /// ```
 #[must_use]
 pub fn jst_ph_slot(pins: u32) -> SdfNode {
-    let pins_f = pins.max(2).min(12) as f32;
+    let pins_f = pins.clamp(2, 12) as f32;
     let width = JST_PH_PITCH * (pins_f + 1.0);
     let depth = 4.5;
     let height = 5.5;

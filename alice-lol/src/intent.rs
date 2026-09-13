@@ -173,11 +173,11 @@ pub enum IntentNode {
     ///
     /// `values` の L2 norm ≤ 1.0 を想定
     /// この制約が Garrido の「future frame を単純 copy 予防」に相当
-    /// [`alice_lol_robot::law::SafetyLaw`] で validation
+    /// `alice_lol_robot::law::SafetyLaw` で validation (別 crate 参照、docs.rs cross-link 不可)
     ///
     /// # 実行
     ///
-    /// [`alice_lol_robot::IntentExecutor`] が hardcoded linear projection (Phase G.1)
+    /// `alice_lol_robot::IntentExecutor` が hardcoded linear projection (Phase G.1)
     /// または learned controller (Phase G.2、cross-attention block) で kinematics packet 群に翻訳
     /// Phase G.1 の projection: `values[0..3]` → target xyz、`values[3]` → speed
     LatentIntent {
@@ -496,7 +496,7 @@ pub const fn music_intent(packet: [u8; 8]) -> IntentNode {
 ///
 /// # 制約 (Garrido 由来)
 ///
-/// L2 norm ≤ 1.0 を想定 ([`alice_lol_robot::law::SafetyLaw::max_latent_norm`] で validation)
+/// L2 norm ≤ 1.0 を想定 (`alice_lol_robot::law::SafetyLaw::max_latent_norm` で validation、別 crate)
 /// この制約が Garrido の「future frame を単純 copy 予防」の意味を持つ
 #[must_use]
 pub fn latent_intent(values: impl Into<Box<[f32]>>) -> IntentNode {
@@ -780,10 +780,7 @@ mod tests {
     fn music_intent_composable_in_sequence() {
         let packet_a = [0u8, 0, 4, 80, 0, 0, 0x11, 0x11];
         let packet_b = [1u8, 4, 8, 60, 4, 5, 0x22, 0x22];
-        let seq = sequence(vec![
-            music_intent(packet_a),
-            music_intent(packet_b),
-        ]);
+        let seq = sequence(vec![music_intent(packet_a), music_intent(packet_b)]);
         if let IntentNode::Sequence(items) = &seq {
             assert_eq!(items.len(), 2);
             assert!(matches!(items[0], IntentNode::Music { .. }));

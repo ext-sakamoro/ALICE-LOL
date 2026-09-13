@@ -6,7 +6,7 @@
 //! マグカップ prompt に対して 11 min × 3 attempt で box+cylinder fallback して
 //! garbage 出力する問題を primitive 化で bypass)
 //!
-//! 詳細: [[feedback_llm_3b_complex_shape_hallucination]]
+//! 詳細: memory `feedback_llm_3b_complex_shape_hallucination`
 //!
 //! ## 座標系 (ALICE-LOL 慣習、Z-up)
 //!

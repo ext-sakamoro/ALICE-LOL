@@ -154,8 +154,10 @@ pub use alice_sdf::compiled::{
 };
 
 // ── Physics bridge re-exports (物理連携) ──
-#[cfg(feature = "physics")]
-pub use alice_sdf::physics_bridge::{sdf_to_physics_field, CompiledSdfField};
-
-#[cfg(feature = "physics")]
-pub use alice_sdf::sim_bridge::{attach_physics, simulate_sdf, SimulatedSdf};
+// alice-sdf 1.7.7 以降 physics_bridge / sim_bridge module は crates.io publish のため
+// alice-sdf 側 physics feature ごと削除済 (source 上は cfg-gate 保持) alice-sdf が
+// physics feature を復活させたら以下 pub use を再度有効化する
+// #[cfg(feature = "physics")]
+// pub use alice_sdf::physics_bridge::{sdf_to_physics_field, CompiledSdfField};
+// #[cfg(feature = "physics")]
+// pub use alice_sdf::sim_bridge::{attach_physics, simulate_sdf, SimulatedSdf};

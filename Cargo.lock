@@ -15,7 +15,7 @@ version = "1.6.0"
 
 [[package]]
 name = "alice-lol"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "alice-llm",
  "alice-lol-macro",
@@ -63,11 +63,11 @@ dependencies = [
 
 [[package]]
 name = "alice-physics"
-version = "0.13.0"
+version = "0.14.0-preview.5"
 
 [[package]]
 name = "alice-sdf"
-version = "1.8.0"
+version = "1.9.0"
 dependencies = [
  "bincode",
  "bytemuck",

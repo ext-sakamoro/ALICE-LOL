@@ -13,7 +13,7 @@ keywords = ["dsl", "sdf", "robot", "intent", "kinematics"]
 categories = ["graphics", "game-development", "robotics"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
 alice-lol-humanoid = { path = "../alice-lol-humanoid", version = "0.1", default-features = false }
 glam = "0.29"
 

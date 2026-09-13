@@ -13,8 +13,8 @@ keywords = ["dsl", "sdf", "ui", "ux", "a11y"]
 categories = ["graphics", "gui", "no-std"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.2", default-features = false }
-alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.9.0", default-features = false }
 glam = "0.29"
 
 [features]

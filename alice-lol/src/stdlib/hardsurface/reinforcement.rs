@@ -15,9 +15,9 @@
 //!
 //! `--features physics` で有効化すると以下 API が使える
 //!
-//! - [`fillet_kt_shaft_shoulder`] — `alice_physics::fillet_stress::kt_shaft_shoulder_bending`
-//! - [`material_elastic_modulus_gpa`] — `alice_physics::filament_db::MaterialProperties::pla/petg/abs`
-//! - [`recommended_fillet_radius_mm`] — `alice_physics::fillet_stress::recommended_fillet_radius_mm`
+//! - `fillet_kt_shaft_shoulder` — `alice_physics::fillet_stress::kt_shaft_shoulder_bending`
+//! - `material_elastic_modulus_gpa` — `alice_physics::filament_db::MaterialProperties::pla/petg/abs`
+//! - `recommended_fillet_radius_mm` — `alice_physics::fillet_stress::recommended_fillet_radius_mm`
 //!
 //! Bamboo `src/safety.rs` の canonical material spec と SSOT を共有できる
 
