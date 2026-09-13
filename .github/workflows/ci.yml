@@ -64,19 +64,23 @@ jobs:
 
       - name: Create SDF dependency stubs
         run: |
+          # alice-physics は crates.io 0.14.0-preview.5 publish 済 (alice-lol の
+          # `version = "0.14.0-preview.4"` constraint を満たすため stub 側 version を追従)
+          # 他 4 stub は現状の 0.1.0 継続 (alice-sdf 側 bridge feature 削除で dead)
           for crate_info in \
-            "ALICE-Physics:alice-physics" \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Cache:alice-cache" \
-            "ALICE-Foundry:alice-foundry"; do
+            "ALICE-Physics:alice-physics:0.14.0-preview.5" \
+            "ALICE-Codec:alice-codec:0.1.0" \
+            "ALICE-Streaming-Protocol:libasp:0.1.0" \
+            "ALICE-Cache:alice-cache:0.1.0" \
+            "ALICE-Foundry:alice-foundry:0.1.0"; do
             dir=$(echo "$crate_info" | cut -d: -f1)
             pkg=$(echo "$crate_info" | cut -d: -f2)
+            ver=$(echo "$crate_info" | cut -d: -f3)
             mkdir -p "$dir/src"
             cat > "$dir/Cargo.toml" << TOML
           [package]
           name = "$pkg"
-          version = "0.1.0"
+          version = "$ver"
           edition = "2021"
           [lib]
           path = "src/lib.rs"
@@ -139,19 +143,23 @@ jobs:
 
       - name: Create SDF dependency stubs
         run: |
+          # alice-physics は crates.io 0.14.0-preview.5 publish 済 (alice-lol の
+          # `version = "0.14.0-preview.4"` constraint を満たすため stub 側 version を追従)
+          # 他 4 stub は現状の 0.1.0 継続 (alice-sdf 側 bridge feature 削除で dead)
           for crate_info in \
-            "ALICE-Physics:alice-physics" \
-            "ALICE-Codec:alice-codec" \
-            "ALICE-Streaming-Protocol:libasp" \
-            "ALICE-Cache:alice-cache" \
-            "ALICE-Foundry:alice-foundry"; do
+            "ALICE-Physics:alice-physics:0.14.0-preview.5" \
+            "ALICE-Codec:alice-codec:0.1.0" \
+            "ALICE-Streaming-Protocol:libasp:0.1.0" \
+            "ALICE-Cache:alice-cache:0.1.0" \
+            "ALICE-Foundry:alice-foundry:0.1.0"; do
             dir=$(echo "$crate_info" | cut -d: -f1)
             pkg=$(echo "$crate_info" | cut -d: -f2)
+            ver=$(echo "$crate_info" | cut -d: -f3)
             mkdir -p "$dir/src"
             cat > "$dir/Cargo.toml" << TOML
           [package]
           name = "$pkg"
-          version = "0.1.0"
+          version = "$ver"
           edition = "2021"
           [lib]
           path = "src/lib.rs"
@@ -193,10 +201,11 @@ jobs:
 
       - name: Create SDF dependency stubs
         run: |
-          for crate_info in "ALICE-Physics:alice-physics" "ALICE-Codec:alice-codec" "ALICE-Streaming-Protocol:libasp" "ALICE-Cache:alice-cache" "ALICE-Foundry:alice-foundry"; do
-            dir=$(echo "$crate_info" | cut -d: -f1); pkg=$(echo "$crate_info" | cut -d: -f2)
+          # alice-physics stub は crates.io 0.14.0-preview.5 に追従 (alice-lol 制約)
+          for crate_info in "ALICE-Physics:alice-physics:0.14.0-preview.5" "ALICE-Codec:alice-codec:0.1.0" "ALICE-Streaming-Protocol:libasp:0.1.0" "ALICE-Cache:alice-cache:0.1.0" "ALICE-Foundry:alice-foundry:0.1.0"; do
+            dir=$(echo "$crate_info" | cut -d: -f1); pkg=$(echo "$crate_info" | cut -d: -f2); ver=$(echo "$crate_info" | cut -d: -f3)
             mkdir -p "$dir/src"
-            printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\nlol = []\n' "$pkg" > "$dir/Cargo.toml"
+            printf '[package]\nname = "%s"\nversion = "%s"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\nlol = []\n' "$pkg" "$ver" > "$dir/Cargo.toml"
             echo "" > "$dir/src/lib.rs"
           done
 
