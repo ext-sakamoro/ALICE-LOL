@@ -169,7 +169,7 @@ geometric proxy 評価 (grid + `sdf_eval()`)、Physics dep 追加なし。精密
 
 ### Intent (Milestone B.1、2026-08-06、Phase 3 IR skeleton)
 
-`IntentNode` 16 variant + `Program { sdf, sdf_registry, intent }` 独立型 (GPU backend 型分離設計)。L1 Physical Intent verb 14 種 (grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest) + 合成 2 種 (Sequence / Parallel)。
+`IntentNode` 17 variant + `Program { sdf, sdf_registry, intent }` 独立型 (GPU backend 型分離設計) L1 Physical Intent verb 14 種 (grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest) + 合成 2 種 (Sequence / Parallel) + L1 Musical Intent 1 種 (Music、2026-09-13 追加)
 
 ```rust
 use alice_lol::intent::{grasp, walk, sequence, HandSide, ProgramBuilder};
@@ -187,6 +187,24 @@ let prog = builder.with_intent(intent).build();
 
 - `Program::as_sdf()` は intent field を露出しない = GPU backend 型分離で誤解釈事故を防止
 - ALICE-Kinematics `lol` feature 経由で 8-byte Intent packet に翻訳可 (Milestone B.3)
+
+#### L1 Musical Intent (Phase 3.1、2026-09-13)
+
+演奏中の身体動作 + 音楽的意図を同一 Intent tree に埋め込むための Music variant `IntentNode::Music { packet: [u8; 8] }` は opaque 8-byte payload で、内訳は [`alice-synth` の `intent::MusicIntent`](https://github.com/ext-sakamoro/ALICE-Synth) が正式定義 (byte 0: genre / 1: mood / 2: length_bars / 3: tempo_bpm_offset / 4: key / 5: mode / 6-7: variation_seed LE)
+
+```rust
+use alice_lol::intent::{grasp, music_intent, parallel, HandSide};
+
+// ある楽器を掴みながら、その楽器で C major folk を演奏する Intent
+let program = parallel(vec![
+    music_intent([0, 0, 4, 80, 0, 0, 0xC0, 0xDE]),  // C major Folk / Happy, seed 0xC0DE
+    grasp(0, HandSide::Right, 5.0),                    // 楽器を右手で把持
+]);
+```
+
+- **依存なし**: `alice-lol` は `alice-synth` に依存しない = 8-byte packet が唯一の cross-crate 契約
+- consumer (interpreter、LLM plan head、remote 演奏服) は `MusicIntent::from_bytes(packet)` で復元 → `synthesize()` で PCM 生成
+- ALICE 三相原理 Phase 3 (Intent 相) の音楽 variant、Physical Intent の隣に対等に配置
 
 ### Variable Capture
 
