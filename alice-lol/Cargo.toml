@@ -40,7 +40,12 @@ hlsl = ["alice-sdf/hlsl"]
 # Physics bridge — alice-sdf 1.7.4 で一時削除、Milestone A.1.0 (2026-08-06) で復帰
 # stdlib::hardsurface からも alice-physics 直接 API (FilamentDb / fillet_stress
 # / beam_stress) が使えるよう alice-physics direct dep も opt-in (Phase A.3)
-physics = ["dep:alice-physics", "alice-sdf/physics"]
+#
+# 2026-09-13 chore: alice-sdf 1.8.0 では bridge features 群 (physics/codec/asp/font/
+# cache) が crates.io publish 準備のため削除済 (alice-sdf/Cargo.toml の comment 参照)
+# `alice-sdf/physics` reference は現状 dead — cargo resolver 越えのため
+# dep:alice-physics のみ残す alice-sdf 側で bridge feature が復帰したら再度追加
+physics = ["dep:alice-physics"]
 roblox = []
 # Phase X.8 B-6: exposes `alice_lol::bridge` for grammar-constrained
 # LLM decoding against the LOL DSL. Off by default so pure geometry

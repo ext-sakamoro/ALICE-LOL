@@ -43,9 +43,10 @@ pub enum HandSide {
 // IntentNode enum
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/// L1 Physical Intent verb catalog (B.1 MVP scope = 14 verb + 2 合成 = 16 variant)
+/// L1 Physical Intent verb catalog (14 discrete verb + 1 latent (G.1) + 2 合成 = 17 variant)
 ///
 /// Q2 決定通り: grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest
+/// + `LatentIntent` (Phase G.1、Garrido 発想 constrained continuous latent action)
 /// + `Sequence` (直列合成) + `Parallel` (並列合成)
 #[derive(Debug, Clone, PartialEq)]
 pub enum IntentNode {
@@ -153,11 +154,60 @@ pub enum IntentNode {
         duration_ms: u32,
     },
 
+    // ── 連続 latent (1 個、Phase G.1、Garrido arXiv 2601.05230 準拠) ──
+    /// Constrained continuous latent action (Garrido arXiv 2601.05230, ICML 2026)
+    ///
+    /// # 目的
+    ///
+    /// 14 discrete verb では表現困難な nuanced motion 用の連続 latent slot
+    /// Garrido の in-the-wild video 実測 = Noisy / Sparse continuous latent が
+    /// vector quantization (discrete codebook) を上回った
+    ///
+    /// # dim 推奨
+    ///
+    /// - **32**: compact first-strike (128 byte / intent、既存 8-byte packet の 16x)
+    /// - **64**: medium
+    /// - **128**: Garrido paper default (512 byte / intent、high-fidelity nuance)
+    ///
+    /// # 制約 (constrained latent の由来)
+    ///
+    /// `values` の L2 norm ≤ 1.0 を想定
+    /// この制約が Garrido の「future frame を単純 copy 予防」に相当
+    /// [`alice_lol_robot::law::SafetyLaw`] で validation
+    ///
+    /// # 実行
+    ///
+    /// [`alice_lol_robot::IntentExecutor`] が hardcoded linear projection (Phase G.1)
+    /// または learned controller (Phase G.2、cross-attention block) で kinematics packet 群に翻訳
+    /// Phase G.1 の projection: `values[0..3]` → target xyz、`values[3]` → speed
+    LatentIntent {
+        /// constrained continuous latent (dim = `values.len()`、min 4、推奨 32/64/128)
+        values: Box<[f32]>,
+        /// debug 用 human-readable label ("grasp-like" 等、production は None 推奨)
+        semantic_hint: Option<String>,
+    },
+
     // ── 合成 (2 個) ──
     /// 直列合成: 内部の Intent を順に実行
     Sequence(Vec<IntentNode>),
     /// 並列合成: 内部の Intent を同時実行
     Parallel(Vec<IntentNode>),
+
+    // ── L1 Musical Intent (1 個、2026-09-13 Phase 3.1 追加) ──
+    /// L1 Musical Intent — 8-byte 音楽的意図 packet
+    ///
+    /// packet の内訳は `alice_synth::intent::MusicIntent` (byte 0: genre / 1: mood /
+    /// 2: length_bars / 3: tempo_bpm_offset / 4: key / 5: mode / 6-7: variation_seed LE)
+    /// で正式定義される 本 crate は依存を持たず opaque `[u8; 8]` として保持し、
+    /// 解釈は consumer (`alice-synth::intent::MusicIntent::from_bytes(packet)` を叩く
+    /// interpreter、または将来の LLM plan head) 側で行う
+    ///
+    /// ALICE 三相原理の Phase 3 (Intent) を Physical Intent の隣に置く音楽 variant
+    /// Kinematics packet と同じ 8-byte サイズで、network 帯域 / storage 効率も同等
+    Music {
+        /// 8-byte MusicIntent packet (alice-synth `intent` module 参照)
+        packet: [u8; 8],
+    },
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -418,6 +468,55 @@ pub fn parallel(intents: Vec<IntentNode>) -> IntentNode {
     IntentNode::Parallel(intents)
 }
 
+/// L1 Musical Intent constructor (Phase 3.1、2026-09-13)
+///
+/// 8-byte packet を `IntentNode::Music` variant に wrap する
+/// packet 内訳は `alice_synth::intent::MusicIntent` 側で正式定義、本 crate は
+/// opaque payload として持つ
+///
+/// ```
+/// use alice_lol::intent::music_intent;
+///
+/// // alice-synth 側で作った 8-byte packet を LOL Intent tree に埋め込む
+/// let packet = [0u8, 0, 4, 80, 0, 0, 0xDE, 0xC0]; // C major Folk / Happy, seed 0xC0DE
+/// let node = music_intent(packet);
+/// ```
+#[must_use]
+pub const fn music_intent(packet: [u8; 8]) -> IntentNode {
+    IntentNode::Music { packet }
+}
+
+/// `LatentIntent` constructor (Phase G.1、Garrido 発想 constrained continuous latent action)
+///
+/// # 引数
+///
+/// - `values`: min 4 dim、推奨 32/64/128 dim
+///   先頭 4 要素は decoder が `[target_x, target_y, target_z, speed]` として解釈
+///   残り (dim > 4) は Phase G.2 の learned controller が消費する reserved 領域
+///
+/// # 制約 (Garrido 由来)
+///
+/// L2 norm ≤ 1.0 を想定 ([`alice_lol_robot::law::SafetyLaw::max_latent_norm`] で validation)
+/// この制約が Garrido の「future frame を単純 copy 予防」の意味を持つ
+#[must_use]
+pub fn latent_intent(values: impl Into<Box<[f32]>>) -> IntentNode {
+    IntentNode::LatentIntent {
+        values: values.into(),
+        semantic_hint: None,
+    }
+}
+
+/// `LatentIntent` constructor with debug hint
+///
+/// production では [`latent_intent`] (hint なし) を推奨、hint は debug / demo 用
+#[must_use]
+pub fn latent_intent_hinted(values: impl Into<Box<[f32]>>, hint: impl Into<String>) -> IntentNode {
+    IntentNode::LatentIntent {
+        values: values.into(),
+        semantic_hint: Some(hint.into()),
+    }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Tests
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -560,5 +659,162 @@ mod tests {
 
         let g3 = grasp(0, HandSide::Left, 3.0); // hand が違う
         assert_ne!(g1, g3);
+    }
+
+    // ── Phase G.1 LatentIntent tests (Garrido arXiv 2601.05230 発想) ──
+
+    #[test]
+    fn latent_intent_construction_min_dim() {
+        let li = latent_intent(vec![0.5, 0.3, 0.2, 0.8]);
+        match &li {
+            IntentNode::LatentIntent {
+                values,
+                semantic_hint,
+            } => {
+                assert_eq!(values.len(), 4);
+                assert!(semantic_hint.is_none());
+                assert!((values[0] - 0.5).abs() < 1e-6);
+                assert!((values[3] - 0.8).abs() < 1e-6);
+            }
+            _ => panic!("LatentIntent を期待"),
+        }
+    }
+
+    #[test]
+    fn latent_intent_with_hint() {
+        let li = latent_intent_hinted(vec![0.1, 0.2, 0.3, 0.4], "grasp-like");
+        match li {
+            IntentNode::LatentIntent {
+                values,
+                semantic_hint,
+            } => {
+                assert_eq!(values.len(), 4);
+                assert_eq!(semantic_hint.as_deref(), Some("grasp-like"));
+            }
+            _ => panic!("LatentIntent を期待"),
+        }
+    }
+
+    #[test]
+    fn latent_intent_dims_variety_32_64_128() {
+        // Phase G.1 推奨 3 dim (compact / medium / Garrido default) 全て正常構築
+        for dim in [32_usize, 64, 128] {
+            #[allow(clippy::cast_precision_loss)]
+            let vals: Vec<f32> = (0..dim).map(|i| (i as f32) * 0.01).collect();
+            let li = latent_intent(vals);
+            if let IntentNode::LatentIntent { values, .. } = li {
+                assert_eq!(values.len(), dim);
+            } else {
+                panic!("LatentIntent を期待 (dim = {dim})");
+            }
+        }
+    }
+
+    #[test]
+    fn latent_intent_composable_in_sequence() {
+        let seq = sequence(vec![
+            latent_intent(vec![1.0, 0.0, 0.0, 0.5]),
+            grasp(0, HandSide::Right, 3.0),
+            latent_intent_hinted(vec![0.5, 0.5, 0.0, 0.3], "release-approach"),
+        ]);
+        if let IntentNode::Sequence(items) = &seq {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], IntentNode::LatentIntent { .. }));
+            assert!(matches!(items[2], IntentNode::LatentIntent { .. }));
+        } else {
+            panic!("Sequence を期待");
+        }
+    }
+
+    #[test]
+    fn latent_intent_composable_in_parallel() {
+        let par = parallel(vec![
+            latent_intent(vec![0.1, 0.2, 0.3, 0.5]),
+            latent_intent(vec![0.4, 0.5, 0.6, 0.7]),
+        ]);
+        if let IntentNode::Parallel(items) = par {
+            assert_eq!(items.len(), 2);
+            assert!(matches!(items[0], IntentNode::LatentIntent { .. }));
+        } else {
+            panic!("Parallel を期待");
+        }
+    }
+
+    #[test]
+    fn latent_intent_clone_and_eq() {
+        let a = latent_intent(vec![1.0, 2.0, 3.0, 4.0]);
+        let b = a.clone();
+        assert_eq!(a, b);
+        let c = latent_intent(vec![1.0, 2.0, 3.0, 5.0]); // 最後の要素 差
+        assert_ne!(a, c);
+    }
+
+    // ── L1 Musical Intent (Phase 3.1、2026-09-13) ──
+
+    #[test]
+    fn music_intent_constructor_wraps_packet() {
+        let packet = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        let node = music_intent(packet);
+        match node {
+            IntentNode::Music { packet: p } => assert_eq!(p, packet),
+            _ => panic!("Music variant を期待"),
+        }
+    }
+
+    #[test]
+    fn music_intent_roundtrip_via_variant() {
+        // alice-synth の canonical 8-byte layout に対応する packet を wrap して
+        // Match で取り出し、byte 一致することを確認する
+        let packet = [0u8, 0, 4, 80, 0, 0, 0xDE, 0xC0]; // C major Folk / Happy, seed 0xC0DE
+        let node = music_intent(packet);
+        if let IntentNode::Music { packet: extracted } = node {
+            assert_eq!(extracted[0], 0); // genre::FOLK
+            assert_eq!(extracted[3], 80); // tempo offset → 120 BPM
+            assert_eq!(u16::from_le_bytes([extracted[6], extracted[7]]), 0xC0DE);
+        } else {
+            panic!("Music variant を期待");
+        }
+    }
+
+    #[test]
+    fn music_intent_composable_in_sequence() {
+        let packet_a = [0u8, 0, 4, 80, 0, 0, 0x11, 0x11];
+        let packet_b = [1u8, 4, 8, 60, 4, 5, 0x22, 0x22];
+        let seq = sequence(vec![
+            music_intent(packet_a),
+            music_intent(packet_b),
+        ]);
+        if let IntentNode::Sequence(items) = &seq {
+            assert_eq!(items.len(), 2);
+            assert!(matches!(items[0], IntentNode::Music { .. }));
+            assert!(matches!(items[1], IntentNode::Music { .. }));
+        } else {
+            panic!("Sequence を期待");
+        }
+    }
+
+    #[test]
+    fn music_intent_composable_with_physical_verbs() {
+        // Musical + Physical Intent を並列に走らせるシナリオ (演奏中の身体動作等)
+        let par = parallel(vec![
+            music_intent([0u8, 0, 4, 80, 0, 0, 0xC0, 0xDE]),
+            grasp(0, HandSide::Right, 5.0),
+        ]);
+        if let IntentNode::Parallel(items) = par {
+            assert_eq!(items.len(), 2);
+            assert!(matches!(items[0], IntentNode::Music { .. }));
+            assert!(matches!(items[1], IntentNode::Grasp { .. }));
+        } else {
+            panic!("Parallel を期待");
+        }
+    }
+
+    #[test]
+    fn music_intent_clone_and_eq() {
+        let a = music_intent([1u8, 2, 3, 4, 5, 6, 7, 8]);
+        let b = a.clone();
+        assert_eq!(a, b);
+        let c = music_intent([1u8, 2, 3, 4, 5, 6, 7, 9]); // 末尾 1 byte 差
+        assert_ne!(a, c);
     }
 }
