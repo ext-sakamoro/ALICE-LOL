@@ -2,7 +2,7 @@
 //!
 //! Phase A.5.2 で `thin::skadis_panel_2d` を追加した (Polygon2D + earcutr 経路)、しかし
 //! これは ALICE 三相原理 Phase 1 Data 相当 = ALICE 違反であることが Phase B.1.c 議論で
-//! 判明 ([[feedback_alice_polygon_extrude_data_route]])
+//! 判明 (memory `feedback_alice_polygon_extrude_data_route`)
 //!
 //! 本 module は SKADIS panel を **純 SDF (SdfNode)** で表現する Phase 2 Law 経路
 //! mesh 化は `alice_lol::print_export::node_to_3mf_dual_contouring` (SDF+DC) 経由

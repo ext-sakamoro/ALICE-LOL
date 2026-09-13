@@ -308,6 +308,7 @@ impl<'a> Parser<'a> {
     }
 
     /// f32 値 7 個 (Phase B.1.b `gridfinity_bin_ex` 用)
+    #[allow(clippy::type_complexity)]
     fn parse_7f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32, f32), ParseError> {
         let a = self.expect_number()?;
         self.expect_comma()?;
@@ -452,7 +453,7 @@ impl<'a> Parser<'a> {
     }
 
     /// 9 floats
-    #[allow(clippy::many_single_char_names)]
+    #[allow(clippy::many_single_char_names, clippy::type_complexity)]
     fn parse_9f(&mut self) -> Result<(f32, f32, f32, f32, f32, f32, f32, f32, f32), ParseError> {
         let a = self.expect_number()?;
         self.expect_comma()?;
@@ -476,7 +477,7 @@ impl<'a> Parser<'a> {
     }
 
     /// 10 floats
-    #[allow(clippy::many_single_char_names)]
+    #[allow(clippy::many_single_char_names, clippy::type_complexity)]
     fn parse_10f(
         &mut self,
     ) -> Result<(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32), ParseError> {

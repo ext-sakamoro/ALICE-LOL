@@ -1,6 +1,6 @@
 [package]
 name = "alice-lol"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "ALICE-LOL: Law-Oriented Language — proc_macro + runtime DSL compiling to SdfNode (GLSL/WGSL/HLSL transpile), print export (STL/3MF/OBJ/FBX), law checker, laser pattern generator, and optional LLM Guided Generation bridge."
 license = "MIT OR Apache-2.0"
@@ -14,7 +14,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "1.7.4", default-features = false, features = ["glsl"] }
+alice-sdf = { path = "../../ALICE-SDF", version = "1.9.0", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
@@ -30,7 +30,7 @@ alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = fa
 # NOTE: alice-physics is AGPL-3.0 enabling `physics` feature propagates that
 # license to downstream Leave the feature off (default) to stay on
 # MIT-or-Apache-2.0 terms
-alice-physics = { path = "../../ALICE-Physics", default-features = false, features = ["std"], optional = true }
+alice-physics = { path = "../../ALICE-Physics", version = "0.14.0-preview.4", default-features = false, features = ["std"], optional = true }
 
 [features]
 default = ["glsl"]

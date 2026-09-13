@@ -681,6 +681,7 @@ pub fn turing(
     let cell_h = bounds.h / n as f64;
     let mut dots = Vec::new();
 
+    #[allow(clippy::needless_range_loop)]
     for y in 0..n {
         for x in 0..n {
             if v[y][x] >= threshold {
@@ -724,25 +725,25 @@ pub fn elements_to_svg(
     for elem in elements {
         match elem {
             LaserElement::Line(x1, y1, x2, y2) => {
-                let _ = write!(
+                let _ = writeln!(
                     svg,
                     "<line x1=\"{x1:.3}\" y1=\"{y1:.3}\" x2=\"{x2:.3}\" y2=\"{y2:.3}\" \
-                     stroke=\"{stroke_color}\" stroke-width=\"{stroke_width}\"/>\n"
+                     stroke=\"{stroke_color}\" stroke-width=\"{stroke_width}\"/>"
                 );
             }
             LaserElement::Circle(cx, cy, r) => {
-                let _ = write!(
+                let _ = writeln!(
                     svg,
                     "<circle cx=\"{cx:.3}\" cy=\"{cy:.3}\" r=\"{r:.3}\" \
-                     fill=\"{stroke_color}\"/>\n"
+                     fill=\"{stroke_color}\"/>"
                 );
             }
             LaserElement::Dot(x, y) => {
                 let half = stroke_width * 0.5;
-                let _ = write!(
+                let _ = writeln!(
                     svg,
                     "<rect x=\"{:.3}\" y=\"{:.3}\" width=\"{stroke_width:.3}\" \
-                     height=\"{stroke_width:.3}\" fill=\"{stroke_color}\"/>\n",
+                     height=\"{stroke_width:.3}\" fill=\"{stroke_color}\"/>",
                     x - half,
                     y - half
                 );
@@ -758,10 +759,10 @@ pub fn elements_to_svg(
                     }
                     let _ = write!(svg, "{x:.3},{y:.3}");
                 }
-                let _ = write!(
+                let _ = writeln!(
                     svg,
                     "\" fill=\"none\" stroke=\"{stroke_color}\" \
-                     stroke-width=\"{stroke_width}\"/>\n"
+                     stroke-width=\"{stroke_width}\"/>"
                 );
             }
         }
