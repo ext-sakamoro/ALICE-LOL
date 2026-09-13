@@ -34,6 +34,17 @@ pub enum RobotError {
         /// 詳細 (例: "joint velocity 4.2 rad/s > max 3.0 rad/s")
         detail: String,
     },
+
+    /// `LatentIntent` の `values.len()` が decoder の要求最小 dim を下回る
+    ///
+    /// Phase G.1 hardcoded projection は 最初の 4 要素 (target xyz + speed) を消費するため
+    /// `dim < 4` で本 error を返す 32/64/128 dim の long latent は先頭 4 要素のみ使用
+    InvalidLatentDim {
+        /// 与えられた `values.len()`
+        got: usize,
+        /// 要求される最小 dim (Phase G.1 = 4)
+        min: usize,
+    },
 }
 
 impl core::fmt::Display for RobotError {
@@ -46,6 +57,9 @@ impl core::fmt::Display for RobotError {
             Self::PoseFail(msg) => write!(f, "humanoid pose apply failed: {msg}"),
             Self::SafetyViolated { rule, detail } => {
                 write!(f, "safety rule '{rule}' violated: {detail}")
+            }
+            Self::InvalidLatentDim { got, min } => {
+                write!(f, "LatentIntent dim {got} < required min {min}")
             }
         }
     }
@@ -100,5 +114,11 @@ mod tests {
         };
         assert!(format!("{e}").contains("Overspeed"));
         assert!(format!("{e}").contains("4.2 rad/s"));
+    }
+
+    #[test]
+    fn invalid_latent_dim_display() {
+        let e = RobotError::InvalidLatentDim { got: 2, min: 4 };
+        assert_eq!(format!("{e}"), "LatentIntent dim 2 < required min 4");
     }
 }

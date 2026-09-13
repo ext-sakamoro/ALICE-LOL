@@ -66,7 +66,9 @@ fn apply_intent_impl(
         | IntentNode::Avoid { .. }
         | IntentNode::Gaze { .. }
         | IntentNode::Rotate { .. }
-        | IntentNode::Align { .. } => Ok(template.clone()),
+        | IntentNode::Align { .. }
+        | IntentNode::LatentIntent { .. }
+        | IntentNode::Music { .. } => Ok(template.clone()),
 
         // 合成 verb
         IntentNode::Sequence(children) => {
