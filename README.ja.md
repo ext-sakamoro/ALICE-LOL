@@ -161,6 +161,28 @@ let node = lol! { sphere(r) };             // 裸の変数名
 let node = lol! { sphere({r * 2.0}) };     // 算術式
 ```
 
+## Intent IR (Phase 3 / 3.1、2026-09-13)
+
+ALICE 三相原理 (Data → Law → Intent) の **Phase 3 Intent 相**。`IntentNode` 17 variant + `Program { sdf, sdf_registry, intent }` 独立型で、Physical Intent と Musical Intent を型分離しつつ同一 program tree に埋め込める。
+
+**L1 Physical Intent (14 verb + 2 合成)** — grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest + Sequence / Parallel
+
+**L1 Musical Intent (1 variant、2026-09-13)** — `IntentNode::Music { packet: [u8; 8] }` は opaque 8-byte payload。内訳は [`alice-synth` の `intent::MusicIntent`](https://github.com/ext-sakamoro/ALICE-Synth) が正式定義 (genre / mood / length_bars / tempo_bpm_offset / key / mode / variation_seed)。
+
+```rust
+use alice_lol::intent::{grasp, music_intent, parallel, HandSide};
+
+// 楽器を掴みながら C major folk を演奏する Intent
+let program = parallel(vec![
+    music_intent([0, 0, 4, 80, 0, 0, 0xC0, 0xDE]),  // C major Folk / Happy
+    grasp(0, HandSide::Right, 5.0),
+]);
+```
+
+- **依存なし** — `alice-lol` は `alice-synth` に依存しない。8-byte packet が唯一の cross-crate 契約
+- consumer (interpreter / LLM plan head / remote 演奏サーバ) は `MusicIntent::from_bytes(packet)` で復元 → `synthesize()` で PCM 生成
+- GPU backend 型分離 — `Program::as_sdf()` は intent field を露出せず、shader が誤って Intent を解釈する事故を型で防止
+
 ## サンプル
 
 | サンプル | 説明 |
