@@ -40,6 +40,11 @@ pub struct SafetyLaw {
     pub workspace_max: Vec3,
     /// 最大 verb 印加力 [N] (`Grasp` / `Push` / `Pull` / `Throw`)
     pub max_force: f32,
+    /// `LatentIntent` の L2 norm 上限 (Garrido arXiv 2601.05230 "constrained" 由来、Phase G.1)
+    ///
+    /// Garrido は norm ≤ 1.0 想定、本実装は buffer 込み 1.5 を default
+    /// この制約が「future frame を単純 copy 予防」の safety proxy
+    pub max_latent_norm: f32,
 }
 
 impl SafetyLaw {
@@ -49,6 +54,7 @@ impl SafetyLaw {
     /// - `max_angular_step`: π/2 (90°)
     /// - workspace: ±3 m cube (肩基準の一般的 reach + buffer)
     /// - `max_force`: 150 N (人間衝突 pain threshold 目安)
+    /// - `max_latent_norm`: 1.5 (Garrido 1.0 + buffer 0.5)
     #[must_use]
     pub const fn default_collab() -> Self {
         Self {
@@ -57,6 +63,7 @@ impl SafetyLaw {
             workspace_min: Vec3::new(-3.0, -1.0, -3.0),
             workspace_max: Vec3::new(3.0, 3.0, 3.0),
             max_force: 150.0,
+            max_latent_norm: 1.5,
         }
     }
 
@@ -132,14 +139,52 @@ impl SafetyLaw {
                     self.walk_intent(child, violations);
                 }
             }
+            IntentNode::LatentIntent { values, .. } => {
+                self.check_latent(values, violations);
+            }
             IntentNode::Release { .. }
             | IntentNode::Catch { .. }
             | IntentNode::Align { .. }
             | IntentNode::Follow { .. }
             | IntentNode::Avoid { .. }
-            | IntentNode::Rest { .. } => {
-                // safety rule なし (MVP scope)
+            | IntentNode::Rest { .. }
+            | IntentNode::Music { .. } => {
+                // safety rule なし (MVP scope、Music は body kinematics scope 外)
             }
+        }
+    }
+
+    /// `LatentIntent` の safety 検査 (Phase G.1、Garrido 準拠 3 rule)
+    ///
+    /// - **`NonFiniteLatent`**: `values` に NaN / Inf 混入
+    /// - **`LatentNormExceeded`**: L2 norm > `max_latent_norm` (Garrido "constrained" 違反)
+    /// - **`OutOfWorkspace`**: 先頭 3 要素を decoded target xyz とみなし workspace check
+    ///   (Phase G.1 decoder が `values[0..3]` を `Walk::destination` に projection するのと一致)
+    fn check_latent(&self, values: &[f32], violations: &mut Vec<SafetyViolation>) {
+        // (1) Finite check (NaN/Inf は fail fast)
+        if values.iter().any(|v| !v.is_finite()) {
+            violations.push(SafetyViolation {
+                rule: "NonFiniteLatent",
+                detail: "LatentIntent::values contains NaN or Inf".to_string(),
+            });
+            return; // 以降 check は non-finite に依存するため skip
+        }
+        // (2) L2 norm bound (Garrido constrained latent 由来)
+        let norm_sq: f32 = values.iter().map(|v| v * v).sum();
+        let norm = norm_sq.sqrt();
+        if norm > self.max_latent_norm {
+            violations.push(SafetyViolation {
+                rule: "LatentNormExceeded",
+                detail: format!(
+                    "LatentIntent L2 norm {norm:.3} > max {:.3}",
+                    self.max_latent_norm
+                ),
+            });
+        }
+        // (3) decoded target workspace check (Phase G.1 decoder と一致)
+        if values.len() >= 3 {
+            let target = Vec3::new(values[0], values[1], values[2]);
+            self.check_workspace("LatentIntent::decoded_target", target, violations);
         }
     }
 
@@ -218,6 +263,8 @@ const fn intent_verb_label(intent: &IntentNode) -> &'static str {
         IntentNode::Follow { .. } => "Follow",
         IntentNode::Avoid { .. } => "Avoid",
         IntentNode::Rest { .. } => "Rest",
+        IntentNode::LatentIntent { .. } => "LatentIntent",
+        IntentNode::Music { .. } => "Music",
         IntentNode::Sequence(_) => "Sequence",
         IntentNode::Parallel(_) => "Parallel",
     }
@@ -227,7 +274,7 @@ const fn intent_verb_label(intent: &IntentNode) -> &'static str {
 mod tests {
     use super::*;
     use alice_lol::intent::{
-        gaze, grasp, point, push, rotate, sequence, walk, HandSide, ProgramBuilder,
+        gaze, grasp, latent_intent, point, push, rotate, sequence, walk, HandSide, ProgramBuilder,
     };
     use alice_lol::SdfNode;
 
@@ -376,5 +423,89 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    // ── Phase G.1 LatentIntent safety tests (Garrido arXiv 2601.05230 準拠 3 rule) ──
+
+    #[test]
+    fn default_collab_has_max_latent_norm() {
+        let law = SafetyLaw::default_collab();
+        assert!((law.max_latent_norm - 1.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn latent_intent_within_norm_and_workspace_passes() {
+        let law = SafetyLaw::default_collab();
+        // target (0.5, 0.5, 0.5), speed 0.3、norm ≈ 0.95 < 1.5
+        let intent = latent_intent(vec![0.5, 0.5, 0.5, 0.3]);
+        let violations = law.check_intent(&intent);
+        assert!(
+            violations.is_empty(),
+            "expected no violations, got: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn latent_intent_non_finite_triggers_violation() {
+        let law = SafetyLaw::default_collab();
+        let intent = latent_intent(vec![1.0, f32::NAN, 0.0, 0.5]);
+        let violations = law.check_intent(&intent);
+        assert!(!violations.is_empty());
+        assert!(violations.iter().any(|v| v.rule == "NonFiniteLatent"));
+    }
+
+    #[test]
+    fn latent_intent_inf_triggers_non_finite_violation() {
+        let law = SafetyLaw::default_collab();
+        let intent = latent_intent(vec![f32::INFINITY, 0.0, 0.0, 0.5]);
+        let violations = law.check_intent(&intent);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].rule, "NonFiniteLatent");
+    }
+
+    #[test]
+    fn latent_intent_norm_exceeded_triggers_violation() {
+        let law = SafetyLaw::default_collab();
+        // norm = sqrt(4*4 + 0 + 0 + 0) = 4.0 > 1.5
+        // ただし target (4.0, 0.0, 0.0) は workspace ±3 外 = OutOfWorkspace も trigger
+        let intent = latent_intent(vec![4.0, 0.0, 0.0, 0.5]);
+        let violations = law.check_intent(&intent);
+        assert!(violations.iter().any(|v| v.rule == "LatentNormExceeded"));
+    }
+
+    #[test]
+    fn latent_intent_workspace_check_uses_decoded_target() {
+        // norm 内 (< 1.5) だが target が workspace 外 (workspace y_min = -1.0)
+        let law = SafetyLaw::default_collab();
+        // target = (0, -2, 0)、norm = 2.0 → LatentNormExceeded も trigger するので
+        // 両方の rule ヒット可
+        let intent = latent_intent(vec![0.0, -2.0, 0.0, 0.5]);
+        let violations = law.check_intent(&intent);
+        // 少なくとも OutOfWorkspace は含まれる
+        assert!(violations.iter().any(|v| v.rule == "OutOfWorkspace"));
+    }
+
+    #[test]
+    fn latent_intent_128_dim_passes_when_bounded() {
+        // Garrido default dim 128、全要素 0.01 で norm ≈ sqrt(128) * 0.01 ≈ 0.113 < 1.5
+        let law = SafetyLaw::default_collab();
+        let vals = vec![0.01_f32; 128];
+        let intent = latent_intent(vals);
+        let violations = law.check_intent(&intent);
+        assert!(
+            violations.is_empty(),
+            "expected no violations, got: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn latent_intent_in_sequence_detects_all_violations() {
+        let law = SafetyLaw::default_collab();
+        let seq = sequence(vec![
+            latent_intent(vec![0.5, 0.5, 0.5, 0.3]),  // OK
+            latent_intent(vec![10.0, 0.0, 0.0, 0.5]), // norm + workspace 違反
+        ]);
+        let violations = law.check_intent(&seq);
+        assert!(violations.len() >= 2); // 少なくとも 2 rule ヒット
     }
 }

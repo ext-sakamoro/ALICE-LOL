@@ -106,13 +106,22 @@ impl<'a> IntentExecutor<'a> {
     /// - [`RobotError::Unmappable`]: verb が Kinematics scope 外
     /// - [`RobotError::OutOfRange`]: [`NodeId`](alice_lol::intent::NodeId) が
     ///   `positions` slice の range 外
+    /// - [`RobotError::InvalidLatentDim`]: [`IntentNode::LatentIntent`] の `values.len() < 4`
+    ///
+    /// # 前処理 (Phase G.1、Garrido latent extension)
+    ///
+    /// [`IntentNode::LatentIntent`] は [`intent_to_kinematics`] 呼び出し前に
+    /// [`decode_latent_intents`] で discrete verb ([`IntentNode::Walk`]) に変換される
+    ///
+    /// [`intent_to_kinematics`]: alice_kinematics::lol_bridge::intent_to_kinematics
     #[allow(clippy::unused_self)]
     pub fn translate_with_positions(
         &self,
         intent: &IntentNode,
         positions: &[Vec3],
     ) -> Result<Vec<Intent>, RobotError> {
-        lol_bridge::intent_to_kinematics(intent, positions).map_err(RobotError::from)
+        let decoded = decode_latent_intents(intent)?;
+        lol_bridge::intent_to_kinematics(&decoded, positions).map_err(RobotError::from)
     }
 }
 
@@ -128,10 +137,74 @@ const fn centroid_heuristic(node: &SdfNode) -> Vec3 {
     }
 }
 
+/// [`IntentNode::LatentIntent`] → discrete verb の再帰的変換 (Phase G.1、Garrido 発想)
+///
+/// [`IntentNode::Sequence`] / [`IntentNode::Parallel`] は内部を再帰処理
+/// その他 discrete verb は clone して pass-through
+///
+/// # Errors
+///
+/// - [`RobotError::InvalidLatentDim`]: `LatentIntent::values.len() < 4`
+///
+/// # Phase 進化
+///
+/// - **G.1** (本実装): hardcoded linear projection (`values[0..4]` → [`IntentNode::Walk`])
+/// - **G.2** (別 sprint): learned controller (cross-attention block、Garrido 準拠、`alice-latent-controller` crate 予定)
+/// - **G.3** (別 sprint): verb catalog 統一 (破壊的 root redesign 検討)
+fn decode_latent_intents(intent: &IntentNode) -> Result<IntentNode, RobotError> {
+    match intent {
+        IntentNode::LatentIntent { values, .. } => decode_latent_projection(values),
+        IntentNode::Sequence(items) => {
+            let decoded = items
+                .iter()
+                .map(decode_latent_intents)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(IntentNode::Sequence(decoded))
+        }
+        IntentNode::Parallel(items) => {
+            let decoded = items
+                .iter()
+                .map(decode_latent_intents)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(IntentNode::Parallel(decoded))
+        }
+        other => Ok(other.clone()),
+    }
+}
+
+/// Phase G.1 hardcoded linear projection: latent slice → [`IntentNode::Walk`]
+///
+/// # Mapping
+///
+/// - `values[0..3]` → `Walk::destination` (world xyz meters)
+/// - `values[3]`    → `Walk::speed` (clamp 0.1..2.0 m/s)
+/// - `values[4..]`  → reserved (Phase G.2 の learned controller が消費)
+///
+/// # 選定理由
+///
+/// [`IntentNode::Walk`] は [`alice_kinematics::lol_bridge`] で単一 packet を確実生成
+/// (Reach type、Kinematics scope 内)、Phase G.1 の linear projection target として最適
+///
+/// # Errors
+///
+/// `values.len() < 4` で [`RobotError::InvalidLatentDim`]
+fn decode_latent_projection(values: &[f32]) -> Result<IntentNode, RobotError> {
+    const MIN_DIM: usize = 4;
+    if values.len() < MIN_DIM {
+        return Err(RobotError::InvalidLatentDim {
+            got: values.len(),
+            min: MIN_DIM,
+        });
+    }
+    let destination = Vec3::new(values[0], values[1], values[2]);
+    let speed = values[3].clamp(0.1, 2.0);
+    Ok(IntentNode::Walk { destination, speed })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alice_lol::intent::{grasp, rest, walk, HandSide, ProgramBuilder};
+    use alice_lol::intent::{grasp, latent_intent, rest, walk, HandSide, ProgramBuilder};
     use std::sync::Arc;
 
     fn make_program_with_target(target_pos: Vec3, intent: IntentNode) -> Program {
@@ -248,5 +321,120 @@ mod tests {
         let executor = IntentExecutor::from_program(&program);
         let packets = executor.translate().unwrap();
         assert_eq!(packets.len(), 2);
+    }
+
+    // ── Phase G.1 LatentIntent tests (Garrido arXiv 2601.05230 発想) ──
+
+    #[test]
+    fn translate_latent_intent_min_dim_produces_walk_packet() {
+        // dim = 4 (min)、[target_x, target_y, target_z, speed]
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(latent_intent(vec![1.0, 0.5, 0.0, 0.8]))
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 1); // Walk → 1 packet
+    }
+
+    #[test]
+    fn translate_latent_intent_128_dim_produces_walk_packet() {
+        // Garrido paper default dim = 128、Phase G.1 は先頭 4 要素のみ使用
+        #[allow(clippy::cast_precision_loss)]
+        let vals: Vec<f32> = (0..128).map(|i| (i as f32) * 0.001).collect();
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(latent_intent(vals))
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 1);
+    }
+
+    #[test]
+    fn translate_latent_intent_below_min_dim_errors() {
+        // dim < 4 → InvalidLatentDim error
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(latent_intent(vec![1.0, 0.5])) // dim = 2
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let result = executor.translate();
+        assert!(matches!(
+            result,
+            Err(RobotError::InvalidLatentDim { got: 2, min: 4 })
+        ));
+    }
+
+    #[test]
+    fn translate_latent_intent_in_sequence_decodes_all() {
+        let seq = IntentNode::Sequence(vec![
+            latent_intent(vec![1.0, 0.0, 0.0, 0.5]),
+            latent_intent(vec![2.0, 0.0, 0.0, 0.8]),
+            latent_intent(vec![3.0, 0.0, 0.0, 1.2]),
+        ]);
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(seq)
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 3); // 3 x Walk = 3 packet
+    }
+
+    #[test]
+    fn translate_latent_intent_in_parallel_decodes_all() {
+        let par = IntentNode::Parallel(vec![
+            latent_intent(vec![1.0, 0.0, 0.0, 0.5]),
+            latent_intent(vec![0.0, 1.0, 0.0, 0.5]),
+        ]);
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(par)
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 2);
+    }
+
+    #[test]
+    fn translate_latent_speed_clamped_to_max() {
+        // values[3] = 100.0 でも Walk::speed は clamp(0.1, 2.0) で 2.0 上限
+        let program = ProgramBuilder::new()
+            .with_sdf(SdfNode::Sphere { radius: 0.5 })
+            .with_intent(latent_intent(vec![1.0, 0.0, 0.0, 100.0]))
+            .build();
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 1); // Kinematics 側で reject されず 1 packet 生成
+    }
+
+    #[test]
+    fn translate_mixed_latent_and_discrete_in_sequence() {
+        // LatentIntent と discrete verb の 混在 sequence
+        let seq = IntentNode::Sequence(vec![
+            latent_intent(vec![0.5, 0.0, 0.5, 0.4]),
+            grasp(0, HandSide::Right, 3.0),
+        ]);
+        let program = make_program_with_target(Vec3::new(0.5, 0.3, 0.2), seq);
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 2); // Walk (from latent) + Grasp
+    }
+
+    #[test]
+    fn translate_nested_latent_in_sequence_parallel() {
+        // Sequence 内に Parallel(LatentIntent) が入るネスト構造
+        let complex = IntentNode::Sequence(vec![
+            IntentNode::Parallel(vec![
+                latent_intent(vec![1.0, 0.0, 0.0, 0.5]),
+                latent_intent(vec![0.0, 1.0, 0.0, 0.5]),
+            ]),
+            grasp(0, HandSide::Right, 3.0),
+        ]);
+        let program = make_program_with_target(Vec3::new(0.5, 0.3, 0.2), complex);
+        let executor = IntentExecutor::from_program(&program);
+        let packets = executor.translate().unwrap();
+        assert_eq!(packets.len(), 3); // 2 x Walk (parallel) + 1 Grasp
     }
 }
