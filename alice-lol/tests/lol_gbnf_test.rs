@@ -183,3 +183,92 @@ fn rejects_variadic_with_single_child() {
     assert!(rejects(g, "union(sphere(1.0))"));
     assert!(rejects(g, "smooth_union(0.3, sphere(1.0))"));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3 Intent / program(...) (A0)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn accepts_program_wrapper_forms() {
+    let g = lol_grammar();
+    assert!(accepts(g, "program(sphere(1.0))"));
+    assert!(accepts(g, "program(sphere(1.0), entities())"));
+    assert!(accepts(
+        g,
+        "program(sphere(1.0), entities(box3d(0.1, 0.1, 0.1)))"
+    ));
+    assert!(accepts(
+        g,
+        "program(sphere(1.0), entities(box3d(0.1, 0.1, 0.1), sphere(0.2)), grasp(1, right, 5.0))"
+    ));
+    assert!(accepts(
+        g,
+        "program(\n  sphere(1.0), // scene\n  entities(sphere(0.2)),\n  seq(grasp(0, left, 3.0), rest(500))\n)"
+    ));
+}
+
+#[test]
+fn accepts_every_intent_verb() {
+    let g = lol_grammar();
+    let verbs = [
+        "grasp(0, right, 5.0)",
+        "release(0)",
+        "catch(0)",
+        "walk(1.0, 0.0, 2.0, 1.2)",
+        "gaze(0.0, 1.5, 0.0, 800)",
+        "point(1.0, 1.0, 1.0, both)",
+        "throw(3.0, 1.0, 0.0, 9.5, right)",
+        "push(0, 1.0, 0.0, 0.0, 2.0)",
+        "pull(0, -1.0, 0.0, 0.0, 2.0)",
+        "turn(0, 0.0, 1.0, 0.0, 1.25)",
+        "align(0, 0.0, 0.0, 1.0)",
+        "follow(0, 0.5)",
+        "avoid(0, 0.3)",
+        "rest(250)",
+        "latent(0.1, 0.2, 0.3, 0.4)",
+        "latent(0.1, 0.2, 0.3, 0.4, 0.5, 0.6)",
+        "seq(rest(1), rest(2))",
+        "par(walk(0.0, 0.0, 1.0, 1.0), gaze(0.0, 1.0, 0.0, 100))",
+        "seq(par(rest(1), rest(2)), grasp(0, both, 1.0))",
+        "music(0, 1, 2, 3, 4, 5, 6, 255)",
+    ];
+    for v in verbs {
+        let snippet = format!("program(sphere(1.0), entities(sphere(0.1)), {v})");
+        assert!(accepts(g, &snippet), "grammar rejected intent verb: {v}");
+    }
+}
+
+#[test]
+fn rejects_intent_outside_program_and_bad_intent_shapes() {
+    let g = lol_grammar();
+    // Intent verbs are only valid in the third slot of program(...).
+    assert!(rejects(g, "grasp(0, right, 5.0)"));
+    assert!(rejects(g, "program(grasp(0, right, 5.0))"));
+    // Intent slot needs entities(...) first.
+    assert!(rejects(g, "program(sphere(1.0), rest(1))"));
+    // SDF `rotate` is not an intent verb (the intent spelling is `turn`).
+    assert!(rejects(
+        g,
+        "program(sphere(1.0), entities(), rotate(0, 0.0, 1.0, 0.0, 1.0))"
+    ));
+    // Hand must be a bare identifier from the enum.
+    assert!(rejects(
+        g,
+        "program(sphere(1.0), entities(), grasp(0, up, 5.0))"
+    ));
+    // NodeId must be an unsigned integer literal.
+    assert!(rejects(g, "program(sphere(1.0), entities(), release(-1))"));
+    assert!(rejects(g, "program(sphere(1.0), entities(), release(0.5))"));
+    // latent needs at least 4 values.
+    assert!(rejects(
+        g,
+        "program(sphere(1.0), entities(), latent(0.1, 0.2, 0.3))"
+    ));
+    // music needs exactly 8 bytes.
+    assert!(rejects(
+        g,
+        "program(sphere(1.0), entities(), music(0, 1, 2, 3, 4, 5, 6))"
+    ));
+    // seq / par need at least one child.
+    assert!(rejects(g, "program(sphere(1.0), entities(), seq())"));
+}

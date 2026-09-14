@@ -56,7 +56,8 @@ pub use alice_llm::grammar::{parse_gbnf, CharSet, Fsm, FsmError, Grammar};
 pub use alice_llm::llama3::{GenerateResult, GrammarGenError, Llama3Model};
 pub use alice_llm::sampling::{advance_fsm_on_emit, mask_logits_by_grammar, GrammarTokenizer};
 
-use crate::runtime_parser::{parse_lol, ParseError};
+use crate::intent::Program;
+use crate::runtime_parser::{parse_lol, parse_program, ParseError};
 use crate::SdfNode;
 
 /// Recommended `Fsm::with_max_depth` for the LOL grammar.
@@ -180,6 +181,38 @@ pub fn generate_sdf_from_prompt(
     )?;
     let node = parse_lol(result.text.trim())?;
     Ok(node)
+}
+
+/// Run the LLM against the LOL grammar and return a parsed [`Program`]
+/// (SDF + entity registry + Phase 3 Intent).
+///
+/// Same sampling contract as [`generate_sdf_from_prompt`] (greedy,
+/// deterministic). The grammar's `root` accepts both a bare SDF
+/// expression and a `program(...)` wrapper, so the model may emit
+/// either; a bare expression comes back as [`Program::sdf_only`].
+///
+/// # Errors
+///
+/// Same as [`generate_sdf_from_prompt`]; additionally
+/// [`BridgeError::Parse`] fires on semantic checks the grammar cannot
+/// express (entity id out of `entities(...)` range, non-integer where an
+/// integer is required, `latent` with fewer than 4 values).
+pub fn generate_program_from_prompt(
+    model: &mut Llama3Model<'_>,
+    tokenizer: &GgufTokenizer,
+    prompt: &str,
+    max_new_tokens: usize,
+) -> Result<Program, BridgeError> {
+    let result = model.generate_grammar(
+        tokenizer,
+        prompt,
+        max_new_tokens,
+        lol_grammar(),
+        1.0, // temperature — no scaling
+        1,   // top_k — strict argmax
+    )?;
+    let program = parse_program(result.text.trim())?;
+    Ok(program)
 }
 
 #[cfg(test)]

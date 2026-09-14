@@ -11,6 +11,7 @@
 //! let dist = alice_lol::eval(&node, glam::Vec3::ZERO);
 //! ```
 
+use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
 use crate::SdfNode;
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use std::sync::Arc;
@@ -3005,6 +3006,362 @@ pub fn parse_lol(input: &str) -> Result<SdfNode, ParseError> {
         });
     }
     Ok(node)
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Program / Intent パーサー (Phase 3、A0)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+impl Parser<'_> {
+    const fn err<T>(&self, message: String) -> Result<T, ParseError> {
+        Err(ParseError {
+            message,
+            position: self.lexer.position(),
+        })
+    }
+
+    /// 関数名 (Ident) 1 個
+    fn expect_ident(&mut self) -> Result<String, ParseError> {
+        match self.next()? {
+            Some(Token::Ident(s)) => Ok(s),
+            other => self.err(format!("expected identifier, got {other:?}")),
+        }
+    }
+
+    /// `(` 1 個
+    fn expect_lparen(&mut self, after: &str) -> Result<(), ParseError> {
+        match self.next()? {
+            Some(Token::LParen) => Ok(()),
+            other => self.err(format!("expected '(' after '{after}', got {other:?}")),
+        }
+    }
+
+    /// 非負整数 (`u32` 範囲)
+    ///
+    /// Lexer は数値を `f32` で保持するため、小数部なし + 範囲内を検証する
+    /// `f32` の整数精度は 2^24 までなので `NodeId` / ms / byte 用途では十分
+    fn expect_uint(&mut self, what: &str) -> Result<u32, ParseError> {
+        let v = self.expect_number()?;
+        if v < 0.0 || v.fract() != 0.0 || v > 16_777_216.0 {
+            return self.err(format!("{what} must be a non-negative integer, got {v}"));
+        }
+        // 範囲は直前で検証済 (0 ..= 2^24)
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Ok(v as u32)
+    }
+
+    /// 0-255 の整数 (music packet byte)
+    fn expect_u8(&mut self, what: &str) -> Result<u8, ParseError> {
+        let v = self.expect_uint(what)?;
+        u8::try_from(v).map_or_else(|_| self.err(format!("{what} must be 0-255, got {v}")), Ok)
+    }
+
+    /// entity registry を参照する `NodeId` (範囲検証込み)
+    fn expect_node_id(&mut self, registry_len: usize) -> Result<NodeId, ParseError> {
+        let id = self.expect_uint("entity id")?;
+        if (id as usize) >= registry_len {
+            return self.err(format!(
+                "entity id {id} out of range (entities has {registry_len} entries)"
+            ));
+        }
+        Ok(id)
+    }
+
+    /// `left` / `right` / `both`
+    fn expect_hand(&mut self) -> Result<HandSide, ParseError> {
+        let s = self.expect_ident()?;
+        match s.as_str() {
+            "left" => Ok(HandSide::Left),
+            "right" => Ok(HandSide::Right),
+            "both" => Ok(HandSide::Both),
+            other => self.err(format!("expected hand (left|right|both), got '{other}'")),
+        }
+    }
+
+    fn expect_vec3(&mut self) -> Result<Vec3, ParseError> {
+        let x = self.expect_number()?;
+        self.expect_comma()?;
+        let y = self.expect_number()?;
+        self.expect_comma()?;
+        let z = self.expect_number()?;
+        Ok(Vec3::new(x, y, z))
+    }
+
+    /// `entities(<sdf>, <sdf>, ...)` — 空も許容
+    fn parse_entities(&mut self) -> Result<Vec<SdfNode>, ParseError> {
+        let name = self.expect_ident()?;
+        if name != "entities" {
+            return self.err(format!("expected 'entities', got '{name}'"));
+        }
+        self.expect_lparen("entities")?;
+        let mut out = Vec::new();
+        if self.at_rparen()? {
+            self.next()?;
+            return Ok(out);
+        }
+        loop {
+            out.push(self.parse_expr()?);
+            match self.next()? {
+                Some(Token::Comma) => {}
+                Some(Token::RParen) => return Ok(out),
+                other => {
+                    return self.err(format!("expected ',' or ')' in entities, got {other:?}"))
+                }
+            }
+        }
+    }
+
+    /// Intent 式 1 個 (`grasp(...)` / `seq(...)` / `latent(...)` 等)
+    #[allow(clippy::too_many_lines)] // verb dispatch table、parse_expr と同型
+    fn parse_intent(&mut self, registry_len: usize) -> Result<IntentNode, ParseError> {
+        let name = self.expect_ident()?;
+        self.expect_lparen(&name)?;
+        match name.as_str() {
+            "grasp" => {
+                let target_id = self.expect_node_id(registry_len)?;
+                self.expect_comma()?;
+                let hand = self.expect_hand()?;
+                self.expect_comma()?;
+                let force = self.parse_1f()?;
+                Ok(IntentNode::Grasp {
+                    target_id,
+                    hand,
+                    force,
+                })
+            }
+            "release" => {
+                let target_id = self.expect_node_id(registry_len)?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Release { target_id })
+            }
+            "catch" => {
+                let object_id = self.expect_node_id(registry_len)?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Catch { object_id })
+            }
+            "walk" => {
+                let destination = self.expect_vec3()?;
+                self.expect_comma()?;
+                let speed = self.parse_1f()?;
+                Ok(IntentNode::Walk { destination, speed })
+            }
+            "gaze" => {
+                let target = self.expect_vec3()?;
+                self.expect_comma()?;
+                let duration_ms = self.expect_uint("gaze duration_ms")?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Gaze {
+                    target,
+                    duration_ms,
+                })
+            }
+            "point" => {
+                let target = self.expect_vec3()?;
+                self.expect_comma()?;
+                let hand = self.expect_hand()?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Point { target, hand })
+            }
+            "throw" => {
+                let target = self.expect_vec3()?;
+                self.expect_comma()?;
+                let force = self.expect_number()?;
+                self.expect_comma()?;
+                let hand = self.expect_hand()?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Throw {
+                    target,
+                    force,
+                    hand,
+                })
+            }
+            "push" | "pull" | "turn" => {
+                let target_id = self.expect_node_id(registry_len)?;
+                self.expect_comma()?;
+                let v = self.expect_vec3()?;
+                self.expect_comma()?;
+                let f = self.parse_1f()?;
+                Ok(match name.as_str() {
+                    "push" => IntentNode::Push {
+                        target_id,
+                        direction: v,
+                        force: f,
+                    },
+                    "pull" => IntentNode::Pull {
+                        target_id,
+                        direction: v,
+                        force: f,
+                    },
+                    _ => IntentNode::Rotate {
+                        target_id,
+                        axis: v,
+                        angle_rad: f,
+                    },
+                })
+            }
+            "align" => {
+                let target_id = self.expect_node_id(registry_len)?;
+                self.expect_comma()?;
+                let reference = self.expect_vec3()?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Align {
+                    target_id,
+                    reference,
+                })
+            }
+            "follow" | "avoid" => {
+                let target_id = self.expect_node_id(registry_len)?;
+                self.expect_comma()?;
+                let d = self.parse_1f()?;
+                Ok(if name == "follow" {
+                    IntentNode::Follow {
+                        target_id,
+                        distance: d,
+                    }
+                } else {
+                    IntentNode::Avoid {
+                        target_id,
+                        min_distance: d,
+                    }
+                })
+            }
+            "rest" => {
+                let duration_ms = self.expect_uint("rest duration_ms")?;
+                self.expect_rparen()?;
+                Ok(IntentNode::Rest { duration_ms })
+            }
+            "latent" => {
+                let mut values = Vec::new();
+                loop {
+                    values.push(self.expect_number()?);
+                    match self.next()? {
+                        Some(Token::Comma) => {}
+                        Some(Token::RParen) => break,
+                        other => {
+                            return self
+                                .err(format!("expected ',' or ')' in latent, got {other:?}"))
+                        }
+                    }
+                }
+                if values.len() < 4 {
+                    return self.err(format!(
+                        "latent needs at least 4 values, got {}",
+                        values.len()
+                    ));
+                }
+                Ok(IntentNode::LatentIntent {
+                    values: values.into_boxed_slice(),
+                    semantic_hint: None,
+                })
+            }
+            "seq" | "par" => {
+                let mut items = Vec::new();
+                loop {
+                    items.push(self.parse_intent(registry_len)?);
+                    match self.next()? {
+                        Some(Token::Comma) => {}
+                        Some(Token::RParen) => break,
+                        other => {
+                            return self
+                                .err(format!("expected ',' or ')' in {name}, got {other:?}"))
+                        }
+                    }
+                }
+                Ok(if name == "seq" {
+                    IntentNode::Sequence(items)
+                } else {
+                    IntentNode::Parallel(items)
+                })
+            }
+            "music" => {
+                let mut packet = [0u8; 8];
+                for (i, slot) in packet.iter_mut().enumerate() {
+                    if i > 0 {
+                        self.expect_comma()?;
+                    }
+                    *slot = self.expect_u8("music byte")?;
+                }
+                self.expect_rparen()?;
+                Ok(IntentNode::Music { packet })
+            }
+            other => self.err(format!("unknown intent verb '{other}'")),
+        }
+    }
+
+    /// `program(<sdf> [, entities(...) [, <intent>]])`
+    fn parse_program_body(&mut self) -> Result<Program, ParseError> {
+        self.expect_lparen("program")?;
+        let sdf = self.parse_expr()?;
+        let mut builder = ProgramBuilder::new().with_sdf(sdf);
+        let mut registry_len = 0;
+        match self.next()? {
+            Some(Token::RParen) => return Ok(builder.build()),
+            Some(Token::Comma) => {}
+            other => return self.err(format!("expected ',' or ')' in program, got {other:?}")),
+        }
+        for node in self.parse_entities()? {
+            let id = builder.register(node);
+            registry_len = id as usize + 1;
+        }
+        match self.next()? {
+            Some(Token::RParen) => return Ok(builder.build()),
+            Some(Token::Comma) => {}
+            other => return self.err(format!("expected ',' or ')' in program, got {other:?}")),
+        }
+        let intent = self.parse_intent(registry_len)?;
+        self.expect_rparen()?;
+        Ok(builder.with_intent(intent).build())
+    }
+}
+
+/// LOL テキストを [`Program`] (SDF + entity registry + Intent) に変換する
+///
+/// 受け付ける形:
+///
+/// ```text
+/// program(<sdf>)                               // geometry のみ
+/// program(<sdf>, entities(<sdf>, ...))         // registry あり、Intent なし
+/// program(<sdf>, entities(<sdf>, ...), <intent>)
+/// <sdf>                                        // 裸の SDF 式 (後方互換、= program(<sdf>))
+/// ```
+///
+/// Intent verb は [`IntentNode`] の field 順に引数を取る `rotate` は SDF transform
+/// と衝突するため Intent 側の verb 名は `turn` entity 参照は非負整数の `NodeId` で、
+/// `entities(...)` の範囲外は parse error
+///
+/// ```
+/// use alice_lol::runtime_parser::parse_program;
+/// use alice_lol::intent::{HandSide, IntentNode};
+///
+/// let p = parse_program(
+///     "program(sphere(1.0), entities(box3d(0.1, 0.1, 0.1)), seq(grasp(0, right, 5.0), rest(500)))",
+/// ).unwrap();
+/// assert_eq!(p.sdf_registry.len(), 1);
+/// assert!(matches!(p.intent, Some(IntentNode::Sequence(ref v)) if v.len() == 2));
+/// assert!(matches!(p.intent, Some(IntentNode::Sequence(ref v))
+///     if v[0] == IntentNode::Grasp { target_id: 0, hand: HandSide::Right, force: 5.0 }));
+/// ```
+///
+/// # Errors
+///
+/// 構文エラー / 未知の verb / entity id 範囲外 / 整数が要る箇所に小数 / 末尾ゴミ
+pub fn parse_program(input: &str) -> Result<Program, ParseError> {
+    let mut parser = Parser::new(input);
+    let is_program = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "program");
+    let program = if is_program {
+        parser.next()?;
+        parser.parse_program_body()?
+    } else {
+        Program::sdf_only(parser.parse_expr()?)
+    };
+    parser.lexer.skip_whitespace();
+    if parser.lexer.position() < parser.lexer.input.len() {
+        return Err(ParseError {
+            message: "unexpected trailing content".into(),
+            position: parser.lexer.position(),
+        });
+    }
+    Ok(program)
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
