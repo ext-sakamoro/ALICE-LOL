@@ -8,7 +8,7 @@ authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 repository = "https://github.com/ext-sakamoro/ALICE-LOL"
 homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
 documentation = "https://docs.rs/alice-lol-macro"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["dsl", "proc-macro", "sdf", "geometry", "distance-field"]
 categories = ["graphics", "development-tools::procedural-macro-helpers"]
 

@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "alice-physics"
-version = "0.14.0-preview.6"
+version = "0.14.0-preview.7"
 
 [[package]]
 name = "alice-sdf"
