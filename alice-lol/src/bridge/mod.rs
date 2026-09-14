@@ -6,6 +6,16 @@
 //! provides [`generate_sdf_from_prompt`] — a one-call wrapper that runs
 //! an LLM against the grammar and hands back a parsed [`SdfNode`].
 //!
+//! # Think-first models (B-11)
+//!
+//! ```ignore
+//! use alice_lol::bridge::generate_program_thinking;
+//!
+//! let out = generate_program_thinking(&mut model, &tokenizer, chatml_prompt,
+//!                                     "</think>", 2000, 256)?;
+//! // `out.program` is parsed; `out.prefix_text` holds the reasoning.
+//! ```
+//!
 //! # One-call flow (B-7, recommended)
 //!
 //! ```ignore
@@ -53,7 +63,9 @@ use std::sync::OnceLock;
 // being deferred to a downstream user.
 pub use alice_llm::gguf::GgufTokenizer;
 pub use alice_llm::grammar::{parse_gbnf, CharSet, Fsm, FsmError, Grammar};
-pub use alice_llm::llama3::{GenerateResult, GrammarGenError, Llama3Model};
+pub use alice_llm::llama3::{
+    GenerateResult, GrammarGenError, GrammarGenResult, GrammarPrefix, Llama3Model,
+};
 pub use alice_llm::sampling::{advance_fsm_on_emit, mask_logits_by_grammar, GrammarTokenizer};
 
 use crate::intent::Program;
@@ -213,6 +225,82 @@ pub fn generate_program_from_prompt(
     )?;
     let program = parse_program(result.text.trim())?;
     Ok(program)
+}
+
+/// Output of [`generate_program_thinking`]: the parsed [`Program`] plus
+/// the model's free-text reasoning and phase statistics.
+#[derive(Debug, Clone)]
+pub struct ThinkingOutput {
+    /// Parsed grammar-phase output.
+    pub program: Program,
+    /// Everything the model wrote before the grammar kicked in (reasoning
+    /// block, marker included).
+    pub prefix_text: String,
+    /// Whether the reasoning ended on the marker (`false` = budget / EOS,
+    /// marker was injected).
+    pub prefix_marker_hit: bool,
+    /// Raw grammar-phase text (what was parsed).
+    pub text: String,
+    /// Free-phase / grammar-phase / total wall time in ms.
+    pub prefix_ms: u64,
+    /// Grammar-phase wall time in ms.
+    pub decode_ms: u64,
+    /// Total wall time in ms.
+    pub total_ms: u64,
+}
+
+impl From<(Program, GrammarGenResult)> for ThinkingOutput {
+    fn from((program, r): (Program, GrammarGenResult)) -> Self {
+        Self {
+            program,
+            prefix_text: r.prefix_text,
+            prefix_marker_hit: r.prefix_marker_hit,
+            text: r.text,
+            prefix_ms: r.prefix_ms,
+            decode_ms: r.decode_ms,
+            total_ms: r.total_ms,
+        }
+    }
+}
+
+/// Two-phase variant of [`generate_program_from_prompt`] for think-first models.
+///
+/// The model (`MiniCPM5`, Qwen 3 thinking, …) reasons freely until
+/// `stop_marker` (default choice `"</think>"`) or `max_prefix_tokens`,
+/// then the LOL grammar constrains the rest from the same KV state.
+///
+/// Measured on `MiniCPM5-2B` (`ChatML` prompt with a canonical example): the
+/// grammar-only path emitted `cylinder(50,100)` for a mug (handle dropped),
+/// this path emitted the full `union(cylinder(25,50), translate(…, rotate(…,
+/// torus(12,4))))`. Wrap chat models in their chat template — a bare
+/// prompt makes them continue the document instead of thinking.
+///
+/// # Errors
+///
+/// Same as [`generate_program_from_prompt`].
+pub fn generate_program_thinking(
+    model: &mut Llama3Model<'_>,
+    tokenizer: &GgufTokenizer,
+    prompt: &str,
+    stop_marker: &str,
+    max_prefix_tokens: usize,
+    max_new_tokens: usize,
+) -> Result<ThinkingOutput, BridgeError> {
+    let prefix = GrammarPrefix {
+        stop_marker,
+        max_prefix_tokens,
+    };
+    let result = model.generate_grammar_prefixed(
+        tokenizer,
+        prompt,
+        &prefix,
+        max_new_tokens,
+        lol_grammar(),
+        1.0, // temperature — no scaling
+        1,   // top_k — strict argmax
+    )?;
+    let program = parse_program(result.text.trim())?;
+    Ok(ThinkingOutput::from((program, result)))
 }
 
 #[cfg(test)]
