@@ -524,11 +524,9 @@ fn main() {
                 || (false, false, err.clone(), String::new()),
                 |p| {
                     let (ok, d) = judge(&case.oracle, p);
-                    // grammar 経路は text を返さないので intent / sdf の要約で代替
+                    // grammar 経路は text を返さないので正規形 LOL (emit) で表示
                     let shown = if text.is_empty() {
-                        p.intent
-                            .as_ref()
-                            .map_or_else(|| format!("{:?}", p.sdf), IntentNode::to_lol)
+                        p.to_lol().unwrap_or_else(|e| format!("<unemittable: {e}>"))
                     } else {
                         text.clone()
                     };

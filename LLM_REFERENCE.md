@@ -41,7 +41,8 @@ This compiles to an `SdfNode` tree that can be:
 | `cylinder(r, h)` | radius, half-height | Cylinder along Y-axis |
 | `torus(R, r)` | major radius, minor radius | Torus in XZ plane |
 | `cone(r, h)` | radius, half-height | Cone along Y-axis |
-| `capsule(r, h)` | radius, half-height | Tube with hemispherical caps |
+| `capsule(r, h)` | radius, half-height | Tube with hemispherical caps (Y axis, centered) |
+| `capsule_ab(ax, ay, az, bx, by, bz, r)` | endpoint A, endpoint B, radius | Capsule between two arbitrary points |
 | `ellipsoid(rx, ry, rz)` | radii X, Y, Z | Stretched sphere |
 | `plane(nx, ny, nz, d)` | normal X, Y, Z, distance | Infinite half-space |
 | `octahedron(s)` | size | Regular 8-faced solid |
