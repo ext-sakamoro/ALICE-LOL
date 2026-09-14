@@ -26,8 +26,69 @@
 #   `proc_macro`-only syntax, absent from the runtime LLM path.
 
 # ─── Root ──────────────────────────────────────────────────────────────
+#
+# Either a bare SDF expression (Phase 2 Law, backward compatible) or a
+# full `program(...)` wrapping SDF + entity registry + Intent (Phase 3).
 
-root ::= ws expr ws
+root ::= ws (program | expr) ws
+
+# ─── Program (SDF + entities + Intent) ────────────────────────────────
+#
+#   program(<sdf>)
+#   program(<sdf>, entities(<sdf>, ...))
+#   program(<sdf>, entities(<sdf>, ...), <intent>)
+#
+# `entities(...)` is the NodeId registry: index = NodeId referenced by
+# the Intent verbs. Bound checking (id < len) is done by the runtime
+# parser, not the grammar.
+
+program ::= "program" ws "(" ws expr ws programtail? ")"
+programtail ::= "," ws entities ws intenttail?
+intenttail ::= "," ws intent ws
+entities ::= "entities" ws "(" ws (expr ws exprtail*)? ")"
+
+# ─── Intent (Phase 3, mirrors alice_lol::intent::IntentNode) ─────────
+#
+# Argument order follows the IntentNode field order. Object references
+# are unsigned integer NodeIds, hands are bare identifiers.
+
+intent ::= intent_grasp
+         | intent_id_only
+         | intent_vec3_1f
+         | intent_point
+         | intent_throw
+         | intent_id_vec3_1f
+         | intent_align
+         | intent_id_1f
+         | intent_rest
+         | intent_latent
+         | intent_compose
+         | intent_music
+
+intent_grasp ::= "grasp" ws "(" ws uint ws "," ws hand ws "," ws number ws ")"
+intent_id_only ::= name_intent_id_only ws "(" ws uint ws ")"
+intent_vec3_1f ::= name_intent_vec3_1f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_point ::= "point" ws "(" ws number ws "," ws number ws "," ws number ws "," ws hand ws ")"
+intent_throw ::= "throw" ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws hand ws ")"
+intent_id_vec3_1f ::= name_intent_id_vec3_1f ws "(" ws uint ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_align ::= "align" ws "(" ws uint ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_id_1f ::= name_intent_id_1f ws "(" ws uint ws "," ws number ws ")"
+intent_rest ::= "rest" ws "(" ws uint ws ")"
+intent_latent ::= "latent" ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws numbertail* ")"
+intent_compose ::= name_intent_compose ws "(" ws intent ws intenttail_inner* ")"
+intent_music ::= "music" ws "(" ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws ")"
+
+intenttail_inner ::= "," ws intent ws
+numbertail ::= "," ws number ws
+
+name_intent_id_only ::= "release" | "catch"
+name_intent_vec3_1f ::= "walk" | "gaze"
+name_intent_id_vec3_1f ::= "push" | "pull" | "turn"
+name_intent_id_1f ::= "follow" | "avoid"
+name_intent_compose ::= "seq" | "par"
+
+hand ::= "left" | "right" | "both"
+uint ::= [0-9]+
 
 # ─── Whitespace + line comment (mirrors runtime_parser lexer) ─────────
 

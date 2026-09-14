@@ -166,6 +166,56 @@ These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, T
 | `animate(speed, amplitude, child)` | speed, amplitude, child | Animate over time |
 | `morph(t, a, b)` | blend factor 0-1, shape A, shape B | Morph between two shapes |
 
+### Phase 3 Intent — `program(...)` wrapper (18 constructs)
+
+A bare SDF expression describes geometry (Phase 2 Law). To also express **what an agent should do** in that scene (Phase 3 Intent), wrap it in `program(...)`:
+
+```
+program(<sdf>)                                   // geometry only (same as bare <sdf>)
+program(<sdf>, entities(<sdf>, <sdf>, ...))      // + entity registry (index = id)
+program(<sdf>, entities(<sdf>, ...), <intent>)   // + one intent tree
+```
+
+- `entities(...)` lists the objects an intent can refer to. Ids are 0-based integers in list order. An id outside the list is a parse error.
+- Hands are bare words: `left` / `right` / `both`.
+- Integer slots (`id`, `ms`, music bytes) must be written without a decimal point.
+
+| Syntax | Args | Description |
+|--------|------|-------------|
+| `grasp(id, hand, force)` | entity id, hand, force | Grasp entity |
+| `release(id)` | entity id | Release entity |
+| `catch(id)` | entity id | Catch incoming entity |
+| `walk(x, y, z, speed)` | destination, m/s | Walk to point |
+| `gaze(x, y, z, ms)` | target, duration ms (integer) | Look at point |
+| `point(x, y, z, hand)` | target, hand | Point at |
+| `throw(x, y, z, force, hand)` | target, force, hand | Throw toward |
+| `push(id, dx, dy, dz, force)` | entity, direction, force | Push entity |
+| `pull(id, dx, dy, dz, force)` | entity, direction, force | Pull entity |
+| `turn(id, ax, ay, az, rad)` | entity, axis, angle rad | Rotate entity (**not** `rotate`, which is the SDF transform) |
+| `align(id, rx, ry, rz)` | entity, reference dir | Align entity to direction |
+| `follow(id, dist)` | entity, distance | Follow entity |
+| `avoid(id, min_dist)` | entity, min distance | Keep away from entity |
+| `rest(ms)` | duration ms (integer) | Idle |
+| `latent(v0, v1, v2, v3, ...)` | ≥ 4 floats, L2 ≤ 1 | Continuous latent intent (Garrido-style) |
+| `seq(i1, i2, ...)` | ≥ 1 intents | Run in order |
+| `par(i1, i2, ...)` | ≥ 1 intents | Run simultaneously |
+| `music(b0, ..., b7)` | 8 bytes 0-255 | 8-byte MusicIntent packet (alice-synth) |
+
+Example — pick up the small box on a table and put it down:
+
+```
+program(
+  box3d(1.0, 0.05, 0.6),                     // table top
+  entities(box3d(0.05, 0.05, 0.05)),         // id 0: small box
+  seq(
+    walk(0.0, 0.0, 0.8, 1.0),
+    grasp(0, right, 5.0),
+    rest(300),
+    release(0)
+  )
+)
+```
+
 ## Examples for LLMs
 
 ### Simple: Snowman

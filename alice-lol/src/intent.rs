@@ -13,7 +13,8 @@
 //! # 実装 scope (B.1 = skeleton のみ)
 //!
 //! - Enum + struct 定義 + builder + convenience helper
-//! - 未実装: 8-byte packet serialize (C.1)、Kinematics 解釈器 (B.3)、LOL DSL intent block 構文 (B.4)
+//! - LOL text 構文 (B.4 / A0、2026-09-14): `crate::runtime_parser::parse_program` ↔ [`IntentNode::to_lol`]
+//! - 未実装: 8-byte packet serialize (C.1)、Kinematics 解釈器 (B.3)
 
 use crate::SdfNode;
 use glam::Vec3;
@@ -514,6 +515,131 @@ pub fn latent_intent_hinted(values: impl Into<Box<[f32]>>, hint: impl Into<Strin
     IntentNode::LatentIntent {
         values: values.into(),
         semantic_hint: Some(hint.into()),
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LOL text 出力 (runtime_parser::parse_program の逆変換)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+impl HandSide {
+    /// LOL text 表記 (`left` / `right` / `both`)
+    #[must_use]
+    pub const fn as_lol(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Both => "both",
+        }
+    }
+}
+
+fn fmt_vec3(v: Vec3) -> String {
+    format!("{}, {}, {}", fmt_f32(v.x), fmt_f32(v.y), fmt_f32(v.z))
+}
+
+/// `f32` を LOL 数値リテラルとして出力 (`1` → `1.0` で整数と区別、`NaN` / `inf` は不許可)
+fn fmt_f32(v: f32) -> String {
+    if v.fract() == 0.0 && v.is_finite() {
+        format!("{v:.1}")
+    } else {
+        format!("{v}")
+    }
+}
+
+impl IntentNode {
+    /// Intent tree を LOL text に変換する
+    ///
+    /// [`crate::runtime_parser::parse_program`] が読み戻せる形式 (`lol.gbnf` の `intent` rule)
+    /// `Rotate` は SDF transform の `rotate` と衝突するため verb 名 `turn` で出力
+    /// `LatentIntent::semantic_hint` は text 構文に存在しないため落とす
+    #[must_use]
+    pub fn to_lol(&self) -> String {
+        match self {
+            Self::Grasp {
+                target_id,
+                hand,
+                force,
+            } => format!("grasp({target_id}, {}, {})", hand.as_lol(), fmt_f32(*force)),
+            Self::Release { target_id } => format!("release({target_id})"),
+            Self::Catch { object_id } => format!("catch({object_id})"),
+            Self::Walk { destination, speed } => {
+                format!("walk({}, {})", fmt_vec3(*destination), fmt_f32(*speed))
+            }
+            Self::Gaze {
+                target,
+                duration_ms,
+            } => format!("gaze({}, {duration_ms})", fmt_vec3(*target)),
+            Self::Point { target, hand } => {
+                format!("point({}, {})", fmt_vec3(*target), hand.as_lol())
+            }
+            Self::Throw {
+                target,
+                force,
+                hand,
+            } => format!(
+                "throw({}, {}, {})",
+                fmt_vec3(*target),
+                fmt_f32(*force),
+                hand.as_lol()
+            ),
+            Self::Push {
+                target_id,
+                direction,
+                force,
+            } => format!(
+                "push({target_id}, {}, {})",
+                fmt_vec3(*direction),
+                fmt_f32(*force)
+            ),
+            Self::Pull {
+                target_id,
+                direction,
+                force,
+            } => format!(
+                "pull({target_id}, {}, {})",
+                fmt_vec3(*direction),
+                fmt_f32(*force)
+            ),
+            Self::Rotate {
+                target_id,
+                axis,
+                angle_rad,
+            } => format!(
+                "turn({target_id}, {}, {})",
+                fmt_vec3(*axis),
+                fmt_f32(*angle_rad)
+            ),
+            Self::Align {
+                target_id,
+                reference,
+            } => format!("align({target_id}, {})", fmt_vec3(*reference)),
+            Self::Follow {
+                target_id,
+                distance,
+            } => format!("follow({target_id}, {})", fmt_f32(*distance)),
+            Self::Avoid {
+                target_id,
+                min_distance,
+            } => format!("avoid({target_id}, {})", fmt_f32(*min_distance)),
+            Self::Rest { duration_ms } => format!("rest({duration_ms})"),
+            Self::LatentIntent { values, .. } => {
+                let inner: Vec<String> = values.iter().map(|v| fmt_f32(*v)).collect();
+                format!("latent({})", inner.join(", "))
+            }
+            Self::Sequence(items) => {
+                let inner: Vec<String> = items.iter().map(Self::to_lol).collect();
+                format!("seq({})", inner.join(", "))
+            }
+            Self::Parallel(items) => {
+                let inner: Vec<String> = items.iter().map(Self::to_lol).collect();
+                format!("par({})", inner.join(", "))
+            }
+            Self::Music { packet } => {
+                let inner: Vec<String> = packet.iter().map(u8::to_string).collect();
+                format!("music({})", inner.join(", "))
+            }
+        }
     }
 }
 
