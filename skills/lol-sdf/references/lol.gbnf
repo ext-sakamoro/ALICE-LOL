@@ -12,8 +12,13 @@
 #   (unknown / typo'd names are rejected).
 # - The argument *shape* (number-count vs child-count, comma placement,
 #   balanced parens) matches one of the recognised categories.
-# - Whitespace and `//` line comments are permitted between tokens
-#   (mirrors the runtime lexer).
+# - At most one whitespace char between tokens; `//` line comments are
+#   NOT accepted (deliberately stricter than the runtime lexer, which
+#   still accepts both in human-written files). A comment state accepts
+#   almost any char, so the token-trie mask degrades to a full-vocabulary
+#   walk (0.5-1 s/step measured on a 130k vocab), and unbounded
+#   whitespace / comments are channels models use to ramble instead of
+#   emitting the program (B-10, 2026-09-14).
 #
 # What the grammar does NOT enforce
 # ---------------------------------
@@ -90,12 +95,16 @@ name_intent_compose ::= "seq" | "par"
 hand ::= "left" | "right" | "both"
 uint ::= [0-9]+
 
-# ─── Whitespace + line comment (mirrors runtime_parser lexer) ─────────
+# ─── Whitespace (subset of the runtime_parser lexer) ──────────────────
+#
+# At most ONE whitespace char between tokens, and no comments. The
+# runtime lexer accepts arbitrary whitespace runs and `//` comments in
+# human-written files; the LLM grammar is deliberately tighter because
+# an unbounded `ws` is a rambling channel — under constrained decoding a
+# model that wants to "think" picks the least committal token, and a
+# 41-tab run was observed on MiniCPM5-2B once comments were removed.
 
-ws ::= wsunit*
-wsunit ::= [ \t\r\n] | linecomment
-linecomment ::= "//" noteol* "\n"
-noteol ::= [^\n]
+ws ::= [ \t\r\n]?
 
 # ─── Numeric literal (matches runtime_parser::read_number) ────────────
 #

@@ -179,6 +179,7 @@ program(<sdf>, entities(<sdf>, ...), <intent>)   // + one intent tree
 - `entities(...)` lists the objects an intent can refer to. Ids are 0-based integers in list order. An id outside the list is a parse error.
 - Hands are bare words: `left` / `right` / `both`.
 - Integer slots (`id`, `ms`, music bytes) must be written without a decimal point.
+- Do not write `//` comments and do not indent: the LLM grammar allows at most one whitespace character between tokens and rejects comments (the runtime parser accepts both in hand-written files only). Emit the program, nothing else.
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -205,8 +206,8 @@ Example — pick up the small box on a table and put it down:
 
 ```
 program(
-  box3d(1.0, 0.05, 0.6),                     // table top
-  entities(box3d(0.05, 0.05, 0.05)),         // id 0: small box
+  box3d(1.0, 0.05, 0.6),
+  entities(box3d(0.05, 0.05, 0.05)),
   seq(
     walk(0.0, 0.0, 0.8, 1.0),
     grasp(0, right, 5.0),
