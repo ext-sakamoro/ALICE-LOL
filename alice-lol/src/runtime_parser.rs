@@ -539,8 +539,19 @@ impl<'a> Parser<'a> {
     // メイン式パーサー
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    #[allow(clippy::too_many_lines)]
     fn parse_expr(&mut self) -> Result<SdfNode, ParseError> {
+        // 本体 (`parse_expr_inner`) は 250+ arm の match で frame が大きく、深い
+        // tree (stdlib product の subtract 2,400 連鎖 = 正当な LOL) で再帰が
+        // 8 MB stack を使い切る 残りが red zone (4 MB、debug build の
+        // parse_expr_inner の frame より十分大きい値) を切ったら 32 MB 単位で
+        // heap 上に stack を伸ばして続行する (stacker、rustc と同じ手法)
+        stacker::maybe_grow(4 * 1024 * 1024, 32 * 1024 * 1024, || {
+            self.parse_expr_inner()
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn parse_expr_inner(&mut self) -> Result<SdfNode, ParseError> {
         // `field Name { ... }` ラッパーをスキップ
         let name = match self.next()? {
             Some(Token::Ident(s)) => s,

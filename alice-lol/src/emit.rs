@@ -23,8 +23,9 @@
 //! # 正規形
 //!
 //! - 数値: 整数値は `1.0` (`fmt_f32`)、それ以外は shortest repr
-//! - 可変長 op (`union` 等) は parser の左畳み込みをそのまま 2 分木で書く
-//!   (`union(union(a, b), c)`) 常に valid、`fold_left` と 1:1
+//! - 可変長 op (`union` / `smooth_union` 等) は parser の `fold_left` が作る
+//!   左結合 2 分木を平坦化して `union(a, b, c)` に戻す (同 op・同数値引数の
+//!   左 spine だけ) stdlib product の穴格子は nested だと深さ 2,400 になる
 //! - 角度は度 (parser 入力と同じ)、`Rotate` は `EulerRot::XYZ`
 
 use std::fmt::Write as _;
@@ -116,8 +117,16 @@ pub fn to_lol(node: &SdfNode) -> Result<String, EmitError> {
     Ok(out)
 }
 
-#[allow(clippy::too_many_lines)] // 121 variant の逆写像 table、分割すると parser との対応が追いにくい
+/// 深い tree でも stack を使い切らないよう、再帰ごとに必要なら stack を伸ばす
+/// (`runtime_parser::parse_expr` と対、stdlib product の subtract 2,400 連鎖対応)
 fn write_node(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
+    stacker::maybe_grow(1024 * 1024, 16 * 1024 * 1024, || {
+        write_node_inner(node, out)
+    })
+}
+
+#[allow(clippy::too_many_lines)] // 121 variant の逆写像 table、分割すると parser との対応が追いにくい
+fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
     // 引数だけの primitive
     macro_rules! prim {
         ($name:expr, $($arg:expr),+) => {{
@@ -500,23 +509,27 @@ fn write_node(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         ),
         SdfNode::Terrain { scale, amplitude } => prim!("terrain", f(*scale), f(*amplitude)),
 
-        // ── CSG (parser の左畳み込みをそのまま 2 分木で) ──
-        SdfNode::Union { a, b } => binop!("union", a, b),
-        SdfNode::Intersection { a, b } => binop!("intersection", a, b),
+        // ── CSG ──
+        // 可変長 op (parser が fold_left で左結合 2 分木にするもの) は左 spine を
+        // 平坦化して variadic で書く = fold_left の正確な逆写像 nested のままだと
+        // stdlib product の穴格子 union が深さ 2,400 の tree になり parser の再帰
+        // (parse_expr の大 frame) で stack が尽きる
+        SdfNode::Union { .. }
+        | SdfNode::Intersection { .. }
+        | SdfNode::SmoothUnion { .. }
+        | SdfNode::SmoothIntersection { .. }
+        | SdfNode::ChamferUnion { .. }
+        | SdfNode::ChamferIntersection { .. }
+        | SdfNode::StairsUnion { .. }
+        | SdfNode::StairsIntersection { .. }
+        | SdfNode::ColumnsUnion { .. }
+        | SdfNode::ColumnsIntersection { .. }
+        | SdfNode::ExpSmoothUnion { .. }
+        | SdfNode::ExpSmoothIntersection { .. } => write_variadic(node, out),
         SdfNode::Subtraction { a, b } => binop!("subtract", a, b),
         SdfNode::XOR { a, b } => binop!("xor", a, b),
-        SdfNode::SmoothUnion { a, b, k } => binop!("smooth_union", a, b, f(*k)),
-        SdfNode::SmoothIntersection { a, b, k } => binop!("smooth_intersection", a, b, f(*k)),
         SdfNode::SmoothSubtraction { a, b, k } => binop!("smooth_subtract", a, b, f(*k)),
-        SdfNode::ChamferUnion { a, b, r } => binop!("chamfer_union", a, b, f(*r)),
-        SdfNode::ChamferIntersection { a, b, r } => {
-            binop!("chamfer_intersection", a, b, f(*r))
-        }
         SdfNode::ChamferSubtraction { a, b, r } => binop!("chamfer_subtraction", a, b, f(*r)),
-        SdfNode::StairsUnion { a, b, r, n } => binop!("stairs_union", a, b, f(*r), f(*n)),
-        SdfNode::StairsIntersection { a, b, r, n } => {
-            binop!("stairs_intersection", a, b, f(*r), f(*n))
-        }
         SdfNode::StairsSubtraction { a, b, r, n } => {
             binop!("stairs_subtraction", a, b, f(*r), f(*n))
         }
@@ -524,16 +537,8 @@ fn write_node(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         SdfNode::Engrave { a, b, r } => binop!("engrave", a, b, f(*r)),
         SdfNode::Groove { a, b, ra, rb } => binop!("groove", a, b, f(*ra), f(*rb)),
         SdfNode::Tongue { a, b, ra, rb } => binop!("tongue", a, b, f(*ra), f(*rb)),
-        SdfNode::ColumnsUnion { a, b, r, n } => binop!("columns_union", a, b, f(*r), f(*n)),
-        SdfNode::ColumnsIntersection { a, b, r, n } => {
-            binop!("columns_intersection", a, b, f(*r), f(*n))
-        }
         SdfNode::ColumnsSubtraction { a, b, r, n } => {
             binop!("columns_subtraction", a, b, f(*r), f(*n))
-        }
-        SdfNode::ExpSmoothUnion { a, b, k } => binop!("exp_smooth_union", a, b, f(*k)),
-        SdfNode::ExpSmoothIntersection { a, b, k } => {
-            binop!("exp_smooth_intersection", a, b, f(*k))
         }
         SdfNode::ExpSmoothSubtraction { a, b, k } => {
             binop!("exp_smooth_subtraction", a, b, f(*k))
@@ -647,6 +652,53 @@ fn write_node(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
     }
 }
 
+/// 可変長 op の識別: (name, 数値引数, a, b) 同 name + 同引数の左 spine を平坦化する
+fn variadic_parts(node: &SdfNode) -> Option<(&'static str, Vec<f32>, &SdfNode, &SdfNode)> {
+    Some(match node {
+        SdfNode::Union { a, b } => ("union", vec![], a, b),
+        SdfNode::Intersection { a, b } => ("intersection", vec![], a, b),
+        SdfNode::SmoothUnion { a, b, k } => ("smooth_union", vec![*k], a, b),
+        SdfNode::SmoothIntersection { a, b, k } => ("smooth_intersection", vec![*k], a, b),
+        SdfNode::ChamferUnion { a, b, r } => ("chamfer_union", vec![*r], a, b),
+        SdfNode::ChamferIntersection { a, b, r } => ("chamfer_intersection", vec![*r], a, b),
+        SdfNode::StairsUnion { a, b, r, n } => ("stairs_union", vec![*r, *n], a, b),
+        SdfNode::StairsIntersection { a, b, r, n } => ("stairs_intersection", vec![*r, *n], a, b),
+        SdfNode::ColumnsUnion { a, b, r, n } => ("columns_union", vec![*r, *n], a, b),
+        SdfNode::ColumnsIntersection { a, b, r, n } => ("columns_intersection", vec![*r, *n], a, b),
+        SdfNode::ExpSmoothUnion { a, b, k } => ("exp_smooth_union", vec![*k], a, b),
+        SdfNode::ExpSmoothIntersection { a, b, k } => ("exp_smooth_intersection", vec![*k], a, b),
+        _ => return None,
+    })
+}
+
+/// 左 spine を平坦化して `name(args…, c1, c2, …)` を書く (`fold_left` の逆)
+fn write_variadic(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
+    let (name, args, mut a, b) =
+        variadic_parts(node).expect("write_variadic called on a non-variadic node");
+    // 左 spine: 同 name・同数値引数の間だけ潰す (k が違う smooth_union は別 op)
+    let mut rev_children: Vec<&SdfNode> = vec![b];
+    while let Some((n2, args2, a2, b2)) = variadic_parts(a) {
+        if n2 != name || args2 != args {
+            break;
+        }
+        rev_children.push(b2);
+        a = a2;
+    }
+    rev_children.push(a);
+    let _ = write!(out, "{name}(");
+    for v in &args {
+        let _ = write!(out, "{}, ", fmt_f32(*v));
+    }
+    for (i, c) in rev_children.iter().rev().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        write_node(c, out)?;
+    }
+    out.push(')');
+    Ok(())
+}
+
 impl Program {
     /// `program(<sdf>, entities(...), <intent>)` 形式の LOL text
     ///
@@ -700,7 +752,7 @@ mod tests {
         for src in [
             "sphere(1.0)",
             "box3d(1.0, 2.0, 3.0)",
-            "union(union(sphere(1.0), box3d(0.5, 0.5, 0.5)), cylinder(0.3, 2.0))",
+            "union(sphere(1.0), box3d(0.5, 0.5, 0.5), cylinder(0.3, 2.0))",
             "smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))",
             "subtract(cylinder(2.5, 0.125), polar_repeat(12.0, translate(1.8, 0.0, 0.0, cylinder(0.3, 0.2))))",
             "repeat_finite(3.0, 2.0, 1.0, 10.0, 10.0, 0.0, sphere(1.0))",
@@ -712,11 +764,33 @@ mod tests {
     }
 
     #[test]
-    fn variadic_union_is_left_folded() {
+    fn variadic_ops_are_flattened_back() {
+        // parser: union(a, b, c) → Union{Union{a,b},c} (fold_left) → emit は平坦化して戻す
         let node = parse_lol("union(sphere(1.0), sphere(2.0), sphere(3.0))").unwrap();
         assert_eq!(
             to_lol(&node).unwrap(),
-            "union(union(sphere(1.0), sphere(2.0)), sphere(3.0))"
+            "union(sphere(1.0), sphere(2.0), sphere(3.0))"
+        );
+        // 明示的に nested で書いた union も同じ正規形に落ちる (同じ tree なので)
+        let nested = parse_lol("union(union(sphere(1.0), sphere(2.0)), sphere(3.0))").unwrap();
+        assert_eq!(
+            to_lol(&nested).unwrap(),
+            "union(sphere(1.0), sphere(2.0), sphere(3.0))"
+        );
+        // 右側の nested は別 tree なので潰さない
+        let right = parse_lol("union(sphere(1.0), union(sphere(2.0), sphere(3.0)))").unwrap();
+        assert_eq!(
+            to_lol(&right).unwrap(),
+            "union(sphere(1.0), union(sphere(2.0), sphere(3.0)))"
+        );
+        // k が違う smooth_union は別 op として残る
+        let mixed = parse_lol(
+            "smooth_union(0.5, smooth_union(0.2, sphere(1.0), sphere(2.0)), sphere(3.0))",
+        )
+        .unwrap();
+        assert_eq!(
+            to_lol(&mixed).unwrap(),
+            "smooth_union(0.5, smooth_union(0.2, sphere(1.0), sphere(2.0)), sphere(3.0))"
         );
     }
 

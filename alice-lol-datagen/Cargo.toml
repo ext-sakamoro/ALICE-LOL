@@ -1,0 +1,26 @@
+[package]
+name = "alice-lol-datagen"
+version = "0.1.0"
+edition = "2021"
+description = "Synthetic (caption, LOL) pair generator for ALICE-LOL — template families emit LOL text, bilingual captions and oracle points from the same parameters (Track C1)."
+license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+readme = "README.md"
+keywords = ["dsl", "sdf", "dataset", "synthetic", "llm"]
+categories = ["graphics", "science"]
+publish = false
+
+[dependencies]
+alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
+glam = "0.29"
+
+[features]
+default = []
+# `Fsm::accepts_str` で LLM grammar 受理を self-check に含める (alice-llm を引く、AGPL 伝播注意)
+grammar-check = ["alice-lol/llm-bridge"]
+
+[[bin]]
+name = "datagen"
+path = "src/bin/datagen.rs"
