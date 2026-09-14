@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`lol.gbnf` に product / mechanical / fastener 構文 103 個を追加** (`pen_cup` / `coaster` / `gridfinity_bin` / `gridfinity_bin_ex` (新 `prim_7f`) / `wall_hook` / 12 archetype 3f 群 64 個 / `vesa_mount` / `l_bracket` / `screw_hole` / `heat_set_hole` / `jst_ph_slot` 等) 事案: 2026-08-20 Sprint C で text-to-print の grammar copy と `runtime_parser` には足されたが canonical `lol.gbnf` には upstream されず、mechanical 38 個はどの grammar にも無かった (system prompt は案内しているのに grammar ON だと emit 不能) 新 golden test `grammar_covers_every_runtime_parser_construct` (parser の `"name" =>` arm ⊆ grammar 名、include_str! で source を走査) で再発を CI で検知、`accepts_product_and_mechanical_shortcuts`
 - **`alice_lol::LOL_GBNF`** (feature 外の `pub const`、`include_str!("lol.gbnf")`) — 下流 (alice-bamboo → text-to-print 等) が grammar を copy して drift させる運用を廃止するための単一 source `bridge::lol_grammar` も同じ bytes を parse
 
 ### Fixed

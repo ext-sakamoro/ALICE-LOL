@@ -1,7 +1,12 @@
 # ALICE-LOL DSL grammar for constrained decoding (Phase X.8 B-5).
 #
-# Covers the 124 constructs implemented in
-# `alice_lol::runtime_parser::parse_lol`. Grouped by *argument shape*
+# Covers every construct implemented in `alice_lol::runtime_parser::parse_lol`
+# (SDF primitives / CSG / modifiers / 3D-print product + mechanical archetype
+# shortcuts / fastener helpers), plus the Phase 3 `program(...)` Intent wrapper.
+# `tests/lol_gbnf_test.rs` asserts parser names ⊆ grammar names so the two
+# cannot drift again (2026-09-14: 103 product / mechanical constructs had
+# been added to the parser and to a downstream copy of this file, but not
+# here). Grouped by *argument shape*
 # rather than one rule per construct: a `sphere(1.0)` and `heart(1.0)`
 # share the same body shape (`name "(" number ")"`), so they live in
 # the same `prim_1f` production and only differ in the enumerated name.
@@ -128,6 +133,7 @@ expr ::= prim_1f
        | prim_4f
        | prim_5f
        | prim_6f
+       | prim_7f
        | prim_9f
        | prim_10f
        | op_variadic
@@ -152,6 +158,7 @@ prim_4f ::= name_4f ws "(" ws number ws "," ws number ws "," ws number ws "," ws
 prim_5f ::= name_5f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 prim_6f ::= name_6f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 prim_9f ::= name_9f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_7f ::= name_7f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 prim_10f ::= name_10f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
 
 name_0f ::= "skadis_hook_l"
@@ -161,6 +168,9 @@ name_0f ::= "skadis_hook_l"
           | "skadis_clip"
           | "skadis_shelf"
           | "skadis_elastic_cord"
+            | "wall_hook"
+            | "drawer_organizer"
+            | "shelf_divider"
 
 name_1f ::= "sphere"
           | "octahedron"
@@ -173,6 +183,12 @@ name_1f ::= "sphere"
           | "truncated_icosahedron"
           | "infinite_cylinder"
           | "infinite_cone"
+            | "heat_set_hole"
+            | "t_slot_2020"
+            | "profile_2020"
+            | "profile_3030"
+            | "servo_mount"
+            | "jst_ph_slot"
 
 name_2f ::= "cylinder"
           | "torus"
@@ -198,6 +214,26 @@ name_2f ::= "cylinder"
           | "blobby_cross"
           | "terrain"
           | "shopping_cart_coin"
+            | "mug"
+            | "pen_cup"
+            | "coaster"
+            | "cable_clip"
+            | "led_channel"
+            | "t_slot_bracket_2020"
+            | "raspi_mount_plate"
+            | "profile_extrusion"
+            | "screw_hole"
+            | "tap_hole"
+            | "counterbore"
+            | "countersink"
+            | "bolt"
+            | "boss"
+            | "cable_grommet"
+            | "curtain_rod_bracket"
+            | "dowel_hole"
+            | "wood_screw_pilot"
+            | "arduino_mount_plate"
+            | "pixhawk_mount"
 
 name_3f ::= "box3d"
           | "ellipsoid"
@@ -218,6 +254,70 @@ name_3f ::= "box3d"
           | "tunnel"
           | "rounded_x"
           | "pie"
+            | "gridfinity_bin"
+            | "sticky_note_holder"
+            | "business_card_holder"
+            | "phone_stand"
+            | "headphone_holder"
+            | "under_desk_mount"
+            | "desk_shelf"
+            | "monitor_riser"
+            | "tissue_box_cover"
+            | "storage_box"
+            | "card_tray"
+            | "token_well"
+            | "wrench_holder"
+            | "socket_rail"
+            | "hex_bit_holder"
+            | "raspi_case"
+            | "esp32_enclosure"
+            | "battery_18650_holder"
+            | "toothbrush_holder"
+            | "drill_bit_holder"
+            | "pliers_rack"
+            | "spice_rack"
+            | "egg_tray"
+            | "utensil_caddy"
+            | "filament_spool_holder"
+            | "nozzle_holder"
+            | "build_plate_rack"
+            | "cutlery_tray"
+            | "pill_organizer"
+            | "magnetic_strip"
+            | "hairdryer_holder"
+            | "kcup_holder"
+            | "hex_key_holder"
+            | "wrap_holder"
+            | "sock_divider"
+            | "soap_tray"
+            | "razor_holder"
+            | "chopstick_holder"
+            | "swatch_holder"
+            | "tp_holder"
+            | "sd_card_holder"
+            | "driver_rack"
+            | "cotton_dispenser"
+            | "sink_caddy"
+            | "clamp_rack"
+            | "dry_box"
+            | "outdoor_enclosure"
+            | "jewelry_stand"
+            | "phone_dock"
+            | "cutting_board_rack"
+            | "tape_dispenser"
+            | "shower_caddy"
+            | "caliper_holder"
+            | "bag_clip_org"
+            | "can_rack"
+            | "led_hub_box"
+            | "makeup_organizer"
+            | "vesa_mount"
+            | "flange_mount"
+            | "dovetail"
+            | "slot"
+            | "pin_hinge_knuckle"
+            | "rib"
+            | "bearing_seat"
 
 name_4f ::= "rounded_box"
           | "plane"
@@ -234,10 +334,21 @@ name_4f ::= "rounded_box"
           | "moon"
           | "stairs_prim"
           | "rounded_rect_2d"
+            | "dovetail_pair"
+            | "snap_fit_pair"
+            | "snap_fit_annular"
 
 name_5f ::= "horseshoe" | "superellipsoid"
+            | "l_bracket"
+            | "heat_set_array"
+            | "bracket_l"
 
 name_6f ::= "segment_2d"
+            | "boss_array"
+            | "flange_circular"
+            | "rack_shelf"
+
+name_7f ::= "gridfinity_bin_ex"
 
 name_9f ::= "triangle"
 
