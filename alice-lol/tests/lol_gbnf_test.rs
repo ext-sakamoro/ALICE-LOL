@@ -310,3 +310,28 @@ fn rejects_intent_outside_program_and_bad_intent_shapes() {
     // seq / par need at least one child.
     assert!(rejects(g, "program(sphere(1.0), entities(), seq())"));
 }
+
+#[test]
+fn accepts_llm_reference_coaster_example_verbatim() {
+    // `LLM_REFERENCE.md` "3D Printable: ALICE Coaster" block, copied as-is
+    // (no comments, no indentation) — the reference must show the model
+    // exactly what the LLM grammar accepts.
+    let g = lol_grammar();
+    let snippet = r"subtract(
+subtract(
+subtract(
+subtract(
+cylinder(2.5, 0.125),
+polar_repeat(12, translate(1.8, 0.0, 0.0, cylinder(0.3, 0.2)))
+),
+rotate(0.0, 15.0, 0.0,
+polar_repeat(12, translate(1.2, 0.0, 0.0, cylinder(0.2, 0.2)))
+)
+),
+polar_repeat(6, translate(0.6, 0.0, 0.0, hex_prism(0.15, 0.2)))
+),
+translate(0.0, 0.04, 0.0, hex_prism(0.25, 0.1))
+)";
+    assert!(accepts(g, snippet));
+    assert!(alice_lol::runtime_parser::parse_lol(snippet).is_ok());
+}

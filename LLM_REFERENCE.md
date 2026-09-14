@@ -27,6 +27,7 @@ This compiles to an `SdfNode` tree that can be:
 4. Nesting is natural: `translate(0.0, 1.0, 0.0, sphere(0.5))`
 5. Operations take 2+ children: `union(sphere(1.0), box3d(0.5, 0.5, 0.5))`
 6. No trailing commas
+7. No `//` comments, no indentation: at most one whitespace character between tokens (the LLM grammar enforces this; comments belong in prose, never in the emitted program)
 
 ## Complete Syntax Reference (79 constructs)
 
@@ -171,10 +172,12 @@ These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, T
 A bare SDF expression describes geometry (Phase 2 Law). To also express **what an agent should do** in that scene (Phase 3 Intent), wrap it in `program(...)`:
 
 ```
-program(<sdf>)                                   // geometry only (same as bare <sdf>)
-program(<sdf>, entities(<sdf>, <sdf>, ...))      // + entity registry (index = id)
-program(<sdf>, entities(<sdf>, ...), <intent>)   // + one intent tree
+program(<sdf>)
+program(<sdf>, entities(<sdf>, <sdf>, ...))
+program(<sdf>, entities(<sdf>, ...), <intent>)
 ```
+
+Form 1 is geometry only (same as a bare `<sdf>`), form 2 adds the entity registry (index = id), form 3 adds one intent tree.
 
 - `entities(...)` lists the objects an intent can refer to. Ids are 0-based integers in list order. An id outside the list is a parse error.
 - Hands are bare words: `left` / `right` / `both`.
@@ -206,14 +209,14 @@ Example — pick up the small box on a table and put it down:
 
 ```
 program(
-  box3d(1.0, 0.05, 0.6),
-  entities(box3d(0.05, 0.05, 0.05)),
-  seq(
-    walk(0.0, 0.0, 0.8, 1.0),
-    grasp(0, right, 5.0),
-    rest(300),
-    release(0)
-  )
+box3d(1.0, 0.05, 0.6),
+entities(box3d(0.05, 0.05, 0.05)),
+seq(
+walk(0.0, 0.0, 0.8, 1.0),
+grasp(0, right, 5.0),
+rest(300),
+release(0)
+)
 )
 ```
 
@@ -223,9 +226,9 @@ program(
 
 ```
 union(
-    sphere(1.0),
-    translate(0.0, 1.3, 0.0, sphere(0.7)),
-    translate(0.0, 2.2, 0.0, sphere(0.5))
+sphere(1.0),
+translate(0.0, 1.3, 0.0, sphere(0.7)),
+translate(0.0, 2.2, 0.0, sphere(0.5))
 )
 ```
 
@@ -233,10 +236,10 @@ union(
 
 ```
 smooth_union(0.2,
-    translate(0.0, 1.0, 0.0,
-        scale_non_uniform(1.5, 0.4, 1.5, sphere(1.0))
-    ),
-    cylinder(0.3, 0.8)
+translate(0.0, 1.0, 0.0,
+scale_non_uniform(1.5, 0.4, 1.5, sphere(1.0))
+),
+cylinder(0.3, 0.8)
 )
 ```
 
@@ -244,13 +247,13 @@ smooth_union(0.2,
 
 ```
 subtract(
-    polar_repeat(12,
-        translate(1.5, 0.0, 0.0, cylinder(0.15, 0.2))
-    ),
-    subtract(
-        cylinder(1.8, 0.2),
-        cylinder(0.5, 0.3)
-    )
+polar_repeat(12,
+translate(1.5, 0.0, 0.0, cylinder(0.15, 0.2))
+),
+subtract(
+cylinder(1.8, 0.2),
+cylinder(0.5, 0.3)
+)
 )
 ```
 
@@ -258,10 +261,10 @@ subtract(
 
 ```
 subtract(
-    box3d(2.0, 2.0, 0.5),
-    translate(0.0, 0.5, 0.0,
-        cylinder(1.2, 0.6)
-    )
+box3d(2.0, 2.0, 0.5),
+translate(0.0, 0.5, 0.0,
+cylinder(1.2, 0.6)
+)
 )
 ```
 
@@ -269,11 +272,11 @@ subtract(
 
 ```
 onion(0.05,
-    twist(0.5,
-        taper(0.3,
-            cylinder(1.0, 2.0)
-        )
-    )
+twist(0.5,
+taper(0.3,
+cylinder(1.0, 2.0)
+)
+)
 )
 ```
 
@@ -281,13 +284,13 @@ onion(0.05,
 
 ```
 smooth_union(0.1,
-    diamond(0.5, 1.5),
-    translate(0.8, -0.5, 0.3,
-        rotate(0.0, 0.0, 15.0, diamond(0.3, 1.0))
-    ),
-    translate(-0.6, -0.3, -0.5,
-        rotate(10.0, 0.0, -10.0, diamond(0.4, 1.2))
-    )
+diamond(0.5, 1.5),
+translate(0.8, -0.5, 0.3,
+rotate(0.0, 0.0, 15.0, diamond(0.3, 1.0))
+),
+translate(-0.6, -0.3, -0.5,
+rotate(10.0, 0.0, -10.0, diamond(0.4, 1.2))
+)
 )
 ```
 
@@ -295,7 +298,7 @@ smooth_union(0.1,
 
 ```
 icosahedral_symmetry(
-    translate(1.0, 0.0, 0.0, sphere(0.3))
+translate(1.0, 0.0, 0.0, sphere(0.3))
 )
 ```
 
@@ -303,41 +306,37 @@ icosahedral_symmetry(
 
 ```
 union(
-    noise(0.1, 2.0, 42,
-        plane(0.0, 1.0, 0.0, 0.0)
-    ),
-    translate(0.0, 1.0, 0.0,
-        smooth_union(0.3,
-            sphere(0.8),
-            translate(0.0, 1.0, 0.0, sphere(0.5))
-        )
-    )
+noise(0.1, 2.0, 42,
+plane(0.0, 1.0, 0.0, 0.0)
+),
+translate(0.0, 1.0, 0.0,
+smooth_union(0.3,
+sphere(0.8),
+translate(0.0, 1.0, 0.0, sphere(0.5))
+)
+)
 )
 ```
 
 ### 3D Printable: ALICE Coaster (10cm round, gyroid openwork)
 
+SDF geometric coaster, 10cm round and 5mm thick. Subtracts are nested sequentially (never union the cutters together): outer ring of 12 round holes, middle ring of 12 smaller holes rotated 15°, inner ring of 6 hexagonal holes, then a hexagonal recess (not through) in the center.
+
 ```
-// SDF geometric coaster (10cm round, 5mm thick)
-// NOTE: Nest subtract sequentially — never union cutters together
 subtract(
-    subtract(
-        subtract(
-            subtract(
-                cylinder(2.5, 0.125),
-                // outer ring: 12 round holes
-                polar_repeat(12, translate(1.8, 0.0, 0.0, cylinder(0.3, 0.2)))
-            ),
-            // middle ring: 12 smaller holes (15° offset)
-            rotate(0.0, 15.0, 0.0,
-                polar_repeat(12, translate(1.2, 0.0, 0.0, cylinder(0.2, 0.2)))
-            )
-        ),
-        // inner ring: 6 hexagonal holes
-        polar_repeat(6, translate(0.6, 0.0, 0.0, hex_prism(0.15, 0.2)))
-    ),
-    // center: hexagonal recess (not through)
-    translate(0.0, 0.04, 0.0, hex_prism(0.25, 0.1))
+subtract(
+subtract(
+subtract(
+cylinder(2.5, 0.125),
+polar_repeat(12, translate(1.8, 0.0, 0.0, cylinder(0.3, 0.2)))
+),
+rotate(0.0, 15.0, 0.0,
+polar_repeat(12, translate(1.2, 0.0, 0.0, cylinder(0.2, 0.2)))
+)
+),
+polar_repeat(6, translate(0.6, 0.0, 0.0, hex_prism(0.15, 0.2)))
+),
+translate(0.0, 0.04, 0.0, hex_prism(0.25, 0.1))
 )
 ```
 
@@ -388,29 +387,29 @@ MakerWorld (makerworld.com) は素の3MFを拒否する。Bambu Studio互換メ�
 **Decorative vase** (hollow, minimal material):
 ```
 onion(0.02,
-    twist(0.5,
-        taper(0.3, cylinder(1.0, 2.0))
-    )
+twist(0.5,
+taper(0.3, cylinder(1.0, 2.0))
+)
 )
 ```
 
 **Structural bracket** (gyroid infill for strength + weight savings):
 ```
 lattice_infill(0.05, 5.0, 0.02,
-    subtract(
-        box3d(2.0, 1.0, 0.5),
-        translate(1.0, 0.0, 0.0, cylinder(0.3, 0.6))
-    )
+subtract(
+box3d(2.0, 1.0, 0.5),
+translate(1.0, 0.0, 0.0, cylinder(0.3, 0.6))
+)
 )
 ```
 
 **Drone arm** (diamond infill for maximum stiffness):
 ```
 diamond_infill(0.04, 6.0, 0.03,
-    smooth_union(0.1,
-        capsule(0.3, 2.0),
-        translate(0.0, 2.0, 0.0, sphere(0.5))
-    )
+smooth_union(0.1,
+capsule(0.3, 2.0),
+translate(0.0, 2.0, 0.0, sphere(0.5))
+)
 )
 ```
 
@@ -790,9 +789,9 @@ Alternative: laser command → G-code directly (rasterize → scanlines → G-co
 ### LOL (concise, 5 lines):
 ```
 union(
-    sphere(1.0),
-    translate(0.0, 1.3, 0.0, sphere(0.7)),
-    translate(0.0, 2.2, 0.0, sphere(0.5))
+sphere(1.0),
+translate(0.0, 1.3, 0.0, sphere(0.7)),
+translate(0.0, 2.2, 0.0, sphere(0.5))
 )
 ```
 
@@ -842,11 +841,15 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 
 Repeating patterns (holes, slots, cutouts) MUST use `repeat_finite`. Never generate individual `translate` × N nodes.
 
-```
-// NG: 200 nodes, O(n) eval per point
-union(translate(a, hole), translate(b, hole), ...)
+NG — 200 nodes, O(n) eval per point:
 
-// OK: 1 node, O(1) eval per point
+```
+union(translate(a, hole), translate(b, hole), ...)
+```
+
+OK — 1 node, O(1) eval per point:
+
+```
 translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole))
 ```
 
@@ -857,8 +860,8 @@ translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hol
 Two `repeat_finite` with `translate` offset:
 ```
 union(
-  translate(g1_cx, g1_cy, 0, repeat_finite(n, n, 0, pitch, pitch, 0, shape)),
-  translate(g2_cx, g2_cy, 0, repeat_finite(m, m, 0, pitch, pitch, 0, shape))
+translate(g1_cx, g1_cy, 0, repeat_finite(n, n, 0, pitch, pitch, 0, shape)),
+translate(g2_cx, g2_cy, 0, repeat_finite(m, m, 0, pitch, pitch, 0, shape))
 )
 ```
 
@@ -895,13 +898,7 @@ Rules:
 7. **Grid Continuity**: For grid systems (SKADIS, Gridfinity), verify grid pitch continues uninterrupted across seams
 8. **Slot clearance**: Clearance rules apply to ALL openings — rectangular slots (e.g. peg slots) need `+0.2 to +0.4mm` on BOTH width AND height, not just circular holes
 
-```
-// FATAL BUG example (actually happened):
-// Panel holes: 40mm spacing
-// Connector holes: 16mm spacing → NOT a multiple of 40 → connector won't fit!
-//
-// Fix: connector holes must be 40mm spacing (or 20mm, 80mm — integer multiples)
-```
+Failure example (actually happened): panel holes at 40mm spacing, connector holes at 16mm spacing — 16 is not a multiple of 40, so the connector does not fit. Fix: connector holes must use 40mm spacing (or 20mm / 80mm — integer multiples).
 
 Anti-patterns:
 - Designing connector hole spacing independently from panel — ALWAYS derive from panel pitch
@@ -939,21 +936,22 @@ Use a **lap joint** at the split seam for mechanical alignment + adhesive bondin
 
 **Lap joint LOL pattern** (example: U-shaped shelf divider, 560mm wide → 2 L-halves):
 
-```
-// LEFT half — upper lap tab on +X joining edge
-union(
-  smooth_union(K,
-    subtract(
-      translate(0, 0, TOP_Z, box3d(HX, HY, T)),       // top plate
-      translate(CUT_X, 0, CUT_Z, box3d(LAP_HX, HY+1, CUT_HT))  // remove lower half at edge
-    ),
-    translate(SIDE_X, 0, 0, box3d(T, HY, HZ))         // side plate
-  ),
-  translate(TAB_X, 0, TAB_Z, box3d(LAP_HX, HY, TAB_HT))  // upper lap tab
-)
+LEFT half — upper lap tab on the +X joining edge. Inside: the top plate with its lower half removed at the edge, the side plate, and the upper lap tab.
 
-// RIGHT half — lower lap tab on -X joining edge (mirrored)
 ```
+union(
+smooth_union(K,
+subtract(
+translate(0, 0, TOP_Z, box3d(HX, HY, T)),
+translate(CUT_X, 0, CUT_Z, box3d(LAP_HX, HY+1, CUT_HT))
+),
+translate(SIDE_X, 0, 0, box3d(T, HY, HZ))
+),
+translate(TAB_X, 0, TAB_Z, box3d(LAP_HX, HY, TAB_HT))
+)
+```
+
+RIGHT half — lower lap tab on the -X joining edge (mirrored).
 
 **Lap joint parameters**:
 - `lap_length` = 5mm (overlap zone)
@@ -994,11 +992,12 @@ Correct (upside down):             Wrong (right-side up):
 
 Popular cabinet shelf organizers use **arch cutouts** instead of full thin walls:
 
+Side panel with arch cutout (stable printing, material efficient): the full side panel minus a rounded-box arch cut.
+
 ```
-// Side panel with arch cutout — stable printing + material efficient
 subtract(
-  translate(SIDE_X, 0, PANEL_CZ, box3d(T, HY, PANEL_HZ)),     // full side panel
-  translate(SIDE_X, 0, ARCH_CZ, rounded_box(T+1, ARCH_HY, ARCH_HZ, R))  // arch cut
+translate(SIDE_X, 0, PANEL_CZ, box3d(T, HY, PANEL_HZ)),
+translate(SIDE_X, 0, ARCH_CZ, rounded_box(T+1, ARCH_HY, ARCH_HZ, R))
 )
 ```
 
@@ -1020,18 +1019,19 @@ subtract(
 Large flat plates (e.g. 280×250mm) warp and detach from the bed during cooling.
 **Always add hex cutout holes** to break up continuous area and reduce shrinkage stress.
 
+Hex grid cutouts on the top plate — staggered (千鳥) pattern via two `repeat_finite` grids offset by half a pitch:
+
 ```
-// Hex grid cutouts on top plate — staggered (千鳥) pattern via 2x repeat_finite
 subtract(
-  PLATE,
-  union(
-    translate(0, 0, PLATE_Z,
-      repeat_finite(COUNT_X, COUNT_Y, 0, PITCH, PITCH, 0,
-        cylinder(HOLE_R, PLATE_T+1))),
-    translate(PITCH/2, PITCH*0.433, PLATE_Z,
-      repeat_finite(COUNT_X2, COUNT_Y2, 0, PITCH, PITCH*0.866, 0,
-        cylinder(HOLE_R, PLATE_T+1)))
-  )
+PLATE,
+union(
+translate(0, 0, PLATE_Z,
+repeat_finite(COUNT_X, COUNT_Y, 0, PITCH, PITCH, 0,
+cylinder(HOLE_R, PLATE_T+1))),
+translate(PITCH/2, PITCH*0.433, PLATE_Z,
+repeat_finite(COUNT_X2, COUNT_Y2, 0, PITCH, PITCH*0.866, 0,
+cylinder(HOLE_R, PLATE_T+1)))
+)
 )
 ```
 
@@ -1397,11 +1397,11 @@ For scenes with different materials per object, set `material_slots > 1`. Your L
 
 ```
 union(
-    with_material(0, plane(0.0, 1.0, 0.0, 0.0)),
-    with_material(1, translate(0.0, 2.0, 0.0, sphere(1.0))),
-    with_material(2, translate(3.0, 1.5, 0.0,
-        smooth_union(0.2, torus(1.0, 0.3), cylinder(0.2, 1.5))
-    ))
+with_material(0, plane(0.0, 1.0, 0.0, 0.0)),
+with_material(1, translate(0.0, 2.0, 0.0, sphere(1.0))),
+with_material(2, translate(3.0, 1.5, 0.0,
+smooth_union(0.2, torus(1.0, 0.3), cylinder(0.2, 1.5))
+))
 )
 ```
 
@@ -1461,19 +1461,19 @@ The application layer samples physics fields each frame and uploads to shader un
 
 ```
 union(
-    noise(0.08, 1.5, 42, plane(0.0, 1.0, 0.0, 0.0)),
-    translate(0.0, 3.0, 0.0,
-        smooth_union(0.3,
-            sphere(1.5),
-            translate(0.0, 2.0, 0.0, sphere(1.0))
-        )
-    ),
-    translate(5.0, 0.0, 0.0,
-        twist(0.3, taper(0.2, cylinder(0.8, 3.0)))
-    ),
-    translate(-4.0, 1.5, 2.0,
-        icosahedral_symmetry(translate(1.0, 0.0, 0.0, sphere(0.15)))
-    )
+noise(0.08, 1.5, 42, plane(0.0, 1.0, 0.0, 0.0)),
+translate(0.0, 3.0, 0.0,
+smooth_union(0.3,
+sphere(1.5),
+translate(0.0, 2.0, 0.0, sphere(1.0))
+)
+),
+translate(5.0, 0.0, 0.0,
+twist(0.3, taper(0.2, cylinder(0.8, 3.0)))
+),
+translate(-4.0, 1.5, 2.0,
+icosahedral_symmetry(translate(1.0, 0.0, 0.0, sphere(0.15)))
+)
 )
 ```
 
