@@ -50,6 +50,11 @@ runs:
         [features]
         default = []
         grammar = []
+        # alice-lol `llm-bridge` が要求する feature は実 crate に追従させる
+        # (2026-09-14: simd + parallel 追加で cargo-deny / semver-checks の
+        # resolve が落ちた事案 → stub の feature 宣言漏れが真因)
+        simd = []
+        parallel = []
 
         [lib]
         path = "src/lib.rs"

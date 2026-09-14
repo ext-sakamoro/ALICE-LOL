@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`alice_lol::LOL_GBNF`** (feature 外の `pub const`、`include_str!("lol.gbnf")`) — 下流 (alice-bamboo → text-to-print 等) が grammar を copy して drift させる運用を廃止するための単一 source `bridge::lol_grammar` も同じ bytes を parse
+
 ### Fixed
+- **CI `Security & Hygiene` red (`536f339`)**: `alice-stubs` action の alice-llm stub が `features = default, grammar` しか宣言しておらず、`llm-bridge` が要求する `simd` / `parallel` で cargo-deny / semver-checks の resolve が失敗 stub の feature 宣言を実 crate に追従 (stub は実 crate の feature list を鏡写しにする、が原則)
 - **`llm-bridge` feature の alice-llm 依存に `simd` + `parallel` を追加** 従来 `features = ["grammar"]` のみで forward が single-thread / SIMD なしになっており、bridge 経由 (text-to-print sidecar 等) は alice-llm 直接 example より数倍遅かった MiniCPM5-2B で 1 prompt (system prompt ~600 token) 58 → 24.5 s 残りは alice-llm の逐次 prefill (batch prefill 未実装、ALICE-LLM 側 issue)
 
 ### Changed
