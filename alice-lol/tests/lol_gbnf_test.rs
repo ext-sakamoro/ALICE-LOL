@@ -76,19 +76,57 @@ fn accepts_negative_and_scientific_numbers() {
 }
 
 #[test]
-fn accepts_whitespace_and_newlines() {
+fn accepts_single_whitespace_rejects_runs() {
+    // The LLM grammar allows at most one whitespace char between tokens
+    // (the runtime lexer allows any run). Unbounded `ws` was a rambling
+    // channel: a 41-tab run was observed once comments were removed.
     let g = lol_grammar();
-    assert!(accepts(g, "  sphere( 1.0 )  "));
-    assert!(accepts(g, "sphere(\n\t1.0\n)"));
+    assert!(accepts(g, " sphere( 1.0 ) "));
+    assert!(accepts(g, "sphere(\n1.0\n)"));
+    assert!(accepts(g, "sphere(\t1.0\t)"));
+    assert!(rejects(g, "  sphere(1.0)"));
+    assert!(rejects(g, "sphere(1.0)\t\t"));
+    assert!(rejects(g, "sphere(\n\t1.0\n)"));
+    assert!(rejects(g, "union(sphere(1.0),  box3d(1.0, 1.0, 1.0))"));
+}
+
+/// Collapse whitespace runs to a single space so human-formatted `.lol`
+/// files (4-space indentation) can be checked against the LLM grammar.
+fn collapse_ws(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    let mut in_ws = false;
+    for ch in src.chars() {
+        if ch.is_ascii_whitespace() {
+            if !in_ws {
+                out.push(' ');
+            }
+            in_ws = true;
+        } else {
+            out.push(ch);
+            in_ws = false;
+        }
+    }
+    out
 }
 
 #[test]
-fn accepts_line_comments() {
+fn rejects_line_comments() {
+    // Comments are lexer-only (human files). The LLM grammar excludes
+    // them on purpose: a comment state admits almost every token, which
+    // both defeats the token-trie mask and lets the model ramble instead
+    // of emitting the program (B-10, 2026-09-14). `parse_lol` still
+    // accepts them, so this is grammar ⊂ parser, never the reverse.
     let g = lol_grammar();
-    let snippet = "// leading comment\nsphere(1.0)\n";
-    assert!(accepts(g, snippet));
-    let inner = "smooth_union(0.3, // between args\n  sphere(1.0), box3d(1.0, 1.0, 1.0))";
-    assert!(accepts(g, inner));
+    assert!(rejects(g, "// leading comment\nsphere(1.0)\n"));
+    assert!(rejects(
+        g,
+        "smooth_union(0.3, // between args\n  sphere(1.0), box3d(1.0, 1.0, 1.0))"
+    ));
+    // Plain whitespace / newlines between tokens remain fine.
+    assert!(accepts(
+        g,
+        "smooth_union(0.3,\nsphere(1.0),\nbox3d(1.0, 1.0, 1.0))\n"
+    ));
 }
 
 #[test]
@@ -140,8 +178,8 @@ fn accepts_deeply_nested_snippet() {
 fn accepts_shipped_sword_example() {
     let g = lol_grammar();
     assert!(
-        accepts(g, SWORD_EXAMPLE.trim_end()),
-        "examples/sword.lol was not accepted by lol.gbnf"
+        accepts(g, &collapse_ws(SWORD_EXAMPLE.trim_end())),
+        "examples/sword.lol (whitespace-collapsed) was not accepted by lol.gbnf"
     );
 }
 
@@ -203,7 +241,7 @@ fn accepts_program_wrapper_forms() {
     ));
     assert!(accepts(
         g,
-        "program(\n  sphere(1.0), // scene\n  entities(sphere(0.2)),\n  seq(grasp(0, left, 3.0), rest(500))\n)"
+        "program(\nsphere(1.0),\nentities(sphere(0.2)),\nseq(grasp(0, left, 3.0), rest(500))\n)"
     ));
 }
 
