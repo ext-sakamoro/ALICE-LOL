@@ -237,7 +237,13 @@ let node = lol! { sphere({r * 2.0}) };     // 算術式
 | `hlsl` | No | HLSL (DirectX) 出力 |
 | `physics` | No | ALICE-Physics bridge (SdfField trait impl + sim_modifier chain、Milestone A.1.0 2026-08-06 復帰) |
 | `roblox` | No | Roblox OBJ/FBX (MeshPart / accessory) |
-| `llm-bridge` | No | GBNF constrained decoding (AGPL-3.0 propagation 注意) |
+| `llm-bridge` | No | GBNF constrained decoding + think-prefix 2 段生成 (alice-llm `grammar` + `simd` + `parallel`、AGPL-3.0 propagation 注意) |
+
+### LLM 生成品質 benchmark (`examples/llm_bench.rs`、2026-09-14)
+
+`cargo run --release --example llm_bench --features llm-bridge -- --model <gguf> [--mode grammar|think|both] [--prefix-budget 800] [--only T2] [--out results.jsonl]`
+
+20 prompt (T1 単体 primitive / T2 合成 / T3 変換・修飾 / T4 Phase 3 Intent) を投げ、出力を **oracle** (ALICE-SDF `eval` の点内外判定、Intent は verb 構造) で判定する 文字列一致ではないので同じ形を別の式で書いても pass grammar-only と think→grammar の pass 率を tier 別に集計し、A3 SFT の効果測定 baseline に使う
 
 ### Backend parity test suite (Milestone A.4、2026-08-06)
 
