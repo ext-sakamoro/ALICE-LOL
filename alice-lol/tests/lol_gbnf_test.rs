@@ -335,3 +335,65 @@ translate(0.0, 0.04, 0.0, hex_prism(0.25, 0.1))
     assert!(accepts(g, snippet));
     assert!(alice_lol::runtime_parser::parse_lol(snippet).is_ok());
 }
+
+#[test]
+fn grammar_covers_every_runtime_parser_construct() {
+    // Drift guard (2026-09-14): every `"name" => { … }` arm of the runtime
+    // parser must appear as a quoted name in `lol.gbnf`. Until today 103
+    // product / mechanical / fastener constructs were parseable but not
+    // emittable under the grammar — they had been added to the parser and
+    // to a downstream copy of the grammar, never here.
+    const PARSER_SRC: &str = include_str!("../src/runtime_parser.rs");
+    let grammar_names: std::collections::HashSet<&str> = LOL_GBNF
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .filter(|s| {
+            s.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        })
+        .collect();
+    let mut missing = Vec::new();
+    for line in PARSER_SRC.lines() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with('"') || !trimmed.contains("=>") {
+            continue;
+        }
+        // `"a" | "b" => {` — collect every quoted identifier on the line.
+        for name in trimmed.split('"').skip(1).step_by(2) {
+            if !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                && !grammar_names.contains(name)
+            {
+                missing.push(name.to_string());
+            }
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    assert!(
+        missing.is_empty(),
+        "runtime_parser constructs missing from lol.gbnf: {missing:?}"
+    );
+}
+
+#[test]
+fn accepts_product_and_mechanical_shortcuts() {
+    let g = lol_grammar();
+    assert!(accepts(g, "pen_cup(50,100)"));
+    assert!(accepts(
+        g,
+        "union(pen_cup(50,100), translate(33,0,50, rotate(0,90,0, torus(15,5))))"
+    ));
+    assert!(accepts(g, "gridfinity_bin(2, 3, 6)"));
+    assert!(accepts(g, "gridfinity_bin_ex(2, 3, 6, 1, 2, 1.2, 1.0)"));
+    assert!(accepts(g, "wall_hook()"));
+    assert!(accepts(g, "vesa_mount(100, 4, 4)"));
+    assert!(accepts(
+        g,
+        "subtract(rounded_box(30,2.5,30,3), screw_hole(4,15))"
+    ));
+    assert!(accepts(g, "jst_ph_slot(4)"));
+}
