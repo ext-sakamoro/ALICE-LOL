@@ -35,7 +35,7 @@ This compiles to an `SdfNode` tree that can be:
 | Syntax | Args | Description |
 |--------|------|-------------|
 | `sphere(r)` | radius | Sphere centered at origin |
-| `box3d(hx, hy, hz)` | half-extents X, Y, Z | Axis-aligned box |
+| `box3d(hx, hy, hz)` | half-extents X, Y, Z | Axis-aligned box — **Rust `SdfNode::box3d` takes full dimensions**; when porting LOL → Rust use `SdfNode::box3d_half_extents` |
 | `rounded_box(hx, hy, hz, r)` | half-extents + round radius | Box with rounded edges |
 | `cylinder(r, h)` | radius, half-height | Cylinder along Y-axis |
 | `torus(R, r)` | major radius, minor radius | Torus in XZ plane |
