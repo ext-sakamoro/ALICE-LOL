@@ -628,6 +628,17 @@ impl<'a> Parser<'a> {
                     radius: r,
                 })
             }
+            // capsule_ab(ax, ay, az, bx, by, bz, r) — 任意 2 点 capsule (2026-09-14 追加)
+            // stdlib (SKADIS hook 等) が生成する非 Y 対称 Capsule を `emit::to_lol` で
+            // 書き戻すための text 構文 `capsule(r, h)` は Y 対称の短縮形のまま
+            "capsule_ab" => {
+                let (ax, ay, az, bx, by, bz, r) = self.parse_7f()?;
+                Ok(SdfNode::Capsule {
+                    point_a: Vec3::new(ax, ay, az),
+                    point_b: Vec3::new(bx, by, bz),
+                    radius: r,
+                })
+            }
             "ellipsoid" => {
                 let (rx, ry, rz) = self.parse_3f()?;
                 Ok(SdfNode::Ellipsoid {

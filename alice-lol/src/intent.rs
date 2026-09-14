@@ -538,14 +538,7 @@ fn fmt_vec3(v: Vec3) -> String {
     format!("{}, {}, {}", fmt_f32(v.x), fmt_f32(v.y), fmt_f32(v.z))
 }
 
-/// `f32` を LOL 数値リテラルとして出力 (`1` → `1.0` で整数と区別、`NaN` / `inf` は不許可)
-fn fmt_f32(v: f32) -> String {
-    if v.fract() == 0.0 && v.is_finite() {
-        format!("{v:.1}")
-    } else {
-        format!("{v}")
-    }
-}
+use crate::emit::fmt_f32;
 
 impl IntentNode {
     /// Intent tree を LOL text に変換する

@@ -187,6 +187,7 @@ let prog = builder.with_intent(intent).build();
 
 - `Program::as_sdf()` は intent field を露出しない = GPU backend 型分離で誤解釈事故を防止
 - ALICE-Kinematics `lol` feature 経由で 8-byte Intent packet に翻訳可 (Milestone B.3)
+- **`emit::to_lol` (C0、2026-09-14)**: `SdfNode` → LOL text の逆変換 (128 variant exhaustive、正規形 = 左畳み込み 2 分木 / 角度 1e-3 度 / ノイズ吸収、eval parity round-trip を全 237 construct で CI 固定) + `Program::to_lol()` 合成 data generator (Track C) の基盤
 - **LOL text 構文 (A0、2026-09-14)**: `runtime_parser::parse_program("program(<sdf>, entities(...), <intent>)")` で LLM 出力から `Program` を直接構築、`IntentNode::to_lol()` で逆変換 (round-trip)、`lol.gbnf` も同構文を受理 (grammar-constrained decoding で Phase 3 Intent を emit 可能) `rotate` verb は SDF transform と衝突するため text では `turn`
 
 #### L1 Musical Intent (Phase 3.1、2026-09-13)

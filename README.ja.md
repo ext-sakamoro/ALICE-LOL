@@ -182,6 +182,7 @@ let program = parallel(vec![
 - **依存なし** — `alice-lol` は `alice-synth` に依存しない。8-byte packet が唯一の cross-crate 契約
 - consumer (interpreter / LLM plan head / remote 演奏サーバ) は `MusicIntent::from_bytes(packet)` で復元 → `synthesize()` で PCM 生成
 - GPU backend 型分離 — `Program::as_sdf()` は intent field を露出せず、shader が誤って Intent を解釈する事故を型で防止
+- **`emit::to_lol` (C0、2026-09-14)** — `SdfNode` → LOL text の逆変換 (128 variant exhaustive、正規形 = 左畳み込み 2 分木 / 角度 1e-3 度 / ノイズ吸収、eval parity round-trip を全 237 construct で CI 固定) + `Program::to_lol()`。合成 data generator (Track C) の基盤。
 - **LOL text 構文 (A0、2026-09-14)** — `runtime_parser::parse_program("program(<sdf>, entities(...), <intent>)")` で LLM 出力から `Program` を直接構築、`IntentNode::to_lol()` で逆変換 (round-trip)。`lol.gbnf` も同構文を受理するため grammar-constrained decoding で Phase 3 Intent を emit 可能。`rotate` verb は SDF transform と衝突するため text では `turn`
 
 ## サンプル

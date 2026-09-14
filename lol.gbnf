@@ -349,6 +349,7 @@ name_6f ::= "segment_2d"
             | "rack_shelf"
 
 name_7f ::= "gridfinity_bin_ex"
+          | "capsule_ab"
 
 name_9f ::= "triangle"
 
