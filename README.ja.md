@@ -62,6 +62,7 @@ let glsl = alice_lol::to_glsl(&scene);
 |---------|------|------|
 | `alice-lol-macro` | proc-macro | LOL DSL パーサー + `SdfNode` コード生成 |
 | `alice-lol` | rlib | Re-export + トランスパイル関数 + 法則チェッカー + 空間枝刈り |
+| `alice-lol-datagen` | rlib + bin (sibling) | 合成 (caption, LOL) pair generator (Track C1、8 template family + self-check、6,500 sample/s) |
 
 ## クイックスタート
 
