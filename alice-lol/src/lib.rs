@@ -22,6 +22,18 @@
 
 // ── ランタイム LOL パーサー（LLM Text-to-3D 用） ──
 // `parse_lol("sphere(1.0)")` → `SdfNode` に変換
+/// The LOL DSL grammar (`lol.gbnf`, GBNF) as shipped with this crate version.
+///
+/// Feature-free on purpose: downstream crates (alice-bamboo → text-to-print,
+/// or any llama.cpp-compatible runtime) embed the *same* bytes instead of
+/// keeping a copy that drifts. With `llm-bridge` enabled,
+/// [`bridge::lol_grammar`] parses exactly this text.
+///
+/// The grammar is deliberately stricter than [`runtime_parser`] (no `//`
+/// comments, at most one whitespace char between tokens); see the file
+/// header for why.
+pub const LOL_GBNF: &str = include_str!("../../lol.gbnf");
+
 pub mod runtime_parser;
 
 // ── 3Dプリント向けエクスポート ──

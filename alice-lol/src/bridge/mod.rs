@@ -81,7 +81,8 @@ use crate::SdfNode;
 pub const LOL_FSM_MAX_DEPTH: usize = 4096;
 
 /// Raw grammar text (compiled into the binary; no filesystem I/O).
-const LOL_GBNF: &str = include_str!("../../../lol.gbnf");
+/// Same bytes as the feature-free [`crate::LOL_GBNF`].
+const LOL_GBNF: &str = crate::LOL_GBNF;
 
 static LOL_GRAMMAR: OnceLock<Grammar> = OnceLock::new();
 
