@@ -194,6 +194,7 @@ let program = parallel(vec![
 | `law_demo` | 法則制約 — NonOverlap、Containment、MinThickness |
 | `autodiff_demo` | 自動微分 — 勾配、曲率解析 |
 | `compiled_demo` | CompiledSdf — SIMD バッチ評価 |
+| `llm_bench` (`--features llm-bridge`) | LLM 生成品質 benchmark — 20 prompt (T1-T4) を oracle (SDF 点内外 / Intent verb 構造) で判定、grammar-only vs think→grammar の pass 率 (2026-09-14) |
 
 ## Cargo Features
 
@@ -203,6 +204,7 @@ let program = parallel(vec![
 | `wgsl` | No | WGSL（WebGPU）出力 |
 | `hlsl` | No | HLSL（DirectX）出力 |
 | `physics` | No | ALICE-Physics 連携（SDF → 力場） |
+| `llm-bridge` | No | GBNF constrained decoding + think-prefix 2 段生成（alice-llm `grammar` + `simd` + `parallel`、AGPL-3.0 伝播注意） |
 
 ## API
 
