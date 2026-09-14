@@ -57,12 +57,12 @@ runs:
         : > "../ALICE-LLM/src/lib.rs"
 
         # ALICE-Physics stub (physics feature 用、実 crate は AGPL-3.0)
-        # crates.io 0.14.0-preview.5 publish 済 (alice-lol 0.3.0 の version = "0.14.0-preview.4" constraint 追従)
+        # crates.io 1.0.0 stable publish 済 2026-09-14 (alice-lol の version = "1.0" constraint 追従)
         mkdir -p "../ALICE-Physics/src"
         cat > "../ALICE-Physics/Cargo.toml" <<'TOML'
         [package]
         name = "alice-physics"
-        version = "0.14.0-preview.5"
+        version = "1.0.0"
         edition = "2021"
         license = "MIT OR Apache-2.0"
 

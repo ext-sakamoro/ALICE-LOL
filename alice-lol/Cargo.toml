@@ -30,7 +30,7 @@ alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = fa
 # NOTE: alice-physics is AGPL-3.0 enabling `physics` feature propagates that
 # license to downstream Leave the feature off (default) to stay on
 # MIT-or-Apache-2.0 terms
-alice-physics = { path = "../../ALICE-Physics", version = "0.14.0-preview.4", default-features = false, features = ["std"], optional = true }
+alice-physics = { path = "../../ALICE-Physics", version = "1.0", default-features = false, features = ["std"], optional = true }
 
 [features]
 default = ["glsl"]
