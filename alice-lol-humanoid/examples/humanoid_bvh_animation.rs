@@ -99,6 +99,7 @@ fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
 }
 
 #[cfg(not(feature = "vrm"))]
+#[allow(clippy::unnecessary_wraps)] // feature vrm 版と signature を揃える
 fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
     if std::env::var("VRM_PATH").is_ok() {
         eprintln!("VRM_PATH set だが feature vrm off → --features vrm 追加要");

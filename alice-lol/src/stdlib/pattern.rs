@@ -163,6 +163,7 @@ pub mod registry {
     };
 
     /// U 字棚仕切り (Bamboo `models/shelf/divider-560x250x120/`、Rust generator canonical)
+    ///
     /// Sim 60 Acceptable (warp Critical + overhang 40、560mm 幅で env open-air PLA warp 高判定)
     /// だが 30lbs 荷重実プリント合格 baseline のため `UserFieldTest` 維持 (CI gate は field test 経由通過)
     pub const SHELF_DIVIDER_560X250X120: LolPattern = LolPattern {
@@ -297,6 +298,7 @@ pub mod registry {
     };
 
     /// Gridfinity bin (Bamboo `generators/gridfinity.rs`、Sim 79 Good、CI gate 未通過)
+    ///
     /// `tight_aabb` 修正で真の bbox (92×92×41mm) 取得、mesh 生成成功 (前 mesh 0 の bug 解消)
     /// overhang 40 (前 100 誤値) で score 降格、gate 通過には field test で 85+ 判定必要
     pub const GRIDFINITY_BIN: LolPattern = LolPattern {
@@ -436,11 +438,11 @@ mod tests {
     fn uncertified_patterns_count() {
         // Phase B.2 代替 (2026-08-06): Bamboo simulation 反映後、全 13 pattern が
         // UserFieldTest / Both / BambooSimulation のいずれかで certified、None は 0
-        let uncertified: Vec<_> = registry::ALL
+        let uncertified = registry::ALL
             .iter()
             .filter(|p| p.certified_by == CertificationSource::None)
-            .collect();
-        assert_eq!(uncertified.len(), 0);
+            .count();
+        assert_eq!(uncertified, 0);
     }
 
     #[test]

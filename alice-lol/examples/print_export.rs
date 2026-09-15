@@ -7,6 +7,9 @@
 //! cargo run --example print_export
 //! ```
 
+// example: file size 表示 (u64 → f64)
+#![allow(clippy::cast_precision_loss)]
+
 use alice_lol::lol;
 use alice_lol::print_export::{lol_to_stl, node_to_3mf, node_to_stl, PrintConfig};
 use glam::Vec3;

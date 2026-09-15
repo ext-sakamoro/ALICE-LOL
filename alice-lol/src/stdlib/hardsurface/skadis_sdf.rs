@@ -359,6 +359,7 @@ pub const SKADIS_OUTER_FRAME: f32 = 12.0;
 /// DC (`node_to_3mf_dual_contouring`) で mesh 化すると Hermite data により watertight 保証
 /// example `skadis_panel_dc_vs_mc.rs` で実測比較
 #[must_use]
+#[allow(clippy::too_many_lines)] // 1 枚の板の SDF 構成を直列に記述 (分割すると寸法の対応が追いにくい)
 pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNode {
     // 外形 (原点中心の RoundedBox、Y 軸方向 = 板厚)
     // 2026-08-08 fix: RoundedBox は 6 面全てに round_radius を追加する仕様のため、

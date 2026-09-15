@@ -92,14 +92,16 @@ pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement>
         .fold(f64::NEG_INFINITY, f64::max);
 
     let mut elements = Vec::new();
-    let mut d = (proj_min / spacing).ceil() * spacing;
+    let d0 = (proj_min / spacing).ceil() * spacing;
+    // 固定間隔なので整数 index で刻む (float の累積加算より誤差が溜まらない)
+    let line_count = cell_count(proj_max - d0, spacing) + 1;
 
-    while d <= proj_max {
+    for i in 0..line_count {
+        let d = usize_f64(i).mul_add(spacing, d0);
         // d = -sin_a * x + cos_a * y の直線と矩形の交点を求める
         if let Some((x1, y1, x2, y2)) = clip_line_to_rect(cos_a, sin_a, d, bounds) {
             elements.push(LaserElement::Line(x1, y1, x2, y2));
         }
-        d += spacing;
     }
 
     elements
@@ -126,6 +128,7 @@ pub fn crosshatch(spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
 /// `bounds`: クリッピング矩形
 /// `density_fn`: (x, y) → 0.0..1.0 の密度関数。1.0=最密、0.0=最疎
 #[must_use]
+#[allow(clippy::while_float)] // 線間隔が密度で変わるので整数 index で刻めない
 pub fn density_hatch(
     min_spacing: f64,
     max_spacing: f64,
@@ -265,13 +268,13 @@ pub fn halftone(
     let cell_size = 25.4 / lpi; // mm per cell
     let mut elements = Vec::new();
 
-    let cols = ((bounds.w / cell_size).ceil() as i32).max(0);
-    let rows = ((bounds.h / cell_size).ceil() as i32).max(0);
+    let cols = cell_count(bounds.w, cell_size);
+    let rows = cell_count(bounds.h, cell_size);
 
     for row in 0..rows {
         for col in 0..cols {
-            let cx = (f64::from(col) + 0.5).mul_add(cell_size, bounds.x);
-            let cy = (f64::from(row) + 0.5).mul_add(cell_size, bounds.y);
+            let cx = cell_center(col, cell_size, bounds.x);
+            let cy = cell_center(row, cell_size, bounds.y);
 
             if !bounds.contains(cx, cy) {
                 continue;
@@ -319,16 +322,16 @@ pub fn dither(
     }
 
     let pixel_size = 25.4 / dpi;
-    let cols = ((bounds.w / pixel_size).ceil() as usize).max(1);
-    let rows = ((bounds.h / pixel_size).ceil() as usize).max(1);
+    let cols = cell_count(bounds.w, pixel_size).max(1);
+    let rows = cell_count(bounds.h, pixel_size).max(1);
 
     // 輝度マップをサンプリング
     let mut grid: Vec<Vec<f64>> = Vec::with_capacity(rows);
     for row in 0..rows {
         let mut scanline = Vec::with_capacity(cols);
         for col in 0..cols {
-            let x = (col as f64 + 0.5).mul_add(pixel_size, bounds.x);
-            let y = (row as f64 + 0.5).mul_add(pixel_size, bounds.y);
+            let x = cell_center(col, pixel_size, bounds.x);
+            let y = cell_center(row, pixel_size, bounds.y);
             let b = brightness_fn(x, y).clamp(0.0, 1.0);
             scanline.push(b);
         }
@@ -351,7 +354,7 @@ fn dither_error_diffusion(
     rows: usize,
 ) -> Vec<LaserElement> {
     // (dx, dy, weight) — 合計が divisor になる
-    let (offsets, divisor): (&[(i32, i32, f64)], f64) = match algorithm {
+    let (offsets, divisor): (&[(isize, isize, f64)], f64) = match algorithm {
         DitherAlgorithm::FloydSteinberg => {
             (&[(1, 0, 7.0), (-1, 1, 3.0), (0, 1, 5.0), (1, 1, 1.0)], 16.0)
         }
@@ -415,17 +418,20 @@ fn dither_error_diffusion(
 
             // 誤差拡散
             for &(dx, dy, weight) in offsets {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx >= 0 && (nx as usize) < cols && ny >= 0 && (ny as usize) < rows {
-                    grid[ny as usize][nx as usize] += error * weight / divisor;
+                // 左端 / 上端で負になる offset は checked_add_signed で None
+                let (Some(nx), Some(ny)) = (x.checked_add_signed(dx), y.checked_add_signed(dy))
+                else {
+                    continue;
+                };
+                if nx < cols && ny < rows {
+                    grid[ny][nx] += error * weight / divisor;
                 }
             }
 
             // 黒ピクセル → ドット
             if new_val < 0.5 {
-                let px = (x as f64 + 0.5).mul_add(pixel_size, bounds.x);
-                let py = (y as f64 + 0.5).mul_add(pixel_size, bounds.y);
+                let px = cell_center(x, pixel_size, bounds.x);
+                let py = cell_center(y, pixel_size, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -456,8 +462,8 @@ fn dither_ordered(
         for x in 0..cols {
             let threshold = BAYER4[y & 3][x & 3];
             if grid[y][x] < threshold {
-                let px = (x as f64 + 0.5).mul_add(pixel_size, bounds.x);
-                let py = (y as f64 + 0.5).mul_add(pixel_size, bounds.y);
+                let px = cell_center(x, pixel_size, bounds.x);
+                let py = cell_center(y, pixel_size, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -550,6 +556,7 @@ pub fn lissajous(
 /// `steps`: 描画ステップ数
 /// `bounds`: 中心配置用
 #[must_use]
+#[allow(clippy::many_single_char_names)] // rhodonea 標準記法 r = a·cos(kθ)
 pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserElement> {
     if steps == 0 {
         return Vec::new();
@@ -683,16 +690,16 @@ pub fn turing(
     }
 
     // V がしきい値以上のセルをドットとして出力
-    let cell_w = bounds.w / n as f64;
-    let cell_h = bounds.h / n as f64;
+    let cell_w = bounds.w / usize_f64(n);
+    let cell_h = bounds.h / usize_f64(n);
     let mut dots = Vec::new();
 
     #[allow(clippy::needless_range_loop)]
     for y in 0..n {
         for x in 0..n {
             if v[y][x] >= threshold {
-                let px = (x as f64 + 0.5).mul_add(cell_w, bounds.x);
-                let py = (y as f64 + 0.5).mul_add(cell_h, bounds.y);
+                let px = cell_center(x, cell_w, bounds.x);
+                let py = cell_center(y, cell_h, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -782,20 +789,41 @@ pub fn elements_to_svg(
 //  ユーティリティ
 // ──────────────────────────────────────────────────────
 
+/// 範囲 `extent` を `cell` 幅で割った cell 数 (切上げ、負 / NaN → 0)
+///
+/// `f64 → usize` の単一 audit 点: `ceil().max(0.0)` 後なので符号なし、mm 単位の
+/// 板サイズ / cell 幅で 2^53 を超えることはない
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn cell_count(extent: f64, cell: f64) -> usize {
+    (extent / cell).ceil().max(0.0) as usize
+}
+
+/// cell index → cell 中心の座標 (`origin + (i + 0.5) * cell`)
+fn cell_center(i: usize, cell: f64, origin: f64) -> f64 {
+    (usize_f64(i) + 0.5).mul_add(cell, origin)
+}
+
+/// `usize → f64` の単一 audit 点 (grid index / cell 数は 2^53 未満)
+#[allow(clippy::cast_precision_loss)]
+const fn usize_f64(i: usize) -> f64 {
+    i as f64
+}
+
 /// 浮動小数の近似GCD（スピログラフの完全周期計算用）
-fn gcd_f64(a: f64, b: f64) -> f64 {
-    let mut x = a.abs();
-    let mut y = b.abs();
+#[allow(clippy::while_float)] // Euclid 互除法の float 版、終了条件は eps
+fn gcd_f64(lhs: f64, rhs: f64) -> f64 {
+    let mut big = lhs.abs();
+    let mut small = rhs.abs();
     let eps = 1e-9;
-    while y > eps {
-        let t = y;
-        y = x % y;
-        if y < eps {
+    while small > eps {
+        let prev = small;
+        small = big % small;
+        if small < eps {
             break;
         }
-        x = t;
+        big = prev;
     }
-    x
+    big
 }
 
 // ──────────────────────────────────────────────────────
@@ -851,10 +879,10 @@ mod tests {
     fn test_hatch_line_count() {
         let spacing = 2.0;
         let elems = hatch(0.0, spacing, &card_bounds());
-        let expected = (54.0 / spacing).ceil() as usize;
+        let expected = cell_count(54.0, spacing);
         // 端数による±1の誤差を許容
         assert!(
-            (elems.len() as i32 - expected as i32).unsigned_abs() <= 1,
+            elems.len().abs_diff(expected) <= 1,
             "線数 {} が期待値 {} と大幅に異なる",
             elems.len(),
             expected

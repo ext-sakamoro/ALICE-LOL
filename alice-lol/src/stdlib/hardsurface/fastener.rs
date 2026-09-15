@@ -153,8 +153,7 @@ impl MetricSize {
             Self::M2 => 3.0,
             Self::M2_5 => 3.3,
             Self::M3 => 3.8,
-            Self::M4 => 5.7,
-            Self::M5 => 5.7,
+            Self::M4 | Self::M5 => 5.7,
             Self::M6 => 7.9,
             Self::M8 => 10.0,
         }

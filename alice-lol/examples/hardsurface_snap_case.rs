@@ -9,6 +9,9 @@
 //!
 //! `joint::snap_fit_cantilever` + PLA 応力計算の実使用例
 
+// example: 寸法 (hx / hy / hz) を追える直列記述の demo
+#![allow(clippy::too_many_lines, clippy::similar_names)]
+
 use alice_lol::stdlib::hardsurface::joint::{
     snap_fit_cantilever, SnapFitCantileverSpec, PLA_ELASTIC_MODULUS_GPA, PLA_YIELD_STRESS_MPA,
 };

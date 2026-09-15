@@ -188,7 +188,7 @@ fn multiple_laws() {
     let outer = lol! { sphere(2.0) };
 
     let laws = vec![
-        Law::hard("no_overlap", Constraint::NonOverlap { a: a, b: b }),
+        Law::hard("no_overlap", Constraint::NonOverlap { a, b }),
         Law::hard("contained", Constraint::Containment { inner, outer }),
     ];
 
@@ -259,7 +259,7 @@ fn lawset_builder_basic() {
     let outer = lol! { sphere(2.0) };
 
     let set = LawSet::new()
-        .hard("no_overlap", Constraint::NonOverlap { a: a, b: b })
+        .hard("no_overlap", Constraint::NonOverlap { a, b })
         .hard("contained", Constraint::Containment { inner, outer });
 
     let config = CheckConfig {
@@ -414,7 +414,7 @@ fn top_violations_filter() {
     let thin = lol! { box3d(2.0, 0.3, 2.0) };
 
     let set = LawSet::new()
-        .hard("no_overlap", Constraint::NonOverlap { a: a, b: b })
+        .hard("no_overlap", Constraint::NonOverlap { a, b })
         .hard(
             "min_wall",
             Constraint::MinThickness {
