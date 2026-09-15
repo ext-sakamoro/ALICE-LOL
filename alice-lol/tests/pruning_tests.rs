@@ -73,7 +73,7 @@ fn cell_count_matches_resolution() {
     }
 }
 
-/// 離れた 2 body の smooth_union — 枝刈りでノード数が減る
+/// 離れた 2 body の `smooth_union` — 枝刈りでノード数が減る
 #[test]
 fn pruning_reduces_node_count() {
     let scene = lol! {
@@ -108,21 +108,21 @@ fn pruning_reduces_node_count() {
     );
 }
 
-/// count_nodes: プリミティブ = 1
+/// `count_nodes`: プリミティブ = 1
 #[test]
 fn count_nodes_primitive() {
     let n = lol! { sphere(1.0) };
     assert_eq!(count_nodes(&n), 1);
 }
 
-/// count_nodes: union(a, b) = 3
+/// `count_nodes`: union(a, b) = 3
 #[test]
 fn count_nodes_union() {
     let n = lol! { union(sphere(1.0), box3d(0.5, 0.5, 0.5)) };
     assert_eq!(count_nodes(&n), 3);
 }
 
-/// count_nodes: translate + sphere = 2
+/// `count_nodes`: translate + sphere = 2
 #[test]
 fn count_nodes_translate() {
     let n = lol! { translate(1.0, 0.0, 0.0, sphere(1.0)) };

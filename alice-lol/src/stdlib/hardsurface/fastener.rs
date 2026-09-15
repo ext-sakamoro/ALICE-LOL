@@ -9,7 +9,7 @@
 //! | [`counterbore`] | ソケットキャップ頭部沈み穴 | ISO 4762 頭径 |
 //! | [`countersink`] | 皿頭 (90°) 沈み穴 | ISO 10642 頭径 |
 //! | [`bolt`] | ボルト実体 (組立可視化用、頭 + 軸) | ISO 4762 |
-//! | [`heat_set_insert_hole`] | Voxel8 / McMaster ヒートセット下穴 | insert 外径 + 0.2 |
+//! | [`heat_set_insert_hole`] | Voxel8 / `McMaster` ヒートセット下穴 | insert 外径 + 0.2 |
 //!
 //! ## 座標系
 //!
@@ -132,7 +132,7 @@ impl MetricSize {
         }
     }
 
-    /// McMaster / Voxel8 ヒートセットインサート 外径 (mm)
+    /// `McMaster` / Voxel8 ヒートセットインサート 外径 (mm)
     #[must_use]
     pub const fn heat_set_insert_diameter(self) -> f32 {
         match self {
@@ -146,7 +146,7 @@ impl MetricSize {
         }
     }
 
-    /// McMaster / Voxel8 ヒートセットインサート 埋込深さ (mm)
+    /// `McMaster` / Voxel8 ヒートセットインサート 埋込深さ (mm)
     #[must_use]
     pub const fn heat_set_insert_depth(self) -> f32 {
         match self {
@@ -163,7 +163,7 @@ impl MetricSize {
     /// f32 呼び径 (mm) を対応 `MetricSize` に最近接 snap する
     ///
     /// 2.0/2.5/3.0/4.0/5.0/6.0/8.0 は完全一致、それ以外は最近接に snap
-    /// LLM / runtime_parser が「M4.5」等の非規格値を渡した時のフォールバック用
+    /// LLM / `runtime_parser` が「M4.5」等の非規格値を渡した時のフォールバック用
     ///
     /// # 使用例
     ///
@@ -267,7 +267,7 @@ pub fn tap_hole(size: MetricSize, depth: f32, accuracy: f32) -> SdfNode {
 /// 座ぐり (counterbore) — ソケットキャップ頭が完全に沈む貫通穴
 ///
 /// 構造: 板貫通クリアランス穴 (下段) ∪ 頭径 × 頭高+0.5mm sink margin の cylinder (上段)
-/// 板は Y=0 中心の厚さ `plate_thickness` を想定、頭は板上面 (Y = +plate_thickness/2) から沈む
+/// 板は Y=0 中心の厚さ `plate_thickness` を想定、頭は板上面 (Y = +`plate_thickness/2`) から沈む
 ///
 /// # 使用例
 ///
@@ -340,7 +340,7 @@ pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
 /// ISO 4762 ソケットキャップボルト 実体 (組立可視化用)
 ///
 /// 構造: 軸 (半径 = 呼び径/2、長 = `shank_length`) ∪ 頭 (ISO 4762 頭径/高)
-/// 頭は Y = +shank_length/2 + head_height/2 に配置 (軸上端の外側)
+/// 頭は Y = +`shank_length/2` + `head_height/2` に配置 (軸上端の外側)
 ///
 /// これは「実体」であって「穴」ではない 穴が欲しい時は [`counterbore`] を使う
 ///
@@ -366,7 +366,7 @@ pub fn bolt(size: MetricSize, shank_length: f32) -> SdfNode {
     };
     let head_shifted = SdfNode::Translate {
         child: Arc::new(head),
-        offset: Vec3::new(0.0, (shank_length + head_h) * 0.5, 0.0),
+        offset: Vec3::new(0.0, f32::midpoint(shank_length, head_h), 0.0),
     };
     SdfNode::Union {
         a: Arc::new(shank),
@@ -374,7 +374,7 @@ pub fn bolt(size: MetricSize, shank_length: f32) -> SdfNode {
     }
 }
 
-/// ヒートセットインサート下穴 (Voxel8 / McMaster 準拠、Bamboo `heat_insert_hole()` と同式)
+/// ヒートセットインサート下穴 (Voxel8 / `McMaster` 準拠、Bamboo `heat_insert_hole()` と同式)
 ///
 /// 直径 = insert 外径 + 0.2mm (熱膨張余裕)、深さ = insert 埋込深さ + [`HEAT_SET_SINK_MARGIN`]
 /// はんだごてで挿入する時に樹脂が沈むための余裕を確保する

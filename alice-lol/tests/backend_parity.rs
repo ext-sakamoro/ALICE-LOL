@@ -1,6 +1,6 @@
 //! Backend parity test suite (Milestone A.4 Level 1: structural)
 //!
-//! 全 GLSL/WGSL/HLSL backend が同一 SdfNode に対して:
+//! 全 GLSL/WGSL/HLSL backend が同一 `SdfNode` に対して:
 //!
 //! 1. panic なく transpile 完了
 //! 2. 非空の shader source 生成
@@ -11,7 +11,7 @@
 //! Level 2 (実 GPU 実行 + CPU eval との数値比較) は A.4.1 別 sprint (wgpu setup 必要)
 //!
 //! 実行:
-//!   cargo test --test backend_parity --features "glsl wgsl hlsl"
+//!   cargo test --test `backend_parity` --features "glsl wgsl hlsl"
 
 #![cfg(all(feature = "glsl", feature = "wgsl", feature = "hlsl"))]
 

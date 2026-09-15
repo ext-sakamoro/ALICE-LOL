@@ -69,7 +69,7 @@ pub fn subtract_through_cylinder(
     x: f32,
     z: f32,
 ) -> SdfNode {
-    let cyl_len = plate_thickness + 2.0 * CAVITY_PUNCH_MARGIN;
+    let cyl_len = 2.0f32.mul_add(CAVITY_PUNCH_MARGIN, plate_thickness);
     let hole = SdfNode::Cylinder {
         radius: hole_dia * 0.5,
         half_height: cyl_len * 0.5,
@@ -215,7 +215,7 @@ pub fn subtract_blind_pocket(
     };
     // center Y = outer_hy + (punch_margin - pocket_depth) / 2
     // → cylinder extends Y = [outer_hy - pocket_depth, outer_hy + punch_margin]
-    let y_offset = outer_hy + (CAVITY_PUNCH_MARGIN - pocket_depth) * 0.5;
+    let y_offset = (CAVITY_PUNCH_MARGIN - pocket_depth).mul_add(0.5, outer_hy);
     let hole_placed = SdfNode::Translate {
         child: Arc::new(hole),
         offset: Vec3::new(x, y_offset, z),
@@ -264,7 +264,7 @@ pub fn subtract_blind_heat_set(
 /// Returns Cylinder Y-axis with length = `plate_thickness + 10mm` (5mm each side)
 #[must_use]
 pub fn through_hole_cylinder(hole_dia: f32, plate_thickness: f32) -> SdfNode {
-    let cyl_len = plate_thickness + 2.0 * CAVITY_PUNCH_MARGIN;
+    let cyl_len = 2.0f32.mul_add(CAVITY_PUNCH_MARGIN, plate_thickness);
     SdfNode::Cylinder {
         radius: hole_dia * 0.5,
         half_height: cyl_len * 0.5,
@@ -319,7 +319,7 @@ mod tests {
         // margin above plate = 7.5 - 2.5 = 5mm ✓
         // margin below plate = 7.5 - 2.5 = 5mm ✓
         // (このテストは数式で保証、runtime assertion 不要だが cavity margin rule 準拠を明示)
-        let expected_hole_half_height = (5.0 + 2.0 * CAVITY_PUNCH_MARGIN) * 0.5;
+        let expected_hole_half_height = 2.0f32.mul_add(CAVITY_PUNCH_MARGIN, 5.0) * 0.5;
         assert!((expected_hole_half_height - 7.5).abs() < 1e-6);
     }
 
@@ -335,7 +335,7 @@ mod tests {
         // hole extends Y = [3.5 - 4.5, 3.5 + 4.5] = [-1.0, +8.0]
         // plate top = +3、pocket top = +8 → margin +5mm above ✓
         // pocket bottom = -1 = plate top - 4mm depth ✓ (物理仕様通り)
-        let expected_y_offset = 3.0 + (CAVITY_PUNCH_MARGIN - 4.0) * 0.5;
+        let expected_y_offset = (CAVITY_PUNCH_MARGIN - 4.0).mul_add(0.5, 3.0);
         assert!((expected_y_offset - 3.5).abs() < 1e-6);
     }
 

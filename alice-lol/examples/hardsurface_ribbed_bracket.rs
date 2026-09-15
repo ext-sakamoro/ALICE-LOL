@@ -1,4 +1,4 @@
-//! # hardsurface_ribbed_bracket — Phase A.3 補強 primitive デモ
+//! # `hardsurface_ribbed_bracket` — Phase A.3 補強 primitive デモ
 //!
 //! L 字ブラケット (水平板 + 垂直板) の内角にフィレット + 3 本のリブを配置
 //! Phase A.3 の rib / fillet を組合わせた実プリント想定 pattern

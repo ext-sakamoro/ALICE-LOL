@@ -188,7 +188,7 @@ fn decode_latent_intents(intent: &IntentNode) -> Result<IntentNode, RobotError> 
 /// # Errors
 ///
 /// `values.len() < 4` で [`RobotError::InvalidLatentDim`]
-fn decode_latent_projection(values: &[f32]) -> Result<IntentNode, RobotError> {
+const fn decode_latent_projection(values: &[f32]) -> Result<IntentNode, RobotError> {
     const MIN_DIM: usize = 4;
     if values.len() < MIN_DIM {
         return Err(RobotError::InvalidLatentDim {

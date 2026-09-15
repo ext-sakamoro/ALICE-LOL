@@ -2,7 +2,7 @@
 //!
 //! 用途に応じた3つのモデリング戦略を示す:
 //! 1. 装飾品（Decorative）: onion で中空化 → フィラメント節約
-//! 2. 構造部品（Structural）: lattice_infill でTPMSラティス充填 → 軽量かつ高強度
+//! 2. 構造部品（Structural）: `lattice_infill` でTPMSラティス充填 → 軽量かつ高強度
 //! 3. 重量物（Solid）: そのまま → 最大剛性
 //!
 //! ```bash

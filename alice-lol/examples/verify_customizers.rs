@@ -1,7 +1,7 @@
 //! Verify text-to-print customizer archetypes render as expected shape
 //!
 //! Renders each broken-reported archetype at preview resolution (96)
-//! and computes fill ratio (mesh_volume / aabb_volume) to detect
+//! and computes fill ratio (`mesh_volume` / `aabb_volume`) to detect
 //! "just a box" bug pattern (ratio > 0.85 = suspicious).
 //!
 //! ```bash
@@ -20,7 +20,7 @@ use glam::Vec3;
 /// Formula: V = (1/6) Σ (v0 · (v1 × v2))
 fn signed_mesh_volume(mesh: &Mesh) -> f32 {
     let mut vol = 0.0_f32;
-    for tri in mesh.indices.chunks_exact(3) {
+    for tri in mesh.indices.as_chunks::<3>().0 {
         let v0 = mesh.vertices[tri[0] as usize].position;
         let v1 = mesh.vertices[tri[1] as usize].position;
         let v2 = mesh.vertices[tri[2] as usize].position;
@@ -34,7 +34,7 @@ fn write_stl_ascii(mesh: &Mesh, path: &std::path::Path) -> std::io::Result<()> {
     use std::io::Write;
     let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
     writeln!(w, "solid verify")?;
-    for tri in mesh.indices.chunks_exact(3) {
+    for tri in mesh.indices.as_chunks::<3>().0 {
         let v0 = mesh.vertices[tri[0] as usize].position;
         let v1 = mesh.vertices[tri[1] as usize].position;
         let v2 = mesh.vertices[tri[2] as usize].position;
@@ -69,7 +69,7 @@ fn mesh_aabb(mesh: &Mesh) -> (Vec3, Vec3) {
 struct Case {
     label: &'static str,
     lol: &'static str,
-    /// Expected fill ratio range (mesh_vol / aabb_vol)
+    /// Expected fill ratio range (`mesh_vol` / `aabb_vol`)
     /// Working archetypes: 0.20-0.75, Box-bug: > 0.85
     expected: &'static str,
 }
@@ -162,8 +162,8 @@ fn main() {
     ];
 
     println!(
-        "{:<48} | {:>8} | {:>9} | {:>10} | {:>7} | {}",
-        "archetype", "tri", "aabb_vol", "mesh_vol", "ratio", "expected"
+        "{:<48} | {:>8} | {:>9} | {:>10} | {:>7} | expected",
+        "archetype", "tri", "aabb_vol", "mesh_vol", "ratio"
     );
     println!("{}", "-".repeat(140));
 

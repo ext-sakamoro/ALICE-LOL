@@ -1,4 +1,4 @@
-//! # hardsurface_wall_bracket — Phase A.1-A.4 統合デモ
+//! # `hardsurface_wall_bracket` — Phase A.1-A.4 統合デモ
 //!
 //! 壁掛け bracket を Phase A の 4 module から primitive を合成して組立てる
 //! - `mount::bracket_l` — L 字本体 (fillet R3 内蔵)
@@ -57,7 +57,7 @@ fn main() {
     // 垂直板中心 X = -(horizontal_len - thickness)/2、Y = (vertical_h + thickness)/2
     // ────────────────────────────────
     let vertical_center_x = -(horizontal_len - thickness) * 0.5;
-    let vertical_center_y = (vertical_h + thickness) * 0.5;
+    let vertical_center_y = f32::midpoint(vertical_h, thickness);
     let wall_bore = counterbore(MetricSize::M5, thickness);
     // Counterbore の穴軸 = Y 軸なので、垂直板の X 軸貫通にするため Z 軸周り 90° 回転
     let wall_bore_horiz = SdfNode::Rotate {

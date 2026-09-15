@@ -5,9 +5,9 @@
 //! | primitive | 用途 | 実装 |
 //! |-----------|------|------|
 //! | [`bracket_l`] | L 字 bracket (水平 + 垂直板、内角 fillet 統合) | 2 Box3d + `SmoothUnion` (fillet) |
-//! | [`flange_circular`] | 円形フランジ (PCD 上に bolt 穴 pattern) | Cylinder + polar_repeat bolt holes |
+//! | [`flange_circular`] | 円形フランジ (PCD 上に bolt 穴 pattern) | Cylinder + `polar_repeat` bolt holes |
 //! | [`rack_shelf`] | 棚受けレール (等間隔 notch 列) | Box3d - `RepeatFinite` (Cylinder notches) |
-//! | [`skadis_peg_compat`] | IKEA SKADIS 互換 peg 単体 (Bamboo `PEG_W - FDM_CLEARANCE` 準拠) | RoundedBox 単体 |
+//! | [`skadis_peg_compat`] | IKEA SKADIS 互換 peg 単体 (Bamboo `PEG_W - FDM_CLEARANCE` 準拠) | `RoundedBox` 単体 |
 //! | [`profile_2020`] | 20×20 アルミプロファイル外形 (4 面 T スロット + 中央 M5 穴) | Box + 4 rotate/translate T-slot + 中央 Cylinder |
 //! | [`profile_3030`] | 30×30 アルミプロファイル外形 (4 面 T スロット + 中央 M6 穴) | 同上、寸法違い |
 //!
@@ -101,7 +101,7 @@ pub fn bracket_l(
         child: Arc::new(vertical_raw),
         offset: Vec3::new(
             -(horizontal_length - thickness) * 0.5,
-            (vertical_height + thickness) * 0.5,
+            f32::midpoint(vertical_height, thickness),
             0.0,
         ),
     };
@@ -162,7 +162,7 @@ pub fn flange_circular(
     // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
     let single_bolt = SdfNode::Cylinder {
         radius: bolt_dia * 0.5,
-        half_height: thickness * 0.5 + 5.0,
+        half_height: thickness.mul_add(0.5, 5.0),
     };
     let bolt_offset = SdfNode::Translate {
         child: Arc::new(single_bolt),
@@ -180,7 +180,7 @@ pub fn flange_circular(
         // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
         let center_bore = SdfNode::Cylinder {
             radius: center_bore_dia * 0.5,
-            half_height: thickness * 0.5 + 5.0,
+            half_height: thickness.mul_add(0.5, 5.0),
         };
         SdfNode::Subtraction {
             a: Arc::new(with_bolts),
@@ -232,7 +232,7 @@ pub fn rack_shelf(
     // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
     let notch = SdfNode::Cylinder {
         radius: notch_dia * 0.5,
-        half_height: thickness * 0.5 + 5.0,
+        half_height: thickness.mul_add(0.5, 5.0),
     };
     let notch_row = SdfNode::RepeatFinite {
         child: Arc::new(notch),
@@ -314,7 +314,7 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
         // +5.0 = 5mm each side、preview MC で確実 punch through (cavity margin rule)
         let bore = SdfNode::Cylinder {
             radius: center_bore_dia * 0.5,
-            half_height: length * 0.5 + 5.0,
+            half_height: length.mul_add(0.5, 5.0),
         };
         SdfNode::Subtraction {
             a: Arc::new(with_slots),
@@ -325,7 +325,7 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
     }
 }
 
-/// 20×20mm アルミプロファイル外形 (4 面 T スロット + 中央 M5 通し穴、MISUMI / OpenBuilds 準拠)
+/// 20×20mm アルミプロファイル外形 (4 面 T スロット + 中央 M5 通し穴、MISUMI / `OpenBuilds` 準拠)
 ///
 /// 構造: `Box3d` 外形 - 4 rotate/translate T-slot (Phase A.2 `t_slot_2020`) - 中央 Cylinder (M5)
 /// 長手方向 = Y 軸

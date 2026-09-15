@@ -1,4 +1,4 @@
-//! 超ゴージャス王冠 — UE5品質の装飾王冠をRoblox用OBJとして出力
+//! 超ゴージャス王冠 — `UE5品質の装飾王冠をRoblox用OBJとして出力`
 //!
 //! ```bash
 //! cargo run --example royal_crown --features roblox --release

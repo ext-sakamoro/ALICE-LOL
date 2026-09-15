@@ -1,6 +1,6 @@
-//! # pattern_catalog — LOL pattern registry catalog view (Phase B.1.a)
+//! # `pattern_catalog` — LOL pattern registry catalog view (Phase B.1.a)
 //!
-//! stdlib::pattern registry (13 pattern) を dump し、certification level と
+//! `stdlib::pattern` registry (13 pattern) を dump し、certification level と
 //! route 別に集計する text-to-print GUI の「実プリント合格 pattern 一覧」
 //! source として使う想定
 //!

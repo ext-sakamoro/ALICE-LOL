@@ -1,4 +1,4 @@
-//! # skadis_panel_dc_vs_mc — Marching Cubes vs Dual Contouring 実測比較 (Phase 3'')
+//! # `skadis_panel_dc_vs_mc` — Marching Cubes vs Dual Contouring 実測比較 (Phase 3'')
 //!
 //! 同じ SKADIS panel SDF (`skadis_panel_sdf`) を MC / DC 両 algorithm で mesh 化し、
 //! triangle 数 / vertex 数 / 実行時間 / watertight 判定を比較する

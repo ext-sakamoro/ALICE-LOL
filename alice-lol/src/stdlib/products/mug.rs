@@ -30,7 +30,7 @@
 //! 取手:
 //! - major radius: 15mm — 指 2-3 本入る
 //! - minor radius: 3mm — 印刷可能な最小径 (0.4mm nozzle × 8 line)
-//! - X 位置: dia/2 + minor_r (外壁に接する外側)
+//! - X 位置: dia/2 + `minor_r` (外壁に接する外側)
 //! - Y-axis 回転 (torus は XZ 平面に生成される、Y 軸 90° 回転で YZ 平面 = mug 側面)
 
 use alice_sdf::SdfNode;
@@ -60,8 +60,8 @@ const DEFAULT_HANDLE_MINOR_R: f32 = 3.0;
 /// or Marching Cubes 両対応
 ///
 /// # 制約
-/// - dia は minimum 20mm 想定 (小さすぎると取手 major_r=15 と干渉)
-/// - height は minimum 40mm 想定 (取手 minor_r×2 で 6mm 使うので余裕必要)
+/// - dia は minimum 20mm 想定 (小さすぎると取手 `major_r=15` と干渉)
+/// - height は minimum 40mm 想定 (取手 `minor_r×2` で 6mm 使うので余裕必要)
 /// - Extreme 小サイズ (< 20mm) は取手が本体外径からはみ出る geometry になるが、
 ///   pipeline はそのまま流れる (physical には非現実的だが SDF は valid)
 #[must_use]
@@ -72,7 +72,7 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
     // 内側くぼみ: 底 3mm 残す + 上端は貫通、subtract cylinder の中心 Z を
     // (bottom_thickness / 2) 上に translate、half_height は (height - bottom) / 2
     let hollow_z_offset = DEFAULT_BOTTOM_THICKNESS * 0.5;
-    let hollow_half_h = (height - DEFAULT_BOTTOM_THICKNESS) * 0.5 + 1.0; // +1mm で上端貫通確保
+    let hollow_half_h = (height - DEFAULT_BOTTOM_THICKNESS).mul_add(0.5, 1.0); // +1mm で上端貫通確保
 
     let outer = Arc::new(SdfNode::Cylinder {
         radius: outer_r,

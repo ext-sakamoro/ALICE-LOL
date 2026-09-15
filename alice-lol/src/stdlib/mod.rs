@@ -8,7 +8,7 @@
 //! - [`products`] — 生活雑貨 / 家庭用 canonical primitive (Phase P.1: マグカップ)
 //!
 //! 各 pattern は既存の [`alice_sdf::SdfNode`] variant を Rust helper 関数で組み立てる
-//! LOL DSL の syntax / proc_macro / GBNF `lol.gbnf` は無変更、既存 SdfNode → GLSL/WGSL/HLSL
+//! LOL DSL の syntax / `proc_macro` / GBNF `lol.gbnf` は無変更、既存 `SdfNode` → GLSL/WGSL/HLSL
 //! transpile pipeline がそのまま流用できる
 
 pub mod hardsurface;

@@ -5,11 +5,11 @@
 //!
 //! ## 目的
 //!
-//! LOL stdlib::hardsurface::{fastener, joint, reinforcement, mount, thin} の 27 primitive
+//! LOL `stdlib::hardsurface::{fastener`, joint, reinforcement, mount, thin} の 27 primitive
 //! を組み合わせた「完成 pattern」を registry として登録し、certification level
 //! (実プリント検証済み / Bamboo simulation のみ / 未検証) を明示化する
 //!
-//! ## certified_by 分類
+//! ## `certified_by` 分類
 //!
 //! - **`UserFieldTest`**: user が実プリントして動作確認済 (Bamboo `models/` 配下)
 //! - **`BambooSimulation`**: Bamboo `alice_bamboo::safety::safety_validate` 通過のみ
@@ -164,7 +164,7 @@ pub mod registry {
 
     /// U 字棚仕切り (Bamboo `models/shelf/divider-560x250x120/`、Rust generator canonical)
     /// Sim 60 Acceptable (warp Critical + overhang 40、560mm 幅で env open-air PLA warp 高判定)
-    /// だが 30lbs 荷重実プリント合格 baseline のため UserFieldTest 維持 (CI gate は field test 経由通過)
+    /// だが 30lbs 荷重実プリント合格 baseline のため `UserFieldTest` 維持 (CI gate は field test 経由通過)
     pub const SHELF_DIVIDER_560X250X120: LolPattern = LolPattern {
         name: "shelf_divider_560x250x120",
         description:
@@ -222,7 +222,7 @@ pub mod registry {
     };
 
     /// SKADIS container (小物入れ、2 peg、Sim 76 Good、Field test で通過)
-    /// tight_aabb 修正で真の bbox (68×72×81mm) 取得後 overhang 40 で score 降格
+    /// `tight_aabb` 修正で真の bbox (68×72×81mm) 取得後 overhang 40 で score 降格
     pub const SKADIS_CONTAINER: LolPattern = LolPattern {
         name: "skadis_container",
         description: "IKEA SKADIS 互換 container (2 peg、gusset ribs で補強、Sim 76)",
@@ -249,8 +249,8 @@ pub mod registry {
     };
 
     /// SKADIS shelf (2 peg 棚、Sim 70 Good、Field test で通過)
-    /// tight_aabb 修正で真の bbox (260×26×82mm) 取得後 overhang 10 で score 降格
-    /// PETG 棚荷重 30 lbs 実プリント baseline のため UserFieldTest 維持
+    /// `tight_aabb` 修正で真の bbox (260×26×82mm) 取得後 overhang 10 で score 降格
+    /// PETG 棚荷重 30 lbs 実プリント baseline のため `UserFieldTest` 維持
     pub const SKADIS_SHELF: LolPattern = LolPattern {
         name: "skadis_shelf",
         description: "IKEA SKADIS 互換 shelf (2 peg、rib 補強棚板、Sim 70)",
@@ -281,7 +281,7 @@ pub mod registry {
     // Sim < 85 なので gate 未通過 (実プリント baseline or 設計 revise 必要)
 
     /// 壁掛けフック (Bamboo `generators/hook.rs`、Sim 79 Good、CI gate 未通過)
-    /// tight_aabb 修正で真の bbox (26×82×50mm) 取得、overhang 40 (前 10 誤値) から改善
+    /// `tight_aabb` 修正で真の bbox (26×82×50mm) 取得、overhang 40 (前 10 誤値) から改善
     /// gate 通過には (a) spec 見直し (angle 45deg 制約) / (b) user field test で 85+ 判定
     pub const WALL_HOOK: LolPattern = LolPattern {
         name: "wall_hook",
@@ -297,7 +297,7 @@ pub mod registry {
     };
 
     /// Gridfinity bin (Bamboo `generators/gridfinity.rs`、Sim 79 Good、CI gate 未通過)
-    /// tight_aabb 修正で真の bbox (92×92×41mm) 取得、mesh 生成成功 (前 mesh 0 の bug 解消)
+    /// `tight_aabb` 修正で真の bbox (92×92×41mm) 取得、mesh 生成成功 (前 mesh 0 の bug 解消)
     /// overhang 40 (前 100 誤値) で score 降格、gate 通過には field test で 85+ 判定必要
     pub const GRIDFINITY_BIN: LolPattern = LolPattern {
         name: "gridfinity_bin",
@@ -312,7 +312,7 @@ pub mod registry {
     };
 
     /// Drawer organizer (Bamboo `generators/drawer.rs`、Sim 72 Good、CI gate 未通過)
-    /// warp High + overhang 30%+ (252×202×42mm 大型 flat) が主因、tight_aabb 修正で真の
+    /// warp High + overhang 30%+ (252×202×42mm 大型 flat) `が主因、tight_aabb` 修正で真の
     /// bbox 取得後 score 変動 gate 通過には field test で 85+ 判定必要
     pub const DRAWER_ORGANIZER: LolPattern = LolPattern {
         name: "drawer_organizer",

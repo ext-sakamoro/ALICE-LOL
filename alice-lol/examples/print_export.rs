@@ -93,12 +93,12 @@ fn main() {
     // E. ランタイムパーサー（LLM出力テキスト → STL直行）
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     println!("--- E. LLM Text → STL (runtime parser) ---");
-    let lol_text = r#"schwarz_infill(0.05, 4.0, 0.02,
+    let lol_text = r"schwarz_infill(0.05, 4.0, 0.02,
         smooth_union(0.1,
             capsule(0.3, 1.0),
             translate(0.0, 1.0, 0.0, sphere(0.4))
         )
-    )"#;
+    )";
     println!("  LOL input: {}", lol_text.lines().next().unwrap_or(""));
     match lol_to_stl(lol_text, out_dir.join("E_llm_schwarz.stl"), &config) {
         Ok(stats) => println!("  STL: {stats}"),
@@ -109,12 +109,10 @@ fn main() {
     // ファイルサイズ比較
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     println!("\n=== File Size Comparison ===");
-    for entry in std::fs::read_dir(out_dir).expect("read dir") {
-        if let Ok(e) = entry {
-            let meta = e.metadata().expect("metadata");
-            let size_kb = meta.len() as f64 / 1024.0;
-            println!("  {:>8.1} KB  {}", size_kb, e.file_name().to_string_lossy());
-        }
+    for e in std::fs::read_dir(out_dir).expect("read dir").flatten() {
+        let meta = e.metadata().expect("metadata");
+        let size_kb = meta.len() as f64 / 1024.0;
+        println!("  {:>8.1} KB  {}", size_kb, e.file_name().to_string_lossy());
     }
 
     println!("\n=== Done — files in {} ===", out_dir.display());

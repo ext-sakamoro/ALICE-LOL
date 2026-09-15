@@ -1,6 +1,6 @@
-//! # complete_pipeline_output — Phase 5.3、全 13 品目 Bambu 対応 3MF 生成
+//! # `complete_pipeline_output` — Phase 5.3、全 13 品目 Bambu 対応 3MF 生成
 //!
-//! LOL DSL text → parse_lol → SdfNode → alice-bamboo sdf_to_bambu_3mf → MakerWorld 対応 .3mf
+//! LOL DSL text → `parse_lol` → `SdfNode` → alice-bamboo `sdf_to_bambu_3mf` → `MakerWorld` 対応 .3mf
 //! 全 13 品目 (薄物 DC 経路 9 + 厚物 MC 経路 4) を `./output/{thin,thick}/` に出力
 //!
 //! **注意**: 本 example は `alice-bamboo` に依存 alice-lol 単独 crate では動作しない
@@ -10,8 +10,8 @@
 //! ```
 //!
 //! LOL 単独では動かないため、実際の使用パターンは text-to-print / alice-bamboo 側で
-//! `sdf_to_bambu_3mf` を呼ぶ 本 example は「LOL DSL → SdfNode の完成度」の実測が主眼
-//! 3MF 生成部分は「LOL DSL parse 成功 + SdfNode 生成成功 + Bambu 変換部は alice-bamboo に委譲」
+//! `sdf_to_bambu_3mf` を呼ぶ 本 example は「LOL DSL → `SdfNode` の完成度」の実測が主眼
+//! 3MF 生成部分は「LOL DSL parse 成功 + `SdfNode` 生成成功 + Bambu 変換部は alice-bamboo に委譲」
 //! の形で確認する
 //!
 //! 現状: LOL 単独 example として `parse_lol` + `SdfNode` 生成のみ確認、3MF は
@@ -81,7 +81,7 @@ fn main() {
     let mut success = 0;
     for (name, lol_text, route) in &items {
         total += 1;
-        print!("[{:<32}] route={route:?} ... ", name);
+        print!("[{name:<32}] route={route:?} ... ");
         match parse_lol(lol_text) {
             Ok(node) => {
                 let d_origin = eval(&node, Vec3::ZERO);

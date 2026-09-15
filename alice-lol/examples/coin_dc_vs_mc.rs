@@ -1,10 +1,10 @@
-//! # coin_dc_vs_mc — 極薄物 (1.7mm coin) の MC vs DC 決定的実測 (Phase 3''.2)
+//! # `coin_dc_vs_mc` — 極薄物 (1.7mm coin) の MC vs DC 決定的実測 (Phase 3''.2)
 //!
 //! Bamboo 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を
 //! 本 example で再現し、同 SDF を Dual Contouring で mesh 化した結果と比較する
 //!
 //! **目的**: 極薄物 (< 2mm) で DC が MC の破綻を回避できることを実測で確定させ、
-//! Phase A.5 polygon_extrude (ALICE 違反、Phase 1 Data 経路) を deprecate → 削除する
+//! Phase A.5 `polygon_extrude` (ALICE 違反、Phase 1 Data 経路) を deprecate → 削除する
 //! 決定的根拠を得る
 //!
 //! ```bash
