@@ -47,17 +47,64 @@ jobs:
           - fuzz_lol_to_wgsl
           - fuzz_lol_eval
     steps:
+      # ci.yml と同じ checkout 構成: alice-lol lib は実 alice-sdf が必須
+      # (alice-stubs の空 stub では `alice_sdf::io / mesh / compiled` が
+      #  unresolved で fuzz target が compile 不能、job-level continue-on-error
+      #  廃止 (罠 #22) で 2026-09-15 に露呈)
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+
+      # alice-lol-robot (default features) の mandatory path dep
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: fuzz
+          workspaces: ALICE-LOL/fuzz
 
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+      # optional path dep の stub (ci.yml と同一、alice-sdf 側 bridge 含む)
+      - name: Create SDF dependency stubs
+        run: |
+          for crate_info in \
+            "ALICE-Physics:alice-physics:1.0.0" \
+            "ALICE-Codec:alice-codec:0.1.0" \
+            "ALICE-Streaming-Protocol:libasp:0.1.0" \
+            "ALICE-Cache:alice-cache:0.1.0" \
+            "ALICE-Foundry:alice-foundry:0.1.0"; do
+            dir=$(echo "$crate_info" | cut -d: -f1)
+            pkg=$(echo "$crate_info" | cut -d: -f2)
+            ver=$(echo "$crate_info" | cut -d: -f3)
+            mkdir -p "$dir/src"
+            cat > "$dir/Cargo.toml" << TOML
+          [package]
+          name = "$pkg"
+          version = "$ver"
+          edition = "2021"
+          [lib]
+          path = "src/lib.rs"
+          [features]
+          default = []
+          std = []
+          lol = []
+          TOML
+            echo "" > "$dir/src/lib.rs"
+          done
 
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
@@ -67,7 +114,7 @@ jobs:
       #  compile error が green 表示で silent になる)
       - name: Build fuzz target
         run: |
-          cd fuzz
+          cd ALICE-LOL/fuzz
           cargo +nightly fuzz build "${{ matrix.target }}"
 
       - name: Set fuzz duration
@@ -84,7 +131,7 @@ jobs:
         id: run
         continue-on-error: true
         run: |
-          cd fuzz
+          cd ALICE-LOL/fuzz
           cargo +nightly fuzz run "${{ matrix.target }}" -- \
             -max_total_time=${{ steps.dur.outputs.seconds }}
 
@@ -93,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-crash-${{ matrix.target }}
-          path: fuzz/artifacts/${{ matrix.target }}
+          path: ALICE-LOL/fuzz/artifacts/${{ matrix.target }}
           if-no-files-found: ignore
           retention-days: 14
 
