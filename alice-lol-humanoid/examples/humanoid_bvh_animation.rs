@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ];
         for j in sample {
             if let Some([x, y, z]) = posed.joints.get(&j).copied() {
-                println!("  {:<11} [{x:>7.3}, {y:>7.3}, {z:>7.3}]", format!("{j:?}"),);
+                println!("  {:<11} [{x:>7.3}, {y:>7.3}, {z:>7.3}]", format!("{j:?}"));
             }
         }
     }

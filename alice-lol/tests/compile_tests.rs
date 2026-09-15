@@ -1,4 +1,4 @@
-//! コンパイル確認テスト: 全27構文が正しく SdfNode を生成することを検証
+//! コンパイル確認テスト: 全27構文が正しく `SdfNode` を生成することを検証
 
 use alice_lol::{lol, Vec3};
 
@@ -397,7 +397,7 @@ fn time_morph_at_half() {
     let n = lol! { morph(0.5, sphere(1.0), box3d(0.5, 0.5, 0.5)) };
     let sphere_d = eval(&lol! { sphere(1.0) }, O);
     let box_d = eval(&lol! { box3d(0.5, 0.5, 0.5) }, O);
-    let expected = sphere_d * 0.5 + box_d * 0.5;
+    let expected = box_d.mul_add(0.5, sphere_d * 0.5);
     let d_morph = eval(&n, O);
     assert!((d_morph - expected).abs() < 1e-4);
 }

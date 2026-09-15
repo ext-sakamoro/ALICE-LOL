@@ -1,4 +1,4 @@
-//! Intent Layer (Milestone B.1: IntentNode 独立 enum + Program 構造)
+//! Intent Layer (Milestone B.1: `IntentNode` 独立 enum + Program 構造)
 //!
 //! ALICE 三相原理 (Data → Law → Intent) の **Phase 3 Intent** 相の IR skeleton
 //! `SdfNode` (Data + Law の IR) とは **独立 enum** として並列に設計
@@ -25,7 +25,7 @@ use glam::Vec3;
 
 /// `Program::sdf_registry` の index として使う identifier
 ///
-/// `Vec<SdfNode>` の index 相当 (Q_B1_registry (a) 決定)
+/// `Vec<SdfNode>` の index 相当 (`Q_B1_registry` (a) 決定)
 /// Program が single owner のため単純な u32 で表現
 pub type NodeId = u32;
 
@@ -190,15 +190,15 @@ pub enum IntentNode {
 
     // ── 合成 (2 個) ──
     /// 直列合成: 内部の Intent を順に実行
-    Sequence(Vec<IntentNode>),
+    Sequence(Vec<Self>),
     /// 並列合成: 内部の Intent を同時実行
-    Parallel(Vec<IntentNode>),
+    Parallel(Vec<Self>),
 
     // ── L1 Musical Intent (1 個、2026-09-13 Phase 3.1 追加) ──
     /// L1 Musical Intent — 8-byte 音楽的意図 packet
     ///
     /// packet の内訳は `alice_synth::intent::MusicIntent` (byte 0: genre / 1: mood /
-    /// 2: length_bars / 3: tempo_bpm_offset / 4: key / 5: mode / 6-7: variation_seed LE)
+    /// 2: `length_bars` / 3: `tempo_bpm_offset` / 4: key / 5: mode / 6-7: `variation_seed` LE)
     /// で正式定義される 本 crate は依存を持たず opaque `[u8; 8]` として保持し、
     /// 解釈は consumer (`alice-synth::intent::MusicIntent::from_bytes(packet)` を叩く
     /// interpreter、または将来の LLM plan head) 側で行う
@@ -206,7 +206,7 @@ pub enum IntentNode {
     /// ALICE 三相原理の Phase 3 (Intent) を Physical Intent の隣に置く音楽 variant
     /// Kinematics packet と同じ 8-byte サイズで、network 帯域 / storage 効率も同等
     Music {
-        /// 8-byte MusicIntent packet (alice-synth `intent` module 参照)
+        /// 8-byte `MusicIntent` packet (alice-synth `intent` module 参照)
         packet: [u8; 8],
     },
 }
@@ -224,7 +224,7 @@ pub enum IntentNode {
 pub struct Program {
     /// メインの visual / geometric SDF tree (backend transpile 対象)
     pub sdf: SdfNode,
-    /// `IntentNode::*` から `NodeId` で参照される SdfNode の集合 (Intent の対象エンティティ)
+    /// `IntentNode::*` から `NodeId` で参照される `SdfNode` の集合 (Intent の対象エンティティ)
     ///
     /// Intent の verb 引数 (`target_id` / `object_id`) は本 registry の index
     pub sdf_registry: Vec<SdfNode>,
@@ -235,7 +235,7 @@ pub struct Program {
 impl Program {
     /// SDF のみの Program を作成 (Intent なし、pure geometry)
     #[must_use]
-    pub fn sdf_only(sdf: SdfNode) -> Self {
+    pub const fn sdf_only(sdf: SdfNode) -> Self {
         Self {
             sdf,
             sdf_registry: Vec::new(),
@@ -259,7 +259,7 @@ impl Program {
 
     /// registry サイズ
     #[must_use]
-    pub fn registry_len(&self) -> usize {
+    pub const fn registry_len(&self) -> usize {
         self.sdf_registry.len()
     }
 
@@ -305,7 +305,7 @@ impl ProgramBuilder {
     pub fn register(&mut self, node: SdfNode) -> NodeId {
         let id = self.registry.len();
         assert!(
-            id <= u32::MAX as usize,
+            u32::try_from(id).is_ok(),
             "sdf_registry index が u32::MAX を超えた"
         );
         self.registry.push(node);
@@ -459,13 +459,13 @@ pub const fn rest(duration_ms: u32) -> IntentNode {
 
 /// Sequence 合成
 #[must_use]
-pub fn sequence(intents: Vec<IntentNode>) -> IntentNode {
+pub const fn sequence(intents: Vec<IntentNode>) -> IntentNode {
     IntentNode::Sequence(intents)
 }
 
 /// Parallel 合成
 #[must_use]
-pub fn parallel(intents: Vec<IntentNode>) -> IntentNode {
+pub const fn parallel(intents: Vec<IntentNode>) -> IntentNode {
     IntentNode::Parallel(intents)
 }
 

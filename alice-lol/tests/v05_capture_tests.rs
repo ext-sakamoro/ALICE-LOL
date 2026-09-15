@@ -33,7 +33,7 @@ fn capture_mixed_translate() {
     assert!((d - 2.0).abs() < 1e-4, "expected 2.0, got {d}");
 }
 
-/// smooth_union の k に変数
+/// `smooth_union` の k に変数
 #[test]
 fn capture_k_smooth_union() {
     let k = 0.5_f32;

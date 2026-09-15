@@ -1,4 +1,4 @@
-//! ALICE コースター — SDF幾何学模様の10cm丸型コースター
+//! ALICE コースター — `SDF幾何学模様の10cm丸型コースター`
 //!
 //! ```bash
 //! cargo run --example alice_coaster --release
@@ -97,10 +97,10 @@ fn main() {
     println!("\n--- Top view (Y=0.05, inside coaster) ---\n");
     let res = 50;
     for iz in 0..res {
-        let z = -3.0 + (iz as f32 / res as f32) * 6.0;
+        let z = (iz as f32 / res as f32).mul_add(6.0, -3.0);
         let mut line = String::with_capacity(res);
         for ix in 0..res {
-            let x = -3.0 + (ix as f32 / res as f32) * 6.0;
+            let x = (ix as f32 / res as f32).mul_add(6.0, -3.0);
             let p = Vec3::new(x, 0.05, z);
             let d = alice_lol::eval(&coaster, p);
             if d < -0.02 {

@@ -1,13 +1,13 @@
-//! # hardsurface_snap_case — Phase A.2 組立 primitive デモ
+//! # `hardsurface_snap_case` — Phase A.2 組立 primitive デモ
 //!
-//! ケース底 (60 × 40 × 3mm) の 4 隅に snap_fit_cantilever を配置し、
+//! ケース底 (60 × 40 × 3mm) の 4 隅に `snap_fit_cantilever` を配置し、
 //! 蓋 (60 × 40 × 3mm) をパチンと閉じられる closure を組立てる
 //!
 //! ```bash
 //! cargo run --example hardsurface_snap_case --release
 //! ```
 //!
-//! joint::snap_fit_cantilever + PLA 応力計算の実使用例
+//! `joint::snap_fit_cantilever` + PLA 応力計算の実使用例
 
 use alice_lol::stdlib::hardsurface::joint::{
     snap_fit_cantilever, SnapFitCantileverSpec, PLA_ELASTIC_MODULUS_GPA, PLA_YIELD_STRESS_MPA,
@@ -77,7 +77,7 @@ fn main() {
             cantilever_vertical.clone(),
             Vec3::new(
                 sx * (case_hx - spec.thickness),
-                case_hy + spec.length * 0.5,
+                spec.length.mul_add(0.5, case_hy),
                 sz * (case_hz - spec.thickness),
             ),
         );

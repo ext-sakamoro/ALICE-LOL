@@ -1,7 +1,7 @@
-//! # thin_sdf — 薄物の純 SDF 表現 (Phase 3''.2、ALICE way 回帰)
+//! # `thin_sdf` — 薄物の純 SDF 表現 (Phase 3''.2、ALICE way 回帰)
 //!
-//! Phase A.5.2 の `thin` module は Polygon2D + earcutr extrude (Phase 1 Data 相当 = ALICE 違反)
-//! 本 module は同じ薄物を **純 SDF (SdfNode)** で表現し、Dual Contouring で mesh 化する
+//! Phase A.5.2 の `thin` module は `Polygon2D` + earcutr extrude (Phase 1 Data 相当 = ALICE 違反)
+//! 本 module は同じ薄物を **純 SDF (`SdfNode`)** で表現し、Dual Contouring で mesh 化する
 //! Phase 2 Law 経路 (ALICE 三相原理準拠)
 //!
 //! mesh 化は `alice_lol::print_export::node_to_3mf_dual_contouring` 経由
@@ -16,7 +16,7 @@
 //!
 //! Bamboo 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を、
 //! 同 SDF を Dual Contouring で mesh 化した時に回避できるかを example
-//! `coin_dc_vs_mc.rs` で実測する 成功すれば Phase A.5 polygon_extrude を deprecate → 削除、
+//! `coin_dc_vs_mc.rs` で実測する 成功すれば Phase A.5 `polygon_extrude` を deprecate → 削除、
 //! ALICE 三相原理 Phase 2 Law 経路への完全回帰を達成
 
 use alice_sdf::SdfNode;
@@ -35,9 +35,9 @@ pub const COIN_100YEN_THICKNESS: f32 = 1.7;
 // SDF spec function
 // ────────────────────────────────────────────────────────
 
-/// Shopping cart coin (100 円硬貨型) の SdfNode を生成する
+/// Shopping cart coin (100 円硬貨型) の `SdfNode` を生成する
 ///
-/// 単純 Cylinder (radius = `diameter/2`, half_height = `thickness/2`)、原点中心、Y 軸
+/// 単純 Cylinder (radius = `diameter/2`, `half_height` = `thickness/2`)、原点中心、Y 軸
 ///
 /// # 引数
 ///

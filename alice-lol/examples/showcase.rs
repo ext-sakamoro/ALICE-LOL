@@ -1,5 +1,5 @@
 //! ALICE-LOL v0.5 全構文ショーケース
-//! 76構文 + 変数キャプチャ + autodiff + CompiledSdf
+//! 76構文 + 変数キャプチャ + autodiff + `CompiledSdf`
 
 use alice_lol::{eval, lol, Vec3};
 

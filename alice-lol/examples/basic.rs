@@ -1,4 +1,4 @@
-//! ALICE-LOL v0.1 demo: LOL DSL → SdfNode → GLSL shader
+//! ALICE-LOL v0.1 demo: LOL DSL → `SdfNode` → GLSL shader
 
 use alice_lol::lol;
 

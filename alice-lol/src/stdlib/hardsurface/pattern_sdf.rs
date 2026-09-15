@@ -1,4 +1,4 @@
-//! # pattern_sdf — Bamboo Rust generator を LOL に移設した完成 pattern (Phase B.1.b)
+//! # `pattern_sdf` — Bamboo Rust generator を LOL に移設した完成 pattern (Phase B.1.b)
 //!
 //! Bamboo `src/generators/{hook,gridfinity,drawer,shelf_divider}.rs` の LOL DSL
 //! 文字列生成ロジックを LOL 側で **`SdfNode` 直接構築 API** に翻訳した完成 pattern
@@ -31,20 +31,20 @@ use std::sync::Arc;
 // 共通 helpers (Arc wrap 簡略化)
 // ────────────────────────────────────────────────────────
 
-fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
+const fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
     SdfNode::RoundedBox {
         half_extents: Vec3::new(hx, hy, hz),
         round_radius: r,
     }
 }
 
-fn box3d(hx: f32, hy: f32, hz: f32) -> SdfNode {
+const fn box3d(hx: f32, hy: f32, hz: f32) -> SdfNode {
     SdfNode::Box3d {
         half_extents: Vec3::new(hx, hy, hz),
     }
 }
 
-fn cylinder(radius: f32, half_height: f32) -> SdfNode {
+const fn cylinder(radius: f32, half_height: f32) -> SdfNode {
     SdfNode::Cylinder {
         radius,
         half_height,
@@ -68,7 +68,7 @@ fn cylinder_z(radius: f32, half_height: f32) -> SdfNode {
 /// text-to-print viewer は Z-up 固定なので、Y-up (Y=vertical) で設計した
 /// pattern を viewer に正しい向きで表示するため本 helper で wrap する
 /// 変換: 内部 (0, 1, 0) = 世界 (0, 0, 1)、intended bottom (Y-) は世界 Z=0 bed 側
-/// storage_box 等の「底が bed で top open」pattern で使う
+/// `storage_box` 等の「底が bed で top open」pattern で使う
 fn to_z_up(y_up_node: SdfNode) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(y_up_node),
@@ -79,8 +79,8 @@ fn to_z_up(y_up_node: SdfNode) -> SdfNode {
 /// Y-up 設計を Z-up 世界向けに 90° 回転 (Y→ -Z、upside-down)
 ///
 /// `to_z_up` の逆方向、intended top (Y+) を bed 側 (Z=0) に配置
-/// tissue_box_cover の「Print upside-down: slot on bed, walls up, bottom-open ceiling」
-/// (household.md § 1 spec 準拠)、desk_shelf の「shelf on bed, legs up」等
+/// `tissue_box_cover` の「Print upside-down: slot on bed, walls up, bottom-open ceiling」
+/// (household.md § 1 spec `準拠)、desk_shelf` の「shelf on bed, legs up」等
 /// 「印刷時に元の top を bed に置きたい」場合に使う
 fn to_z_up_flipped(y_up_node: SdfNode) -> SdfNode {
     SdfNode::Rotate {
@@ -135,7 +135,7 @@ pub struct WallHookSpec {
     pub hook_opening: f32,
     /// フック throat (mm、内側深さ、default 30)
     pub hook_throat: f32,
-    /// backplate 追加幅 (mm、hook_width + 本値 = backplate 幅、default 10)
+    /// backplate 追加幅 (`mm、hook_width` + 本値 = backplate 幅、default 10)
     pub backplate_extra_w: f32,
     /// backplate 追加高 (mm、throat + depth + 本値 = backplate 高、default 10)
     pub backplate_extra_h: f32,
@@ -168,10 +168,10 @@ impl WallHookSpec {
 
 /// 壁掛けフック (Bamboo `hook.rs` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
-/// 構造 (Bamboo `hook.rs:49-60` `format!` を SdfNode 直接構築に翻訳):
+/// 構造 (Bamboo `hook.rs:49-60` `format!` を `SdfNode` 直接構築に翻訳):
 /// - backplate `RoundedBox` (中心 X=0, Y=0, Z=0)
-/// - hook arm `RoundedBox` (Y=bp_hy - arm_hy、Z=+bp_hz + arm_hz)
-/// - hook tip `RoundedBox` (Y=bp_hy - opening/2、Z=+bp_hz + hook_depth)
+/// - hook arm `RoundedBox` (`Y=bp_hy` - `arm_hy、Z=+bp_hz` + `arm_hz`)
+/// - hook tip `RoundedBox` (`Y=bp_hy` - `opening/2、Z=+bp_hz` + `hook_depth`)
 /// - 3-way `SmoothUnion` で blend
 /// - mount holes は screw 指定時のみ subtract
 ///
@@ -203,7 +203,7 @@ pub fn wall_hook(spec: &WallHookSpec) -> SdfNode {
         rounded_box(arm_hx, tip_hy, arm_hy, spec.fillet_radius),
         Vec3::new(
             0.0,
-            bp_hy - spec.hook_opening * 0.5,
+            spec.hook_opening.mul_add(-0.5, bp_hy),
             bp_hz + spec.hook_depth,
         ),
     );
@@ -298,19 +298,20 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
     let ext_x = spec.units_x as f32 * gridfinity_spec::GRID_UNIT;
     #[allow(clippy::cast_precision_loss)]
     let ext_y = spec.units_y as f32 * gridfinity_spec::GRID_UNIT;
-    let bin_hx = (ext_x - 2.0 * gridfinity_spec::BIN_CLEARANCE) * 0.5;
-    let bin_hy = (ext_y - 2.0 * gridfinity_spec::BIN_CLEARANCE) * 0.5;
+    let bin_hx = 2.0f32.mul_add(-gridfinity_spec::BIN_CLEARANCE, ext_x) * 0.5;
+    let bin_hy = 2.0f32.mul_add(-gridfinity_spec::BIN_CLEARANCE, ext_y) * 0.5;
     #[allow(clippy::cast_precision_loss)]
-    let ext_h = spec.height_u as f32 * gridfinity_spec::HEIGHT_UNIT + gridfinity_spec::LIP_HEIGHT;
+    let ext_h =
+        (spec.height_u as f32).mul_add(gridfinity_spec::HEIGHT_UNIT, gridfinity_spec::LIP_HEIGHT);
     let bin_hz = ext_h * 0.5;
     // 2026-08-20 fix: cavity 天面が outer top 未満で塞がる bug を修正
     // 旧: cavity_hz = int_depth/2、cavity_offset_z = floor/2 で cavity 天面が
     //     outer top より 6.25mm 内側 = 「ただの四角」に見える
     // 新: cavity を outer top を貫通するサイズにして top open を保証
-    let cavity_hz = (ext_h - spec.floor_thickness + 10.0) * 0.5;
+    let cavity_hz = f32::midpoint(ext_h - spec.floor_thickness, 10.0);
     let inner_hx = bin_hx - spec.wall_thickness;
     let inner_hy = bin_hy - spec.wall_thickness;
-    let cavity_offset_z = (spec.floor_thickness + 10.0) * 0.5;
+    let cavity_offset_z = f32::midpoint(spec.floor_thickness, 10.0);
 
     let outer = rounded_box(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET);
 
@@ -336,9 +337,9 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
             for i in 0..dx {
                 for j in 0..dy {
                     #[allow(clippy::cast_precision_loss)]
-                    let cx = cx_start + i as f32 * cell_w;
+                    let cx = (i as f32).mul_add(cell_w, cx_start);
                     #[allow(clippy::cast_precision_loss)]
-                    let cy = cy_start + j as f32 * cell_d;
+                    let cy = (j as f32).mul_add(cell_d, cy_start);
                     cavity_list.push(translate(
                         cavity.clone(),
                         Vec3::new(cx, cy, cavity_offset_z),
@@ -385,7 +386,7 @@ pub struct DrawerSpec {
     pub height: f32,
     /// slot 定義列 (順に X 方向配置)
     pub slots: Vec<DrawerSlotSpec>,
-    /// 壁厚 (mm、default 1.5 = FDM min_wall)
+    /// 壁厚 (mm、default 1.5 = FDM `min_wall`)
     pub wall_thickness: f32,
     /// 底厚 (mm、default max(wall, 1.5))
     pub floor_thickness: f32,
@@ -433,7 +434,7 @@ impl DrawerSpec {
 /// 構造:
 /// - 外形 tray `RoundedBox` (`width × depth × height`)
 /// - 内側 cavities を Union で組立て、Subtraction で outer から刳り抜く
-/// - slot 幅は total_width 超過時 scale (Bamboo `drawer.rs::scale` 相当)
+/// - slot 幅は `total_width` 超過時 scale (Bamboo `drawer.rs::scale` 相当)
 ///
 /// # 使用例
 ///
@@ -446,7 +447,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     let tray_hx = spec.width * 0.5;
     let tray_hy = spec.depth * 0.5;
     let tray_hz = spec.height * 0.5;
-    let inner_width = spec.width - 2.0 * spec.wall_thickness;
+    let inner_width = 2.0f32.mul_add(-spec.wall_thickness, spec.width);
     let inner_hz = (spec.height - spec.floor_thickness) * 0.5;
     let outer = rounded_box(tray_hx, tray_hy, tray_hz, spec.fillet_radius);
 
@@ -472,7 +473,9 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     let cavity_z_offset = spec.floor_thickness * 0.5;
     for slot in &spec.slots {
         let sw = slot.width * scale;
-        let sd = slot.min_depth.min(spec.depth - 2.0 * spec.wall_thickness);
+        let sd = slot
+            .min_depth
+            .min(2.0f32.mul_add(-spec.wall_thickness, spec.depth));
         let sd_half = sd * 0.5;
         let sw_half = sw * 0.5 - 0.5; // Bamboo drawer.rs の inset 相当
         for i in 0..slot.count {
@@ -508,7 +511,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
 /// shelf divider の寸法仕様 (U 字、Bamboo `shelf_divider.rs::generate` 相当)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShelfDividerSpec {
-    /// 全幅 (mm、half_width × 2 = 2 パーツ結合時の合計幅)
+    /// 全幅 (`mm、half_width` × 2 = 2 パーツ結合時の合計幅)
     pub total_width: f32,
     /// 奥行 (mm、Y 軸)
     pub depth: f32,
@@ -544,7 +547,7 @@ impl ShelfDividerSpec {
 ///
 /// 構造 (Bamboo コメント準拠、逆さ印刷想定で天板 Z=0 に配置):
 /// - 天板 `Box3d` (Z=+t、hx × depth × thickness)
-/// - 左右 側板 `Box3d` (X=±(hx-t)、Y=depth 中央、Z=wall+wall_hz)
+/// - 左右 側板 `Box3d` (X=±(hx-t)、Y=depth `中央、Z=wall+wall_hz`)
 /// - 上記 3 面を `SmoothUnion` (k = wall × 0.5)
 /// - 天板に千鳥 hex cutout (`RepeatFinite` × 2 + Y offset)
 /// - `Subtraction` で hex holes を刳り抜き
@@ -665,8 +668,8 @@ impl StickyNoteHolderSpec {
 /// ```
 #[must_use]
 pub fn sticky_note_holder(spec: &StickyNoteHolderSpec) -> SdfNode {
-    let outer_hx = (spec.pad_width + 2.0 * spec.wall_thickness) * 0.5;
-    let outer_hy = (spec.pad_depth + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hx = 2.0f32.mul_add(spec.wall_thickness, spec.pad_width) * 0.5;
+    let outer_hy = 2.0f32.mul_add(spec.wall_thickness, spec.pad_depth) * 0.5;
     let outer_hz = spec.height * 0.5;
     let inner_hx = spec.pad_width * 0.5;
     let inner_hy = spec.pad_depth * 0.5;
@@ -732,8 +735,8 @@ impl BusinessCardHolderSpec {
 /// ```
 #[must_use]
 pub fn business_card_holder(spec: &BusinessCardHolderSpec) -> SdfNode {
-    let outer_hx = (spec.card_width + 2.0 * spec.wall_thickness) * 0.5;
-    let outer_hy = (spec.slot_thickness + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_hx = 2.0f32.mul_add(spec.wall_thickness, spec.card_width) * 0.5;
+    let outer_hy = 2.0f32.mul_add(spec.wall_thickness, spec.slot_thickness) * 0.5;
     let outer_hz = spec.slot_depth * 0.5;
     let inner_hx = spec.card_width * 0.5;
     let inner_hy = spec.slot_thickness * 0.5;
@@ -782,8 +785,8 @@ impl PenCupSpec {
 /// ペン立て (`Cylinder` outer - `Cylinder` cavity、Z-up)
 ///
 /// 構造 (organizer-gridfinity-desk § 2.2 準拠、`cylinder_z` で Z-axis alignment):
-/// - Outer: Z-axis `Cylinder` (r = `(inner_dia + 2×wall) / 2`, half_h = `height / 2`)
-/// - Cavity: Z-axis `Cylinder` (r = `inner_dia / 2`, half_h = `(height - floor) / 2`)、Z=+floor/2 offset
+/// - Outer: Z-axis `Cylinder` (r = `(inner_dia + 2×wall) / 2`, `half_h` = `height / 2`)
+/// - Cavity: Z-axis `Cylinder` (r = `inner_dia / 2`, `half_h` = `(height - floor) / 2`)、Z=+floor/2 offset
 ///   (Z+ 方向が cup 開口部、Z- 方向が floor)
 ///
 /// # 使用例
@@ -794,7 +797,7 @@ impl PenCupSpec {
 /// ```
 #[must_use]
 pub fn pen_cup(spec: &PenCupSpec) -> SdfNode {
-    let outer_r = (spec.inner_diameter + 2.0 * spec.wall_thickness) * 0.5;
+    let outer_r = 2.0f32.mul_add(spec.wall_thickness, spec.inner_diameter) * 0.5;
     let outer_hz = spec.height * 0.5;
     let inner_r = spec.inner_diameter * 0.5;
     let cavity_h = spec.height - spec.floor_thickness;
@@ -854,8 +857,8 @@ impl PhoneStandSpec {
 /// スマホ / タブレット スタンド (L 字 base + back plate、front 面 slot)
 ///
 /// 構造 (organizer-gridfinity-desk § 2.9 準拠):
-/// - Base: `Box3d` (`base_width × base_depth × base_thickness`)、Z=+base_thickness/2
-/// - Back plate: `Box3d` (`base_width × back_thickness × back_height`)、後端 Y=-(base_depth/2 - back_thickness/2)、Z 中心=+base_thickness+back_height/2
+/// - Base: `Box3d` (`base_width × base_depth × base_thickness`)、`Z=+base_thickness/2`
+/// - Back plate: `Box3d` (`base_width × back_thickness × back_height`)、後端 Y=-(base_depth/2 - `back_thickness/2)、Z` `中心=+base_thickness+back_height/2`
 /// - Slot: `Box3d` を back plate 前面から刳り抜き (phone を差し込む溝)
 /// - Cable hole: `Cylinder` を base 中央から Z 貫通 (指定時のみ)
 ///
@@ -925,7 +928,7 @@ pub struct HeadphoneHolderSpec {
     pub arm_length: f32,
     /// hook arm 太さ (mm、Y 方向厚さ、default 6)
     pub arm_thickness: f32,
-    /// hook arm 幅 (mm、X、headband_width + margin、default 50)
+    /// hook arm 幅 (`mm、X、headband_width` + margin、default 50)
     pub arm_width: f32,
     /// mount plate 幅 (mm、X、default 100)
     pub mount_width: f32,
@@ -956,11 +959,11 @@ impl HeadphoneHolderSpec {
     }
 }
 
-/// ヘッドホンホルダー (wall_hook variant、hook 太くて headband 対応)
+/// ヘッドホンホルダー (`wall_hook` variant、hook 太くて headband 対応)
 ///
-/// 構造 (organizer-gridfinity-desk § 2.5 準拠、wall_hook と同 pattern):
-/// - Mount plate: `RoundedBox` (X×Y×Z = mount_w × mount_h × mount_thickness)、Z=0 中心
-/// - Hook arm: `RoundedBox`、mount plate 前面 (Z=+mount_thickness/2) から Z 方向 protrusion
+/// 構造 (organizer-gridfinity-desk § 2.5 `準拠、wall_hook` と同 pattern):
+/// - Mount plate: `RoundedBox` (X×Y×Z = `mount_w` × `mount_h` × `mount_thickness)、Z=0` 中心
+/// - Hook arm: `RoundedBox`、mount plate 前面 (`Z=+mount_thickness/2`) から Z 方向 protrusion
 /// - Hook tip: `RoundedBox`、arm 先端で Y 上方向 curl (slip 防止)
 /// - 3-way `SmoothUnion` で blend
 /// - Mount holes: `Box3d` (方形穴、Z-thickness で 2 個縦並び)
@@ -1051,9 +1054,9 @@ impl UnderDeskMountSpec {
 /// 机下 clamp mount (C 字構造、机端に上下 jaw で挟み込み)
 ///
 /// 構造 (organizer-gridfinity-desk § 2.4 準拠):
-/// - Top jaw: `Box3d` (机上に載る、X×Y×Z = clamp_w × wall_t × clamp_depth)、Y=+top_y 位置
+/// - Top jaw: `Box3d` (机上に載る、X×Y×Z = `clamp_w` × `wall_t` × `clamp_depth)、Y=+top_y` 位置
 /// - Bottom jaw: `Box3d` (机下、同 size)、Y=-bottom_y 位置
-/// - Back stem: `Box3d` (背面接続、X×Y×Z = clamp_w × (desk+2×wall) × wall_t)、Z=-back_z 位置
+/// - Back stem: `Box3d` (背面接続、X×Y×Z = `clamp_w` × (desk+2×wall) × wall_t)、Z=-back_z 位置
 /// - Screw hole: `Cylinder` Y-axis (bottom jaw を貫通、締付ネジ用)、指定時のみ
 ///
 /// # 使用例
@@ -1067,10 +1070,10 @@ pub fn under_desk_mount(spec: &UnderDeskMountSpec) -> SdfNode {
     let jaw_hx = spec.clamp_width * 0.5;
     let jaw_hy = spec.clamp_wall_thickness * 0.5;
     let jaw_hz = spec.clamp_depth * 0.5;
-    let top_y = spec.desk_thickness * 0.5 + jaw_hy;
-    let bottom_y = -(spec.desk_thickness * 0.5 + jaw_hy);
+    let top_y = spec.desk_thickness.mul_add(0.5, jaw_hy);
+    let bottom_y = -spec.desk_thickness.mul_add(0.5, jaw_hy);
     let stem_hx = spec.clamp_width * 0.5;
-    let stem_hy = (spec.desk_thickness + 2.0 * spec.clamp_wall_thickness) * 0.5;
+    let stem_hy = 2.0f32.mul_add(spec.clamp_wall_thickness, spec.desk_thickness) * 0.5;
     let stem_hz = spec.clamp_wall_thickness * 0.5;
     let back_z = -(jaw_hz - stem_hz);
 
@@ -1101,7 +1104,7 @@ pub fn under_desk_mount(spec: &UnderDeskMountSpec) -> SdfNode {
 // 11. desk_shelf (organizer-gridfinity-desk § 2.3)
 // ────────────────────────────────────────────────────────
 
-/// 卓上シェルフ spec (平板 + 左右 2 脚、shelf_divider 簡易版)
+/// 卓上シェルフ spec (平板 + 左右 2 `脚、shelf_divider` 簡易版)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeskShelfSpec {
     /// shelf 幅 (mm、X、default 400、range 200-500)
@@ -1132,10 +1135,10 @@ impl DeskShelfSpec {
 
 /// 卓上シェルフ (shelf plate + 左右 2 脚、シンプル L 構造)
 ///
-/// 構造 (organizer-gridfinity-desk § 2.3 準拠、shelf_divider 簡易版):
-/// - Shelf plate: `Box3d` (X×Y×Z = shelf_w × shelf_t × shelf_d)、Y=+leg_h + shelf_t/2
-/// - Left leg: `Box3d` (X×Y×Z = leg_t × leg_h × shelf_d)、X=-(shelf_w/2 - leg_t/2)、Y=leg_h/2
-/// - Right leg: 同 X=+(shelf_w/2 - leg_t/2)
+/// 構造 (organizer-gridfinity-desk § 2.3 `準拠、shelf_divider` 簡易版):
+/// - Shelf plate: `Box3d` (X×Y×Z = `shelf_w` × `shelf_t` × `shelf_d)、Y=+leg_h` + `shelf_t/2`
+/// - Left leg: `Box3d` (X×Y×Z = `leg_t` × `leg_h` × shelf_d)、X=-(shelf_w/2 - `leg_t/2)、Y=leg_h/2`
+/// - Right leg: 同 `X=+(shelf_w/2` - `leg_t/2`)
 /// - `SmoothUnion` で 3-way blend
 ///
 /// # 使用例
@@ -1216,8 +1219,8 @@ impl MonitorRiserSpec {
 /// モニターライザー (platform + 左右 2 脚 + optional cable hole、Z-up)
 ///
 /// 構造 (organizer-gridfinity-desk § 2.1 準拠、簡易版 = 単一プリント):
-/// - Platform: `RoundedBox` (X×Y×Z = width × depth × plat_t)、Z 上端
-/// - Left leg: `Box3d` (X×Y×Z = leg_t × depth × leg_h)、Z 方向脚
+/// - Platform: `RoundedBox` (X×Y×Z = width × depth × `plat_t)、Z` 上端
+/// - Left leg: `Box3d` (X×Y×Z = `leg_t` × depth × `leg_h)、Z` 方向脚
 /// - Right leg: 同、X 反対
 /// - Cable hole: Z-axis `Cylinder` (`cylinder_z`、platform 貫通、指定時のみ)
 ///
@@ -1297,7 +1300,7 @@ impl CoasterSpec {
 /// 円形コースター (bowl 状、rim で液滴 catch、Z-up)
 ///
 /// 構造 (household § 7 準拠、`cylinder_z` で Z-axis alignment):
-/// - Base: Z-axis `Cylinder` (r = `diameter/2`, half_h = `thickness/2`)
+/// - Base: Z-axis `Cylinder` (r = `diameter/2`, `half_h` = `thickness/2`)
 /// - Recess: Z-axis `Cylinder` (r = `(diameter - 2×lip_width)/2`, depth = `lip_height`)
 ///   Z+ 方向 (上面) から subtract、`Subtraction { base, recess }`
 ///
@@ -1374,8 +1377,8 @@ impl TissueBoxCoverSpec {
 /// ```
 #[must_use]
 pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
-    let ext_l = spec.internal_length + 2.0 * spec.wall_thickness;
-    let ext_w = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_l = 2.0f32.mul_add(spec.wall_thickness, spec.internal_length);
+    let ext_w = 2.0f32.mul_add(spec.wall_thickness, spec.internal_width);
     let ext_h = spec.internal_height + spec.wall_thickness;
 
     let outer_hx = ext_l * 0.5;
@@ -1390,7 +1393,7 @@ pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
 
     // Top slot (Y+ 面貫通): X 方向 slot_length、Y 方向 wall_thickness+margin、Z 方向 slot_width
     let slot_hx = spec.slot_length * 0.5;
-    let slot_hy = (spec.wall_thickness + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.wall_thickness, 10.0);
     let slot_hz = spec.slot_width * 0.5;
     let slot_offset_y = outer_hy - slot_hy + 0.5;
 
@@ -1459,8 +1462,8 @@ impl StorageBoxSpec {
 /// ```
 #[must_use]
 pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
-    let ext_l = spec.internal_length + 2.0 * spec.wall_thickness;
-    let ext_w = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_l = 2.0f32.mul_add(spec.wall_thickness, spec.internal_length);
+    let ext_w = 2.0f32.mul_add(spec.wall_thickness, spec.internal_width);
     let ext_h = spec.internal_height + spec.floor_thickness;
 
     let outer_hx = ext_l * 0.5;
@@ -1474,9 +1477,9 @@ pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
     // the punch-through, making the cavity appear enclosed (「ただの四角」)
     // Floor thickness is preserved because cavity_offset_y shifts up by
     // the same amount that cavity_hy grows on each side
-    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.internal_height, 10.0);
     let cavity_hz = spec.internal_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let cavity = translate(
@@ -1531,12 +1534,12 @@ impl CableClipSpec {
 /// ```
 #[must_use]
 pub fn cable_clip(spec: &CableClipSpec) -> SdfNode {
-    let outer_side = spec.cable_diameter + 2.0 * spec.wall_thickness;
+    let outer_side = 2.0f32.mul_add(spec.wall_thickness, spec.cable_diameter);
     let outer_hx = outer_side * 0.5;
     let outer_hy = spec.clip_length * 0.5;
     let outer_hz = outer_side * 0.5;
 
-    let cavity_r = spec.cable_diameter * 0.5 + 0.1;
+    let cavity_r = spec.cable_diameter.mul_add(0.5, 0.1);
     let cavity_hy = outer_hy + 1.0;
 
     let slot_hx = spec.cable_diameter * spec.opening_ratio * 0.5;
@@ -1545,7 +1548,7 @@ pub fn cable_clip(spec: &CableClipSpec) -> SdfNode {
     let slot_top_z = outer_hz + 1.0;
     let slot_bottom_z = -spec.cable_diameter * 0.15;
     let slot_hz = (slot_top_z - slot_bottom_z) * 0.5;
-    let slot_offset_z = (slot_top_z + slot_bottom_z) * 0.5;
+    let slot_offset_z = f32::midpoint(slot_top_z, slot_bottom_z);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness * 0.5);
     let cavity = cylinder(cavity_r, cavity_hy);
@@ -1602,7 +1605,7 @@ impl LedChannelSpec {
 #[must_use]
 pub fn led_channel(spec: &LedChannelSpec) -> SdfNode {
     let inner_w = spec.strip_width + 1.0; // 0.5mm clearance / side
-    let outer_w = spec.strip_width + 2.0 * spec.wall_thickness;
+    let outer_w = 2.0f32.mul_add(spec.wall_thickness, spec.strip_width);
     let floor = 1.5;
     let outer_h = spec.channel_depth + floor;
 
@@ -1618,7 +1621,7 @@ pub fn led_channel(spec: &LedChannelSpec) -> SdfNode {
     // extend cavity DOWNWARD (destroying the floor), so keep the small
     // +1mm margin — LED channels are thin (channel_depth 2.5mm typical)
     // and preview cell size < 1mm so the small margin still cuts through
-    let cavity_hz = (spec.channel_depth + 1.0) * 0.5;
+    let cavity_hz = f32::midpoint(spec.channel_depth, 1.0);
     let cavity_offset_z = outer_hz - cavity_hz + 0.5;
 
     let outer = box3d(outer_hx, outer_hy, outer_hz);
@@ -1684,18 +1687,18 @@ impl CardTraySpec {
 /// ```
 #[must_use]
 pub fn card_tray(spec: &CardTraySpec) -> SdfNode {
-    let ext_x = spec.card_width + 2.0 * (spec.card_clearance + spec.wall_thickness);
-    let ext_z = spec.card_height + 2.0 * (spec.card_clearance + spec.wall_thickness);
+    let ext_x = 2.0f32.mul_add(spec.card_clearance + spec.wall_thickness, spec.card_width);
+    let ext_z = 2.0f32.mul_add(spec.card_clearance + spec.wall_thickness, spec.card_height);
     let ext_y = spec.tray_depth + spec.floor_thickness;
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let cavity_hx = (spec.card_width + 2.0 * spec.card_clearance) * 0.5;
-    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
-    let cavity_hz = (spec.card_height + 2.0 * spec.card_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_hx = 2.0f32.mul_add(spec.card_clearance, spec.card_width) * 0.5;
+    let cavity_hy = f32::midpoint(spec.tray_depth, 10.0);
+    let cavity_hz = 2.0f32.mul_add(spec.card_clearance, spec.card_height) * 0.5;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let notch_hy = outer_hy + 1.0;
     let notch_offset_z = -outer_hz;
@@ -1765,9 +1768,12 @@ impl TokenWellSpec {
 pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
     let count = spec.well_count.max(1);
     let count_f = count as f32;
-    let pitch = spec.well_diameter + 2.0 * spec.well_clearance;
-    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
-    let ext_z = spec.well_diameter + 2.0 * (spec.well_clearance + spec.wall_thickness);
+    let pitch = 2.0f32.mul_add(spec.well_clearance, spec.well_diameter);
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, count_f * pitch);
+    let ext_z = 2.0f32.mul_add(
+        spec.well_clearance + spec.wall_thickness,
+        spec.well_diameter,
+    );
     let ext_y = spec.well_depth + spec.floor_thickness;
 
     let outer_hx = ext_x * 0.5;
@@ -1775,14 +1781,14 @@ pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let well_r = spec.well_diameter * 0.5;
-    let well_hy = (spec.well_depth + 10.0) * 0.5;
-    let well_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let well_hy = f32::midpoint(spec.well_depth, 10.0);
+    let well_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, 0.0));
         result = subtract(result, well);
     }
@@ -1848,21 +1854,22 @@ impl WrenchHolderSpec {
 pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
     let count = spec.count.max(1);
     let count_f = count as f32;
-    let max_slot_w = spec.max_size_mm + 2.0 * spec.slot_clearance;
+    let max_slot_w = 2.0f32.mul_add(spec.slot_clearance, spec.max_size_mm);
     let pitch = max_slot_w + 3.0; // 3mm inter-slot wall
-    let max_thickness = spec.max_size_mm * spec.thickness_ratio + 2.0 * spec.slot_clearance;
+    let max_thickness =
+        2.0f32.mul_add(spec.slot_clearance, spec.max_size_mm * spec.thickness_ratio);
 
-    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, count_f * pitch);
     let ext_y = spec.slot_depth + spec.floor_thickness;
-    let ext_z = max_thickness + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, max_thickness);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_hy = f32::midpoint(spec.slot_depth, 10.0);
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -1873,9 +1880,9 @@ pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
             i as f32 / (count_f - 1.0)
         };
         let size = spec.min_size_mm + t * (spec.max_size_mm - spec.min_size_mm);
-        let slot_w = size + 2.0 * spec.slot_clearance;
-        let slot_thick = size * spec.thickness_ratio + 2.0 * spec.slot_clearance;
-        let x = x_start + i as f32 * pitch;
+        let slot_w = 2.0f32.mul_add(spec.slot_clearance, size);
+        let slot_thick = 2.0f32.mul_add(spec.slot_clearance, size * spec.thickness_ratio);
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_w * 0.5, slot_hy, slot_thick * 0.5),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -1908,7 +1915,7 @@ pub struct SocketRailSpec {
 }
 
 impl SocketRailSpec {
-    /// 1/2" drive 6-post (tools § 2 中型セット、post_dia 12.4mm)
+    /// 1/2" drive 6-post (tools § 2 `中型セット、post_dia` 12.4mm)
     #[must_use]
     pub const fn half_inch_6() -> Self {
         Self {
@@ -1939,9 +1946,9 @@ pub fn socket_rail(spec: &SocketRailSpec) -> SdfNode {
     let count = spec.post_count.max(1);
     let count_f = count as f32;
     let pitch = spec.post_diameter + spec.post_spacing;
-    let ext_x = count_f * pitch + 2.0 * spec.base_margin;
+    let ext_x = 2.0f32.mul_add(spec.base_margin, count_f * pitch);
     let ext_y = spec.base_thickness;
-    let ext_z = spec.post_diameter + 2.0 * spec.base_margin;
+    let ext_z = 2.0f32.mul_add(spec.base_margin, spec.post_diameter);
 
     let base_hx = ext_x * 0.5;
     let base_hy = ext_y * 0.5;
@@ -1955,7 +1962,7 @@ pub fn socket_rail(spec: &SocketRailSpec) -> SdfNode {
     let base = rounded_box(base_hx, base_hy, base_hz, spec.base_margin);
     let mut result = base;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let post = translate(cylinder(post_r, post_hy), Vec3::new(x, post_offset_y, 0.0));
         result = union(result, post);
     }
@@ -2024,8 +2031,8 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
     let rows_f = rows as f32;
     let cols_f = cols as f32;
 
-    let ext_x = cols_f * spec.spacing + 2.0 * spec.wall_thickness;
-    let ext_y = rows_f * spec.spacing + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, cols_f * spec.spacing);
+    let ext_y = 2.0f32.mul_add(spec.wall_thickness, rows_f * spec.spacing);
     let ext_z = HEX_BIT_HOLE_DEPTH + spec.floor_thickness;
 
     let outer_hx = ext_x * 0.5;
@@ -2033,7 +2040,7 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let hex_r = HEX_BIT_ACROSS_FLATS * 0.5;
-    let hex_half_h = (HEX_BIT_HOLE_DEPTH + 10.0) * 0.5;
+    let hex_half_h = f32::midpoint(HEX_BIT_HOLE_DEPTH, 10.0);
     let hex_offset_z = outer_hz - hex_half_h + 0.5;
     let x_start = -(cols_f - 1.0) * spec.spacing * 0.5;
     let y_start = -(rows_f - 1.0) * spec.spacing * 0.5;
@@ -2042,8 +2049,8 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * spec.spacing;
-            let y = y_start + r as f32 * spec.spacing;
+            let x = (c as f32).mul_add(spec.spacing, x_start);
+            let y = (r as f32).mul_add(spec.spacing, y_start);
             let hex = translate(
                 SdfNode::HexPrism {
                     hex_radius: hex_r,
@@ -2090,7 +2097,7 @@ pub struct RaspiCaseSpec {
 }
 
 impl RaspiCaseSpec {
-    /// RPi 5 with Active Cooler 85×56×25mm (electronics-enclosure § 1 default)
+    /// `RPi` 5 with Active Cooler 85×56×25mm (electronics-enclosure § 1 default)
     #[must_use]
     pub const fn rpi5_active_cooler() -> Self {
         Self {
@@ -2126,25 +2133,25 @@ impl RaspiCaseSpec {
 /// ```
 #[must_use]
 pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
-    let ext_x = spec.pcb_width + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
-    let ext_z = spec.pcb_depth + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_x = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_width);
+    let ext_z = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_depth);
     let ext_y = spec.internal_height + spec.floor_thickness;
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
-    let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_hx = 2.0f32.mul_add(spec.pcb_clearance, spec.pcb_width) * 0.5;
+    let cavity_hy = f32::midpoint(spec.internal_height, 10.0);
+    let cavity_hz = 2.0f32.mul_add(spec.pcb_clearance, spec.pcb_depth) * 0.5;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let standoff_r = spec.standoff_diameter * 0.5;
     let standoff_hy = spec.standoff_height * 0.5;
     let standoff_offset_y = -outer_hy + spec.floor_thickness + standoff_hy;
     // Standoff 位置: PCB corner から standoff_inset だけ内側
-    let sx = spec.pcb_width * 0.5 - spec.standoff_inset;
-    let sz = spec.pcb_depth * 0.5 - spec.standoff_inset;
+    let sx = spec.pcb_width.mul_add(0.5, -spec.standoff_inset);
+    let sz = spec.pcb_depth.mul_add(0.5, -spec.standoff_inset);
 
     let pilot_r = spec.standoff_pilot_diameter * 0.5;
     let pilot_hy = spec.standoff_height * 0.75;
@@ -2152,8 +2159,8 @@ pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
 
     let port_hx = spec.port_opening_width * 0.5;
     let port_hy = spec.internal_height * 0.5;
-    let port_hz = (spec.wall_thickness + 2.0) * 0.5;
-    let port_offset_y = spec.floor_thickness * 0.5 + spec.pcb_clearance + port_hy * 0.5;
+    let port_hz = f32::midpoint(spec.wall_thickness, 2.0);
+    let port_offset_y = spec.floor_thickness.mul_add(0.5, spec.pcb_clearance) + port_hy * 0.5;
     let port_offset_z = -outer_hz + port_hz - 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
@@ -2194,7 +2201,7 @@ pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
 /// ESP32/Arduino ケース spec (standoff なし、friction cradle 想定、USB 短辺 opening)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Esp32EnclosureSpec {
-    /// PCB 幅 (mm、ESP32 DevKit V1=51.6 / Arduino Uno=68.6、default 51.6)
+    /// PCB 幅 (mm、ESP32 `DevKit` V1=51.6 / Arduino Uno=68.6、default 51.6)
     pub pcb_width: f32,
     /// PCB 奥行 (mm、ESP32=28.4 / Uno=53.4、default 28.4)
     pub pcb_depth: f32,
@@ -2213,7 +2220,7 @@ pub struct Esp32EnclosureSpec {
 }
 
 impl Esp32EnclosureSpec {
-    /// ESP32 DevKit V1 51.6×28.4×15mm (electronics-enclosure § 2 default)
+    /// ESP32 `DevKit` V1 51.6×28.4×15mm (electronics-enclosure § 2 default)
     #[must_use]
     pub const fn esp32_devkit_v1() -> Self {
         Self {
@@ -2244,24 +2251,24 @@ impl Esp32EnclosureSpec {
 /// ```
 #[must_use]
 pub fn esp32_enclosure(spec: &Esp32EnclosureSpec) -> SdfNode {
-    let ext_x = spec.pcb_width + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
-    let ext_z = spec.pcb_depth + 2.0 * (spec.pcb_clearance + spec.wall_thickness);
+    let ext_x = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_width);
+    let ext_z = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_depth);
     let ext_y = spec.internal_height + spec.floor_thickness;
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let cavity_hx = (spec.pcb_width + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
-    let cavity_hz = (spec.pcb_depth + 2.0 * spec.pcb_clearance) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_hx = 2.0f32.mul_add(spec.pcb_clearance, spec.pcb_width) * 0.5;
+    let cavity_hy = f32::midpoint(spec.internal_height, 10.0);
+    let cavity_hz = 2.0f32.mul_add(spec.pcb_clearance, spec.pcb_depth) * 0.5;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
-    let usb_hx = (spec.wall_thickness + 2.0) * 0.5;
+    let usb_hx = f32::midpoint(spec.wall_thickness, 2.0);
     let usb_hy = spec.usb_opening_height * 0.5;
     let usb_hz = spec.usb_opening_width * 0.5;
     let usb_offset_x = outer_hx - usb_hx + 0.5;
-    let usb_offset_y = spec.floor_thickness * 0.5 + spec.pcb_clearance + usb_hy;
+    let usb_offset_y = spec.floor_thickness.mul_add(0.5, spec.pcb_clearance) + usb_hy;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let cavity = translate(
@@ -2331,8 +2338,8 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
     let count_f = count as f32;
     let pitch = CELL_18650_DIAMETER + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
-    let ext_y = CELL_18650_LENGTH + 2.0 * spec.floor_thickness;
-    let ext_z = CELL_18650_DIAMETER + 2.0 * spec.wall_thickness;
+    let ext_y = 2.0f32.mul_add(spec.floor_thickness, CELL_18650_LENGTH);
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, CELL_18650_DIAMETER);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -2340,13 +2347,13 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
 
     let cell_r = CELL_18650_DIAMETER * 0.5;
     // cavity length: floor=0 → 貫通 (h > outer_hy)、floor>0 → 内側 CELL_LEN 範囲のみ
-    let cell_hy = (CELL_18650_LENGTH + 10.0) * 0.5;
+    let cell_hy = f32::midpoint(CELL_18650_LENGTH, 10.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let cavity = translate(cylinder(cell_r, cell_hy), Vec3::new(x, 0.0, 0.0));
         result = subtract(result, cavity);
     }
@@ -2407,21 +2414,21 @@ pub fn toothbrush_holder(spec: &ToothbrushHolderSpec) -> SdfNode {
     let pitch = spec.hole_diameter + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.hole_depth + spec.floor_thickness;
-    let ext_z = spec.hole_diameter + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.hole_diameter);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let hole_r = spec.hole_diameter * 0.5;
-    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let hole_hy = f32::midpoint(spec.hole_depth, 10.0);
+    let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -2470,7 +2477,7 @@ impl DrillBitHolderSpec {
 
 /// ドリルビットホルダー (row 状 hole、size linear interpolate、`to_z_up` wrap)
 ///
-/// 構造 (garage § 8.1 準拠、Y-up 設計、wrench_holder 類似だが hole 円形):
+/// 構造 (garage § 8.1 準拠、Y-up `設計、wrench_holder` 類似だが hole 円形):
 /// - Outer: `RoundedBox` (`(count×pitch+2×wall) × (depth+floor) × (max_dia+2×wall)`)
 /// - Holes: N× Y-axis `Cylinder`、size = `min + i×(max-min)/(count-1)` + clearance
 ///
@@ -2484,20 +2491,20 @@ impl DrillBitHolderSpec {
 pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
     let count = spec.count.max(1);
     let count_f = count as f32;
-    let max_hole_dia = spec.max_size_mm + 2.0 * spec.hole_clearance;
+    let max_hole_dia = 2.0f32.mul_add(spec.hole_clearance, spec.max_size_mm);
     let pitch = max_hole_dia + 4.0; // 4mm inter-hole wall
 
-    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, count_f * pitch);
     let ext_y = spec.hole_depth + spec.floor_thickness;
-    let ext_z = max_hole_dia + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, max_hole_dia);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let hole_hy = f32::midpoint(spec.hole_depth, 10.0);
+    let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -2508,8 +2515,8 @@ pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
             i as f32 / (count_f - 1.0)
         };
         let size = spec.min_size_mm + t * (spec.max_size_mm - spec.min_size_mm);
-        let hole_r = (size + 2.0 * spec.hole_clearance) * 0.5;
-        let x = x_start + i as f32 * pitch;
+        let hole_r = 2.0f32.mul_add(spec.hole_clearance, size) * 0.5;
+        let x = (i as f32).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -2578,14 +2585,14 @@ pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_hy = f32::midpoint(spec.slot_depth, 10.0);
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -2607,7 +2614,7 @@ pub struct SpiceRackSpec {
     pub count: u32,
     /// jar 直径 (mm、small=42 / std=48 / large=52、default 48)
     pub jar_diameter: f32,
-    /// jar 高さ (mm、default 100、lip_height 計算に使う)
+    /// jar 高さ (mm、default `100、lip_height` 計算に使う)
     pub jar_height: f32,
     /// jar recess 深さ (mm、default 5.0)
     pub recess_depth: f32,
@@ -2617,7 +2624,7 @@ pub struct SpiceRackSpec {
     pub base_thickness: f32,
     /// 外周 壁厚 (mm、default 3.0)
     pub wall_thickness: f32,
-    /// 前縁 lip 高さ係数 (× jar_height = lip_height、default 0.15)
+    /// 前縁 lip 高さ係数 (× `jar_height` = `lip_height、default` 0.15)
     pub lip_height_ratio: f32,
     /// 前縁 lip 厚 (mm、default 3.0)
     pub lip_thickness: f32,
@@ -2665,7 +2672,7 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     let lip_height = spec.jar_height * spec.lip_height_ratio;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.base_thickness + lip_height;
-    let ext_z = shelf_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, shelf_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -2693,12 +2700,12 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     let mut result = union(base, lip);
 
     // jar recess: base 上面 (Y+) から下向きに subtract
-    let recess_r = spec.jar_diameter * 0.5 + jar_clearance;
-    let recess_hy = (spec.recess_depth + 0.5) * 0.5;
+    let recess_r = spec.jar_diameter.mul_add(0.5, jar_clearance);
+    let recess_hy = f32::midpoint(spec.recess_depth, 0.5);
     let recess_offset_y = -outer_hy + spec.base_thickness - recess_hy + 0.25;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let recess = translate(
             cylinder(recess_r, recess_hy),
             Vec3::new(x, recess_offset_y, 0.0),
@@ -2750,7 +2757,7 @@ const EGG_CUP_DIAMETER: f32 = 40.0;
 
 /// 卵トレー (2D grid 状 cup、egg cup diameter 40mm 固定、`to_z_up` wrap)
 ///
-/// 構造 (kitchen § 6.5 準拠、Y-up 設計、hex_bit_holder の 2D grid pattern の cyl 版):
+/// 構造 (kitchen § 6.5 準拠、Y-up `設計、hex_bit_holder` の 2D grid pattern の cyl 版):
 /// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (cup_depth+floor) × (rows×pitch+2×wall)`)
 /// - Cups: (rows×cols)× Y-axis `Cylinder` (r=`20mm`, h=`cup_depth+1`)、grid 配置
 ///
@@ -2767,17 +2774,17 @@ pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
     let rows_f = rows as f32;
     let cols_f = cols as f32;
 
-    let ext_x = cols_f * spec.pitch + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, cols_f * spec.pitch);
     let ext_y = spec.cup_depth + spec.floor_thickness;
-    let ext_z = rows_f * spec.pitch + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, rows_f * spec.pitch);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let cup_r = EGG_CUP_DIAMETER * 0.5;
-    let cup_hy = (spec.cup_depth + 10.0) * 0.5;
-    let cup_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cup_hy = f32::midpoint(spec.cup_depth, 10.0);
+    let cup_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * spec.pitch * 0.5;
     let z_start = -(rows_f - 1.0) * spec.pitch * 0.5;
 
@@ -2785,8 +2792,8 @@ pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * spec.pitch;
-            let z = z_start + r as f32 * spec.pitch;
+            let x = (c as f32).mul_add(spec.pitch, x_start);
+            let z = (r as f32).mul_add(spec.pitch, z_start);
             let cup = translate(cylinder(cup_r, cup_hy), Vec3::new(x, cup_offset_y, z));
             result = subtract(result, cup);
         }
@@ -2830,7 +2837,7 @@ impl UtensilCaddySpec {
 
 /// キッチンツールキャディ (row 状 large cylindrical compartment、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (kitchen § 6.8 準拠、Y-up 設計、toothbrush_holder pattern の大径 kitchen version):
+/// 構造 (kitchen § 6.8 準拠、Y-up `設計、toothbrush_holder` pattern の大径 kitchen version):
 /// - Outer: `RoundedBox`
 /// - Compartments: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
 /// - Drainage holes は user 側で加工推奨 (sink 側で使う場合)
@@ -2848,21 +2855,21 @@ pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
     let pitch = spec.compartment_diameter + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.height + spec.floor_thickness;
-    let ext_z = spec.compartment_diameter + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.compartment_diameter);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let comp_r = spec.compartment_diameter * 0.5;
-    let comp_hy = (spec.height + 10.0) * 0.5;
-    let comp_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let comp_hy = f32::midpoint(spec.height, 10.0);
+    let comp_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let compartment = translate(cylinder(comp_r, comp_hy), Vec3::new(x, comp_offset_y, 0.0));
         result = subtract(result, compartment);
     }
@@ -2885,11 +2892,11 @@ pub struct FilamentSpoolHolderSpec {
     pub bore_diameter: f32,
     /// base plate 厚 (mm、default 5.0)
     pub base_thickness: f32,
-    /// base plate 余裕 (mm、spool_od 周りの extra margin、default 30.0)
+    /// base plate 余裕 (`mm、spool_od` 周りの extra margin、default 30.0)
     pub base_margin: f32,
     /// peg 半径 減少量 (mm、bore/2 から slide fit clearance、default 1.0)
     pub peg_clearance: f32,
-    /// peg 追加高さ (spool_width 超過分、mm、default 20.0)
+    /// peg 追加高さ (`spool_width` 超過分、mm、default 20.0)
     pub peg_extra_height: f32,
 }
 
@@ -2930,7 +2937,7 @@ pub fn filament_spool_holder(spec: &FilamentSpoolHolderSpec) -> SdfNode {
     let base_hy = base_side * 0.5;
     let base_hz = spec.base_thickness * 0.5;
 
-    let peg_r = spec.bore_diameter * 0.5 - spec.peg_clearance;
+    let peg_r = spec.bore_diameter.mul_add(0.5, -spec.peg_clearance);
     let peg_h = spec.spool_width + spec.peg_extra_height;
     let peg_half_h = peg_h * 0.5;
     let peg_offset_z = spec.base_thickness + peg_half_h - 0.5; // 0.5mm overlap with base
@@ -2979,7 +2986,7 @@ impl NozzleHolderSpec {
 
 /// ノズルホルダー (row 状 hole、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (printer § 9.5 準拠、Y-up 設計、drill_bit_holder pattern の単一サイズ版):
+/// 構造 (printer § 9.5 準拠、Y-up `設計、drill_bit_holder` pattern の単一サイズ版):
 /// - Outer: `RoundedBox`
 /// - Holes: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
 ///
@@ -2996,21 +3003,21 @@ pub fn nozzle_holder(spec: &NozzleHolderSpec) -> SdfNode {
     let pitch = spec.hole_diameter + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.hole_depth + spec.floor_thickness;
-    let ext_z = spec.hole_diameter + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.hole_diameter);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let hole_r = spec.hole_diameter * 0.5;
-    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let hole_hy = f32::midpoint(spec.hole_depth, 10.0);
+    let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -3059,7 +3066,7 @@ impl BuildPlateRackSpec {
 
 /// ビルドプレートラック (row 状 vertical slot、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (printer § 9.6 準拠、Y-up 設計、pliers_rack pattern の taller version):
+/// 構造 (printer § 9.6 準拠、Y-up `設計、pliers_rack` pattern の taller version):
 /// - Outer: `RoundedBox` (`(count×spacing+2×wall) × (height+floor) × depth`)
 /// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 全高貫通
 ///
@@ -3073,7 +3080,7 @@ impl BuildPlateRackSpec {
 pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
     let count = spec.slot_count.max(1);
     let count_f = count as f32;
-    let ext_x = count_f * spec.slot_spacing + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, count_f * spec.slot_spacing);
     let ext_y = spec.height + spec.floor_thickness;
     let ext_z = spec.depth;
 
@@ -3081,14 +3088,14 @@ pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.height + 10.0) * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_hy = f32::midpoint(spec.height, 10.0);
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * spec.slot_spacing * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * spec.slot_spacing;
+        let x = (i as f32).mul_add(spec.slot_spacing, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -3139,9 +3146,9 @@ impl CutleryTraySpec {
 ///
 /// 構造 (drawer § 3.2 準拠、Y-up 設計):
 /// - Outer: `RoundedBox` (`(count×pitch+wall) × (depth+floor) × (length+2×wall)`)
-/// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 開口、Z 方向 slot_length
+/// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 開口、Z 方向 `slot_length`
 ///
-/// pliers_rack と類似だが slot_length (Z) が長く drawer 引き出し向け
+/// `pliers_rack` と類似だが `slot_length` (Z) が長く drawer 引き出し向け
 ///
 /// # 使用例
 ///
@@ -3156,21 +3163,21 @@ pub fn cutlery_tray(spec: &CutleryTraySpec) -> SdfNode {
     let pitch = spec.slot_width + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.slot_depth + spec.floor_thickness;
-    let ext_z = spec.slot_length + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.slot_length);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.slot_depth, 10.0);
     let slot_hz = spec.slot_length * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -3219,7 +3226,7 @@ impl PillOrganizerSpec {
 
 /// 薬箱 (2D grid rect cells、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (drawer § 3.6 準拠、Y-up 設計、egg_tray の rect 版):
+/// 構造 (drawer § 3.6 準拠、Y-up `設計、egg_tray` の rect 版):
 /// - Outer: `RoundedBox` (`(cols×pitch+wall) × (depth+floor) × (rows×pitch+wall)`)
 /// - Cells: (rows×cols)× `Box3d` rect cavity、grid 配置、Y+ 開口
 ///
@@ -3246,8 +3253,8 @@ pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cell_h = spec.cell_size * 0.5;
-    let cell_hy = (spec.cell_depth + 10.0) * 0.5;
-    let cell_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cell_hy = f32::midpoint(spec.cell_depth, 10.0);
+    let cell_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -3255,8 +3262,8 @@ pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch;
-            let z = z_start + r as f32 * pitch;
+            let x = (c as f32).mul_add(pitch, x_start);
+            let z = (r as f32).mul_add(pitch, z_start);
             let cell = translate(
                 box3d(cell_h, cell_hy, cell_h),
                 Vec3::new(x, cell_offset_y, z),
@@ -3283,7 +3290,7 @@ pub struct MagneticStripSpec {
     pub magnet_spacing: f32,
     /// magnet 埋込 depth (mm、typical 2-3、default 2.0)
     pub magnet_depth: f32,
-    /// bar 厚 (mm、bar 全厚 = magnet_depth + 3mm backing、default 5.0)
+    /// bar 厚 (mm、bar 全厚 = `magnet_depth` + 3mm backing、default 5.0)
     pub bar_thickness: f32,
     /// bar 高さ (mm、Z 方向、default 15)
     pub bar_height: f32,
@@ -3309,7 +3316,7 @@ impl MagneticStripSpec {
 
 /// マグネットストリップ (long thin bar + row of magnet holes、`to_z_up` wrap)
 ///
-/// 構造 (wall § 4.6 準拠、Y-up 設計、nozzle_holder pattern の long thin bar 版):
+/// 構造 (wall § 4.6 準拠、Y-up `設計、nozzle_holder` pattern の long thin bar 版):
 /// - Bar: `RoundedBox` (`(count×spacing+2×end_margin) × bar_thickness × bar_height`)
 /// - Magnet holes: N× Y-axis `Cylinder` (r=`magnet_dia/2`, depth=`magnet_depth`)、X 方向等間隔
 /// - hole は bar 表面 (Y+) から埋込 (Y+ 側 open)
@@ -3324,7 +3331,7 @@ impl MagneticStripSpec {
 pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
     let count = spec.magnet_count.max(1);
     let count_f = count as f32;
-    let ext_x = count_f * spec.magnet_spacing + 2.0 * spec.end_margin;
+    let ext_x = 2.0f32.mul_add(spec.end_margin, count_f * spec.magnet_spacing);
     let ext_y = spec.bar_thickness;
     let ext_z = spec.bar_height;
 
@@ -3333,7 +3340,7 @@ pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let magnet_r = spec.magnet_diameter * 0.5;
-    let magnet_hy = (spec.magnet_depth + 0.5) * 0.5;
+    let magnet_hy = f32::midpoint(spec.magnet_depth, 0.5);
     // magnet は Y+ 面 (bar 表面) から埋込
     let magnet_offset_y = outer_hy - magnet_hy + 0.25;
     let x_start = -(count_f - 1.0) * spec.magnet_spacing * 0.5;
@@ -3341,7 +3348,7 @@ pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
     let bar = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = bar;
     for i in 0..count {
-        let x = x_start + i as f32 * spec.magnet_spacing;
+        let x = (i as f32).mul_add(spec.magnet_spacing, x_start);
         let hole = translate(
             cylinder(magnet_r, magnet_hy),
             Vec3::new(x, magnet_offset_y, 0.0),
@@ -3399,14 +3406,17 @@ impl HairdryerHolderSpec {
 /// ```
 #[must_use]
 pub fn hairdryer_holder(spec: &HairdryerHolderSpec) -> SdfNode {
-    let outer_side = spec.barrel_diameter + 2.0 * (spec.inner_clearance + spec.wall_thickness);
+    let outer_side = 2.0f32.mul_add(
+        spec.inner_clearance + spec.wall_thickness,
+        spec.barrel_diameter,
+    );
     let outer_hx = outer_side * 0.5;
     let outer_hz = outer_side * 0.5;
-    let outer_hy = (spec.holster_depth + spec.floor_thickness) * 0.5;
+    let outer_hy = f32::midpoint(spec.holster_depth, spec.floor_thickness);
 
-    let cavity_r = spec.barrel_diameter * 0.5 + spec.inner_clearance;
-    let cavity_hy = (spec.holster_depth + 10.0) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_r = spec.barrel_diameter.mul_add(0.5, spec.inner_clearance);
+    let cavity_hy = f32::midpoint(spec.holster_depth, 10.0);
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 5.0);
     let cavity = translate(
@@ -3421,7 +3431,7 @@ pub fn hairdryer_holder(spec: &HairdryerHolderSpec) -> SdfNode {
 // 39. kcup_holder (organizer-cable-kitchen § 6.7 K-Cup / Capsule Holder)
 // ────────────────────────────────────────────────────────
 
-/// K-Cup ホルダー spec (2D grid K-Cup wells、egg_tray の K-Cup 版)
+/// K-Cup ホルダー spec (2D grid K-Cup `wells、egg_tray` の K-Cup 版)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KcupHolderSpec {
     /// 行数 (default 3、range 1-6)
@@ -3458,7 +3468,7 @@ impl KcupHolderSpec {
 
 /// K-Cup ホルダー (2D grid cylindrical wells、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (kitchen § 6.7 準拠、Y-up 設計、egg_tray pattern の K-Cup サイズ版):
+/// 構造 (kitchen § 6.7 準拠、Y-up `設計、egg_tray` pattern の K-Cup サイズ版):
 /// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (depth+floor) × (rows×pitch+2×wall)`)
 /// - Wells: (rows×cols)× Y-axis `Cylinder` (r=`capsule/2`, h=`depth+1`)、grid 配置
 ///
@@ -3476,17 +3486,17 @@ pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
     let cols_f = cols as f32;
     let pitch = spec.capsule_diameter + spec.capsule_clearance;
 
-    let ext_x = cols_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, cols_f * pitch);
     let ext_y = spec.capsule_depth + spec.floor_thickness;
-    let ext_z = rows_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, rows_f * pitch);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let well_r = spec.capsule_diameter * 0.5;
-    let well_hy = (spec.capsule_depth + 10.0) * 0.5;
-    let well_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let well_hy = f32::midpoint(spec.capsule_depth, 10.0);
+    let well_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -3494,8 +3504,8 @@ pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch;
-            let z = z_start + r as f32 * pitch;
+            let x = (c as f32).mul_add(pitch, x_start);
+            let z = (r as f32).mul_add(pitch, z_start);
             let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, z));
             result = subtract(result, well);
         }
@@ -3528,7 +3538,7 @@ pub struct HexKeyHolderSpec {
 }
 
 impl HexKeyHolderSpec {
-    /// Metric 9-piece 1.5-10mm (garage § 8.2 standard、drill_bit pattern of hex keys)
+    /// Metric 9-piece 1.5-10mm (garage § 8.2 `standard、drill_bit` pattern of hex keys)
     #[must_use]
     pub const fn metric_9() -> Self {
         Self {
@@ -3545,7 +3555,7 @@ impl HexKeyHolderSpec {
 
 /// ヘックスキーホルダー (row 状 hole、size linear interpolate、`to_z_up` wrap)
 ///
-/// 構造 (garage § 8.2 準拠、Y-up 設計、drill_bit_holder と同 pattern):
+/// 構造 (garage § 8.2 準拠、Y-up `設計、drill_bit_holder` と同 pattern):
 /// - Outer: `RoundedBox`
 /// - Holes: N× Y-axis `Cylinder`、size = `min + i×(max-min)/(count-1)` + clearance
 ///
@@ -3561,20 +3571,20 @@ impl HexKeyHolderSpec {
 pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
     let count = spec.count.max(1);
     let count_f = count as f32;
-    let max_hole_dia = spec.max_key_mm + 2.0 * spec.hole_clearance;
+    let max_hole_dia = 2.0f32.mul_add(spec.hole_clearance, spec.max_key_mm);
     let pitch = max_hole_dia + 3.0; // 3mm inter-hole wall
 
-    let ext_x = count_f * pitch + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, count_f * pitch);
     let ext_y = spec.hole_depth + spec.floor_thickness;
-    let ext_z = max_hole_dia + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, max_hole_dia);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let x_start = -(count_f - 1.0) * pitch * 0.5;
-    let hole_hy = (spec.hole_depth + 10.0) * 0.5;
-    let hole_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let hole_hy = f32::midpoint(spec.hole_depth, 10.0);
+    let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
@@ -3585,8 +3595,8 @@ pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
             i as f32 / (count_f - 1.0)
         };
         let size = spec.min_key_mm + t * (spec.max_key_mm - spec.min_key_mm);
-        let hole_r = (size + 2.0 * spec.hole_clearance) * 0.5;
-        let x = x_start + i as f32 * pitch;
+        let hole_r = 2.0f32.mul_add(spec.hole_clearance, size) * 0.5;
+        let x = (i as f32).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -3642,14 +3652,17 @@ impl WrapHolderSpec {
 /// ```
 #[must_use]
 pub fn wrap_holder(spec: &WrapHolderSpec) -> SdfNode {
-    let cradle_r = spec.roll_diameter * 0.5 + spec.roll_clearance;
+    let cradle_r = spec.roll_diameter.mul_add(0.5, spec.roll_clearance);
     // body height: cradle が cradle_depth_ratio × dia だけ食い込むように設計
     let cavity_depth = spec.roll_diameter * spec.cradle_depth_ratio;
     let body_height = cavity_depth + spec.wall_thickness + 5.0; // floor 5mm 補足
 
-    let ext_x = spec.roll_width + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.roll_width);
     let ext_y = body_height;
-    let ext_z = spec.roll_diameter + 2.0 * (spec.roll_clearance + spec.wall_thickness);
+    let ext_z = 2.0f32.mul_add(
+        spec.roll_clearance + spec.wall_thickness,
+        spec.roll_diameter,
+    );
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -3729,10 +3742,10 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let count_f = count as f32;
 
     // 内部合計幅 = count × cell_width + (count-1) × wall_thickness
-    let inner_x = count_f * spec.cell_width + (count_f - 1.0) * spec.wall_thickness;
-    let ext_x = inner_x + 2.0 * spec.wall_thickness;
+    let inner_x = (count_f - 1.0).mul_add(spec.wall_thickness, count_f * spec.cell_width);
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, inner_x);
     let ext_y = spec.height + spec.floor_thickness;
-    let ext_z = spec.cell_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.cell_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -3740,9 +3753,9 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
 
     // Cavity: 内部全体 (partition wall もまとめて subtract、後で union で追加)
     let cavity_hx = inner_x * 0.5;
-    let cavity_hy = (spec.height + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.height, 10.0);
     let cavity_hz = spec.cell_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let cavity = translate(
@@ -3758,8 +3771,10 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let wall_offset_y = spec.floor_thickness + wall_hy;
     let x_left = -inner_x * 0.5;
     for i in 1..count {
-        let wall_center_x =
-            x_left + i as f32 * (spec.cell_width + spec.wall_thickness) - spec.wall_thickness * 0.5;
+        let wall_center_x = spec.wall_thickness.mul_add(
+            -0.5,
+            (i as f32).mul_add(spec.cell_width + spec.wall_thickness, x_left),
+        );
         let wall = translate(
             box3d(spec.wall_thickness * 0.5, wall_hy, wall_hz),
             Vec3::new(wall_center_x, wall_offset_y - outer_hy, 0.0),
@@ -3827,18 +3842,18 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
     let count = spec.drain_slot_count.max(1);
     let count_f = count as f32;
 
-    let ext_x = spec.tray_length + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.tray_length);
     let ext_y = spec.tray_depth + spec.floor_thickness;
-    let ext_z = spec.tray_width + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.tray_width);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.tray_length * 0.5;
-    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.tray_depth, 10.0);
     let cavity_hz = spec.tray_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -3851,11 +3866,11 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
     // slot 配置: slot 間 wall 厚 は残り floor に配置
     let slot_pitch = spec.tray_length / (count_f + 1.0);
     let slot_hx = spec.drain_slot_width * 0.5;
-    let slot_hy = (spec.floor_thickness + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.floor_thickness, 10.0);
     let slot_hz = spec.tray_width * 0.5;
     let slot_offset_y = -outer_hy + slot_hy - 0.5;
     for i in 0..count {
-        let x = -spec.tray_length * 0.5 + slot_pitch * (i as f32 + 1.0);
+        let x = (-spec.tray_length).mul_add(0.5, slot_pitch * (i as f32 + 1.0));
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -3940,7 +3955,7 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
     // to the plate bottom. Growing slot_hy would extend the slot UPWARD
     // by 2×delta into the plate interior — keep +1mm slot depth margin
     let slot_hx = spec.slot_width * 0.5;
-    let slot_hy = (spec.slot_depth + 1.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.slot_depth, 1.0);
     let slot_hz = punch_z;
     let slot_offset_y = -outer_hy + slot_hy - 0.5;
 
@@ -3948,7 +3963,7 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
     // the rounded_box-inflated plate thickness
     let mount_r = spec.mount_hole_diameter * 0.5;
     let mount_hy = punch_z;
-    let mount_offset_y = outer_hy - spec.wall_thickness * 2.0;
+    let mount_offset_y = spec.wall_thickness.mul_add(-2.0, outer_hy);
 
     let backplate = rounded_box(outer_hx, outer_hy, outer_hz, backplate_radius);
     let slot = translate(
@@ -4001,7 +4016,7 @@ impl ChopstickHolderSpec {
 
 /// 箸ホルダー (row 状 narrow long slots、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (drawer § 3.3 準拠、Y-up 設計、cutlery_tray より narrow slot):
+/// 構造 (drawer § 3.3 準拠、Y-up `設計、cutlery_tray` より narrow slot):
 /// - Outer: `RoundedBox` (`(count×pitch+wall) × (depth+floor) × (length+2×wall)`)
 /// - Slots: N× `Box3d` slot (X thin、Y depth、Z long)、Y+ 開口
 ///
@@ -4018,21 +4033,21 @@ pub fn chopstick_holder(spec: &ChopstickHolderSpec) -> SdfNode {
     let pitch = spec.slot_width + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.slot_depth + spec.floor_thickness;
-    let ext_z = spec.slot_length + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.slot_length);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
-    let slot_hy = (spec.slot_depth + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.slot_depth, 10.0);
     let slot_hz = spec.slot_length * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -4084,9 +4099,9 @@ impl SwatchHolderSpec {
 
 /// フィラメントスウォッチホルダー (2D grid narrow rect slots、top 開口、`to_z_up` wrap)
 ///
-/// 構造 (printer § 9.7 準拠、Y-up 設計、pill_organizer pattern の narrow rect 版):
+/// 構造 (printer § 9.7 準拠、Y-up `設計、pill_organizer` pattern の narrow rect 版):
 /// - Outer: `RoundedBox` (`(cols×pitch_x+wall) × (height+floor) × (rows×pitch_z+wall)`)
-/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z width=swatch_width)
+/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z `width=swatch_width`)
 ///
 /// swatch カード立てて挿入する形式 (Z 方向に幅、X 方向に厚みで、多数の swatch を並べる)
 ///
@@ -4115,9 +4130,9 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.swatch_thickness * 0.5;
-    let slot_hy = (spec.swatch_height + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.swatch_height, 10.0);
     let slot_hz = spec.swatch_width * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
     let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
 
@@ -4125,8 +4140,8 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch_x;
-            let z = z_start + r as f32 * pitch_z;
+            let x = (c as f32).mul_add(pitch_x, x_start);
+            let z = (r as f32).mul_add(pitch_z, z_start);
             let slot = translate(
                 box3d(slot_hx, slot_hy, slot_hz),
                 Vec3::new(x, slot_offset_y, z),
@@ -4186,7 +4201,7 @@ pub fn tp_holder(spec: &TpHolderSpec) -> SdfNode {
     let outer_hz = spec.wall_thickness * 0.5;
 
     // Axle: Z-axis cylinder、backplate 中央から前方 (+Z) 突出
-    let axle_r = spec.inner_diameter * 0.5 - 0.5;
+    let axle_r = spec.inner_diameter.mul_add(0.5, -0.5);
     let axle_half_h = spec.roll_width * 0.5;
     let axle_z_center = outer_hz + axle_half_h - 5.0;
 
@@ -4259,7 +4274,7 @@ impl SdCardHolderSpec {
 ///
 /// 構造 (printer § 9.4 準拠、Y-up 設計、`swatch_holder` pattern の SD card 版):
 /// - Outer: `RoundedBox` (`(cols×pitch_x+wall) × (height+floor) × (rows×pitch_z+wall)`)
-/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z width=card_width)
+/// - Slots: (rows×cols)× `Box3d` rect (X narrow=thickness、Y depth=height、Z `width=card_width`)
 ///
 /// # 使用例
 ///
@@ -4286,9 +4301,9 @@ pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.card_thickness * 0.5;
-    let slot_hy = (spec.card_height + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.card_height, 10.0);
     let slot_hz = spec.card_width * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch_x * 0.5;
     let z_start = -(rows_f - 1.0) * pitch_z * 0.5;
 
@@ -4296,8 +4311,8 @@ pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch_x;
-            let z = z_start + r as f32 * pitch_z;
+            let x = (c as f32).mul_add(pitch_x, x_start);
+            let z = (r as f32).mul_add(pitch_z, z_start);
             let slot = translate(
                 box3d(slot_hx, slot_hy, slot_hz),
                 Vec3::new(x, slot_offset_y, z),
@@ -4357,7 +4372,7 @@ pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
     let pitch = spec.slot_diameter + wall_thickness;
     let ext_x = count_f * pitch + wall_thickness;
     let ext_y = spec.height;
-    let ext_z = spec.slot_diameter + 2.0 * wall_thickness;
+    let ext_z = 2.0f32.mul_add(wall_thickness, spec.slot_diameter);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -4365,14 +4380,14 @@ pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
 
     let hole_r = spec.slot_diameter * 0.5;
     let hole_depth = spec.height - floor_thickness;
-    let hole_hy = (hole_depth + 10.0) * 0.5;
+    let hole_hy = f32::midpoint(hole_depth, 10.0);
     let hole_offset_y = floor_thickness * 0.5 + 5.0;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -4429,11 +4444,11 @@ impl CottonDispenserSpec {
 /// ```
 #[must_use]
 pub fn cotton_dispenser(spec: &CottonDispenserSpec) -> SdfNode {
-    let outer_r = spec.inner_diameter * 0.5 + spec.wall_thickness;
+    let outer_r = spec.inner_diameter.mul_add(0.5, spec.wall_thickness);
     let outer_hz = spec.height * 0.5;
     let inner_r = spec.inner_diameter * 0.5;
-    let inner_hz = (spec.height - spec.floor_thickness + 10.0) * 0.5;
-    let inner_offset_z = spec.floor_thickness * 0.5 + 5.0;
+    let inner_hz = f32::midpoint(spec.height - spec.floor_thickness, 10.0);
+    let inner_offset_z = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = cylinder_z(outer_r, outer_hz);
     let cavity = translate(
@@ -4500,18 +4515,18 @@ pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
     let count = spec.drain_hole_count.max(1);
     let count_f = count as f32;
 
-    let ext_x = spec.tray_length + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.tray_length);
     let ext_y = spec.tray_depth + spec.floor_thickness;
-    let ext_z = spec.tray_width + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.tray_width);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.tray_length * 0.5;
-    let cavity_hy = (spec.tray_depth + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.tray_depth, 10.0);
     let cavity_hz = spec.tray_width * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -4522,11 +4537,11 @@ pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
 
     // Drain holes: floor 貫通 Y-axis cyl、X 方向等間隔
     let hole_r = spec.drain_hole_diameter * 0.5;
-    let hole_hy = (spec.floor_thickness + 10.0) * 0.5;
+    let hole_hy = f32::midpoint(spec.floor_thickness, 10.0);
     let hole_offset_y = -outer_hy + hole_hy - 0.5;
     let hole_pitch = spec.tray_length / (count_f + 1.0);
     for i in 0..count {
-        let x = -spec.tray_length * 0.5 + hole_pitch * (i as f32 + 1.0);
+        let x = (-spec.tray_length).mul_add(0.5, hole_pitch * (i as f32 + 1.0));
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
         result = subtract(result, hole);
     }
@@ -4577,7 +4592,7 @@ impl ClampRackSpec {
 /// - Hooks: N× (`Box3d` arm + `Box3d` tip)、backplate 下寄せ、X 方向等間隔
 /// - Mount holes: 2× Y-axis `Cylinder` (r=2.25、M4)、backplate 上部左右
 ///
-/// hook 形状: arm (前方突出) + tip (下向き、hook_opening 分、clamp 引っ掛け)
+/// hook 形状: arm (前方突出) + tip (`下向き、hook_opening` 分、clamp 引っ掛け)
 ///
 /// # 使用例
 ///
@@ -4603,12 +4618,12 @@ pub fn clamp_rack(spec: &ClampRackSpec) -> SdfNode {
     let arm_hy = 4.0;
     let arm_hz = spec.hook_depth * 0.5;
     let tip_hy = spec.hook_opening * 0.5;
-    let hook_y_offset = -outer_hy + spec.height * 0.3;
+    let hook_y_offset = spec.height.mul_add(0.3, -outer_hy);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let mut result = backplate;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let arm = translate(
             rounded_box(arm_hx, arm_hy, arm_hz, 2.0),
             Vec3::new(x, hook_y_offset, outer_hz + arm_hz),
@@ -4711,8 +4726,8 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cavity_r = spec.filament_diameter * 0.5;
-    let cavity_hy = (spec.spool_width - spec.floor_thickness + 10.0) * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_hy = f32::midpoint(spec.spool_width - spec.floor_thickness, 10.0);
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -4720,8 +4735,8 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch;
-            let z = z_start + r as f32 * pitch;
+            let x = (c as f32).mul_add(pitch, x_start);
+            let z = (r as f32).mul_add(pitch, z_start);
             let cavity = translate(
                 cylinder(cavity_r, cavity_hy),
                 Vec3::new(x, cavity_offset_y, z),
@@ -4737,7 +4752,7 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
 // 54. outdoor_enclosure (electronics § 5 Outdoor IP54 Enclosure)
 // ────────────────────────────────────────────────────────
 
-/// 屋外用 IP54 密閉筐体 spec (raspi_case + gasket groove、lid seam)
+/// 屋外用 IP54 密閉筐体 spec (`raspi_case` + gasket groove、lid seam)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OutdoorEnclosureSpec {
     /// 内部 幅 (mm、default 120、range 80-200)
@@ -4772,7 +4787,7 @@ impl OutdoorEnclosureSpec {
     }
 }
 
-/// 屋外用 IP54 密閉筐体 (raspi_case pattern + gasket groove for O-ring seal、`to_z_up` wrap)
+/// 屋外用 IP54 密閉筐体 (`raspi_case` pattern + gasket groove for O-ring seal、`to_z_up` wrap)
 ///
 /// 構造 (electronics § 5 準拠、Y-up 設計):
 /// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
@@ -4789,18 +4804,18 @@ impl OutdoorEnclosureSpec {
 /// ```
 #[must_use]
 pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
-    let ext_x = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.internal_width);
     let ext_y = spec.internal_height + spec.floor_thickness;
-    let ext_z = spec.internal_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.internal_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.internal_width * 0.5;
-    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.internal_height, 10.0);
     let cavity_hz = spec.internal_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -4811,10 +4826,10 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
 
     // Gasket groove: outer top rim を囲む矩形溝 (4 slot union)
     // 位置: wall 中央 (X±=cavity_hx + wall/2、Z±=cavity_hz + wall/2)
-    let groove_offset_y = outer_hy - spec.gasket_depth * 0.5 + 5.0;
-    let groove_hy = (spec.gasket_depth + 10.0) * 0.5;
-    let wall_mid_x = cavity_hx + spec.wall_thickness * 0.5;
-    let wall_mid_z = cavity_hz + spec.wall_thickness * 0.5;
+    let groove_offset_y = spec.gasket_depth.mul_add(-0.5, outer_hy) + 5.0;
+    let groove_hy = f32::midpoint(spec.gasket_depth, 10.0);
+    let wall_mid_x = spec.wall_thickness.mul_add(0.5, cavity_hx);
+    let wall_mid_z = spec.wall_thickness.mul_add(0.5, cavity_hz);
 
     // X 方向長 slot (Z-facing wall 2 本)
     let slot_x_long = translate(
@@ -4885,7 +4900,7 @@ impl JewelryStandSpec {
 /// - Pillar: `cylinder_z` (r=`pillar_dia/2`、h=`height/2`)、中央 Z 軸
 /// - Tiers: N× `cylinder_z` disk (r=`bottom_dia/2 × ratio^i`、h=`tier_thickness/2`)、Z 方向等間隔
 ///
-/// tier_ratio で上段ほど小径 (wedding cake style)、Z=0 が最下段
+/// `tier_ratio` で上段ほど小径 (wedding cake style)、Z=0 が最下段
 ///
 /// # 使用例
 ///
@@ -5017,7 +5032,7 @@ pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
 // 57. cutting_board_rack (organizer-cable-kitchen § 6.6 Cutting Board Rack)
 // ────────────────────────────────────────────────────────
 
-/// まな板ラック spec (tall vertical slots、build_plate_rack pattern の tall + deep 版)
+/// まな板ラック spec (tall vertical `slots、build_plate_rack` pattern の tall + deep 版)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CuttingBoardRackSpec {
     /// slot 個数 (default 3、range 2-6)
@@ -5053,9 +5068,9 @@ impl CuttingBoardRackSpec {
 ///
 /// 構造 (kitchen § 6.6 準拠、Y-up 設計、multi-component:base + N 垂直 slot):
 /// - Outer: `RoundedBox` (`(count×pitch+wall) × height × (slot_depth+2×wall)`)
-/// - Slots: N× `Box3d` slot (X thin、Y height-floor、Z slot_depth)、Y+ 開口 + X 貫通で挿入
+/// - Slots: N× `Box3d` slot (X thin、Y height-floor、Z `slot_depth)、Y`+ 開口 + X 貫通で挿入
 ///
-/// build_plate_rack との違い: slot_depth (Z) が大幅 deep = まな板の長辺方向、height (Y) が tall (200+mm)
+/// `build_plate_rack` との違い: `slot_depth` (Z) が大幅 deep = まな板の長辺方向、height (Y) が tall (200+mm)
 ///
 /// # 使用例
 ///
@@ -5070,22 +5085,22 @@ pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
     let pitch = spec.slot_width + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.height;
-    let ext_z = spec.slot_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.slot_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.slot_width * 0.5;
-    let slot_hy = (spec.height - spec.floor_thickness + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.height - spec.floor_thickness, 10.0);
     let slot_hz = spec.slot_depth * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -5135,10 +5150,10 @@ impl TapeDispenserSpec {
 /// - Base plate: `RoundedBox` (`(outer_dia+2×wall) × wall × (outer_dia/2+roll_width+2×wall)`)、bed に設置
 /// - Hood: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 上方 (Y+) 覆い
 /// - Back wall: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 後方 (Z-) 支え
-/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2-0.5`、h=`roll_width/2`)、Y=outer_dia/2 中央、Z=0
+/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2-0.5`、h=`roll_width/2`)、`Y=outer_dia/2` 中央、Z=0
 /// - Tear edge: `Box3d` 傾斜 slot、hood 前端 (Y+ 上部)
 ///
-/// 単一 print で 4 component (base + hood + back + axle) を union で結合、cotton_dispenser より複雑
+/// 単一 print で 4 component (base + hood + back + axle) を union `で結合、cotton_dispenser` より複雑
 ///
 /// # 使用例
 ///
@@ -5149,8 +5164,8 @@ impl TapeDispenserSpec {
 #[must_use]
 pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let outer_r = spec.outer_diameter * 0.5;
-    let full_x = spec.outer_diameter + 2.0 * spec.wall_thickness;
-    let full_z = outer_r + spec.roll_width + 2.0 * spec.wall_thickness;
+    let full_x = 2.0f32.mul_add(spec.wall_thickness, spec.outer_diameter);
+    let full_z = 2.0f32.mul_add(spec.wall_thickness, outer_r + spec.roll_width);
 
     // Base plate: 全体を底面に敷く
     let base_hx = full_x * 0.5;
@@ -5177,10 +5192,10 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     );
 
     // Axle: Z-axis cylinder、roll 中央 (Y=outer_r + wall、Z=roll 中央)
-    let axle_r = spec.inner_diameter * 0.5 - 0.5;
+    let axle_r = spec.inner_diameter.mul_add(0.5, -0.5);
     let axle_half_h = spec.roll_width * 0.5;
     let axle_offset_y = spec.wall_thickness + outer_r * 0.5;
-    let axle_offset_z = -base_hz + spec.wall_thickness * 2.0 + outer_r + axle_half_h;
+    let axle_offset_z = spec.wall_thickness.mul_add(2.0, -base_hz) + outer_r + axle_half_h;
     let axle = translate(
         cylinder_z(axle_r, axle_half_h),
         Vec3::new(0.0, axle_offset_y, axle_offset_z),
@@ -5261,7 +5276,7 @@ impl ShowerCaddySpec {
 /// 構造 (bathroom § 7.5 準拠、Y-up 設計、**新 pattern: multi-tier wall-mount tray**):
 /// - Backplate: `RoundedBox` (`(length+2×wall) × total_height × wall`)、壁貼付面 (Z-)
 /// - Tiers: N× (`RoundedBox` tray + `Box3d` cavity subtract)、Y 方向等間隔、Z+ に突出
-/// - Drain holes: 各 tier に (drains_per_tier)× Y-axis `Cylinder`、tray floor 貫通、X 方向等間隔
+/// - Drain holes: 各 tier に (`drains_per_tier`)× Y-axis `Cylinder`、tray floor 貫通、X 方向等間隔
 /// - Mount holes: 2× Y-axis `Cylinder` (M4)、backplate 上端左右
 ///
 /// 3-component composite = backplate + N tier trays + mount holes
@@ -5277,8 +5292,10 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let count = spec.tier_count.max(1);
     let count_f = count as f32;
 
-    let bp_ext_x = spec.tier_length + 2.0 * spec.wall_thickness;
-    let bp_ext_y = count_f * spec.tier_spacing + spec.tier_height + spec.wall_thickness * 2.0;
+    let bp_ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.tier_length);
+    let bp_ext_y = spec
+        .wall_thickness
+        .mul_add(2.0, count_f * spec.tier_spacing + spec.tier_height);
     let bp_ext_z = spec.wall_thickness;
     let bp_hx = bp_ext_x * 0.5;
     let bp_hy = bp_ext_y * 0.5;
@@ -5288,21 +5305,24 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let mut result = backplate;
 
     // tier X 方向 outer / cavity 定数
-    let tier_outer_hx = (spec.tier_length + 2.0 * spec.wall_thickness) * 0.5;
-    let tier_outer_hy = (spec.tier_height + spec.floor_thickness) * 0.5;
-    let tier_outer_hz = (spec.tier_depth + spec.wall_thickness) * 0.5;
+    let tier_outer_hx = 2.0f32.mul_add(spec.wall_thickness, spec.tier_length) * 0.5;
+    let tier_outer_hy = f32::midpoint(spec.tier_height, spec.floor_thickness);
+    let tier_outer_hz = f32::midpoint(spec.tier_depth, spec.wall_thickness);
     let cavity_hx = spec.tier_length * 0.5;
-    let cavity_hy = (spec.tier_height + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.tier_height, 10.0);
     let cavity_hz = spec.tier_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let drain_r = spec.drain_hole_diameter * 0.5;
-    let drain_hy = (spec.floor_thickness + 10.0) * 0.5;
+    let drain_hy = f32::midpoint(spec.floor_thickness, 10.0);
     let drain_offset_y = -tier_outer_hy + drain_hy - 0.5;
     let drains = spec.drains_per_tier.max(1);
     let drain_pitch = spec.tier_length / (drains as f32 + 1.0);
 
     for i in 0..count {
-        let tier_y = -bp_hy + spec.wall_thickness + tier_outer_hy + (i as f32) * spec.tier_spacing;
+        let tier_y = (i as f32).mul_add(
+            spec.tier_spacing,
+            -bp_hy + spec.wall_thickness + tier_outer_hy,
+        );
         let tier_z = bp_hz + tier_outer_hz;
 
         let outer = rounded_box(tier_outer_hx, tier_outer_hy, tier_outer_hz, 3.0);
@@ -5312,7 +5332,7 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
         );
         let mut tier = subtract(outer, cavity);
         for k in 0..drains {
-            let x = -spec.tier_length * 0.5 + drain_pitch * (k as f32 + 1.0);
+            let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (k as f32 + 1.0));
             let drain = translate(
                 cylinder(drain_r, drain_hy),
                 Vec3::new(x, drain_offset_y, spec.wall_thickness * 0.5),
@@ -5326,7 +5346,7 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     // Mount holes (M4 × 2、backplate 上端左右)
     let mount_r = spec.mount_hole_diameter * 0.5;
     let mount_hy = spec.wall_thickness + 1.0;
-    let mount_y_offset = bp_hy - spec.wall_thickness * 2.0;
+    let mount_y_offset = spec.wall_thickness.mul_add(-2.0, bp_hy);
     let mount_x_offset = bp_hx * 0.85;
     let mount_left = translate(
         cylinder(mount_r, mount_hy),
@@ -5382,7 +5402,7 @@ impl CaliperHolderSpec {
 ///
 /// 構造 (tools § 4 準拠、Y-up 設計、multi-component composite):
 /// - Backplate: `RoundedBox` (`(count×pitch+wall) × jaw_length+wall × wall`)、壁貼付面
-/// - Slots: N× `Box3d` slot (X thin=slot_width、Y jaw_length、Z through)、backplate 貫通で挿入
+/// - Slots: N× `Box3d` slot (X `thin=slot_width、Y` `jaw_length、Z` through)、backplate 貫通で挿入
 /// - Mount holes: 4× Y-axis `Cylinder` (M4)、backplate 4 隅
 ///
 /// 単一 print composite (backplate + slot subtract)、caliper は下から差し込み
@@ -5416,7 +5436,7 @@ pub fn caliper_holder(spec: &CaliperHolderSpec) -> SdfNode {
 
     let mut result = backplate;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -5446,7 +5466,7 @@ pub fn caliper_holder(spec: &CaliperHolderSpec) -> SdfNode {
 // 61. bag_clip_org (organizer-cable-kitchen § 6.3 Bag Clip Organizer)
 // ────────────────────────────────────────────────────────
 
-/// 袋クリップ整理 spec (縦 slot rack、magnetic_strip の vertical 変種)
+/// 袋クリップ整理 spec (縦 slot `rack、magnetic_strip` の vertical 変種)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BagClipOrgSpec {
     /// slot 個数 (default 8、range 4-16)
@@ -5482,7 +5502,7 @@ impl BagClipOrgSpec {
 ///
 /// 構造 (kitchen § 6.3 準拠、Y-up 設計、`magnetic_strip` の vertical 変種):
 /// - Outer: `RoundedBox` (`(count×pitch+wall) × (height+floor) × (slot_depth+2×wall)`)
-/// - Slots: N× `Box3d` slot (X narrow=clip thickness、Y height、Z slot_depth)、Y+ 開口
+/// - Slots: N× `Box3d` slot (X narrow=clip thickness、Y height、Z `slot_depth)、Y`+ 開口
 ///
 /// # 使用例
 ///
@@ -5497,22 +5517,22 @@ pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
     let pitch = spec.slot_width + spec.wall_thickness;
     let ext_x = count_f * pitch + spec.wall_thickness;
     let ext_y = spec.height + spec.floor_thickness;
-    let ext_z = spec.slot_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.slot_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let slot_hx = spec.slot_width * 0.5;
-    let slot_hy = (spec.height + 10.0) * 0.5;
+    let slot_hy = f32::midpoint(spec.height, 10.0);
     let slot_hz = spec.slot_depth * 0.5;
-    let slot_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
     for i in 0..count {
-        let x = x_start + i as f32 * pitch;
+        let x = (i as f32).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
@@ -5536,7 +5556,7 @@ pub struct CanRackSpec {
     pub can_diameter: f32,
     /// 傾斜角 (deg、gravity feed 用、default 10、range 5-20)
     pub tilt_angle_deg: f32,
-    /// 段当り 缶数 (default 6、shelf_length 決定用)
+    /// 段当り 缶数 (default `6、shelf_length` 決定用)
     pub cans_per_row: u32,
     /// 側壁厚 (mm、default 3)
     pub wall_thickness: f32,
@@ -5588,9 +5608,9 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let tier_spacing = spec.can_diameter + 15.0;
     let total_height = rows_f * tier_spacing + spec.wall_thickness;
 
-    let ext_x = shelf_width + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, shelf_width);
     let ext_y = total_height;
-    let ext_z = shelf_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, shelf_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
@@ -5659,7 +5679,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
 // 63. led_hub_box (electronics § 6 LED Hub Enclosure)
 // ────────────────────────────────────────────────────────
 
-/// LED hub 筐体 spec (raspi_case + front LED window + antenna keep-out)
+/// LED hub 筐体 spec (`raspi_case` + front LED window + antenna keep-out)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LedHubBoxSpec {
     /// 内部 幅 (mm、default 80、range 60-150)
@@ -5697,7 +5717,7 @@ impl LedHubBoxSpec {
     }
 }
 
-/// LED hub 筐体 (raspi_case + front LED opening + top antenna hole、multi-component、`to_z_up` wrap)
+/// LED hub 筐体 (`raspi_case` + front LED opening + top antenna hole、multi-component、`to_z_up` wrap)
 ///
 /// 構造 (electronics § 6 準拠、Y-up 設計、3-component composite):
 /// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
@@ -5713,18 +5733,18 @@ impl LedHubBoxSpec {
 /// ```
 #[must_use]
 pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
-    let ext_x = spec.internal_width + 2.0 * spec.wall_thickness;
+    let ext_x = 2.0f32.mul_add(spec.wall_thickness, spec.internal_width);
     let ext_y = spec.internal_height + spec.floor_thickness;
-    let ext_z = spec.internal_depth + 2.0 * spec.wall_thickness;
+    let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.internal_depth);
 
     let outer_hx = ext_x * 0.5;
     let outer_hy = ext_y * 0.5;
     let outer_hz = ext_z * 0.5;
 
     let cavity_hx = spec.internal_width * 0.5;
-    let cavity_hy = (spec.internal_height + 10.0) * 0.5;
+    let cavity_hy = f32::midpoint(spec.internal_height, 10.0);
     let cavity_hz = spec.internal_depth * 0.5;
-    let cavity_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let cavity = translate(
@@ -5738,7 +5758,7 @@ pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
     let led_hy = spec.led_window_height * 0.5;
     let led_hz = spec.wall_thickness + 1.0;
     let led_offset_y = cavity_offset_y;
-    let led_offset_z = outer_hz - spec.wall_thickness * 0.5;
+    let led_offset_z = spec.wall_thickness.mul_add(-0.5, outer_hz);
     let led = translate(
         box3d(led_hx, led_hy, led_hz),
         Vec3::new(0.0, led_offset_y, led_offset_z),
@@ -5798,11 +5818,11 @@ impl MakeupOrganizerSpec {
 
 /// メイク整理 (2D grid multi-cell、pill_organizer pattern の large 版、`to_z_up` wrap)
 ///
-/// 構造 (drawer § 3.5 準拠、Y-up 設計、pill_organizer と同 structure):
+/// 構造 (drawer § 3.5 準拠、Y-up `設計、pill_organizer` と同 structure):
 /// - Outer: `RoundedBox` (`(cols×pitch+wall) × (depth+floor) × (rows×pitch+wall)`)
-/// - Cells: (rows×cols)× `Box3d` square (X=Z=cell_size、Y=cell_depth+1)、Y+ 開口
+/// - Cells: (rows×cols)× `Box3d` square (`X=Z=cell_size、Y=cell_depth+1)、Y`+ 開口
 ///
-/// pill_organizer より大きい cell (45mm square、makeup brush / lipstick / palette 用)
+/// `pill_organizer` より大きい cell (45mm square、makeup brush / lipstick / palette 用)
 ///
 /// # 使用例
 ///
@@ -5827,8 +5847,8 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     let cell_h_side = spec.cell_size * 0.5;
-    let cell_hy = (spec.cell_depth + 10.0) * 0.5;
-    let cell_offset_y = spec.floor_thickness * 0.5 + 5.0;
+    let cell_hy = f32::midpoint(spec.cell_depth, 10.0);
+    let cell_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
@@ -5836,8 +5856,8 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
     let mut result = outer;
     for r in 0..rows {
         for c in 0..cols {
-            let x = x_start + c as f32 * pitch;
-            let z = z_start + r as f32 * pitch;
+            let x = (c as f32).mul_add(pitch, x_start);
+            let z = (r as f32).mul_add(pitch, z_start);
             let cell = translate(
                 box3d(cell_h_side, cell_hy, cell_h_side),
                 Vec3::new(x, cell_offset_y, z),
@@ -5864,7 +5884,7 @@ pub struct VesaMountSpec {
     pub vesa_size: f32,
     /// 板厚 (mm、Y 軸、5-8mm 推奨)
     pub plate_thickness: f32,
-    /// 板 X/Z 追加マージン (mm、規格外径 = vesa_size + 2*margin)
+    /// 板 X/Z 追加マージン (mm、規格外径 = `vesa_size` + 2*margin)
     pub plate_margin: f32,
     /// 板 corner 半径 (mm、RoundedBox radius)
     pub corner_radius: f32,
@@ -5919,7 +5939,7 @@ pub fn vesa_mount(spec: &VesaMountSpec) -> SdfNode {
         subtract_through_counterbore, subtract_through_countersink, subtract_through_screw_hole,
     };
 
-    let plate_extent = spec.vesa_size + 2.0 * spec.plate_margin;
+    let plate_extent = 2.0f32.mul_add(spec.plate_margin, spec.vesa_size);
     let outer_hx = plate_extent * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
     let outer_hz = plate_extent * 0.5;
@@ -6037,8 +6057,11 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
     };
 
     // 穴配置: 各 arm の Z 軸方向に holes 個等間隔、両端は板厚分マージン
-    let z_margin = spec.plate_thickness + spec.hole_size.head_diameter_socket() * 0.5;
-    let usable_z = (spec.depth - 2.0 * z_margin).max(0.0);
+    let z_margin = spec
+        .hole_size
+        .head_diameter_socket()
+        .mul_add(0.5, spec.plate_thickness);
+    let usable_z = 2.0f32.mul_add(-z_margin, spec.depth).max(0.0);
     let step_z = if holes > 1 {
         usable_z / (holes - 1) as f32
     } else {
@@ -6048,7 +6071,7 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
 
     let horizontal_hole_x =
         (arm_width - spec.plate_thickness - spec.hole_size.head_diameter_socket()) * 0.5;
-    let vertical_hole_y = (arm_height + spec.plate_thickness) * 0.5;
+    let vertical_hole_y = f32::midpoint(arm_height, spec.plate_thickness);
     let vertical_hole_x = -(arm_width - spec.plate_thickness) * 0.5;
 
     let mut result = bracket;
@@ -6154,7 +6177,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
         v_hole_rotated,
         Vec3::new(
             -(arm - spec.plate_thickness) * 0.5,
-            (arm + spec.plate_thickness) * 0.5,
+            f32::midpoint(arm, spec.plate_thickness),
             0.0,
         ),
     );
@@ -6230,8 +6253,8 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
     let footprint_x = pattern_x + 20.0;
     let footprint_z = pattern_z + 20.0;
 
-    let plate_extent_x = footprint_x + 2.0 * spec.plate_margin;
-    let plate_extent_z = footprint_z + 2.0 * spec.plate_margin;
+    let plate_extent_x = 2.0f32.mul_add(spec.plate_margin, footprint_x);
+    let plate_extent_z = 2.0f32.mul_add(spec.plate_margin, footprint_z);
 
     let outer_hx = plate_extent_x * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
@@ -6254,8 +6277,8 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
 
     if spec.extra_m4_holes >= 4 {
         // Optional M4 VESA 4 隅穴 (cavity margin rule intrinsic in helper)
-        let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
-        let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
+        let vesa_x = spec.plate_margin.mul_add(-0.5, plate_extent_x * 0.5);
+        let vesa_z = spec.plate_margin.mul_add(-0.5, plate_extent_z * 0.5);
         for (x, z) in [
             (vesa_x, vesa_z),
             (-vesa_x, vesa_z),
@@ -6270,7 +6293,7 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
     to_z_up(result)
 }
 
-/// Heat-set insert grid plate spec (McMaster / Voxel8 準拠、板上に穴 grid)
+/// Heat-set insert grid plate spec (`McMaster` / Voxel8 準拠、板上に穴 grid)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HeatSetArraySpec {
     /// 行数 (Z 軸、>= 1)
@@ -6335,8 +6358,8 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
     let rows_f = rows as f32;
     let cols_f = cols as f32;
 
-    let plate_extent_x = (cols_f - 1.0) * spec.pitch + 2.0 * spec.margin;
-    let plate_extent_z = (rows_f - 1.0) * spec.pitch + 2.0 * spec.margin;
+    let plate_extent_x = 2.0f32.mul_add(spec.margin, (cols_f - 1.0) * spec.pitch);
+    let plate_extent_z = 2.0f32.mul_add(spec.margin, (rows_f - 1.0) * spec.pitch);
 
     let outer_hx = plate_extent_x * 0.5;
     let outer_hy = spec.base_thickness * 0.5;
@@ -6351,8 +6374,8 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
     let mut result = plate;
     for r in 0..rows {
         for c in 0..cols {
-            let cx = start_x + c as f32 * spec.pitch;
-            let cz = start_z + r as f32 * spec.pitch;
+            let cx = (c as f32).mul_add(spec.pitch, start_x);
+            let cz = (r as f32).mul_add(spec.pitch, start_z);
             result = subtract_blind_heat_set(result, spec.insert_size, spec.base_thickness, cx, cz);
         }
     }
@@ -6500,7 +6523,7 @@ pub fn dovetail_pair(spec: &DovetailPairSpec) -> SdfNode {
     if spec.gender == 0 {
         to_z_up(tenon)
     } else {
-        let outer_w = spec.base_width + 2.0 * spec.female_margin;
+        let outer_w = 2.0f32.mul_add(spec.female_margin, spec.base_width);
         let outer_h = spec.height + spec.female_plate_thickness;
         let outer = box3d(outer_w * 0.5, outer_h * 0.5, spec.depth * 0.5);
         let pocket = dovetail(spec.base_width + 0.3, spec.height + 0.15, spec.depth + 0.2);
@@ -6562,7 +6585,7 @@ pub fn profile_extrusion(spec: &ProfileExtrusionSpec) -> SdfNode {
     to_z_up(profile)
 }
 
-/// Snap-fit cantilever wrap spec (LOL DSL 経由で joint::snap_fit_cantilever に露出)
+/// Snap-fit cantilever wrap spec (LOL DSL 経由で `joint::snap_fit_cantilever` に露出)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SnapFitPairSpec {
     /// 梁長 (mm、X 軸)
@@ -6677,8 +6700,8 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let rows_f = rows as f32;
     let cols_f = cols as f32;
 
-    let plate_extent_x = (cols_f - 1.0) * spec.pitch + spec.pitch;
-    let plate_extent_z = (rows_f - 1.0) * spec.pitch + spec.pitch;
+    let plate_extent_x = (cols_f - 1.0).mul_add(spec.pitch, spec.pitch);
+    let plate_extent_z = (rows_f - 1.0).mul_add(spec.pitch, spec.pitch);
 
     let outer_hx = plate_extent_x * 0.5;
     let outer_hy = spec.base_thickness * 0.5;
@@ -6697,8 +6720,8 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let mut result = plate;
     for r in 0..rows {
         for c in 0..cols {
-            let cx = start_x + c as f32 * spec.pitch;
-            let cz = start_z + r as f32 * spec.pitch;
+            let cx = (c as f32).mul_add(spec.pitch, start_x);
+            let cz = (r as f32).mul_add(spec.pitch, start_z);
             result = union(
                 result.clone(),
                 translate(boss_template.clone(), Vec3::new(cx, boss_y, cz)),
@@ -6766,7 +6789,7 @@ impl BearingKind {
         }
     }
 
-    /// f32 サイズ (mm、outer_dia の目安) を対応 `BearingKind` に最近接 snap
+    /// f32 サイズ (`mm、outer_dia` の目安) を対応 `BearingKind` に最近接 snap
     #[must_use]
     pub fn from_f32_snap(size: f32) -> Self {
         let candidates = [
@@ -6795,7 +6818,7 @@ pub struct BearingSeatSpec {
     pub bearing: BearingKind,
     /// 板厚 (mm、bearing width より小さいと bearing 突出する仕様)
     pub plate_thickness: f32,
-    /// 板 X/Z 端マージン (mm、外形 = bearing_od + 2*margin)
+    /// 板 X/Z 端マージン (mm、外形 = `bearing_od` + 2*margin)
     pub plate_margin: f32,
     /// 板 corner 半径 (mm)
     pub corner_radius: f32,
@@ -6844,8 +6867,8 @@ impl BearingSeatSpec {
 /// 軸受マウント板 (板 + bearing pocket + shaft 貫通穴、Z-up viewer 向き)
 ///
 /// 構造: `RoundedBox` 板 中心に bearing OD の cylinder pocket を Subtraction
-/// style=0 (press-fit): pocket dia = OD - 0.05mm (圧入)、shaft 貫通穴 = inner_dia + 0.5mm clearance
-/// style=1 (slip fit): pocket dia = OD + 0.1mm (はめ込み)、shaft 貫通穴 = inner_dia + 0.5mm
+/// style=0 (press-fit): pocket dia = OD - 0.05mm (圧入)、shaft 貫通穴 = `inner_dia` + 0.5mm clearance
+/// style=1 (slip fit): pocket dia = OD + 0.1mm (はめ込み)、shaft 貫通穴 = `inner_dia` + 0.5mm
 /// style=2 (through with shoulder): 板厚 > bearing width の場合のみ shoulder 残す、それ以外は貫通
 ///
 /// # 使用例
@@ -6862,7 +6885,7 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
     let id = spec.bearing.inner_dia();
     let width = spec.bearing.width();
 
-    let plate_extent = od + 2.0 * spec.plate_margin;
+    let plate_extent = 2.0f32.mul_add(spec.plate_margin, od);
     let outer_hx = plate_extent * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
     let outer_hz = plate_extent * 0.5;
@@ -6904,8 +6927,8 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
 
 /// デスク配線通しグロメット spec (家具 flat-pack、Ø60 標準)
 ///
-/// 板穴 (grommet_od) にリング状 body が入り、上部フランジで板上に乗る
-/// 中央 inner_dia で配線が通過
+/// 板穴 (`grommet_od`) にリング状 body が入り、上部フランジで板上に乗る
+/// 中央 `inner_dia` で配線が通過
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CableGrommetSpec {
     /// リング body 外径 (mm、default 60 = デスク穴 Φ60 対応)
@@ -6916,7 +6939,7 @@ pub struct CableGrommetSpec {
     pub flange_thickness: f32,
     /// 上部フランジ張り出し (mm、片側、default 4)
     pub flange_overhang: f32,
-    /// 中央配線通過穴径 (mm、default outer_dia - 10)
+    /// 中央配線通過穴径 (mm、default `outer_dia` - 10)
     pub inner_dia: f32,
 }
 
@@ -6948,8 +6971,8 @@ impl CableGrommetSpec {
 
 /// デスク配線通しグロメット (家具 flat-pack、Ø60 標準、Z-up viewer 向き)
 ///
-/// 構造: 上部フランジ (od + 2*overhang) + body cylinder (outer_dia) の Union、
-/// 中央 inner_dia の Cylinder で貫通穴
+/// 構造: 上部フランジ (od + 2*overhang) + body cylinder (`outer_dia`) の Union、
+/// 中央 `inner_dia` の Cylinder で貫通穴
 /// フランジは Y+ 側 (板上)、body は Y- 側 (板穴に挿入)
 ///
 /// # 使用例
@@ -6975,7 +6998,7 @@ pub fn cable_grommet(spec: &CableGrommetSpec) -> SdfNode {
     let outer = union(body, flange);
 
     // 中央貫通穴 (body 全高 + フランジ全高、余裕込み)
-    let punch_hh = (spec.height + spec.flange_thickness) * 0.5 + 5.0;
+    let punch_hh = f32::midpoint(spec.height, spec.flange_thickness) + 5.0;
     let punch = cylinder(inner_r, punch_hh);
 
     to_z_up(subtract(outer, punch))
@@ -7039,7 +7062,7 @@ impl CurtainRodBracketSpec {
 /// カーテンレール壁掛けブラケット (Z-up viewer 向き)
 ///
 /// 構造: 壁面 plate (Y-up の X-Y 平面板) + 水平 arm (X 軸方向、壁から突出) + rod cradle (arm 先端 cylinder)
-/// 壁面 plate に 4 隅 counterbore、cradle は rod_dia + 0.5mm clearance
+/// 壁面 plate に 4 隅 counterbore、cradle は `rod_dia` + 0.5mm clearance
 ///
 /// # 使用例
 ///
@@ -7066,8 +7089,8 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
 
     // rod cradle: arm 先端 (X = plate_hx + projection) に配置
     // rod は Z 軸方向 (床と平行)、cradle は upside-open (Y+ 側 open) の半円 pocket
-    let cradle_r = (spec.rod_dia + 0.5) * 0.5;
-    let cradle_hh = spec.arm_width * 0.5 + 2.0;
+    let cradle_r = f32::midpoint(spec.rod_dia, 0.5);
+    let cradle_hh = spec.arm_width.mul_add(0.5, 2.0);
     // rod cradle center: X = plate_hx + projection、Y = arm 上端 + rod 半径
     let cradle_x = plate_hx + spec.projection;
     let cradle_y = arm_hy + cradle_r;
@@ -7152,7 +7175,7 @@ impl ArduinoBoard {
 
     /// f32 引数から board 種別を snap (1=Uno, 2=Mega, 3=Nano)
     #[must_use]
-    pub fn from_f32_snap(v: f32) -> Self {
+    pub const fn from_f32_snap(v: f32) -> Self {
         match v.round() as i32 {
             2 => Self::Mega,
             3 => Self::Nano,
@@ -7227,8 +7250,8 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
 
     let bw = spec.board.board_width();
     let bh = spec.board.board_height();
-    let plate_extent_x = bw + 2.0 * spec.plate_margin;
-    let plate_extent_z = bh + 2.0 * spec.plate_margin;
+    let plate_extent_x = 2.0f32.mul_add(spec.plate_margin, bw);
+    let plate_extent_z = 2.0f32.mul_add(spec.plate_margin, bh);
 
     let outer_hx = plate_extent_x * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
@@ -7237,8 +7260,8 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
     let plate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
 
     // M3 hole pattern: board 外形 -3mm inset の 4 隅 (cavity margin rule intrinsic in helper)
-    let hole_x = bw * 0.5 - 3.0;
-    let hole_z = bh * 0.5 - 3.0;
+    let hole_x = bw.mul_add(0.5, -3.0);
+    let hole_z = bh.mul_add(0.5, -3.0);
 
     let mut result = plate;
     for (x, z) in [
@@ -7252,8 +7275,8 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
 
     // Optional M4 VESA 4 隅穴
     if spec.extra_m4_holes >= 4 {
-        let vesa_x = plate_extent_x * 0.5 - spec.plate_margin * 0.5;
-        let vesa_z = plate_extent_z * 0.5 - spec.plate_margin * 0.5;
+        let vesa_x = spec.plate_margin.mul_add(-0.5, plate_extent_x * 0.5);
+        let vesa_z = spec.plate_margin.mul_add(-0.5, plate_extent_z * 0.5);
         for (x, z) in [
             (vesa_x, vesa_z),
             (-vesa_x, vesa_z),
@@ -7332,7 +7355,7 @@ pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
     use crate::stdlib::hardsurface::cavity::{subtract_blind_pocket, subtract_through_screw_hole};
     use crate::stdlib::hardsurface::fastener::MetricSize;
 
-    let plate_extent = spec.hole_pattern_size + 2.0 * spec.plate_margin;
+    let plate_extent = 2.0f32.mul_add(spec.plate_margin, spec.hole_pattern_size);
     let outer_hx = plate_extent * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
     let outer_hz = plate_extent * 0.5;
@@ -7356,8 +7379,8 @@ pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
     if spec.damper_style >= 1 {
         let damper_dia = 10.0;
         let damper_depth = spec.plate_thickness * 0.5;
-        let damper_x = plate_extent * 0.5 - spec.plate_margin * 0.5;
-        let damper_z = plate_extent * 0.5 - spec.plate_margin * 0.5;
+        let damper_x = spec.plate_margin.mul_add(-0.5, plate_extent * 0.5);
+        let damper_z = spec.plate_margin.mul_add(-0.5, plate_extent * 0.5);
         for (x, z) in [
             (damper_x, damper_z),
             (-damper_x, damper_z),
@@ -7411,7 +7434,7 @@ impl ServoKind {
 
     /// f32 引数から servo 種別を snap (1=SG90, 2=MG996R)
     #[must_use]
-    pub fn from_f32_snap(v: f32) -> Self {
+    pub const fn from_f32_snap(v: f32) -> Self {
         match v.round() as i32 {
             2 => Self::Mg996r,
             _ => Self::Sg90,
@@ -7426,7 +7449,7 @@ pub struct ServoMountSpec {
     pub servo: ServoKind,
     /// 板厚 (mm)
     pub plate_thickness: f32,
-    /// flange 端マージン (mm、板 X 全長 = mount_span + 2*margin)
+    /// flange 端マージン (mm、板 X 全長 = `mount_span` + 2*margin)
     pub flange_margin: f32,
 }
 
@@ -7454,7 +7477,7 @@ impl ServoMountSpec {
 
 /// Servo mount plate (SG90 / MG996R、中央 body 切欠 + 両 flange mount 穴、Z-up viewer 向き)
 ///
-/// 構造: `Box3d` 板 (X = mount_span + 2*flange_margin、Z = body_depth + 2mm) から
+/// 構造: `Box3d` 板 (X = `mount_span` + 2*`flange_margin、Z` = `body_depth` + 2mm) から
 /// 中央 body 切欠 + 両 flange mount 穴 2 個 (SG90=M2、MG996R=M3) を Subtract
 ///
 /// # 使用例
@@ -7468,7 +7491,7 @@ pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
     use crate::stdlib::hardsurface::cavity::subtract_through_screw_hole;
     use crate::stdlib::hardsurface::fastener::MetricSize;
 
-    let plate_x = spec.servo.mount_span() + 2.0 * spec.flange_margin;
+    let plate_x = 2.0f32.mul_add(spec.flange_margin, spec.servo.mount_span());
     let plate_z = spec.servo.body_depth() + 4.0;
     let outer_hx = plate_x * 0.5;
     let outer_hy = spec.plate_thickness * 0.5;
@@ -7477,8 +7500,8 @@ pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
     let plate = box3d(outer_hx, outer_hy, outer_hz);
 
     // 中央 body 切欠 (body_width × body_depth + 0.5mm clearance、cutout は Y 貫通で +5mm each side 自作)
-    let cutout_hx = (spec.servo.body_width() + 0.5) * 0.5;
-    let cutout_hz = (spec.servo.body_depth() + 0.5) * 0.5;
+    let cutout_hx = f32::midpoint(spec.servo.body_width(), 0.5);
+    let cutout_hz = f32::midpoint(spec.servo.body_depth(), 0.5);
     let cutout = box3d(cutout_hx, outer_hy + 5.0, cutout_hz);
 
     // Flange mount 穴 (SG90=M2、MG996R=M3)、両端中央 (cavity margin rule intrinsic in helper)

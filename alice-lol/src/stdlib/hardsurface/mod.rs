@@ -1,6 +1,6 @@
 //! # hardsurface — メカ / 建築 / パーツ / 道具 / 家具 の構造要素 primitive library
 //!
-//! ALICE-Bamboo 実プリント検証で確立された formulas を LOL の SdfNode として提供する
+//! ALICE-Bamboo 実プリント検証で確立された formulas を LOL の `SdfNode` として提供する
 //!
 //! ## モジュール
 //!
@@ -10,7 +10,7 @@
 //! - [`mount`] — 建築/取付 6 primitive (L 字ブラケット / 円形フランジ / ラック / SKADIS peg / 2020 profile / 3030 profile)
 //! - [`thin_sdf`] — 薄物 SDF primitive (shopping cart coin 単純 Cylinder、Phase 3''.2、Dual Contouring 経路推奨、旧 `thin` polygon 経路は Phase 4 で削除済)
 //! - [`skadis_sdf`] — SKADIS panel 純 SDF (Phase 3''、Dual Contouring 経路推奨)
-//! - [`pattern_sdf`] — Bamboo Rust generator を SdfNode 直接構築に翻訳した完成 pattern 4 種 (Phase B.1.b、wall_hook / gridfinity_bin / drawer_organizer / shelf_divider)
+//! - [`pattern_sdf`] — Bamboo Rust generator を `SdfNode` 直接構築に翻訳した完成 pattern 4 種 (Phase `B.1.b、wall_hook` / `gridfinity_bin` / `drawer_organizer` / `shelf_divider`)
 //! - [`cavity`] — Subtract 系 helper (Phase C 根本 refactor 2026-09-01、cavity margin +5mm rule intrinsic 化、archetype 側の rule 忘却事故を primitive API で防ぐ)
 //!
 //! ## 準拠 formulas (ALICE-Bamboo `src/formulas.rs`)
@@ -24,7 +24,7 @@
 //! ## ALICE-Bamboo 実プリント合格の baseline
 //!
 //! umbrella 削除後 (2026-08-06、Bamboo commit `6727f3f`) 残った 5 generator
-//! (drawer / gridfinity / hook / shelf_divider / skadis) が本 module の骨格となる
+//! (drawer / gridfinity / hook / `shelf_divider` / skadis) が本 module の骨格となる
 //! ハードサーフェス pattern の実プリント合格 baseline
 
 pub mod cavity;
@@ -39,10 +39,10 @@ pub mod thin_sdf;
 use alice_sdf::SdfNode;
 use std::sync::Arc;
 
-/// N 個の SdfNode を **balanced binary tree** で Union fold する
+/// N 個の `SdfNode` を **balanced binary tree** で Union fold する
 ///
 /// 線形左入れ子 fold (`Union(Union(...(Union(a,b),c)...))`, depth O(n)) を使うと
-/// grid 系 primitive (skadis_panel 98 holes 等) で eval() recursion が
+/// grid 系 primitive (`skadis_panel` 98 holes 等) で `eval()` recursion が
 /// test thread の 2 MB stack を超過する (2026-08-07 CI 事故で発覚)
 ///
 /// 本 helper は隣接ペアを Union で潰しながら fold し、depth O(log n) にする
@@ -86,7 +86,7 @@ mod balanced_fold_tests {
     #[test]
     fn single_returns_self() {
         let n = SdfNode::Sphere { radius: 1.0 };
-        let out = balanced_union_fold(vec![n.clone()]).unwrap();
+        let out = balanced_union_fold(vec![n]).unwrap();
         assert!(matches!(out, SdfNode::Sphere { .. }));
     }
 
@@ -109,6 +109,6 @@ mod balanced_fold_tests {
         let nodes: Vec<_> = (0..100).map(|_| SdfNode::Sphere { radius: 0.1 }).collect();
         let out = balanced_union_fold(nodes).unwrap();
         let d = depth(&out);
-        assert!(d <= 8, "100 nodes → depth {} (期待: ≤ 8)", d);
+        assert!(d <= 8, "100 nodes → depth {d} (期待: ≤ 8)");
     }
 }

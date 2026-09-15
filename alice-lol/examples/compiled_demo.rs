@@ -1,4 +1,4 @@
-//! ALICE-LOL CompiledSdf デモ
+//! ALICE-LOL `CompiledSdf` デモ
 //! 高速評価: 単一点、バッチ SIMD、法線計算
 
 use alice_lol::{

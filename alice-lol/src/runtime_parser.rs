@@ -68,7 +68,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_whitespace(&mut self) {
+    const fn skip_whitespace(&mut self) {
         while self.pos < self.input.len() {
             if self.input[self.pos].is_ascii_whitespace() {
                 self.pos += 1;
@@ -255,7 +255,7 @@ impl<'a> Parser<'a> {
     }
 
     /// SKADIS panel の variadic arg 解析 0/1/2/3-arg を許容し不足分は
-    /// SKADIS canonical default (300mm 板 / 5mm 厚 / 5mm corner_r) で補完
+    /// SKADIS canonical default (300mm 板 / 5mm 厚 / 5mm `corner_r`) で補完
     /// LLM 出力の arity ズレ (「SKADISパネル 10✖10」→ `skadis_panel(10, 10)` 等)
     /// を parse fail させないための forgiving 動作 (2026-09-04 追加)
     fn parse_skadis_panel_args(&mut self) -> Result<(f32, f32, f32), ParseError> {
@@ -2673,7 +2673,7 @@ impl<'a> Parser<'a> {
             "dovetail_pair" => {
                 // dovetail_pair(w, h, d, gender) 4 param、gender: 0=male / 1=female
                 let (w, h, d, gender) = self.parse_4f()?;
-                let g = if gender >= 0.5 { 1_u8 } else { 0_u8 };
+                let g = u8::from(gender >= 0.5);
                 let spec = crate::stdlib::hardsurface::pattern_sdf::DovetailPairSpec {
                     base_width: w,
                     height: h,
@@ -2856,10 +2856,8 @@ impl<'a> Parser<'a> {
                 let corner_radius = plate_margin * 0.3;
                 let style_u8 = if style >= 1.5 {
                     2_u8
-                } else if style >= 0.5 {
-                    1_u8
                 } else {
-                    0_u8
+                    u8::from(style >= 0.5)
                 };
                 let spec = crate::stdlib::hardsurface::pattern_sdf::BearingSeatSpec {
                     bearing,
@@ -2945,7 +2943,7 @@ impl<'a> Parser<'a> {
             "pixhawk_mount" => {
                 // pixhawk_mount(size, damper_style) 2 param、size = hole pattern (45 / 30)
                 let (size, damper) = self.parse_2f()?;
-                let damper_u8 = if damper >= 0.5 { 1_u8 } else { 0_u8 };
+                let damper_u8 = u8::from(damper >= 0.5);
                 let spec = crate::stdlib::hardsurface::pattern_sdf::PixhawkMountSpec {
                     hole_pattern_size: size,
                     plate_thickness: 4.0,

@@ -1,8 +1,8 @@
-//! # hardsurface_bolt_plate — Phase A.1 締結 primitive デモ
+//! # `hardsurface_bolt_plate` — Phase A.1 締結 primitive デモ
 //!
 //! 板 (100 × 50 × 8 mm) を M4 ボルト 4 本で固定する pattern を組立てる
 //! - 4 隅に counterbore (M4 ソケットキャップ頭が沈む)
-//! - 中央に heat_set_insert_hole (M3 ヒートセット下穴)
+//! - 中央に `heat_set_insert_hole` (M3 ヒートセット下穴)
 //! - 貫通穴 4 隅 + M3 熱融着 1 中央 の 5 hole plate
 //!
 //! ```bash

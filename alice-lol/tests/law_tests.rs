@@ -4,7 +4,7 @@ use alice_lol::law::{check_laws, CheckConfig, Constraint, Law, Priority};
 use alice_lol::lol;
 use glam::Vec3;
 
-/// 重なる 2 sphere → NonOverlap 違反検出
+/// 重なる 2 sphere → `NonOverlap` 違反検出
 #[test]
 fn non_overlap_overlapping_spheres() {
     let a = lol! { sphere(1.0) };
@@ -28,7 +28,7 @@ fn non_overlap_overlapping_spheres() {
     assert!(report.violations[0].residual < 0.0, "残差は負（侵入深さ）");
 }
 
-/// 離れた 2 sphere → NonOverlap パス
+/// 離れた 2 sphere → `NonOverlap` パス
 #[test]
 fn non_overlap_separated_spheres() {
     let a = lol! { sphere(1.0) };
@@ -123,7 +123,7 @@ fn soft_constraint_reports_warn() {
     assert_eq!(report.violations[0].priority, Priority::Soft(0.3));
 }
 
-/// MinThickness: 薄い box → 肉厚不足検出
+/// `MinThickness`: 薄い box → 肉厚不足検出
 #[test]
 fn min_thickness_thin_object() {
     // box3d(2.0, 0.3, 2.0) → Y方向の半径 0.3（肉厚は表面距離で最大 0.3）
@@ -153,7 +153,7 @@ fn min_thickness_thin_object() {
     );
 }
 
-/// MinThickness: 十分な肉厚 → パス
+/// `MinThickness`: 十分な肉厚 → パス
 #[test]
 fn min_thickness_thick_solid() {
     // sphere(2.0) を AABB [-1,1] でサンプル → 深い内部のみ
@@ -188,13 +188,7 @@ fn multiple_laws() {
     let outer = lol! { sphere(2.0) };
 
     let laws = vec![
-        Law::hard(
-            "no_overlap",
-            Constraint::NonOverlap {
-                a: a.clone(),
-                b: b.clone(),
-            },
-        ),
+        Law::hard("no_overlap", Constraint::NonOverlap { a: a, b: b }),
         Law::hard("contained", Constraint::Containment { inner, outer }),
     ];
 
@@ -210,7 +204,7 @@ fn multiple_laws() {
     assert_eq!(report.violations[0].law_name, "no_overlap");
 }
 
-/// format_report の出力確認
+/// `format_report` の出力確認
 #[test]
 fn format_report_output() {
     let a = lol! { sphere(1.0) };
@@ -256,7 +250,7 @@ fn default_config() {
 
 use alice_lol::law::{hard_violations, soft_violations, top_violations, LawSet};
 
-/// LawSet ビルダーで複数制約を一括検証
+/// `LawSet` ビルダーで複数制約を一括検証
 #[test]
 fn lawset_builder_basic() {
     let a = lol! { sphere(1.0) };
@@ -265,13 +259,7 @@ fn lawset_builder_basic() {
     let outer = lol! { sphere(2.0) };
 
     let set = LawSet::new()
-        .hard(
-            "no_overlap",
-            Constraint::NonOverlap {
-                a: a.clone(),
-                b: b.clone(),
-            },
-        )
+        .hard("no_overlap", Constraint::NonOverlap { a: a, b: b })
         .hard("contained", Constraint::Containment { inner, outer });
 
     let config = CheckConfig {
@@ -287,7 +275,7 @@ fn lawset_builder_basic() {
     assert_eq!(report.violations[0].law_name, "no_overlap");
 }
 
-/// LawSet ビルダーにソフト制約を混在
+/// `LawSet` ビルダーにソフト制約を混在
 #[test]
 fn lawset_mixed_hard_soft() {
     let a = lol! { sphere(1.0) };
@@ -314,7 +302,7 @@ fn lawset_mixed_hard_soft() {
     assert!(report.has_hard_violations());
 }
 
-/// LawSet: 空の法則セット
+/// `LawSet`: 空の法則セット
 #[test]
 fn lawset_empty() {
     let set = LawSet::new();
@@ -323,7 +311,7 @@ fn lawset_empty() {
     assert_eq!(report.total_laws, 0);
 }
 
-/// LawSet: laws() でリスト参照
+/// `LawSet`: `laws()` でリスト参照
 #[test]
 fn lawset_laws_accessor() {
     let a = lol! { sphere(1.0) };
@@ -348,7 +336,7 @@ fn lawset_laws_accessor() {
 // v1.0 Phase 1: 静的矛盾検出
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/// NonOverlap + Containment を同一ペアに適用 → 矛盾検出
+/// `NonOverlap` + Containment を同一ペアに適用 → 矛盾検出
 #[test]
 fn contradiction_non_overlap_and_containment() {
     let a = lol! { sphere(1.0) };
@@ -418,7 +406,7 @@ fn no_contradiction_same_type() {
 // v1.0 Phase 1: 残差フィルタリング
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/// top_violations: 上位 N 件の取得
+/// `top_violations`: 上位 N 件の取得
 #[test]
 fn top_violations_filter() {
     let a = lol! { sphere(1.0) };
@@ -426,13 +414,7 @@ fn top_violations_filter() {
     let thin = lol! { box3d(2.0, 0.3, 2.0) };
 
     let set = LawSet::new()
-        .hard(
-            "no_overlap",
-            Constraint::NonOverlap {
-                a: a.clone(),
-                b: b.clone(),
-            },
-        )
+        .hard("no_overlap", Constraint::NonOverlap { a: a, b: b })
         .hard(
             "min_wall",
             Constraint::MinThickness {
@@ -459,7 +441,7 @@ fn top_violations_filter() {
     assert_eq!(top_all.len(), 2);
 }
 
-/// hard_violations: ハード違反のみ抽出
+/// `hard_violations`: ハード違反のみ抽出
 #[test]
 fn filter_hard_violations() {
     let a = lol! { sphere(1.0) };
@@ -491,7 +473,7 @@ fn filter_hard_violations() {
     assert_eq!(soft[0].law_name, "soft_rule");
 }
 
-/// soft_violations: ソフト違反のみ抽出
+/// `soft_violations`: ソフト違反のみ抽出
 #[test]
 fn filter_soft_violations_only() {
     let a = lol! { sphere(1.0) };
@@ -683,7 +665,7 @@ fn continuity_disjoint_spheres() {
     );
 }
 
-/// VolumeConservation: 同じ SDF → pass (差 = 0)
+/// `VolumeConservation`: 同じ SDF → pass (差 = 0)
 #[test]
 fn volume_conservation_identity() {
     let before = lol! { sphere(1.0) };
@@ -700,7 +682,7 @@ fn volume_conservation_identity() {
     assert!(report.all_passed(), "同一 SDF は体積保存");
 }
 
-/// VolumeConservation: 大きく違う体積 → violation
+/// `VolumeConservation`: 大きく違う体積 → violation
 #[test]
 fn volume_conservation_large_diff() {
     let before = lol! { sphere(1.0) };
@@ -720,7 +702,7 @@ fn volume_conservation_large_diff() {
     );
 }
 
-/// Contradiction: Contact(min=0) + NonOverlap 同一ペア → 矛盾検出
+/// Contradiction: Contact(min=0) + `NonOverlap` 同一ペア → 矛盾検出
 #[test]
 fn contradiction_contact_nonoverlap_conflict() {
     let a = lol! { sphere(1.0) };

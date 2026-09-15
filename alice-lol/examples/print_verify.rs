@@ -1,6 +1,6 @@
 //! 3Dプリント構造検証
 //!
-//! lattice_infill が正しく内部構造を生成しているか、
+//! `lattice_infill` が正しく内部構造を生成しているか、
 //! SDF距離場とメッシュ断面を数値的に検証する。
 //!
 //! ```bash
@@ -60,10 +60,10 @@ fn main() {
     let shell_node = lol! { onion(0.05, sphere(1.0)) };
     let res = 40;
     for iz in 0..res {
-        let z = -1.2 + (iz as f32 / res as f32) * 2.4;
+        let z = (iz as f32 / res as f32).mul_add(2.4, -1.2);
         let mut line = String::with_capacity(res);
         for ix in 0..res {
-            let x = -1.2 + (ix as f32 / res as f32) * 2.4;
+            let x = (ix as f32 / res as f32).mul_add(2.4, -1.2);
             let p = Vec3::new(x, 0.0, z);
             let d_infill = eval(&infill_sphere, p);
             let d_shell = eval(&shell_node, p);
@@ -183,7 +183,7 @@ fn main() {
 
     let mut max_diff: f32 = 0.0;
     for i in 0..200 {
-        let t = i as f32 * 0.01 - 1.0;
+        let t = (i as f32).mul_add(0.01, -1.0);
         let p = Vec3::new(t, t * 0.3, t * 0.7);
         let d_macro = eval(&macro_node, p);
         let d_runtime = eval(&runtime_node, p);
@@ -205,9 +205,9 @@ fn monte_carlo_volume(node: &alice_lol::SdfNode, n: usize) -> f32 {
     let mut inside = 0u32;
     // 疑似ランダム（Halton sequence 風）
     for i in 0..n {
-        let x = halton(i, 2) * 2.0 * bounds - bounds;
-        let y = halton(i, 3) * 2.0 * bounds - bounds;
-        let z = halton(i, 5) * 2.0 * bounds - bounds;
+        let x = (halton(i, 2) * 2.0).mul_add(bounds, -bounds);
+        let y = (halton(i, 3) * 2.0).mul_add(bounds, -bounds);
+        let z = (halton(i, 5) * 2.0).mul_add(bounds, -bounds);
         if eval(node, Vec3::new(x, y, z)) < 0.0 {
             inside += 1;
         }
@@ -222,7 +222,7 @@ fn halton(mut index: usize, base: usize) -> f32 {
     index += 1; // 0-indexed → 1-indexed
     while index > 0 {
         f /= b;
-        r += f * (index % base) as f32;
+        r = f.mul_add((index % base) as f32, r);
         index /= base;
     }
     r
@@ -238,9 +238,9 @@ fn correlation(a: &[f32], b: &[f32]) -> f32 {
     for (ai, bi) in a.iter().zip(b.iter()) {
         let da = ai - mean_a;
         let db = bi - mean_b;
-        cov += da * db;
-        var_a += da * da;
-        var_b += db * db;
+        cov = da.mul_add(db, cov);
+        var_a = da.mul_add(da, var_a);
+        var_b = db.mul_add(db, var_b);
     }
     let denom = (var_a * var_b).sqrt();
     if denom < 1e-10 {

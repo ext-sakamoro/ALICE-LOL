@@ -6,8 +6,8 @@
 //! |-----------|------|------|
 //! | [`rib`] | 板裏の補強リブ | Box3d 単体 |
 //! | [`boss`] | ネジ穴周りボス | Cylinder outer + tap hole subtraction (Bamboo `screw_boss_od = screw_dia × 2.2`) |
-//! | [`fillet`] | 内角 R (2 SdfNode ブレンド) | `SdfNode::SmoothUnion` wrapper |
-//! | [`chamfer`] | edge 面取り (2 SdfNode) | `SdfNode::ChamferUnion` wrapper |
+//! | [`fillet`] | 内角 R (2 `SdfNode` ブレンド) | `SdfNode::SmoothUnion` wrapper |
+//! | [`chamfer`] | edge 面取り (2 `SdfNode`) | `SdfNode::ChamferUnion` wrapper |
 //! | [`honeycomb_infill`] | 6 角形 infill 壁パターン | `RepeatFinite` + `HexPrism` を container から `Subtraction` |
 //! | [`gyroid_infill`] | Gyroid TPMS infill | 既存 `SdfNode::Gyroid` + container との `Intersection` |
 //!
@@ -98,7 +98,7 @@ pub fn boss(screw_dia: f32, height: f32) -> SdfNode {
         radius: tap_r,
         // +5.0 = 5mm each side、preview MC (cell ~1mm) で確実 punch through
         // (cavity margin rule、[[success_alice_lol_cavity_margin_batch_fix_2026_08_25]])
-        half_height: height * 0.5 + 5.0,
+        half_height: height.mul_add(0.5, 5.0),
     };
     SdfNode::Subtraction {
         a: Arc::new(barrel),
@@ -110,14 +110,14 @@ pub fn boss(screw_dia: f32, height: f32) -> SdfNode {
 // 3. fillet (SmoothUnion wrapper)
 // ────────────────────────────────────────────────────────
 
-/// 内角 R (2 SdfNode を smooth-union で滑らかに blend)
+/// 内角 R (2 `SdfNode` を smooth-union で滑らかに blend)
 ///
 /// 応力集中を緩和する canonical 手段
 /// R が大きいほど内角の応力集中係数 Kt が下がる (`physics` feature で計算可)
 ///
 /// # 引数
 ///
-/// - `a`, `b`: blend 対象の 2 SdfNode
+/// - `a`, `b`: blend 対象の 2 `SdfNode`
 /// - `radius`: フィレット半径 (mm、smooth-union の blend radius k)
 ///
 /// # 使用例
@@ -144,13 +144,13 @@ pub fn fillet(a: SdfNode, b: SdfNode, radius: f32) -> SdfNode {
 // 4. chamfer (ChamferUnion wrapper)
 // ────────────────────────────────────────────────────────
 
-/// 面取り (2 SdfNode を 45° chamfer union で結合)
+/// 面取り (2 `SdfNode` を 45° chamfer union で結合)
 ///
 /// fillet より加工しやすい直線的 edge、CNC / レーザー切断で標準
 ///
 /// # 引数
 ///
-/// - `a`, `b`: 結合対象の 2 SdfNode
+/// - `a`, `b`: 結合対象の 2 `SdfNode`
 /// - `size`: 面取り寸法 (mm、chamfer 幅)
 ///
 /// # 使用例
@@ -183,7 +183,7 @@ pub fn chamfer(a: SdfNode, b: SdfNode, size: f32) -> SdfNode {
 ///
 /// # 引数
 ///
-/// - `container`: 中身を刳り抜く対象 SdfNode (bbox 内で cell を repeat)
+/// - `container`: 中身を刳り抜く対象 `SdfNode` (bbox 内で cell を repeat)
 /// - `cell_size`: 6 角形 cell の対辺距離 (mm、hexagon flat-to-flat)
 /// - `wall_thickness`: 残す壁厚 (mm、cell 間の材料肉厚)
 /// - `count`: 各軸方向の repeat 半径 (`2 * count + 1` 個生成、X-Z 平面)
@@ -208,7 +208,7 @@ pub fn honeycomb_infill(
     // hex_prism は Y 軸押出、板は Y = 板厚方向想定 (rib と揃える)
     let hex_r = cell_size / 3.0_f32.sqrt();
     // wall_thickness 分だけ hex を縮小して壁を残す (cell 間ギャップ = wall)
-    let cell_effective_r = (hex_r - wall_thickness * 0.5).max(0.0);
+    let cell_effective_r = wall_thickness.mul_add(-0.5, hex_r).max(0.0);
     let hex = SdfNode::HexPrism {
         hex_radius: cell_effective_r,
         half_height: 1000.0, // container で切るので大きめに取る
@@ -237,7 +237,7 @@ pub fn honeycomb_infill(
 ///
 /// # 引数
 ///
-/// - `container`: 中身を Gyroid で埋める対象 SdfNode
+/// - `container`: 中身を Gyroid で埋める対象 `SdfNode`
 /// - `cell_scale`: Gyroid 空間周波数 (小さいほど cell 大)
 /// - `wall_thickness`: Gyroid 曲面の壁半厚 (mm)
 ///

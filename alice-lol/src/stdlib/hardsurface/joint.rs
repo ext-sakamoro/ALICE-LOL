@@ -8,8 +8,8 @@
 //! | [`snap_fit_annular`] | 環状 snap-fit (円柱嵌合) | shaft + torus bulge |
 //! | [`slot`] | 貫通スロット (両端半円) | 長 × 幅 × 深、rounded ends |
 //! | [`t_slot_2020`] | 2020 アルミプロファイル T スロット | 開口 6mm + 内幅 11mm × 深 6mm (MISUMI/OpenBuilds) |
-//! | [`dovetail`] | アリ継ぎ (10° テーパー台形) | 底 base_width、taper 10° 固定 |
-//! | [`pin_hinge_knuckle`] | ピンヒンジ knuckle 単体 (barrel + pin hole) | knuckle_od / pin_dia + 0.3mm clearance |
+//! | [`dovetail`] | アリ継ぎ (10° テーパー台形) | 底 `base_width、taper` 10° 固定 |
+//! | [`pin_hinge_knuckle`] | ピンヒンジ knuckle 単体 (barrel + pin hole) | `knuckle_od` / `pin_dia` + 0.3mm clearance |
 //!
 //! ## 座標系
 //!
@@ -23,7 +23,7 @@
 //! ## Phase A.2 現状 (実プリント検証はまだ)
 //!
 //! [`SnapFitCantileverSpec::PLA_STANDARD`] は一般的な PLA snap-fit 参考寸法
-//! (L=10mm, t=2mm, w=5mm, δ=0.5mm) 応力 ≒ 52 MPa (PLA yield 60 MPa の 87%、
+//! (L=10mm, t=2mm, w=5mm, δ=0.5mm) 応力 ≒ 52 `MPa` (PLA yield 60 `MPa` の 87%、
 //! 弾性限界近い、実プリント検証は Phase B.2 予定)
 
 use alice_sdf::SdfNode;
@@ -40,7 +40,7 @@ pub const PLA_ELASTIC_MODULUS_GPA: f32 = 3.5;
 /// PETG 弾性率 (GPa)、snap-fit 応力計算用
 pub const PETG_ELASTIC_MODULUS_GPA: f32 = 2.2;
 
-/// PLA 引張降伏応力 (MPa)、snap-fit 破損閾値 (安全率 2 で σ_max ≤ 30 MPa 推奨)
+/// PLA 引張降伏応力 (MPa)、snap-fit 破損閾値 (安全率 2 で `σ_max` ≤ 30 `MPa` 推奨)
 pub const PLA_YIELD_STRESS_MPA: f32 = 60.0;
 
 /// pin-hinge 標準クリアランス (mm)、pin 径 + 本値 = knuckle 内径
@@ -71,7 +71,7 @@ pub struct SnapFitCantileverSpec {
 impl SnapFitCantileverSpec {
     /// PLA 参考寸法 (L=10, t=2, w=5, δ=0.5)
     ///
-    /// 応力 ≒ 52 MPa (PLA yield 60 の 87%、安全率 1.14、弾性限界近い)
+    /// 応力 ≒ 52 `MPa` (PLA yield 60 の 87%、安全率 1.14、弾性限界近い)
     /// 実プリント検証済 baseline への昇格は Phase B.2 予定
     pub const PLA_STANDARD: Self = Self {
         length: 10.0,
@@ -102,7 +102,7 @@ impl SnapFitCantileverSpec {
 /// 片持ち snap-fit primitive (梁 + フック)
 ///
 /// 構造: 梁 Box (中心 X=0、根本 X=-length/2 〜 先端 X=+length/2)
-/// + フック小 Box (X=+length/2 - hook_offset の梁上面に配置、hook_height 突出)
+/// + フック小 Box (X=+length/2 - `hook_offset` `の梁上面に配置、hook_height` 突出)
 ///
 /// # 使用例
 ///
@@ -129,8 +129,8 @@ pub fn snap_fit_cantilever(spec: SnapFitCantileverSpec) -> SdfNode {
     let hook_placed = SdfNode::Translate {
         child: Arc::new(hook),
         offset: Vec3::new(
-            spec.length * 0.5 - spec.hook_offset * 0.5,
-            spec.thickness * 0.5 + spec.hook_height * 0.5,
+            spec.hook_offset.mul_add(-0.5, spec.length * 0.5),
+            spec.hook_height.mul_add(0.5, spec.thickness * 0.5),
             0.0,
         ),
     };
@@ -146,8 +146,8 @@ pub fn snap_fit_cantilever(spec: SnapFitCantileverSpec) -> SdfNode {
 
 /// 環状 snap-fit primitive (円柱 shaft + torus bulge)
 ///
-/// 構造: shaft Cylinder (Y 軸、shaft_length 長) + bulge Torus (半径方向に bulge_height 突出)
-/// bulge は shaft の bulge_y_offset 位置 (Y 軸方向、原点中心) に配置
+/// 構造: shaft Cylinder (Y `軸、shaft_length` 長) + bulge Torus (半径方向に `bulge_height` 突出)
+/// bulge は shaft の `bulge_y_offset` 位置 (Y 軸方向、原点中心) に配置
 ///
 /// # 引数
 ///
@@ -177,7 +177,7 @@ pub fn snap_fit_annular(
     // Torus major_radius = shaft_r + bulge_height/2 で shaft 表面を跨ぐ
     // minor_radius = bulge_height/2 で bulge の断面半径
     let bulge = SdfNode::Torus {
-        major_radius: shaft_diameter * 0.5 + bulge_height * 0.5,
+        major_radius: bulge_height.mul_add(0.5, shaft_diameter * 0.5),
         minor_radius: bulge_height * 0.5,
     };
     let bulge_placed = SdfNode::Translate {
@@ -245,7 +245,7 @@ pub fn slot(length: f32, width: f32, depth: f32) -> SdfNode {
 // 4. T-slot 2020 (MISUMI / OpenBuilds 標準)
 // ────────────────────────────────────────────────────────
 
-/// 2020 アルミプロファイル T スロット開口幅 (mm)、MISUMI / OpenBuilds 標準
+/// 2020 アルミプロファイル T スロット開口幅 (mm)、MISUMI / `OpenBuilds` 標準
 pub const T_SLOT_2020_OPENING_WIDTH: f32 = 6.0;
 
 /// 2020 T スロット開口深さ (mm)
@@ -348,7 +348,7 @@ pub fn dovetail(base_width: f32, height: f32, depth: f32) -> SdfNode {
     //   底辺左端 (-base/2, -height/2, 0) を通る
     //   d = dot((-base/2, -height/2, 0), (-cos_t, sin_t, 0)) = cos_t·base/2 - sin_t·height/2
     // Plane SDF (alice-sdf) = dot(p, normal) - d、Plane 内側 = SDF < 0 (= 台形残存側)
-    let d = cos_t * base_width * 0.5 - sin_t * height * 0.5;
+    let d = (sin_t * height).mul_add(-0.5, cos_t * base_width * 0.5);
     let plane_left = SdfNode::Plane {
         normal: Vec3::new(-cos_t, sin_t, 0.0),
         distance: d,
@@ -385,7 +385,7 @@ pub fn dovetail(base_width: f32, height: f32, depth: f32) -> SdfNode {
 ///
 /// - `pin_diameter`: 挿入する pin の径 (mm、通常 M3-M5 相当)
 /// - `knuckle_length`: knuckle 1 個の長さ (mm、Y 軸方向)
-/// - `knuckle_od`: knuckle 外径 (mm、pin_dia の 2-3 倍推奨)
+/// - `knuckle_od`: knuckle 外径 (`mm、pin_dia` の 2-3 倍推奨)
 ///
 /// # 使用例
 ///
@@ -403,8 +403,8 @@ pub fn pin_hinge_knuckle(pin_diameter: f32, knuckle_length: f32, knuckle_od: f32
     // Pin hole は barrel より 5mm each side 長く取り、preview MC で確実 punch through
     // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
     let hole = SdfNode::Cylinder {
-        radius: (pin_diameter + HINGE_CLEARANCE) * 0.5,
-        half_height: knuckle_length * 0.5 + 5.0,
+        radius: f32::midpoint(pin_diameter, HINGE_CLEARANCE),
+        half_height: knuckle_length.mul_add(0.5, 5.0),
     };
     SdfNode::Subtraction {
         a: Arc::new(barrel),

@@ -1,7 +1,7 @@
 //! レーザー彫刻向け2Dパターン生成
 //!
 //! SDF距離場を使わず、2D幾何学パターンをSVGパスデータとして生成する。
-//! LOL DSL → LaserPattern → SVG のパイプライン。
+//! LOL DSL → `LaserPattern` → SVG のパイプライン。
 
 use std::f64::consts::PI;
 use std::fmt::Write;
@@ -34,7 +34,7 @@ pub struct Bounds {
 
 impl Bounds {
     #[must_use]
-    pub fn new(x: f64, y: f64, w: f64, h: f64) -> Self {
+    pub const fn new(x: f64, y: f64, w: f64, h: f64) -> Self {
         Self { x, y, w, h }
     }
 
@@ -46,8 +46,8 @@ impl Bounds {
 
     /// 中心座標
     #[must_use]
-    pub fn center(&self) -> (f64, f64) {
-        (self.x + self.w * 0.5, self.y + self.h * 0.5)
+    pub const fn center(&self) -> (f64, f64) {
+        (self.w.mul_add(0.5, self.x), self.h.mul_add(0.5, self.y))
     }
 }
 
@@ -68,7 +68,7 @@ pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement>
         return Vec::new();
     }
 
-    let angle = angle_deg * PI / 180.0;
+    let angle = angle_deg.to_radians();
     let cos_a = angle.cos();
     let sin_a = angle.sin();
 
@@ -83,12 +83,12 @@ pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement>
     // 法線方向への各頂点の射影距離
     let projections: Vec<f64> = corners
         .iter()
-        .map(|&(cx, cy)| -sin_a * cx + cos_a * cy)
+        .map(|&(cx, cy)| (-sin_a).mul_add(cx, cos_a * cy))
         .collect();
-    let proj_min = projections.iter().cloned().fold(f64::INFINITY, f64::min);
+    let proj_min = projections.iter().copied().fold(f64::INFINITY, f64::min);
     let proj_max = projections
         .iter()
-        .cloned()
+        .copied()
         .fold(f64::NEG_INFINITY, f64::max);
 
     let mut elements = Vec::new();
@@ -137,7 +137,7 @@ pub fn density_hatch(
         return Vec::new();
     }
 
-    let angle = angle_deg * PI / 180.0;
+    let angle = angle_deg.to_radians();
     let cos_a = angle.cos();
     let sin_a = angle.sin();
 
@@ -149,12 +149,12 @@ pub fn density_hatch(
     ];
     let projections: Vec<f64> = corners
         .iter()
-        .map(|&(cx, cy)| -sin_a * cx + cos_a * cy)
+        .map(|&(cx, cy)| (-sin_a).mul_add(cx, cos_a * cy))
         .collect();
-    let proj_min = projections.iter().cloned().fold(f64::INFINITY, f64::min);
+    let proj_min = projections.iter().copied().fold(f64::INFINITY, f64::min);
     let proj_max = projections
         .iter()
-        .cloned()
+        .copied()
         .fold(f64::NEG_INFINITY, f64::max);
 
     let mut elements = Vec::new();
@@ -165,10 +165,10 @@ pub fn density_hatch(
             elements.push(LaserElement::Line(x1, y1, x2, y2));
 
             // 次の線までの間隔を、この線の中点の密度で決定
-            let mx = (x1 + x2) * 0.5;
-            let my = (y1 + y2) * 0.5;
+            let mx = f64::midpoint(x1, x2);
+            let my = f64::midpoint(y1, y2);
             let density = density_fn(mx, my).clamp(0.0, 1.0);
-            let spacing = max_spacing - (max_spacing - min_spacing) * density;
+            let spacing = (max_spacing - min_spacing).mul_add(-density, max_spacing);
             d += spacing;
         } else {
             d += min_spacing;
@@ -197,28 +197,28 @@ fn clip_line_to_rect(
 
     // 上辺 y = y_min: x = (d - cos_a * y_min) / (-sin_a)
     if sin_a.abs() > eps {
-        let x = (d - cos_a * y_min) / (-sin_a);
+        let x = cos_a.mul_add(-y_min, d) / (-sin_a);
         if x >= x_min - eps && x <= x_max + eps {
             intersections.push((x.clamp(x_min, x_max), y_min));
         }
     }
     // 下辺 y = y_max: x = (d - cos_a * y_max) / (-sin_a)
     if sin_a.abs() > eps {
-        let x = (d - cos_a * y_max) / (-sin_a);
+        let x = cos_a.mul_add(-y_max, d) / (-sin_a);
         if x >= x_min - eps && x <= x_max + eps {
             intersections.push((x.clamp(x_min, x_max), y_max));
         }
     }
     // 左辺 x = x_min: y = (d + sin_a * x_min) / cos_a
     if cos_a.abs() > eps {
-        let y = (d + sin_a * x_min) / cos_a;
+        let y = sin_a.mul_add(x_min, d) / cos_a;
         if y >= y_min - eps && y <= y_max + eps {
             intersections.push((x_min, y.clamp(y_min, y_max)));
         }
     }
     // 右辺 x = x_max: y = (d + sin_a * x_max) / cos_a
     if cos_a.abs() > eps {
-        let y = (d + sin_a * x_max) / cos_a;
+        let y = sin_a.mul_add(x_max, d) / cos_a;
         if y >= y_min - eps && y <= y_max + eps {
             intersections.push((x_max, y.clamp(y_min, y_max)));
         }
@@ -270,8 +270,8 @@ pub fn halftone(
 
     for row in 0..rows {
         for col in 0..cols {
-            let cx = bounds.x + (col as f64 + 0.5) * cell_size;
-            let cy = bounds.y + (row as f64 + 0.5) * cell_size;
+            let cx = (f64::from(col) + 0.5).mul_add(cell_size, bounds.x);
+            let cy = (f64::from(row) + 0.5).mul_add(cell_size, bounds.y);
 
             if !bounds.contains(cx, cy) {
                 continue;
@@ -327,8 +327,8 @@ pub fn dither(
     for row in 0..rows {
         let mut scanline = Vec::with_capacity(cols);
         for col in 0..cols {
-            let x = bounds.x + (col as f64 + 0.5) * pixel_size;
-            let y = bounds.y + (row as f64 + 0.5) * pixel_size;
+            let x = (col as f64 + 0.5).mul_add(pixel_size, bounds.x);
+            let y = (row as f64 + 0.5).mul_add(pixel_size, bounds.y);
             let b = brightness_fn(x, y).clamp(0.0, 1.0);
             scanline.push(b);
         }
@@ -424,8 +424,8 @@ fn dither_error_diffusion(
 
             // 黒ピクセル → ドット
             if new_val < 0.5 {
-                let px = bounds.x + (x as f64 + 0.5) * pixel_size;
-                let py = bounds.y + (y as f64 + 0.5) * pixel_size;
+                let px = (x as f64 + 0.5).mul_add(pixel_size, bounds.x);
+                let py = (y as f64 + 0.5).mul_add(pixel_size, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -456,8 +456,8 @@ fn dither_ordered(
         for x in 0..cols {
             let threshold = BAYER4[y & 3][x & 3];
             if grid[y][x] < threshold {
-                let px = bounds.x + (x as f64 + 0.5) * pixel_size;
-                let py = bounds.y + (y as f64 + 0.5) * pixel_size;
+                let px = (x as f64 + 0.5).mul_add(pixel_size, bounds.x);
+                let py = (y as f64 + 0.5).mul_add(pixel_size, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -493,15 +493,15 @@ pub fn guilloche(
 
     // 完全な1周のためのt範囲を計算
     let t_max = 2.0 * PI * small_r / gcd_f64(big_r, small_r);
-    let dt = t_max / steps as f64;
+    let dt = t_max / f64::from(steps);
 
     let mut points = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
-        let t = i as f64 * dt;
+        let t = f64::from(i) * dt;
         let diff = big_r - small_r;
         let ratio = diff / small_r;
-        let x = cx + diff * t.cos() + pen_d * (ratio * t).cos();
-        let y = cy + diff * t.sin() - pen_d * (ratio * t).sin();
+        let x = pen_d.mul_add((ratio * t).cos(), diff.mul_add(t.cos(), cx));
+        let y = pen_d.mul_add(-(ratio * t).sin(), diff.mul_add(t.sin(), cy));
         points.push((x, y));
     }
 
@@ -530,13 +530,13 @@ pub fn lissajous(
     }
 
     let (cx, cy) = bounds.center();
-    let dt = 2.0 * PI / steps as f64;
+    let dt = 2.0 * PI / f64::from(steps);
 
     let mut points = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
-        let t = i as f64 * dt;
-        let x = cx + amplitude * (freq_a * t + delta).sin();
-        let y = cy + amplitude * (freq_b * t).sin();
+        let t = f64::from(i) * dt;
+        let x = amplitude.mul_add(freq_a.mul_add(t, delta).sin(), cx);
+        let y = amplitude.mul_add((freq_b * t).sin(), cy);
         points.push((x, y));
     }
 
@@ -558,11 +558,11 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
     let (cx, cy) = bounds.center();
     // k が整数なら 2π で閉じる（奇数）か π で閉じる（偶数として扱う）
     let t_max = 2.0 * PI;
-    let dt = t_max / steps as f64;
+    let dt = t_max / f64::from(steps);
 
     let mut points = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
-        let t = i as f64 * dt;
+        let t = f64::from(i) * dt;
         let r = amplitude * (k * t).cos();
         let x = cx + r * t.cos();
         let y = cy + r * t.sin();
@@ -580,14 +580,14 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
 #[must_use]
 pub fn phyllotaxis(n: u32, scale: f64, bounds: &Bounds) -> Vec<LaserElement> {
     let (cx, cy) = bounds.center();
-    let golden_angle = 137.508_f64 * PI / 180.0;
+    let golden_angle = 137.508_f64.to_radians();
 
     let mut dots = Vec::with_capacity(n as usize);
     for i in 0..n {
-        let theta = i as f64 * golden_angle;
-        let r = scale * (i as f64).sqrt();
-        let x = cx + r * theta.cos();
-        let y = cy + r * theta.sin();
+        let theta = f64::from(i) * golden_angle;
+        let r = scale * f64::from(i).sqrt();
+        let x = r.mul_add(theta.cos(), cx);
+        let y = r.mul_add(theta.sin(), cy);
 
         if bounds.contains(x, y) {
             dots.push(LaserElement::Dot(x, y));
@@ -664,12 +664,18 @@ pub fn turing(
                 let xp = if x == 0 { n - 1 } else { x - 1 };
                 let xn = if x == n - 1 { 0 } else { x + 1 };
 
-                let lap_u = u[yp][x] + u[yn][x] + u[y][xp] + u[y][xn] - 4.0 * u[y][x];
-                let lap_v = v[yp][x] + v[yn][x] + v[y][xp] + v[y][xn] - 4.0 * v[y][x];
+                let lap_u = 4.0f64.mul_add(-u[y][x], u[yp][x] + u[yn][x] + u[y][xp] + u[y][xn]);
+                let lap_v = 4.0f64.mul_add(-v[y][x], v[yp][x] + v[yn][x] + v[y][xp] + v[y][xn]);
 
                 let uv2 = u[y][x] * v[y][x] * v[y][x];
-                u_next[y][x] = u[y][x] + dt * (du * lap_u - uv2 + feed * (1.0 - u[y][x]));
-                v_next[y][x] = v[y][x] + dt * (dv * lap_v + uv2 - (feed + kill) * v[y][x]);
+                u_next[y][x] = dt.mul_add(
+                    feed.mul_add(1.0 - u[y][x], du.mul_add(lap_u, -uv2)),
+                    u[y][x],
+                );
+                v_next[y][x] = dt.mul_add(
+                    (feed + kill).mul_add(-v[y][x], dv.mul_add(lap_v, uv2)),
+                    v[y][x],
+                );
             }
         }
         std::mem::swap(&mut u, &mut u_next);
@@ -685,8 +691,8 @@ pub fn turing(
     for y in 0..n {
         for x in 0..n {
             if v[y][x] >= threshold {
-                let px = bounds.x + (x as f64 + 0.5) * cell_w;
-                let py = bounds.y + (y as f64 + 0.5) * cell_h;
+                let px = (x as f64 + 0.5).mul_add(cell_w, bounds.x);
+                let py = (y as f64 + 0.5).mul_add(cell_h, bounds.y);
                 dots.push(LaserElement::Dot(px, py));
             }
         }
@@ -699,12 +705,12 @@ pub fn turing(
 //  SVG出力
 // ──────────────────────────────────────────────────────
 
-/// LaserElement群をSVG文字列に変換
+/// `LaserElement群をSVG文字列に変換`
 ///
 /// `elements`: パターン要素
 /// `stroke_color`: 線/ドットの色（SVG fill/stroke）
 /// `stroke_width`: 線幅 (mm)
-/// `bounds`: SVGのviewBox用
+/// `bounds`: `SVGのviewBox用`
 #[must_use]
 pub fn elements_to_svg(
     elements: &[LaserElement],
@@ -879,11 +885,11 @@ mod tests {
     fn test_density_hatch_center_dense() {
         let bounds = card_bounds();
         let (cx, cy) = bounds.center();
-        let max_dist = (cx * cx + cy * cy).sqrt();
+        let max_dist = cx.hypot(cy);
         let elems = density_hatch(0.5, 4.0, 0.0, &bounds, &|x, y| {
             let dx = x - cx;
             let dy = y - cy;
-            1.0 - (dx * dx + dy * dy).sqrt() / max_dist
+            1.0 - dx.hypot(dy) / max_dist
         });
         assert!(!elems.is_empty());
     }

@@ -29,9 +29,9 @@ pub enum Priority {
 
 /// 制約の種類
 ///
-/// A.1.0 (2026-08-06) 時点で 3 variant (NonOverlap / Containment / MinThickness)
+/// A.1.0 (2026-08-06) 時点で 3 variant (`NonOverlap` / Containment / `MinThickness`)
 /// A.2 (2026-08-06) で 5 variant 追加 (Stress / Thermal / Contact / Continuity / `VolumeConservation`)
-/// 新 5 variant は geometric proxy 評価 (grid + sdf_eval)、精密 physics-backed 評価は A.2.1 で追加予定
+/// 新 5 variant は geometric proxy 評価 (grid + `sdf_eval)、精密` physics-backed 評価は A.2.1 で追加予定
 #[derive(Debug, Clone)]
 pub enum Constraint {
     /// 2 つの SDF が重ならない（distance > 0）
@@ -110,7 +110,7 @@ pub enum Constraint {
     /// morph 前後の体積保存を検証
     ///
     /// grid 上で before / after 各 SDF の内部セル数を count
-    /// 相対差 |V_before - V_after| / max(V_before, 1) が `relative_tolerance` 超過で violation
+    /// 相対差 |`V_before` - `V_after`| / `max(V_before`, 1) が `relative_tolerance` 超過で violation
     VolumeConservation {
         /// 変形前 SDF
         before: SdfNode,
@@ -536,7 +536,7 @@ fn check_stress(
 /// Thermal: 各 heat source 近傍の 表面近傍セル数 / 内部セル数 の ratio が下限未満なら violation
 ///
 /// step (グリッド 1 セル辺) を「表面近傍」判定に流用
-/// residual = actual_ratio - `min_surface_ratio` (負 = 不足)
+/// residual = `actual_ratio` - `min_surface_ratio` (負 = 不足)
 fn check_thermal(
     node: &SdfNode,
     heat_sources: &[Vec3],
@@ -603,7 +603,7 @@ fn check_thermal(
 /// Contact: A と B の最小表面間距離が \[min, max\] 範囲外なら violation
 ///
 /// 両 sdf < 0 の cell (interfering) は residual = 侵入深さ (負) で返す
-/// それ以外は min over (両 sdf > 0 の cell) of (sdf_a + sdf_b) を surface 間距離として使用
+/// それ以外は min over (両 sdf > 0 の cell) of (`sdf_a` + `sdf_b`) を surface 間距離として使用
 fn check_contact(
     a: &SdfNode,
     b: &SdfNode,
@@ -672,7 +672,7 @@ fn check_contact(
     }
 }
 
-/// max_distance 超過時の residual (負値で「どれだけ超過したか」を表現)
+/// `max_distance` 超過時の residual (負値で「どれだけ超過したか」を表現)
 fn max_dist_residual(actual: f32, limit: f32) -> f32 {
     limit - actual
 }
@@ -809,7 +809,7 @@ fn check_continuity(
     None
 }
 
-/// grid の (ix, iy, iz, flat_idx) を返すヘルパー
+/// grid の (ix, iy, iz, `flat_idx`) を返すヘルパー
 fn grid_indices(n: usize) -> impl Iterator<Item = (usize, usize, usize, usize)> {
     (0..n).flat_map(move |iz| {
         (0..n).flat_map(move |iy| (0..n).map(move |ix| (ix, iy, iz, ix + iy * n + iz * n * n)))
