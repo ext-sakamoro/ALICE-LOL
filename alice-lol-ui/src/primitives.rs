@@ -431,7 +431,9 @@ mod tests {
 
     #[test]
     fn icon_triangle_returns_polygon2d_with_3_vertices() {
-        let SdfNode::Polygon2D { vertices, .. } = Icon::triangle(20.0) else {
+        // SdfNode は Drop 実装 (alice-sdf 1.10.2) のため参照で destructure
+        let node = Icon::triangle(20.0);
+        let SdfNode::Polygon2D { vertices, .. } = &node else {
             panic!("expected Polygon2D");
         };
         assert_eq!(vertices.len(), 3);
