@@ -1,7 +1,15 @@
 //! ALICE-LOL v0.5 全構文ショーケース
 //! 76構文 + 変数キャプチャ + autodiff + `CompiledSdf`
 
+// example: 全構文を 1 本の main で順に見せる demo
+#![allow(clippy::too_many_lines)]
+
 use alice_lol::{eval, lol, Vec3};
+
+/// capture 内から呼ぶ関数の例
+fn make_radius(scale: f32) -> f32 {
+    scale * 0.75
+}
 
 fn eval_at(label: &str, node: &alice_lol::SdfNode, point: Vec3) {
     let d = eval(node, point);
@@ -384,9 +392,6 @@ fn main() {
     eval_at("at joint", &node, Vec3::new(arm_len, 0.0, 0.0));
 
     println!("\n-- function call in capture --");
-    fn make_radius(scale: f32) -> f32 {
-        scale * 0.75
-    }
     let node = lol! { sphere({make_radius(2.0)}) };
     eval_at("sphere(fn(2.0)=1.5)", &node, o);
 

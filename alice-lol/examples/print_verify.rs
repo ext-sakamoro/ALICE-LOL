@@ -7,6 +7,9 @@
 //! cargo run --example print_verify
 //! ```
 
+// example: 検証 report 出力、mesh 統計 (usize / i32 → f32) の表示用計算
+#![allow(clippy::too_many_lines, clippy::cast_precision_loss)]
+
 use alice_lol::{eval, lol};
 use glam::Vec3;
 
@@ -108,14 +111,14 @@ fn main() {
     }
 
     // 相関が低い = 異なるパターン
-    let corr_gd = correlation(&g_vals, &d_vals);
-    let corr_gs = correlation(&g_vals, &s_vals);
-    let corr_ds = correlation(&d_vals, &s_vals);
-    println!("  Gyroid vs Diamond  correlation: {corr_gd:.3}");
-    println!("  Gyroid vs Schwarz  correlation: {corr_gs:.3}");
-    println!("  Diamond vs Schwarz correlation: {corr_ds:.3}");
+    let corr_gyroid_diamond = correlation(&g_vals, &d_vals);
+    let corr_gyroid_schwarz = correlation(&g_vals, &s_vals);
+    let corr_diamond_schwarz = correlation(&d_vals, &s_vals);
+    println!("  Gyroid vs Diamond  correlation: {corr_gyroid_diamond:.3}");
+    println!("  Gyroid vs Schwarz  correlation: {corr_gyroid_schwarz:.3}");
+    println!("  Diamond vs Schwarz correlation: {corr_diamond_schwarz:.3}");
     assert!(
-        corr_gd.abs() < 0.99 && corr_gs.abs() < 0.99,
+        corr_gyroid_diamond.abs() < 0.99 && corr_gyroid_schwarz.abs() < 0.99,
         "3種のTPMSは異なるパターンを生成すべき"
     );
     println!("  -> PASS: 3種のTPMSは異なるパターンを確認\n");

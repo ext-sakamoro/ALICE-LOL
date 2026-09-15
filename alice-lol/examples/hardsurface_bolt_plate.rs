@@ -11,6 +11,9 @@
 //!
 //! LOL DSL primitive 71 種 + Phase A.1 fastener 6 種を組み合わせて 1 部品を構築する
 
+// example: 寸法 (hx / hy / hz) を追える直列記述の demo
+#![allow(clippy::too_many_lines, clippy::similar_names)]
+
 use alice_lol::stdlib::hardsurface::fastener::{counterbore, heat_set_insert_hole, MetricSize};
 use alice_sdf::{eval, SdfNode};
 use glam::Vec3;

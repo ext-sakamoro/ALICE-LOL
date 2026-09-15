@@ -95,12 +95,12 @@ fn main() {
 
     // 断面プレビュー（Y=0）
     println!("\n--- Top view (Y=0.05, inside coaster) ---\n");
-    let res = 50;
+    let res: u8 = 50;
     for iz in 0..res {
-        let z = (iz as f32 / res as f32).mul_add(6.0, -3.0);
-        let mut line = String::with_capacity(res);
+        let z = (f32::from(iz) / f32::from(res)).mul_add(6.0, -3.0);
+        let mut line = String::with_capacity(usize::from(res));
         for ix in 0..res {
-            let x = (ix as f32 / res as f32).mul_add(6.0, -3.0);
+            let x = (f32::from(ix) / f32::from(res)).mul_add(6.0, -3.0);
             let p = Vec3::new(x, 0.05, z);
             let d = alice_lol::eval(&coaster, p);
             if d < -0.02 {

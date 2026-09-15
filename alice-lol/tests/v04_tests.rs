@@ -319,6 +319,7 @@ fn mod_icosahedral_symmetry() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)] // 同一 SDF の 2 経路評価は bit-exact 一致が仕様
 fn mod_with_material() {
     let node = lol! { with_material(1.0, sphere(1.0)) };
     // マテリアルは SDF 値に影響しない

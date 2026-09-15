@@ -293,8 +293,8 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
     // face_offset = size/2 - opening_depth/2 (開口面が profile 表面と一致するよう配置)
     let face_offset = size * 0.5;
     let mut with_slots = outer;
-    for i in 0..4 {
-        let angle = std::f32::consts::FRAC_PI_2 * i as f32;
+    for i in 0..4_u8 {
+        let angle = std::f32::consts::FRAC_PI_2 * f32::from(i);
         let rotated = SdfNode::Rotate {
             child: Arc::new(t_slot.clone()),
             rotation: Quat::from_rotation_y(angle),

@@ -677,6 +677,15 @@ fn max_dist_residual(actual: f32, limit: f32) -> f32 {
     limit - actual
 }
 
+/// grid 座標 (cell 単位、f32) → `[0, n)` の cell index
+///
+/// `max(0.0)` で負と NaN を 0 に寄せてから truncation、上限は `min(n - 1)` で clamp
+/// (`n >= 1` 前提、`n` は `CheckConfig` の grid 解像度で小さい)
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn grid_index(coord: f32, n: usize) -> usize {
+    (coord.max(0.0) as usize).min(n - 1)
+}
+
 /// Continuity: seed から 6-connected flood fill で 到達不能な内部セルがあれば violation
 ///
 /// seed が内部でない (sdf(seed) >= 0) なら violation として即報告
@@ -736,9 +745,9 @@ fn check_continuity(
 
     // seed セルの grid index
     let rel = (seed_point - config.aabb_min) / step;
-    let sx = (rel.x as i32).clamp(0, (n as i32) - 1) as usize;
-    let sy = (rel.y as i32).clamp(0, (n as i32) - 1) as usize;
-    let sz = (rel.z as i32).clamp(0, (n as i32) - 1) as usize;
+    let sx = grid_index(rel.x, n);
+    let sy = grid_index(rel.y, n);
+    let sz = grid_index(rel.z, n);
     let seed_idx = sx + sy * n + sz * n * n;
 
     if !interior[seed_idx] {
@@ -754,23 +763,16 @@ fn check_continuity(
     let mut reachable: usize = 1;
 
     while let Some((x, y, z)) = queue.pop_front() {
-        for (dx, dy, dz) in [
-            (-1_i32, 0_i32, 0_i32),
-            (1, 0, 0),
-            (0, -1, 0),
-            (0, 1, 0),
-            (0, 0, -1),
-            (0, 0, 1),
-        ] {
-            let nx = x as i32 + dx;
-            let ny = y as i32 + dy;
-            let nz = z as i32 + dz;
-            if nx < 0 || nx >= n as i32 || ny < 0 || ny >= n as i32 || nz < 0 || nz >= n as i32 {
-                continue;
-            }
-            let nx = nx as usize;
-            let ny = ny as usize;
-            let nz = nz as usize;
+        // 6-connected 隣接 (grid 外は None、符号付き演算なし)
+        let neighbors = [
+            x.checked_sub(1).map(|v| (v, y, z)),
+            (x + 1 < n).then_some((x + 1, y, z)),
+            y.checked_sub(1).map(|v| (x, v, z)),
+            (y + 1 < n).then_some((x, y + 1, z)),
+            z.checked_sub(1).map(|v| (x, y, v)),
+            (z + 1 < n).then_some((x, y, z + 1)),
+        ];
+        for (nx, ny, nz) in neighbors.into_iter().flatten() {
             let nidx = nx + ny * n + nz * n * n;
             if !visited[nidx] && interior[nidx] {
                 visited[nidx] = true;
@@ -849,8 +851,7 @@ fn check_volume_conservation(
         return None; // 変形前が空 = 対象外
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    let diff = ((after_count as i64) - (before_count as i64)).unsigned_abs();
+    let diff = after_count.abs_diff(before_count);
     #[allow(clippy::cast_precision_loss)]
     let relative_diff = (diff as f32) / (before_count as f32);
 
@@ -1094,10 +1095,10 @@ fn check_contradiction(a: &Constraint, b: &Constraint) -> Option<String> {
         ) => {
             let dbg_a = format!("{na:?}");
             let dbg_b = format!("{nb:?}");
-            let dbg_ca = format!("{ca:?}");
-            let dbg_cb = format!("{cb:?}");
-            let same_pair =
-                (dbg_a == dbg_ca && dbg_b == dbg_cb) || (dbg_a == dbg_cb && dbg_b == dbg_ca);
+            let dbg_constraint_a = format!("{ca:?}");
+            let dbg_constraint_b = format!("{cb:?}");
+            let same_pair = (dbg_a == dbg_constraint_a && dbg_b == dbg_constraint_b)
+                || (dbg_a == dbg_constraint_b && dbg_b == dbg_constraint_a);
             if same_pair && *min_distance <= 0.0 {
                 Some(
                     "NonOverlap と Contact(min<=0) が同一ノードペアに適用: 接触を許容と禁止が同時"

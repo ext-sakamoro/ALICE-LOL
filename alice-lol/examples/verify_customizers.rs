@@ -74,6 +74,7 @@ struct Case {
     expected: &'static str,
 }
 
+#[allow(clippy::too_many_lines)] // 検証 case 表 + 判定を 1 本で読める report script
 fn main() {
     let cases = [
         // ── User-reported "just a box" (broken candidates) ──
@@ -219,9 +220,7 @@ fn main() {
 
         let flag = if ratio > 0.85 {
             " ← BOX-BUG"
-        } else if case.label.starts_with("SANITY") {
-            ""
-        } else if case.label.starts_with("REF") {
+        } else if case.label.starts_with("SANITY") || case.label.starts_with("REF") {
             ""
         } else if ratio > 0.75 {
             " ← suspicious"

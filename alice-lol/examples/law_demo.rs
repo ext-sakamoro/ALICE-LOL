@@ -2,6 +2,9 @@
 //!
 //! SDF シーンに物理的・幾何学的制約を宣言し、違反を検出する。
 
+// example: law 検証を 1 本の main で順に見せる demo、統計表示の u64→f64
+#![allow(clippy::too_many_lines, clippy::cast_precision_loss)]
+
 use alice_lol::law::{check_laws, format_report, CheckConfig, Constraint, Law, LawSet};
 use alice_lol::{lol, Vec3};
 

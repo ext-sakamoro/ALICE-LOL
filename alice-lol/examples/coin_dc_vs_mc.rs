@@ -11,6 +11,9 @@
 //! cargo run --example coin_dc_vs_mc --release
 //! ```
 
+// example: DC vs MC 比較を 1 本の main で順に見せる demo
+#![allow(clippy::too_many_lines)]
+
 use alice_lol::print_export::{
     node_to_3mf, node_to_3mf_dual_contouring, DualContouringConfig, MarchingCubesConfig,
     MeshRepair, PrintConfig,
