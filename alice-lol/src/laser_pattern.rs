@@ -46,8 +46,10 @@ impl Bounds {
 
     /// 中心座標
     #[must_use]
+    // const fn では f64::mul_add が 1.92 以下で未安定 (下流 ALICE-Manga は 1.92 pin、2026-09-15 red)
+    #[allow(clippy::suboptimal_flops)]
     pub const fn center(&self) -> (f64, f64) {
-        (self.w.mul_add(0.5, self.x), self.h.mul_add(0.5, self.y))
+        (self.x + self.w * 0.5, self.y + self.h * 0.5)
     }
 }
 
