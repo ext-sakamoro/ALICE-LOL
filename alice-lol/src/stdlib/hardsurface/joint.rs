@@ -481,12 +481,12 @@ mod tests {
     #[test]
     fn snap_fit_cantilever_returns_union_of_beam_and_hook() {
         let node = snap_fit_cantilever(SnapFitCantileverSpec::PLA_STANDARD);
-        match node {
+        match &node {
             SdfNode::Union { a, b } => {
                 // a = 梁 Box3d
-                assert!(matches!(&*a, SdfNode::Box3d { .. }));
+                assert!(matches!(&**a, SdfNode::Box3d { .. }));
                 // b = translate(hook Box3d)
-                assert!(matches!(&*b, SdfNode::Translate { .. }));
+                assert!(matches!(&**b, SdfNode::Translate { .. }));
             }
             _ => panic!("expected Union"),
         }
@@ -503,15 +503,15 @@ mod tests {
     #[test]
     fn snap_fit_annular_bulge_creates_outer_ring() {
         let node = snap_fit_annular(8.0, 20.0, ANNULAR_BULGE_STANDARD_HEIGHT, 7.0);
-        match node {
+        match &node {
             SdfNode::Union { a, b } => {
                 // a = shaft Cylinder
-                match &*a {
+                match &**a {
                     SdfNode::Cylinder { radius, .. } => assert!(approx_eq(*radius, 4.0)),
                     _ => panic!("expected Cylinder for shaft"),
                 }
                 // b = translate(Torus)
-                match &*b {
+                match &**b {
                     SdfNode::Translate { child, .. } => {
                         assert!(matches!(&**child, SdfNode::Torus { .. }));
                     }

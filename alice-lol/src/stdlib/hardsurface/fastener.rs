@@ -501,12 +501,12 @@ mod tests {
     #[test]
     fn counterbore_m4_produces_union_of_through_and_bore() {
         let node = counterbore(MetricSize::M4, 8.0);
-        match node {
+        match &node {
             SdfNode::Union { a, b } => {
                 // a = 貫通穴 (Cylinder 直下)
-                assert!(matches!(&*a, SdfNode::Cylinder { .. }));
+                assert!(matches!(&**a, SdfNode::Cylinder { .. }));
                 // b = translate(cylinder)
-                assert!(matches!(&*b, SdfNode::Translate { .. }));
+                assert!(matches!(&**b, SdfNode::Translate { .. }));
             }
             _ => panic!("expected Union"),
         }
@@ -517,8 +517,8 @@ mod tests {
         // M4 皿頭径 = 8mm、cone 高さ = 4mm
         let node = countersink(MetricSize::M4, 8.0);
         // Union { through, translate(rotate(cone)) } の構造
-        match node {
-            SdfNode::Union { a: _, b } => match &*b {
+        match &node {
+            SdfNode::Union { a: _, b } => match &**b {
                 SdfNode::Translate { child, .. } => {
                     assert!(matches!(&**child, SdfNode::Rotate { .. }));
                 }
@@ -531,10 +531,10 @@ mod tests {
     #[test]
     fn bolt_m4_produces_shank_plus_head_union() {
         let node = bolt(MetricSize::M4, 20.0);
-        match node {
+        match &node {
             SdfNode::Union { a, b } => {
                 // a = 軸 cylinder、b = translate(頭 cylinder)
-                match &*a {
+                match &**a {
                     SdfNode::Cylinder {
                         radius,
                         half_height,
@@ -544,7 +544,7 @@ mod tests {
                     }
                     _ => panic!("expected Cylinder for shank"),
                 }
-                assert!(matches!(&*b, SdfNode::Translate { .. }));
+                assert!(matches!(&**b, SdfNode::Translate { .. }));
             }
             _ => panic!("expected Union"),
         }

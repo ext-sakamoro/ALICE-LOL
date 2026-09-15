@@ -125,12 +125,12 @@ mod tests {
     #[test]
     fn mug_sdf_returns_union_of_subtract_and_translate_handle() {
         let node = mug_sdf(50.0, 100.0);
-        match node {
+        match &node {
             SdfNode::Union { a, b } => {
                 // a = hollow_body (Subtraction)
-                assert!(matches!(*a, SdfNode::Subtraction { .. }));
+                assert!(matches!(**a, SdfNode::Subtraction { .. }));
                 // b = handle (Translate around Rotate around Torus)
-                assert!(matches!(*b, SdfNode::Translate { .. }));
+                assert!(matches!(**b, SdfNode::Translate { .. }));
             }
             _ => panic!("Expected Union at top level"),
         }
