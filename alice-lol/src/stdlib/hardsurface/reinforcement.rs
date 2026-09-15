@@ -386,8 +386,8 @@ mod tests {
     fn boss_outer_diameter_uses_bamboo_screw_boss_od_ratio() {
         // M3 → 外径 = 3 * 2.2 = 6.6mm、外半径 3.3mm
         let node = boss(3.0, 8.0);
-        match node {
-            SdfNode::Subtraction { a, b: _ } => match &*a {
+        match &node {
+            SdfNode::Subtraction { a, b: _ } => match &**a {
                 SdfNode::Cylinder { radius, .. } => assert!(approx_eq(*radius, 3.3)),
                 _ => panic!("expected outer Cylinder"),
             },
@@ -399,8 +399,8 @@ mod tests {
     fn boss_inner_hole_uses_tap_formula() {
         // M3 tap: 3 * 0.85 + 0.2 = 2.75mm 直径、半径 1.375mm
         let node = boss(3.0, 8.0);
-        match node {
-            SdfNode::Subtraction { a: _, b } => match &*b {
+        match &node {
+            SdfNode::Subtraction { a: _, b } => match &**b {
                 SdfNode::Cylinder { radius, .. } => assert!(approx_eq(*radius, 1.375)),
                 _ => panic!("expected inner Cylinder"),
             },
@@ -445,9 +445,9 @@ mod tests {
             half_extents: Vec3::new(20.0, 20.0, 20.0),
         };
         let node = gyroid_infill(container, 3.0, 0.4);
-        match node {
+        match &node {
             SdfNode::Intersection { a: _, b } => {
-                assert!(matches!(&*b, SdfNode::Gyroid { .. }));
+                assert!(matches!(&**b, SdfNode::Gyroid { .. }));
             }
             _ => panic!("expected Intersection with Gyroid"),
         }
