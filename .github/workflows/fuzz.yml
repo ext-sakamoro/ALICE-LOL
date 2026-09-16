@@ -48,9 +48,7 @@ jobs:
           - fuzz_lol_eval
     steps:
       # ci.yml と同じ checkout 構成: alice-lol lib は実 alice-sdf が必須
-      # (alice-stubs の空 stub では `alice_sdf::io / mesh / compiled` が
-      #  unresolved で fuzz target が compile 不能、job-level continue-on-error
-      #  廃止 (罠 #22) で 2026-09-15 に露呈)
+      # (2026-09-16 に security-audit.yml も real checkout に統一、stub action 廃止)
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL

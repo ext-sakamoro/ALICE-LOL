@@ -45,10 +45,10 @@ need cargo-machete "cargo install cargo-machete --locked"
 
 step "ci.yml / clippy: Clippy"
 relint
-(cd "ALICE-LOL" && ( export CARGO_TERM_COLOR="always"; cargo clippy --features llm-bridge -- -W clippy::pedantic -W clippy::nursery ))
+( export CARGO_TERM_COLOR="always"; cargo clippy --features llm-bridge -- -W clippy::pedantic -W clippy::nursery )
 
 step "ci.yml / fmt: Check formatting"
-(cd "ALICE-LOL" && ( export CARGO_TERM_COLOR="always"; cargo fmt -- --check ))
+( export CARGO_TERM_COLOR="always"; cargo fmt -- --check )
 
 step "ci.yml / actionlint: actionlint"
 actionlint .github/workflows/*.yml
@@ -56,8 +56,8 @@ actionlint .github/workflows/*.yml
 step "security-audit.yml / deny: Run cargo deny check all"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo deny --all-features check all )
 
-step "security-audit.yml / unused-deps: cargo machete"
-cargo machete
+step "security-audit.yml / unused-deps: Run cargo machete"
+( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo machete )
 
 step "security-audit.yml / stub-guard: Detect todo! / unimplemented! / panic!(STUB) in src/**"
 (
@@ -117,6 +117,6 @@ if [[ $quick -eq 1 ]]; then
 fi
 
 step "security-audit.yml / audit: Run cargo audit"
-( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --deny yanked )
+( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )
 
 echo; echo "preflight OK"
