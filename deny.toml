@@ -16,7 +16,9 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 yanked = "deny"
 ignore = [
-    # ALICE-LOL 固有の unmaintained ignore は発覚次第追加
+    # unmaintained warnings (informational only、CVE ではない) — alice-sdf 経由の transitive dep
+    "RUSTSEC-2025-0141",  # bincode 2.x unmaintained: alice-sdf の asdf / mesh I/O、代替は wire format 別
+    "RUSTSEC-2024-0436",  # paste 1.0.15 unmaintained: pyo3-macros 経由、除去不能
 ]
 
 [licenses]
@@ -69,3 +71,13 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
 
 [sources.allow-org]
+
+# Sibling ALICE crates are AGPL-3.0-or-later. CI builds them as MIT stubs
+# (alice-stubs), the local preflight sees the real crates: allow both spellings.
+[[licenses.exceptions]]
+name = "alice-physics"
+allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+name = "alice-llm"
+allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]

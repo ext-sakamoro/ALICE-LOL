@@ -14,7 +14,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "1.9.0", default-features = false, features = ["glsl"] }
+alice-sdf = { path = "../../ALICE-SDF", version = "2.0.0", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # 深い LOL tree (stdlib product の subtract 2,400 連鎖等) を parse / emit する時、
 # parse_expr の大 frame × 再帰で 8 MB stack が尽きる → 再帰時に heap 上で
