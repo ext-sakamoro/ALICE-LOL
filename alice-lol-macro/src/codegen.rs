@@ -564,7 +564,8 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
         }
         Expr::Taper { factor, child } => {
             let c = codegen(child);
-            quote! { ::alice_lol::SdfNode::Taper { child: ::std::sync::Arc::new(#c), factor: #factor } }
+            // `SdfNode::taper` computes the child's reach (alice-sdf 2.0 cone bound)
+            quote! { ::alice_lol::SdfNode::taper(#c, #factor) }
         }
         Expr::Displacement { strength, child } => {
             let c = codegen(child);

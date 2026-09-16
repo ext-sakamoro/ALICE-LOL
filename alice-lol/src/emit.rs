@@ -572,7 +572,7 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         SdfNode::Elongate { child, amount } => modif!("elongate", child, v3(*amount)),
         SdfNode::Revolution { child, offset } => modif!("revolution", child, f(*offset)),
         SdfNode::Extrude { child, half_height } => modif!("extrude", child, f(*half_height)),
-        SdfNode::Taper { child, factor } => modif!("taper", child, f(*factor)),
+        SdfNode::Taper { child, factor, .. } => modif!("taper", child, f(*factor)),
         SdfNode::Displacement { child, strength } => modif!("displacement", child, f(*strength)),
         SdfNode::PolarRepeat { child, count } => modif!("polar_repeat", child, u(*count)),
         SdfNode::Shear { child, shear } => modif!("shear", child, v3(*shear)),

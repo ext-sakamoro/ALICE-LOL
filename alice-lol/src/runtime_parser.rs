@@ -1107,10 +1107,8 @@ impl<'a> Parser<'a> {
             }
             "taper" => {
                 let (f, child) = self.parse_1f_child()?;
-                Ok(SdfNode::Taper {
-                    child: Arc::new(child),
-                    factor: f,
-                })
+                // `SdfNode::taper` computes the child's reach (alice-sdf 2.0 cone bound)
+                Ok(child.taper(f))
             }
             "displacement" => {
                 let (s, child) = self.parse_1f_child()?;
