@@ -16,12 +16,12 @@ runs:
         set -euo pipefail
 
         # ALICE-SDF stub (mandatory dep、`glsl` feature 有効化前提)
-        # crates.io 1.9.0 publish 済 (2026-09-13、alice-lol 0.3.0 の version = "1.9.0" constraint 追従)
+        # crates.io 2.0.0 publish 済 (2026-09-16、alice-lol の version = "2.0.0" constraint 追従)
         mkdir -p "../ALICE-SDF/src"
         cat > "../ALICE-SDF/Cargo.toml" <<'TOML'
         [package]
         name = "alice-sdf"
-        version = "1.9.0"
+        version = "2.0.0"
         edition = "2021"
         license = "MIT OR Apache-2.0"
 
