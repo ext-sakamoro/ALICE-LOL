@@ -13,7 +13,6 @@ on:
       - '**/src/**'
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
-      - '.github/actions/**'
   pull_request:
     branches: [main]
     paths:
@@ -22,7 +21,6 @@ on:
       - '**/src/**'
       - 'deny.toml'
       - '.github/workflows/security-audit.yml'
-      - '.github/actions/**'
   schedule:
     # 毎週月曜 09:00 UTC = 18:00 JST
     - cron: '0 9 * * 1'
@@ -41,30 +39,81 @@ jobs:
   audit:
     name: cargo audit (RustSec CVE scan)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
+      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
+      # that used to stand in here hid alice-sdf's whole dependency tree from
+      # audit / deny and their version had to be bumped by hand — 2026-09-16,
+      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
+      # out for real; unpublished siblings would need a stub again.
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+        with:
+          workspaces: ALICE-LOL
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
+      # unmaintained ignores mirror deny.toml (bincode / paste via alice-sdf)
       - name: Run cargo audit
-        run: cargo audit --deny yanked
+        run: cargo audit --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436
 
   deny:
     name: cargo-deny (license + advisories + bans + sources)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
+      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
+      # that used to stand in here hid alice-sdf's whole dependency tree from
+      # audit / deny and their version had to be bumped by hand — 2026-09-16,
+      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
+      # out for real; unpublished siblings would need a stub again.
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+        with:
+          workspaces: ALICE-LOL
 
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
@@ -75,14 +124,43 @@ jobs:
   unused-deps:
     name: cargo-machete (unused dependencies)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
+      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
+      # that used to stand in here hid alice-sdf's whole dependency tree from
+      # audit / deny and their version had to be bumped by hand — 2026-09-16,
+      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
+      # out for real; unpublished siblings would need a stub again.
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
 
-      - uses: bnjbvr/cargo-machete@main
+      - name: Run cargo machete
+        run: cargo machete
 
   stub-guard:
     name: Stub / mock / dbg guard (grep)
@@ -136,15 +214,40 @@ jobs:
     name: Coverage (cargo-llvm-cov、informational)
     runs-on: ubuntu-latest
     continue-on-error: true
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
+      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
+      # that used to stand in here hid alice-sdf's whole dependency tree from
+      # audit / deny and their version had to be bumped by hand — 2026-09-16,
+      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
+      # out for real; unpublished siblings would need a stub again.
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+        with:
+          workspaces: ALICE-LOL
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -158,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-summary
-          path: coverage-summary.txt
+          path: ALICE-LOL/coverage-summary.txt
           retention-days: 30
 
   semver-checks:
@@ -168,15 +271,39 @@ jobs:
     # publish 済 version があれば default baseline (crates.io) 使用
     # 未 publish なら --baseline-rev fallback
     continue-on-error: true
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
+      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
+      # that used to stand in here hid alice-sdf's whole dependency tree from
+      # audit / deny and their version had to be bumped by hand — 2026-09-16,
+      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
+      # out for real; unpublished siblings would need a stub again.
       - uses: actions/checkout@v5
         with:
+          path: ALICE-LOL
           fetch-depth: 0
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-
-      - name: Create ALICE optional bridge stubs
-        uses: ./.github/actions/alice-stubs
+        with:
+          workspaces: ALICE-LOL
 
       # version 明示 pin: `@latest` は rustc MSRV を追いかける (0.50.0 = 1.93+) ので、
       # rust-toolchain.toml の pin が遅れると赤になる (2026-09-14 事案) toolchain と
