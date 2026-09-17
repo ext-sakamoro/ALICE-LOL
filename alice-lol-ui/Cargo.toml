@@ -2,6 +2,7 @@
 name = "alice-lol-ui"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.90"
 description = "UI/UX template for ALICE-LOL DSL — parametric Button/Card/Panel/Icon → SdfNode + Flex/Grid/Stack layout + WCAG a11y law checker."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
@@ -13,8 +14,8 @@ keywords = ["dsl", "sdf", "ui", "ux", "a11y"]
 categories = ["graphics", "gui", "no-std"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
-alice-sdf = { path = "../../ALICE-SDF", version = "2.0.0", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.4", default-features = false }
+alice-sdf = { path = "../../ALICE-SDF", version = "3.0.0", default-features = false }
 glam = "0.29"
 
 # alice-lol は現状 direct use なし (doc comment のみ)、public API contract として保持

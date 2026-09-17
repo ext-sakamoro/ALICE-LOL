@@ -1,7 +1,8 @@
 [package]
 name = "alice-lol"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
+rust-version = "1.90"
 description = "ALICE-LOL: Law-Oriented Language — proc_macro + runtime DSL compiling to SdfNode (GLSL/WGSL/HLSL transpile), print export (STL/3MF/OBJ/FBX), law checker, laser pattern generator, and optional LLM Guided Generation bridge."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
@@ -14,7 +15,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "2.0.0", default-features = false, features = ["glsl"] }
+alice-sdf = { path = "../../ALICE-SDF", version = "3.0.0", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # 深い LOL tree (stdlib product の subtract 2,400 連鎖等) を parse / emit する時、
 # parse_expr の大 frame × 再帰で 8 MB stack が尽きる → 再帰時に heap 上で
@@ -35,6 +36,10 @@ alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = fa
 # license to downstream Leave the feature off (default) to stay on
 # MIT-or-Apache-2.0 terms
 alice-physics = { path = "../../ALICE-Physics", version = "1.0", default-features = false, features = ["std"], optional = true }
+
+[dev-dependencies]
+# tests/transpiler_naga_validate.rs: corpus 全構文の WGSL / GLSL を naga で parse + validate
+naga = { version = "24", default-features = false, features = ["wgsl-in", "glsl-in"] }
 
 [features]
 default = ["glsl"]
