@@ -1,7 +1,7 @@
 name: Fuzz
 
 # canonical CI template: [[reference_alice_ci_canonical_template]]
-# ALICE-SDF v1.7.7 base、ALICE-LOL 3 target: parse / to_wgsl / eval
+# ALICE-SDF v1.7.7 base、ALICE-LOL 4 target: parse / to_wgsl / eval / emit_parity
 
 on:
   push:
@@ -46,6 +46,7 @@ jobs:
           - fuzz_lol_parse
           - fuzz_lol_to_wgsl
           - fuzz_lol_eval
+          - fuzz_lol_emit_parity
     steps:
       # ci.yml と同じ checkout 構成: alice-lol lib は実 alice-sdf が必須
       # (2026-09-16 に security-audit.yml も real checkout に統一、stub action 廃止)

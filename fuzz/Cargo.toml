@@ -34,5 +34,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_lol_emit_parity"
+path = "fuzz_targets/fuzz_lol_emit_parity.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]

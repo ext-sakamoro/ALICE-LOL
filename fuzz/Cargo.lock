@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "alice-det-math"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dd4269e9085b09f6218cc8d1aa0d729466d5d7e2e4fba958e32ec7dd6785f03"
+dependencies = [
+ "bytemuck",
+ "wide",
+]
+
+[[package]]
 name = "alice-lol"
 version = "0.3.0"
 dependencies = [
@@ -33,8 +43,9 @@ dependencies = [
 
 [[package]]
 name = "alice-sdf"
-version = "1.10.2"
+version = "3.1.0"
 dependencies = [
+ "alice-det-math",
  "bincode",
  "bytemuck",
  "crc32fast",
@@ -682,6 +693,7 @@ dependencies = [
  "hexf-parse",
  "indexmap",
  "log",
+ "pp-rs",
  "rustc-hash",
  "spirv",
  "strum",
@@ -787,6 +799,15 @@ name = "pollster"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
+name = "pp-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb458bb7f6e250e6eb79d5026badc10a3ebb8f9a15d1fff0f13d17c71f4d6dee"
+dependencies = [
+ "unicode-xid",
+]
 
 [[package]]
 name = "presser"

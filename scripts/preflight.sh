@@ -21,12 +21,10 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1 ($2)" >&2; 
 has_toolchain() { rustup toolchain list | grep -q "^$1"; }
 
 # Steps CI runs that this file cannot reproduce locally (they can only fail remotely):
-#   - ci.yml:test:Create SDF dependency stubs (no cargo / grep)
 #   - ci.yml:test:Build (needs network / runner-only)
 #   - ci.yml:test:Test (needs network / runner-only)
 #   - ci.yml:test:Build examples (needs network / runner-only)
-#   - ci.yml:clippy:Create SDF dependency stubs (no cargo / grep)
-#   - ci.yml:fmt:Create SDF dependency stubs (no cargo / grep)
+#   - ci.yml:gpu-parity:Install Mesa software Vulkan (lavapipe) (needs network / runner-only)
 #   - security-audit.yml:audit:Install cargo-audit (needs network / runner-only)
 #   - security-audit.yml:deny:Install cargo-deny (needs network / runner-only)
 #   - security-audit.yml:coverage (job is continue-on-error: informational in CI)
@@ -42,13 +40,17 @@ need actionlint "brew install actionlint"
 need cargo-audit "cargo install cargo-audit --locked"
 need cargo-deny "cargo install cargo-deny --locked"
 need cargo-machete "cargo install cargo-machete --locked"
+has_toolchain 1.90 || { echo "missing toolchain 1.90 (rustup toolchain install 1.90)" >&2; exit 1; }
 
 step "ci.yml / clippy: Clippy"
 relint
-( export CARGO_TERM_COLOR="always"; cargo clippy --features llm-bridge -- -W clippy::pedantic -W clippy::nursery )
+( export CARGO_TERM_COLOR="always"; cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery )
 
 step "ci.yml / fmt: Check formatting"
 ( export CARGO_TERM_COLOR="always"; cargo fmt -- --check )
+
+step "ci.yml / msrv: Check (workspace, all features)"
+( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 
 step "ci.yml / actionlint: actionlint"
 actionlint .github/workflows/*.yml
@@ -115,6 +117,9 @@ fi
 if [[ $quick -eq 1 ]]; then
   echo; echo "preflight --quick OK (test / bench suites skipped)"; exit 0
 fi
+
+step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
+( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
 
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )

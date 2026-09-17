@@ -2,6 +2,7 @@
 name = "alice-lol-macro"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.90"
 description = "LOL (Law-Oriented Language) proc_macro — parses LOL DSL, emits SdfNode construction code"
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]

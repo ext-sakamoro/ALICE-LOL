@@ -18,7 +18,7 @@ fn main() {
     //   4. 中間装飾: 尖塔間の小さな突起
     //   5. ベース装飾リム: 上下の縁取りリング
     //   6. round で全体を宝飾品品質に仕上げ
-    let crown_lol = r#"
+    let crown_lol = r"
         round(0.02,
             smooth_union(0.06,
                 smooth_union(0.04,
@@ -90,7 +90,7 @@ fn main() {
                 )
             )
         )
-    "#;
+    ";
 
     let node = parse_lol(crown_lol).expect("LOL parse failed");
 
