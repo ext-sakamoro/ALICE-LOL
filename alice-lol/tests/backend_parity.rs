@@ -8,7 +8,8 @@
 //!
 //! を保証する
 //!
-//! Level 2 (実 GPU 実行 + CPU eval との数値比較) は A.4.1 別 sprint (wgpu setup 必要)
+//! Level 1.5 (naga parse + validate) は `transpiler_naga_validate.rs`、
+//! Level 2 (実 GPU 実行 + CPU eval との数値比較) は `gpu_parity.rs` (A.4.1、2026-09-17)
 //!
 //! 実行:
 //!   cargo test --test `backend_parity` --features "glsl wgsl hlsl"
