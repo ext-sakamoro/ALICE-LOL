@@ -62,35 +62,14 @@ jobs:
         with:
           workspaces: ALICE-LOL
 
-      - name: Create SDF dependency stubs
-        run: |
-          # alice-physics は crates.io 1.0.0 stable publish 済 2026-09-14 (alice-lol の
-          # `version = "1.0"` constraint を満たすため stub 側 version を追従)
-          # 他 4 stub は現状の 0.1.0 継続 (alice-sdf 側 bridge feature 削除で dead)
-          for crate_info in \
-            "ALICE-Physics:alice-physics:1.0.0" \
-            "ALICE-Codec:alice-codec:0.1.0" \
-            "ALICE-Streaming-Protocol:libasp:0.1.0" \
-            "ALICE-Cache:alice-cache:0.1.0" \
-            "ALICE-Foundry:alice-foundry:0.1.0"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            ver=$(echo "$crate_info" | cut -d: -f3)
-            mkdir -p "$dir/src"
-            cat > "$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "$ver"
-          edition = "2021"
-          [lib]
-          path = "src/lib.rs"
-          [features]
-          default = []
-          std = []
-          lol = []
-          TOML
-            echo "" > "$dir/src/lib.rs"
-          done
+      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
+      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
+      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
+      # どの Cargo.toml も参照していなかった (dead) ので撤去
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
 
       - name: Build
         working-directory: ALICE-LOL
@@ -141,39 +120,20 @@ jobs:
         with:
           workspaces: ALICE-LOL
 
-      - name: Create SDF dependency stubs
-        run: |
-          # alice-physics は crates.io 1.0.0 stable publish 済 2026-09-14 (alice-lol の
-          # `version = "1.0"` constraint を満たすため stub 側 version を追従)
-          # 他 4 stub は現状の 0.1.0 継続 (alice-sdf 側 bridge feature 削除で dead)
-          for crate_info in \
-            "ALICE-Physics:alice-physics:1.0.0" \
-            "ALICE-Codec:alice-codec:0.1.0" \
-            "ALICE-Streaming-Protocol:libasp:0.1.0" \
-            "ALICE-Cache:alice-cache:0.1.0" \
-            "ALICE-Foundry:alice-foundry:0.1.0"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            ver=$(echo "$crate_info" | cut -d: -f3)
-            mkdir -p "$dir/src"
-            cat > "$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "$ver"
-          edition = "2021"
-          [lib]
-          path = "src/lib.rs"
-          [features]
-          default = []
-          std = []
-          lol = []
-          TOML
-            echo "" > "$dir/src/lib.rs"
-          done
+      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
+      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
+      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
+      # どの Cargo.toml も参照していなかった (dead) ので撤去
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
 
       - name: Clippy
         working-directory: ALICE-LOL
-        run: cargo clippy --features llm-bridge -- -W clippy::pedantic -W clippy::nursery
+        # 2026-09-17: -W → -D、lib のみ → workspace 全 target 全 feature
+        # (Backlog 「clippy -D 昇格」、toolchain は rust-toolchain.toml pin)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery
 
   fmt:
     name: Format
@@ -199,15 +159,14 @@ jobs:
           repository: ext-sakamoro/ALICE-Kinematics
           path: ALICE-Kinematics
 
-      - name: Create SDF dependency stubs
-        run: |
-          # alice-physics stub は crates.io 1.0.0 に追従 (alice-lol version = "1.0" 制約)
-          for crate_info in "ALICE-Physics:alice-physics:1.0.0" "ALICE-Codec:alice-codec:0.1.0" "ALICE-Streaming-Protocol:libasp:0.1.0" "ALICE-Cache:alice-cache:0.1.0" "ALICE-Foundry:alice-foundry:0.1.0"; do
-            dir=$(echo "$crate_info" | cut -d: -f1); pkg=$(echo "$crate_info" | cut -d: -f2); ver=$(echo "$crate_info" | cut -d: -f3)
-            mkdir -p "$dir/src"
-            printf '[package]\nname = "%s"\nversion = "%s"\nedition = "2021"\n[lib]\npath = "src/lib.rs"\n[features]\ndefault = []\nstd = []\nlol = []\n' "$pkg" "$ver" > "$dir/Cargo.toml"
-            echo "" > "$dir/src/lib.rs"
-          done
+      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
+      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
+      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
+      # どの Cargo.toml も参照していなかった (dead) ので撤去
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -217,6 +176,97 @@ jobs:
       - name: Check formatting
         working-directory: ALICE-LOL
         run: cargo fmt -- --check
+
+  # LOL grammar corpus 全構文 + 深い合成 fixture を GPU で実行して CPU eval と
+  # 突合する (tests/gpu_parity.rs、Milestone A.4.1) GitHub runner に GPU は
+  # 無いので Mesa の software Vulkan (lavapipe) を入れ、ALICE_SDF_REQUIRE_GPU=1
+  # で「adapter なし → skip」を fail にする (alice-sdf ci.yml gpu-parity と同型)
+  gpu-parity:
+    name: GPU parity (lavapipe)
+    runs-on: ubuntu-latest
+    env:
+      ALICE_SDF_REQUIRE_GPU: "1"
+      WGPU_BACKEND: vulkan
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      # The lavapipe ICD file name depends on the Mesa build
+      # (`lvp_icd.x86_64.json` up to 24.x, `lvp_icd.json` from 25.x on
+      # noble-updates): locate it instead of hard-coding, and prove the loader
+      # sees llvmpipe before spending a build on the tests.
+      - name: Install Mesa software Vulkan (lavapipe)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1 vulkan-tools
+          icd=$(find /usr/share/vulkan/icd.d -name "lvp_icd*.json" | head -1)
+          echo "lavapipe ICD: $icd"
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          VK_ICD_FILENAMES="$icd" vulkaninfo --summary | tee /tmp/vulkaninfo.txt | head -60
+          grep -qi llvmpipe /tmp/vulkaninfo.txt
+
+      - name: GPU ↔ CPU parity (grammar corpus + fixtures)
+        working-directory: ALICE-LOL
+        run: cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture
+
+  msrv:
+    name: MSRV (rust-version = 1.90)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      # Cargo.toml `rust-version` を実証する (canonical template 罠 #27、
+      # 偽 MSRV は clippy を黙らせる: feedback_false_msrv_silences_clippy)
+      # 宣言値と同じ toolchain を pin し、全 feature で check が通ることを確認
+      # 宣言を上げる時はここも上げる (alice-sdf 3.0.0 は 1.85、本 crate は const fn の f32::round が 1.90 を要求)
+      - uses: dtolnay/rust-toolchain@1.90
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Check (workspace, all features)
+        working-directory: ALICE-LOL
+        # rust-toolchain.toml の 1.98.1 pin を `+1.90` で明示的に上書き (Physics ci.yml と同型)
+        run: cargo +1.90 check --workspace --all-targets --all-features
 
   actionlint:
     name: actionlint (workflow YAML 検証)

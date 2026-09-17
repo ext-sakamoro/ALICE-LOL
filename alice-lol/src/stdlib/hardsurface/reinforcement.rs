@@ -266,9 +266,9 @@ pub fn gyroid_infill(container: SdfNode, cell_scale: f32, wall_thickness: f32) -
 // alice-physics 連携 (opt-in、`physics` feature 必須)
 // ────────────────────────────────────────────────────────
 
-/// 材料名から弾性率 (GPa) を取得 (`alice_physics::filament_db::MaterialProperties`)
+/// 材料名から弾性率 (`GPa`) を取得 (`alice_physics::filament_db::MaterialProperties`)
 ///
-/// SSOT: Bamboo `safety.rs` と同じ FilamentDb を参照 hardcode 定数を置換
+/// SSOT: Bamboo `safety.rs` と同じ `FilamentDb` を参照 hardcode 定数を置換
 /// 対応材料: `"pla"` / `"petg"` / `"abs"` (大文字小文字不問)
 ///
 /// # 使用例

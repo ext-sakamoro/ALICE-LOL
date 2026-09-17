@@ -1,6 +1,6 @@
 //! Roblox アクセサリー出力サンプル
 //!
-//! LOL DSL → OBJ/FBX (Roblox MeshPart 用) の動作確認。
+//! LOL DSL → OBJ/FBX (Roblox `MeshPart` 用) の動作確認。
 //!
 //! ```bash
 //! cargo run --example roblox_accessory --features roblox
@@ -30,12 +30,12 @@ fn main() {
     }
 
     // ── 2. 宝石 (ランタイムパーサー経由) ──
-    let gem_lol = r#"
+    let gem_lol = r"
         smooth_intersection(0.05,
             octahedron(0.6),
             box3d(0.5, 0.8, 0.5)
         )
-    "#;
+    ";
 
     match alice_lol::roblox_export::lol_to_fbx_roblox(gem_lol, "gem.fbx", &config) {
         Ok(stats) => println!("Gem FBX:   {stats}"),
