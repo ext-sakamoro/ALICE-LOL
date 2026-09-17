@@ -164,7 +164,7 @@ Continuity(node, seed_point)                        # 単一連結領域 (BFS fl
 VolumeConservation(before, after, relative_tolerance)  # morph 前後の体積保存
 ```
 
-geometric proxy 評価 (grid + `sdf_eval()`)、Physics dep 追加なし。精密 physics-backed 評価は Milestone A.2.1 で `alice-physics` API 経由に置換予定。
+距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性) Physics dep 追加なし、精密 physics-backed 評価は Milestone A.2.1 で `alice-physics` API 経由に置換予定
 
 `LawSet` builder に convenience method 全 8 variant 分あり (`.stress()` / `.thermal()` / `.contact()` / `.continuity()` / `.volume_conservation()`)。`detect_contradictions()` で NonOverlap+Containment、Contact+NonOverlap の静的矛盾検出も追加。
 

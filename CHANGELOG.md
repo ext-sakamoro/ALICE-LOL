@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — breaking: 法則検証器が場の値を距離として使わなくなった (0.4.0)
+- **距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) を Lipschitz 非依存の三値判定に置換** — 旧実装は `sdf_eval` の返り値を距離として使っていたので、TPMS (場が距離を √3〜7 倍に過大申告) では 0.058 の薄壁を 0.1 と読んで合格させ、union の内部 (場が過小) では 0.87 の肉厚を 0.5 と読んで不合格にし、格子より薄い重なり / はみ出しは標本点をすり抜けていた (セルフレビュー 2026-09-16 § 4「検証器が嘘をつく」) 新実装は `alice_sdf::interval::eval_interval` (区間演算) で「箱に表面なし」を **証明**、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の **証拠** (二分探索で締めた上界) を取り、八分木深さ `BALL_PROBE_DEPTH = 4` で決められなかった標本点は **unresolved** として報告する 違反の検出は健全 (偽陽性なし)、合格は標本点ごとの証明
+- **`LawReport` に `unresolved: Vec<Unresolved>` を追加、`all_passed()` は「違反なし かつ 判定不能なし」に変更** (silent 合格の廃止、struct literal で `LawReport` を組んでいる下流は field 追加で breaking) 新 API: `LawReport::has_unresolved()` / `Unresolved { law_name, priority, point, region, reason }` / `UnresolvedReason` (`SurfaceProximity { radius }` / `SignUndecided` / `GapUnbracketed { upper }`、`#[non_exhaustive]`) / `format_report` に `[UNDECIDED]` 行
+- `Contact` の residual: 近すぎは `上界 − min_distance`、遠すぎは `max_distance − 上界` (上界を取れなければ `−∞`)、gap > m の証明は各 cell を m/2 広げた箱の区間で行う (中点が検査 AABB 内にある前提)
+
 ### Added
+- **`tests/analytic_law.rs` — 法則検証器の解析解 oracle 9 本** (oracle 先行で red 4/7 を確認してから実装): gyroid 板の真の半厚 (平坦点で g ≈ √3·s、ε = 0.05778) / 2 球 union 内部の真の距離 (√0.75) / 球殻 R − r の境界 / 2 球 NonOverlap の侵入深さ上界 / 内球 Containment のはみ出し量 / Contact gap = 0.5 の 3 範囲 / 板 Stress / `InfiniteCone` (区間 EVERYTHING) が unresolved になること / `resolution` 1..8 で verdict 不変
+- **`tests/transpiler_naga_validate.rs` — grammar corpus 全構文 + fixture の WGSL / GLSL を naga で parse + validate** (Level 1.5、GPU 不要) 初回実行で alice-sdf 3.0.0 の `Terrain` が WGSL / HLSL に GLSL 構文を直書きし GLSL でも `vnoise` helper 未定義であることを検出 (SDF 側 Backlog)
+- **`tests/gpu_parity.rs` — grammar corpus 全構文 + 深い合成 fixture 7 本を実 GPU で実行して CPU `eval` と突合** (Level 2、Milestone A.4.1) + ci.yml `gpu-parity` job (lavapipe、`ALICE_SDF_REQUIRE_GPU=1`) 初回実行 (Metal) で fixture 7 本は drift ≤ 5e-6、corpus 237 中 235 一致、`Elongate` の CPU (`p − clamp(p, −a, a)`) と shader (`abs(p) − a` + 内部補正) の法則不一致と `Terrain` の WGSL 不正を検出 (いずれも alice-sdf 側、Backlog)
+- `tests/common/corpus.rs` — grammar corpus / fixture / 標本点生成を `emit_roundtrip` / `transpiler_naga_validate` / `gpu_parity` で共有
+- **fuzz target `fuzz_lol_emit_parity`** (parse → emit → parse の eval parity + emit 冪等性、strict-eval 8b) fuzz.yml matrix に追加、local 60 s / 1.27M run で crash 0
+- ci.yml: `msrv` job (`cargo +1.90 check --workspace --all-targets --all-features`)、`gpu-parity` job
+
+### Changed
+- **`rust-version = "1.90"` を全 workspace crate に宣言** — clippy `incompatible_msrv` が `from_f32_snap` 等の const fn で `f32::round` (const 化 1.90) と `Vec::is_empty` (1.87) を指摘、1.85 (alice-sdf の MSRV) を宣言すると偽 MSRV になる 下流 (Manga / Foundry / Print / Kinematics 1.92.0、Bamboo / LLM 1.98.1) の toolchain pin は全て上回る `cargo +1.90.0 check --workspace --all-targets --all-features` 通過
+- **ci.yml clippy を `-D warnings -D clippy::pedantic -D clippy::nursery` + `--workspace --all-targets --all-features` に昇格** (旧: lib のみ `--features llm-bridge` で `-W`) 昇格に伴い example 2 本の raw string hash / doc backtick を修正
+- ci.yml の manifest-only stub (`alice-physics` 空 lib + 参照されていない Codec / Streaming / Cache / Foundry) を real `ALICE-Physics` checkout に置換 (`--all-features` で `physics` feature が実 compile されるため)
+- `alice-sdf` 要件 `2.0.0` → `3.0.0` (`ShaderLang` seal のみ breaking、LOL は trait を実装していない)
+
+### Added (previous)
 - `docs/LLM_LOL_ROADMAP.md` — 「モデルに LOL を話させる」Track A/B/C の status 表 + benchmark baseline + fail 型 4 + A3 の評価 leakage 注意 (repo 側の単一 status source)
 - **`alice-lol-datagen` (新 sibling crate、Track C1)** — 合成 (caption, LOL) pair generator template family 8 種 (`primitive_placed` / `stacked` / `attachment` / `plate_holes` / `transformed` / `intent_program` / `random_tree` / `product_shortcut`) が同じ parameter から LOL text (学習 target、shortcut はそのまま) / `lol_canonical` (`parse → emit` 正規形) / 英日 caption / oracle 点を同時に生成、`Sample::verify` (parse 成功 / emit 冪等 / oracle 点の eval 一致 / `grammar-check` feature で LLM grammar 受理) を通ったものだけ出力 `datagen --n 20000 --seed 42 --families all --out data.jsonl` で **6,500 sample/s、rejected 0** (evidence `~/claude-config/evidence_lol_datagen_2026_09_14/`) xorshift64* で決定論、serde 非依存 `llm_bench` baseline の fail 型 4 (translate 欠落 / half 引数 / 合成省略 / Intent 構造) を family 設計で直接狙う 自己検証は実装中に template の bug 2 件 (arch の穴が高すぎる / `repeat_finite` のコピー数は `2·floor(c/2)+1` で常に奇数・原点あり) を検出した
 - **`runtime_parser::parse_expr` / `emit::write_node` を `stacker::maybe_grow` で stack 伸長** — stdlib product (`sd_card_holder` 等) は `subtract` を 2,400 段 nest した正当な tree を生成し、`parse_expr` の大 frame × 再帰で 8 MB stack が尽きていた (debug build は red zone 4 MB / 伸長 32 MB) 依存 `stacker = "0.1"` (MIT OR Apache-2.0) 残る深さ依存は `Arc<SdfNode>` の再帰 Drop (alice-sdf 側、2 MB の test thread で overflow、iterative Drop は follow-up)
