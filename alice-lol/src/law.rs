@@ -9,6 +9,26 @@
 //! - 全制約の残差（violation magnitude）を公開
 //! - 違反領域の AABB を空間的にレポート
 //! - ハード/ソフト制約の明示的な優先度宣言
+//! - **判定不能を合格にしない**: 決められなかったセルは [`LawReport::unresolved`]
+//!   に載り、[`LawReport::all_passed`] は「違反なし」ではなく「全て証明済」を意味する
+//!
+//! # 距離依存 law の判定原理 (0.4.0、Lipschitz 非依存)
+//!
+//! `MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は
+//! 「表面までの距離」を問うが、SDF の場の値 `f(p)` は一般に距離ではない
+//! (TPMS は √3〜7 倍に過大、union の内部は過小、`eval_lipschitz` の L は
+//! 外部 `{f ≥ 0}` でしか保証されない) そこで場の値を距離に使わず、
+//! **符号の正しさと連続性だけ**に依存する 2 つの道具で判定する:
+//!
+//! - [`alice_sdf::interval::eval_interval`] (区間演算の包含) — 箱の中の場が
+//!   一様に同符号なら、その箱に表面はない (証明)
+//! - 点評価 — `f(p) < 0` の p と `f(q) ≥ 0` の q があれば、線分 p–q 上に
+//!   表面がある (中間値定理) ので `dist(p, 表面) ≤ |p − q|` (証拠)
+//!
+//! 半径 r の球を八分木で細分し、全ての葉が同符号なら「表面まで ≥ r」、
+//! 反対符号の点が見つかれば「表面まで ≤ |p − q|」(二分探索で締める)、
+//! 深さ上限 ([`BALL_PROBE_DEPTH`]) で未決定の葉が残れば **unresolved**
+//! 違反の検出は健全 (偽陽性なし)、合格は標本点ごとの証明 (格子解像度に依存)
 
 use alice_sdf::interval::{Interval, Vec3Interval};
 use alice_sdf::SdfNode;
@@ -169,22 +189,61 @@ pub struct Violation {
     pub region: Vec3Interval,
 }
 
+/// 判定不能の理由
+///
+/// 検証器 (本 crate) が構築し、利用側は読むだけ 理由は今後増えるので
+/// `#[non_exhaustive]`、match には `_` 腕を置く
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum UnresolvedReason {
+    /// 半径 `radius` の球内に表面があるか、区間演算でも点探索でも決まらなかった
+    SurfaceProximity {
+        /// 探索半径
+        radius: f32,
+    },
+    /// セル内で 2 つの場の符号の組合せが区間演算で確定しなかった
+    SignUndecided,
+    /// 表面間距離を上下から挟めなかった (`upper` = 見つかった上界、無ければ +∞)
+    GapUnbracketed {
+        /// 表面間距離の上界
+        upper: f32,
+    },
+}
+
+/// 判定不能レポート — 違反でも合格でもない (検証器の解像度 / 区間演算の
+/// 包含精度が足りなかった) 標本点 合格扱いにしてはいけない
+#[derive(Debug, Clone)]
+pub struct Unresolved {
+    /// 法則名
+    pub law_name: String,
+    /// 優先度
+    pub priority: Priority,
+    /// 判定できなかった標本点
+    pub point: Vec3,
+    /// 判定できなかった領域 (球探索なら未決定の葉、セル判定ならセル)
+    pub region: Vec3Interval,
+    /// 理由
+    pub reason: UnresolvedReason,
+}
+
 /// 法則検証の結果
 #[derive(Debug, Clone)]
 pub struct LawReport {
     /// 全法則数
     pub total_laws: usize,
-    /// パスした法則数
+    /// パスした法則数 (違反も未決定もない法則)
     pub passed: usize,
     /// 違反リスト（残差の絶対値の大きい順）
     pub violations: Vec<Violation>,
+    /// 判定不能リスト (法則ごとに最初の 1 件)
+    pub unresolved: Vec<Unresolved>,
 }
 
 impl LawReport {
-    /// 全法則がパスしたか
+    /// 全法則が **証明付きで** パスしたか (違反なし かつ 判定不能なし)
     #[must_use]
     pub const fn all_passed(&self) -> bool {
-        self.violations.is_empty()
+        self.violations.is_empty() && self.unresolved.is_empty()
     }
 
     /// ハード制約の違反があるか
@@ -192,7 +251,25 @@ impl LawReport {
     pub fn has_hard_violations(&self) -> bool {
         self.violations.iter().any(|v| v.priority == Priority::Hard)
     }
+
+    /// 判定不能の法則があるか
+    #[must_use]
+    pub const fn has_unresolved(&self) -> bool {
+        !self.unresolved.is_empty()
+    }
 }
+
+/// 1 法則の判定結果 (内部)
+struct Verdict {
+    violation: Option<Violation>,
+    unresolved: Option<Unresolved>,
+}
+
+/// 球探索 / セル細分の八分木深さ上限 (葉の辺 = 元の辺 / 2^depth)
+pub const BALL_PROBE_DEPTH: u32 = 4;
+
+/// 交点の二分探索反復回数 (距離の上界を `|p − q| / 2^n` まで締める)
+const BISECT_ITERS: u32 = 12;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 検証設定
@@ -226,6 +303,601 @@ impl Default for CheckConfig {
 /// SDF を点で評価するヘルパー
 fn sdf_eval(node: &SdfNode, point: Vec3) -> f32 {
     alice_sdf::eval(node, point)
+}
+
+/// 区間演算で箱の場を包含評価するヘルパー
+fn sdf_interval(node: &SdfNode, bounds: Vec3Interval) -> Interval {
+    alice_sdf::interval::eval_interval(node, bounds)
+}
+
+/// 中心 `c` 半幅 `h` の立方体
+fn cube(c: Vec3, h: f32) -> Vec3Interval {
+    Vec3Interval {
+        x: Interval::new(c.x - h, c.x + h),
+        y: Interval::new(c.y - h, c.y + h),
+        z: Interval::new(c.z - h, c.z + h),
+    }
+}
+
+/// 箱の中心
+const fn box_center(b: Vec3Interval) -> Vec3 {
+    Vec3::new(
+        b.x.lo.midpoint(b.x.hi),
+        b.y.lo.midpoint(b.y.hi),
+        b.z.lo.midpoint(b.z.hi),
+    )
+}
+
+/// 箱の各軸を `amount` だけ広げる
+fn box_expand(b: Vec3Interval, amount: f32) -> Vec3Interval {
+    Vec3Interval {
+        x: b.x.expand(amount),
+        y: b.y.expand(amount),
+        z: b.z.expand(amount),
+    }
+}
+
+/// 箱の中で `p` に最も近い点
+const fn box_nearest(b: Vec3Interval, p: Vec3) -> Vec3 {
+    Vec3::new(
+        p.x.clamp(b.x.lo, b.x.hi),
+        p.y.clamp(b.y.lo, b.y.hi),
+        p.z.clamp(b.z.lo, b.z.hi),
+    )
+}
+
+/// 箱を 8 分割
+fn box_children(b: Vec3Interval) -> [Vec3Interval; 8] {
+    let c = box_center(b);
+    let split = |iv: Interval, m: f32, hi: bool| {
+        if hi {
+            Interval::new(m, iv.hi)
+        } else {
+            Interval::new(iv.lo, m)
+        }
+    };
+    let mut out = [b; 8];
+    for (i, child) in out.iter_mut().enumerate() {
+        *child = Vec3Interval {
+            x: split(b.x, c.x, i & 1 != 0),
+            y: split(b.y, c.y, i & 2 != 0),
+            z: split(b.z, c.z, i & 4 != 0),
+        };
+    }
+    out
+}
+
+/// 区間の符号: `Some(true)` = 全て非負 (外側 or 表面)、`Some(false)` = 全て負 (内側)、
+/// `None` = 混在 (表面を含みうる)
+fn interval_sign(iv: Interval) -> Option<bool> {
+    if iv.lo >= 0.0 {
+        Some(true)
+    } else if iv.hi < 0.0 {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// `p` (`f(p)` の符号 `outside_p`) と `q` (反対符号) の線分上の交点を二分探索し、
+/// `p` から交点までの距離の上界を返す
+fn bisect_crossing(node: &SdfNode, p: Vec3, outside_p: bool, mut q: Vec3) -> f32 {
+    let mut a = p;
+    for _ in 0..BISECT_ITERS {
+        let m = (a + q) * 0.5;
+        if (sdf_eval(node, m) >= 0.0) == outside_p {
+            a = m;
+        } else {
+            q = m;
+        }
+    }
+    // 交点は [a, q] の間 → 上界は q
+    p.distance(q)
+}
+
+/// 球探索の結果
+enum BallProbe {
+    /// 球内は全て `p` と同符号 = 表面まで ≥ r
+    Clear,
+    /// 反対符号の点を発見 = 表面まで ≤ `distance` (二分探索で締めた上界)
+    Crossing { distance: f32 },
+    /// 深さ上限まで細分しても未決定の葉が残った
+    Undecided { region: Vec3Interval },
+}
+
+/// 点 `p` を中心とする半径 `r` の球に `f(p)` と反対符号の点 (= 表面) があるか
+///
+/// 八分木で細分し、`p` に近い箱から訪問、見つかった交点より遠い箱は刈る
+/// 深さ上限で未決定の葉は中心を点評価 (反対符号なら証拠) してから Undecided
+fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
+    let f_centre = sdf_eval(node, centre);
+    if f_centre == 0.0 {
+        return BallProbe::Crossing { distance: 0.0 };
+    }
+    let outside = f_centre > 0.0;
+
+    let mut best: Option<f32> = None;
+    let mut undecided: Option<Vec3Interval> = None;
+    // (箱, 深さ) の明示 stack — centre に近い順に処理するため子は遠い順に push
+    let mut stack: Vec<(Vec3Interval, u32)> = vec![(cube(centre, radius), 0)];
+
+    while let Some((bx, depth)) = stack.pop() {
+        let near = box_nearest(bx, centre);
+        let near_dist = centre.distance(near);
+        if near_dist > radius {
+            continue; // 球と交わらない
+        }
+        if best.is_some_and(|d| near_dist >= d) {
+            continue; // これより近い交点は出ない
+        }
+
+        match interval_sign(sdf_interval(node, bx)) {
+            // 一様に同符号: 表面なし
+            Some(sign) if sign == outside => {}
+            // 一様に反対符号: 箱の最近点が反対符号 → 交点は centre–near 線分上
+            Some(_) => {
+                let d = bisect_crossing(node, centre, outside, near);
+                if best.is_none_or(|bd| d < bd) {
+                    best = Some(d);
+                }
+            }
+            None if depth >= BALL_PROBE_DEPTH => {
+                let leaf_centre = box_center(bx);
+                if centre.distance(leaf_centre) <= radius
+                    && (sdf_eval(node, leaf_centre) >= 0.0) != outside
+                {
+                    let d = bisect_crossing(node, centre, outside, leaf_centre);
+                    if best.is_none_or(|bd| d < bd) {
+                        best = Some(d);
+                    }
+                } else if undecided.is_none() {
+                    undecided = Some(bx);
+                }
+            }
+            None => {
+                let mut children = box_children(bx);
+                children.sort_by(|x, y| {
+                    let dx = centre.distance(box_nearest(*x, centre));
+                    let dy = centre.distance(box_nearest(*y, centre));
+                    dy.partial_cmp(&dx).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                for child in children {
+                    stack.push((child, depth + 1));
+                }
+            }
+        }
+    }
+
+    match (best, undecided) {
+        (Some(distance), _) => BallProbe::Crossing { distance },
+        (None, Some(region)) => BallProbe::Undecided { region },
+        (None, None) => BallProbe::Clear,
+    }
+}
+
+/// 「表面まで ≥ `required`」を標本点 `center` で判定し、違反 / 未決定を集約する
+///
+/// `MinThickness` と `Stress` の共通部分 `worst` は最も負の residual、
+/// `undecided` は最初の未決定
+fn accumulate_thickness(
+    node: &SdfNode,
+    center: Vec3,
+    bounds: Vec3Interval,
+    required: f32,
+    worst: &mut Option<(f32, Vec3, Vec3Interval)>,
+    undecided: &mut Option<(Vec3, Vec3Interval, f32)>,
+) {
+    match probe_ball(node, center, required) {
+        BallProbe::Clear => {}
+        BallProbe::Crossing { distance } => {
+            let residual = distance - required; // ≤ 0 = 不足量 (上界側)
+            match worst {
+                Some((w, _, _)) if residual >= *w => {}
+                _ => *worst = Some((residual, center, bounds)),
+            }
+        }
+        BallProbe::Undecided { region } => {
+            if undecided.is_none() {
+                *undecided = Some((center, region, required));
+            }
+        }
+    }
+}
+
+fn thickness_verdict(
+    law_name: &str,
+    priority: Priority,
+    worst: Option<(f32, Vec3, Vec3Interval)>,
+    undecided: Option<(Vec3, Vec3Interval, f32)>,
+) -> Verdict {
+    Verdict {
+        violation: worst.map(|(residual, point, region)| Violation {
+            law_name: law_name.to_string(),
+            priority,
+            residual,
+            point,
+            region,
+        }),
+        unresolved: undecided.map(|(point, region, radius)| Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point,
+            region,
+            reason: UnresolvedReason::SurfaceProximity { radius },
+        }),
+    }
+}
+
+/// 2 つの場の符号条件をセル内で判定する (八分木細分付き)
+///
+/// `decided_ok(ia, ib)`: 箱全体で条件が成立し得ないことの証明
+/// `witness(fa, fb)`: 点評価で条件が成立するか (箱全体で成立する場合も
+/// 中心点が witness になるので、区間での「certain」判定は不要)
+/// `residual(fa, fb)`: witness の残差 (負、小さいほど悪い) — 最初の witness で
+/// 打ち切らず、未決定の箱を全て掘って **最悪** の witness を返す
+enum PairProbe {
+    Clear,
+    Witness { point: Vec3, residual: f32 },
+    Undecided { region: Vec3Interval },
+}
+
+fn probe_pair(
+    a: &SdfNode,
+    b: &SdfNode,
+    cell: Vec3Interval,
+    decided_ok: &dyn Fn(Interval, Interval) -> bool,
+    witness: &dyn Fn(f32, f32) -> bool,
+    residual: &dyn Fn(f32, f32) -> f32,
+) -> PairProbe {
+    let mut worst: Option<(f32, Vec3)> = None;
+    let mut undecided: Option<Vec3Interval> = None;
+    let mut stack: Vec<(Vec3Interval, u32)> = vec![(cell, 0)];
+
+    while let Some((bx, depth)) = stack.pop() {
+        let ia = sdf_interval(a, bx);
+        let ib = sdf_interval(b, bx);
+        if decided_ok(ia, ib) {
+            continue;
+        }
+        let c = box_center(bx);
+        let (fa, fb) = (sdf_eval(a, c), sdf_eval(b, c));
+        if witness(fa, fb) {
+            let r = residual(fa, fb).min(-f32::EPSILON);
+            if worst.is_none_or(|(w, _)| r < w) {
+                worst = Some((r, c));
+            }
+        }
+        if depth >= BALL_PROBE_DEPTH {
+            if undecided.is_none() {
+                undecided = Some(bx);
+            }
+        } else {
+            for child in box_children(bx) {
+                stack.push((child, depth + 1));
+            }
+        }
+    }
+
+    match (worst, undecided) {
+        (Some((residual, point)), _) => PairProbe::Witness { point, residual },
+        (None, Some(region)) => PairProbe::Undecided { region },
+        (None, None) => PairProbe::Clear,
+    }
+}
+
+fn pair_verdict(
+    law_name: &str,
+    priority: Priority,
+    worst: Option<(f32, Vec3, Vec3Interval)>,
+    undecided: Option<(Vec3, Vec3Interval)>,
+) -> Verdict {
+    Verdict {
+        violation: worst.map(|(residual, point, region)| Violation {
+            law_name: law_name.to_string(),
+            priority,
+            residual,
+            point,
+            region,
+        }),
+        unresolved: undecided.map(|(point, region)| Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point,
+            region,
+            reason: UnresolvedReason::SignUndecided,
+        }),
+    }
+}
+
+/// `NonOverlap`: 両 SDF が負（内部）の点があれば重なり
+///
+/// 証明: 箱で `a ≥ 0` or `b ≥ 0` が一様 → その箱に重なりなし
+/// 証拠: 点で両方負 (residual = 浅い方の侵入深さ、点評価なので exact)
+fn check_non_overlap(
+    a: &SdfNode,
+    b: &SdfNode,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
+    let mut undecided: Option<(Vec3, Vec3Interval)> = None;
+
+    for (center, bounds) in GridSampler::new(config) {
+        match probe_pair(
+            a,
+            b,
+            bounds,
+            &|ia, ib| ia.lo >= 0.0 || ib.lo >= 0.0,
+            &|fa, fb| fa < 0.0 && fb < 0.0,
+            &|fa, fb| fa.max(fb), // 浅い方の侵入深さ (点評価なので exact)
+        ) {
+            PairProbe::Clear => {}
+            PairProbe::Witness { point, residual } => match &worst {
+                Some((w, _, _)) if residual >= *w => {}
+                _ => worst = Some((residual, point, bounds)),
+            },
+            PairProbe::Undecided { region } => {
+                if undecided.is_none() {
+                    undecided = Some((center, region));
+                }
+            }
+        }
+    }
+
+    pair_verdict(law_name, priority, worst, undecided)
+}
+
+/// Containment: inner が内部（< 0）かつ outer が外部（> 0）の点があればはみ出し
+///
+/// 証明: 箱で `inner ≥ 0` (inner が無い) or `outer ≤ 0` (outer の中) が一様
+/// 証拠: 点で `inner < 0 && outer > 0` (residual = −outer、点評価なので exact)
+fn check_containment(
+    inner: &SdfNode,
+    outer: &SdfNode,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
+    let mut undecided: Option<(Vec3, Vec3Interval)> = None;
+
+    for (center, bounds) in GridSampler::new(config) {
+        match probe_pair(
+            inner,
+            outer,
+            bounds,
+            &|ii, io| ii.lo >= 0.0 || io.hi <= 0.0,
+            &|fi, fo| fi < 0.0 && fo > 0.0,
+            &|_, fo| -fo, // 負 = はみ出し量 (点評価なので exact)
+        ) {
+            PairProbe::Clear => {}
+            PairProbe::Witness { point, residual } => match &worst {
+                Some((w, _, _)) if residual >= *w => {}
+                _ => worst = Some((residual, point, bounds)),
+            },
+            PairProbe::Undecided { region } => {
+                if undecided.is_none() {
+                    undecided = Some((center, region));
+                }
+            }
+        }
+    }
+
+    pair_verdict(law_name, priority, worst, undecided)
+}
+
+/// `MinThickness`: 内部標本点から表面までの距離が `min_thickness` 未満なら肉厚不足
+///
+/// 場の値 `|f|` は距離ではないので使わない ([`probe_ball`] で球内の表面を
+/// 証明 / 証拠 / 未決定に三分する)
+fn check_min_thickness(
+    node: &SdfNode,
+    min_thickness: f32,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let mut worst = None;
+    let mut undecided = None;
+
+    for (center, bounds) in GridSampler::new(config) {
+        if sdf_eval(node, center) >= 0.0 {
+            continue; // 内部標本点のみ対象
+        }
+        accumulate_thickness(
+            node,
+            center,
+            bounds,
+            min_thickness,
+            &mut worst,
+            &mut undecided,
+        );
+    }
+
+    thickness_verdict(law_name, priority, worst, undecided)
+}
+
+/// Stress: 各 load point 近傍の内部標本点で、表面までの距離 < force × factor なら violation
+///
+/// 探索半径 = max(1.0, force) の球内セル対象 (heuristic)
+fn check_stress(
+    node: &SdfNode,
+    load_points: &[(Vec3, f32)],
+    min_thickness_factor: f32,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let mut worst = None;
+    let mut undecided = None;
+
+    for (center, bounds) in GridSampler::new(config) {
+        if sdf_eval(node, center) >= 0.0 {
+            continue; // 内部セルのみ対象
+        }
+
+        for &(lp, force) in load_points {
+            let search_radius = force.max(1.0);
+            if center.distance(lp) > search_radius {
+                continue;
+            }
+            let required = force * min_thickness_factor;
+            if required <= 0.0 {
+                continue;
+            }
+            accumulate_thickness(node, center, bounds, required, &mut worst, &mut undecided);
+        }
+    }
+
+    thickness_verdict(law_name, priority, worst, undecided)
+}
+
+/// 表面間距離 (gap) が `m` を超えることの証明
+///
+/// gap ≤ m なら中点 p に `dist(p, A) ≤ m/2 && dist(p, B) ≤ m/2` の点がある
+/// (p が検査 AABB 内にある前提) 各セルを m/2 広げた箱で A か B が一様に
+/// 正なら、そのセルにそんな p は無い 全セルで示せれば gap > m
+fn gap_exceeds(a: &SdfNode, b: &SdfNode, m: f32, config: &CheckConfig) -> bool {
+    let half = m * 0.5;
+    for (_, cell) in GridSampler::new(config) {
+        let mut stack: Vec<(Vec3Interval, u32)> = vec![(cell, 0)];
+        while let Some((bx, depth)) = stack.pop() {
+            let e = box_expand(bx, half);
+            if sdf_interval(a, e).lo > 0.0 || sdf_interval(b, e).lo > 0.0 {
+                continue;
+            }
+            if depth >= BALL_PROBE_DEPTH {
+                return false;
+            }
+            for child in box_children(bx) {
+                stack.push((child, depth + 1));
+            }
+        }
+    }
+    true
+}
+
+/// Contact の gap 上界: 両方の外側にある標本点 c から A / B それぞれの表面への
+/// 交点距離の和 (三角不等式で gap ≤ 和) の最小
+///
+/// gap の中点は何れかの cell 中心から cell 半対角以内にあるので、探索半径は
+/// max(min, max) + cell 対角で両側に届く (遠いセルは区間で除外)
+fn contact_upper_bound(
+    a: &SdfNode,
+    b: &SdfNode,
+    min_distance: f32,
+    max_distance: f32,
+    config: &CheckConfig,
+) -> Option<(f32, Vec3, Vec3Interval)> {
+    #[allow(clippy::cast_precision_loss)]
+    let cell_diag =
+        ((config.aabb_max - config.aabb_min) / config.resolution.max(1) as f32).length();
+    let radius = max_distance.max(min_distance) + cell_diag;
+    let mut upper: Option<(f32, Vec3, Vec3Interval)> = None;
+    for (center, bounds) in GridSampler::new(config) {
+        let (fa, fb) = (sdf_eval(a, center), sdf_eval(b, center));
+        if fa <= 0.0 || fb <= 0.0 {
+            continue;
+        }
+        let e = box_expand(bounds, radius);
+        if sdf_interval(a, e).lo > 0.0 || sdf_interval(b, e).lo > 0.0 {
+            continue;
+        }
+        let (BallProbe::Crossing { distance: da }, BallProbe::Crossing { distance: db }) =
+            (probe_ball(a, center, radius), probe_ball(b, center, radius))
+        else {
+            continue;
+        };
+        let ub = da + db;
+        match &upper {
+            Some((u, _, _)) if ub >= *u => {}
+            _ => upper = Some((ub, center, bounds)),
+        }
+    }
+    upper
+}
+
+/// Contact: A と B の表面間距離 (gap) が \[min, max\] 範囲外なら violation
+///
+/// 1. interfering (両 sdf < 0 の点) → residual = 侵入深さ (負)
+/// 2. 上界 UB: 両方の外側の標本点 c から A / B それぞれへの交点距離の和
+///    (三角不等式で gap ≤ UB)、UB < min なら近すぎ (residual = UB − min)
+/// 3. 下界: [`gap_exceeds`] で gap > max を証明できれば遠すぎ
+///    (residual = max − UB、UB 無しなら −∞)
+/// 4. gap > min の証明 かつ UB ≤ max → pass、それ以外は未決定
+fn check_contact(
+    a: &SdfNode,
+    b: &SdfNode,
+    min_distance: f32,
+    max_distance: f32,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    // 1. 干渉
+    let interference = check_non_overlap(a, b, law_name, priority, config);
+    if interference.violation.is_some() {
+        return interference;
+    }
+
+    // 2. 上界
+    let upper = contact_upper_bound(a, b, min_distance, max_distance, config);
+
+    let make_violation = |residual: f32, point: Vec3, region: Vec3Interval| Violation {
+        law_name: law_name.to_string(),
+        priority,
+        residual,
+        point,
+        region,
+    };
+
+    if let Some((ub, point, region)) = upper {
+        if ub < min_distance {
+            return Verdict {
+                violation: Some(make_violation(ub - min_distance, point, region)),
+                unresolved: None,
+            };
+        }
+    }
+
+    // 3. 下界
+    if gap_exceeds(a, b, max_distance, config) {
+        let (residual, point, region) = upper.map_or_else(
+            || {
+                (
+                    f32::NEG_INFINITY,
+                    config.aabb_min,
+                    Vec3Interval::from_bounds(config.aabb_min, config.aabb_max),
+                )
+            },
+            |(ub, p, r)| (max_distance - ub, p, r),
+        );
+        return Verdict {
+            violation: Some(make_violation(residual, point, region)),
+            unresolved: None,
+        };
+    }
+
+    // 4. pass には gap > min の証明 と UB ≤ max の両方が要る
+    if let Some((ub, _, _)) = upper {
+        if ub <= max_distance && gap_exceeds(a, b, min_distance, config) {
+            return interference; // 干渉側の未決定があればそれを引き継ぐ
+        }
+    }
+
+    Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point: upper.map_or(config.aabb_min, |(_, p, _)| p),
+            region: upper.map_or_else(|| cube(config.aabb_min, 0.0), |(_, _, r)| r),
+            reason: UnresolvedReason::GapUnbracketed {
+                upper: upper.map_or(f32::INFINITY, |(u, _, _)| u),
+            },
+        }),
+    }
 }
 
 /// グリッド上のサンプル点を生成するイテレータ
@@ -293,41 +965,36 @@ impl Iterator for GridSampler {
     }
 }
 
-/// 法則リストを一括検証
-#[must_use]
-pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
-    let mut violations = Vec::new();
-
-    for law in laws {
-        let violation = match &law.constraint {
-            Constraint::NonOverlap { a, b } => {
-                check_non_overlap(a, b, &law.name, law.priority, config)
-            }
-            Constraint::Containment { inner, outer } => {
-                check_containment(inner, outer, &law.name, law.priority, config)
-            }
-            Constraint::MinThickness {
-                node,
-                min_thickness,
-            } => check_min_thickness(node, *min_thickness, &law.name, law.priority, config),
-            Constraint::Stress {
-                node,
-                load_points,
-                min_thickness_factor,
-            } => check_stress(
-                node,
-                load_points,
-                *min_thickness_factor,
-                &law.name,
-                law.priority,
-                config,
-            ),
-            Constraint::Thermal {
-                node,
-                heat_sources,
-                search_radius,
-                min_surface_ratio,
-            } => check_thermal(
+/// 1 法則を判定する
+fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
+    match &law.constraint {
+        Constraint::NonOverlap { a, b } => check_non_overlap(a, b, &law.name, law.priority, config),
+        Constraint::Containment { inner, outer } => {
+            check_containment(inner, outer, &law.name, law.priority, config)
+        }
+        Constraint::MinThickness {
+            node,
+            min_thickness,
+        } => check_min_thickness(node, *min_thickness, &law.name, law.priority, config),
+        Constraint::Stress {
+            node,
+            load_points,
+            min_thickness_factor,
+        } => check_stress(
+            node,
+            load_points,
+            *min_thickness_factor,
+            &law.name,
+            law.priority,
+            config,
+        ),
+        Constraint::Thermal {
+            node,
+            heat_sources,
+            search_radius,
+            min_surface_ratio,
+        } => Verdict {
+            violation: check_thermal(
                 node,
                 heat_sources,
                 *search_radius,
@@ -336,28 +1003,32 @@ pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
                 law.priority,
                 config,
             ),
-            Constraint::Contact {
-                a,
-                b,
-                min_distance,
-                max_distance,
-            } => check_contact(
-                a,
-                b,
-                *min_distance,
-                *max_distance,
-                &law.name,
-                law.priority,
-                config,
-            ),
-            Constraint::Continuity { node, seed_point } => {
-                check_continuity(node, *seed_point, &law.name, law.priority, config)
-            }
-            Constraint::VolumeConservation {
-                before,
-                after,
-                relative_tolerance,
-            } => check_volume_conservation(
+            unresolved: None,
+        },
+        Constraint::Contact {
+            a,
+            b,
+            min_distance,
+            max_distance,
+        } => check_contact(
+            a,
+            b,
+            *min_distance,
+            *max_distance,
+            &law.name,
+            law.priority,
+            config,
+        ),
+        Constraint::Continuity { node, seed_point } => Verdict {
+            violation: check_continuity(node, *seed_point, &law.name, law.priority, config),
+            unresolved: None,
+        },
+        Constraint::VolumeConservation {
+            before,
+            after,
+            relative_tolerance,
+        } => Verdict {
+            violation: check_volume_conservation(
                 before,
                 after,
                 *relative_tolerance,
@@ -365,9 +1036,24 @@ pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
                 law.priority,
                 config,
             ),
-        };
-        if let Some(v) = violation {
+            unresolved: None,
+        },
+    }
+}
+
+/// 法則リストを一括検証
+#[must_use]
+pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
+    let mut violations = Vec::new();
+    let mut unresolved = Vec::new();
+
+    for law in laws {
+        let verdict = check_one(law, config);
+        if let Some(v) = verdict.violation {
             violations.push(v);
+        }
+        if let Some(u) = verdict.unresolved {
+            unresolved.push(u);
         }
     }
 
@@ -379,158 +1065,19 @@ pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let passed = laws.len() - violations.len();
+    // 違反と未決定の両方を持つ法則を二重に引かない
+    let mut undecided_names: Vec<&str> = violations.iter().map(|v| v.law_name.as_str()).collect();
+    undecided_names.extend(unresolved.iter().map(|u| u.law_name.as_str()));
+    undecided_names.sort_unstable();
+    undecided_names.dedup();
+    let passed = laws.len().saturating_sub(undecided_names.len());
 
     LawReport {
         total_laws: laws.len(),
         passed,
         violations,
+        unresolved,
     }
-}
-
-/// `NonOverlap`: セル中心で両 SDF が負（内部）なら重なり
-fn check_non_overlap(
-    a: &SdfNode,
-    b: &SdfNode,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
-
-    for (center, bounds) in GridSampler::new(config) {
-        let da = sdf_eval(a, center);
-        let db = sdf_eval(b, center);
-
-        // 両方が負 → 重なっている
-        if da < 0.0 && db < 0.0 {
-            let residual = da.max(db); // 浅い方の侵入深さ（min overlap）
-            match &worst {
-                Some((w, _, _)) if residual >= *w => {}
-                _ => worst = Some((residual, center, bounds)),
-            }
-        }
-    }
-
-    worst.map(|(residual, point, region)| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-    })
-}
-
-/// Containment: inner が内部（< 0）かつ outer が外部（> 0）→ はみ出し
-fn check_containment(
-    inner: &SdfNode,
-    outer: &SdfNode,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
-
-    for (center, bounds) in GridSampler::new(config) {
-        let d_inner = sdf_eval(inner, center);
-        let d_outer = sdf_eval(outer, center);
-
-        // inner の内部かつ outer の外部 → はみ出し
-        if d_inner < 0.0 && d_outer > 0.0 {
-            let residual = -d_outer; // 負の値（はみ出し量）
-            match &worst {
-                Some((w, _, _)) if residual >= *w => {}
-                _ => worst = Some((residual, center, bounds)),
-            }
-        }
-    }
-
-    worst.map(|(residual, point, region)| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-    })
-}
-
-/// `MinThickness`: 内部点で SDF 値の絶対値が `min_thickness` 未満なら肉厚不足
-fn check_min_thickness(
-    node: &SdfNode,
-    min_thickness: f32,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
-
-    for (center, bounds) in GridSampler::new(config) {
-        let d = sdf_eval(node, center);
-
-        // 内部（d < 0）かつ表面に近すぎる（|d| < min_thickness）
-        if d < 0.0 && d.abs() < min_thickness {
-            let residual = d.abs() - min_thickness; // 負 = 不足量
-            match &worst {
-                Some((w, _, _)) if residual >= *w => {}
-                _ => worst = Some((residual, center, bounds)),
-            }
-        }
-    }
-
-    worst.map(|(residual, point, region)| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-    })
-}
-
-/// Stress: 各 load point 近傍の内部セルで肉厚 < force × factor なら violation
-///
-/// 探索半径 = max(1.0, force) の球内セル対象 (heuristic)
-fn check_stress(
-    node: &SdfNode,
-    load_points: &[(Vec3, f32)],
-    min_thickness_factor: f32,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
-
-    for (center, bounds) in GridSampler::new(config) {
-        let d = sdf_eval(node, center);
-        if d >= 0.0 {
-            continue; // 内部セルのみ対象
-        }
-
-        let thickness = d.abs();
-
-        for &(lp, force) in load_points {
-            let search_radius = force.max(1.0);
-            if center.distance(lp) > search_radius {
-                continue;
-            }
-
-            let required_thickness = force * min_thickness_factor;
-            if thickness < required_thickness {
-                let residual = thickness - required_thickness; // 負 = 不足量
-                match &worst {
-                    Some((w, _, _)) if residual >= *w => {}
-                    _ => worst = Some((residual, center, bounds)),
-                }
-            }
-        }
-    }
-
-    worst.map(|(residual, point, region)| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-    })
 }
 
 /// Thermal: 各 heat source 近傍の 表面近傍セル数 / 内部セル数 の ratio が下限未満なら violation
@@ -598,83 +1145,6 @@ fn check_thermal(
         point,
         region,
     })
-}
-
-/// Contact: A と B の最小表面間距離が \[min, max\] 範囲外なら violation
-///
-/// 両 sdf < 0 の cell (interfering) は residual = 侵入深さ (負) で返す
-/// それ以外は min over (両 sdf > 0 の cell) of (`sdf_a` + `sdf_b`) を surface 間距離として使用
-fn check_contact(
-    a: &SdfNode,
-    b: &SdfNode,
-    min_distance: f32,
-    max_distance: f32,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let mut min_surface_distance: Option<(f32, Vec3, Vec3Interval)> = None;
-    let mut interfering: Option<(f32, Vec3, Vec3Interval)> = None;
-
-    for (center, bounds) in GridSampler::new(config) {
-        let da = sdf_eval(a, center);
-        let db = sdf_eval(b, center);
-
-        if da < 0.0 && db < 0.0 {
-            // 両方内部 = interfering
-            let residual = da.max(db); // 浅い方の侵入深さ
-            match &interfering {
-                Some((w, _, _)) if residual >= *w => {}
-                _ => interfering = Some((residual, center, bounds)),
-            }
-        } else if da > 0.0 && db > 0.0 {
-            // 両方外部 = 表面間距離の候補
-            let dist = da + db;
-            match &min_surface_distance {
-                Some((w, _, _)) if dist >= *w => {}
-                _ => min_surface_distance = Some((dist, center, bounds)),
-            }
-        }
-    }
-
-    if let Some((residual, point, region)) = interfering {
-        return Some(Violation {
-            law_name: law_name.to_string(),
-            priority,
-            residual,
-            point,
-            region,
-        });
-    }
-
-    let (min_dist, point, region) = min_surface_distance?;
-
-    if min_dist < min_distance {
-        // 近すぎる (violation: 過密接触)
-        Some(Violation {
-            law_name: law_name.to_string(),
-            priority,
-            residual: min_dist - min_distance, // 負 = 距離不足
-            point,
-            region,
-        })
-    } else if min_dist > max_distance {
-        // 遠すぎる (violation: 接触不能)
-        Some(Violation {
-            law_name: law_name.to_string(),
-            priority,
-            residual: max_dist_residual(min_dist, max_distance), // 負 = 距離過多
-            point,
-            region,
-        })
-    } else {
-        None
-    }
-}
-
-/// `max_distance` 超過時の residual (負値で「どれだけ超過したか」を表現)
-fn max_dist_residual(actual: f32, limit: f32) -> f32 {
-    limit - actual
 }
 
 /// grid 座標 (cell 単位、f32) → `[0, n)` の cell index
@@ -1155,8 +1625,21 @@ pub fn format_report(report: &LawReport) -> String {
     );
 
     if report.all_passed() {
-        let _ = writeln!(out, "  All laws satisfied.");
+        let _ = writeln!(out, "  All laws satisfied (proven at every sample point).");
         return out;
+    }
+
+    for u in &report.unresolved {
+        let _ = writeln!(
+            out,
+            "  [UNDECIDED] {}: {:?} at=({:.2},{:.2},{:.2}), region=[{:.2}..{:.2}]x[{:.2}..{:.2}]x[{:.2}..{:.2}]",
+            u.law_name,
+            u.reason,
+            u.point.x, u.point.y, u.point.z,
+            u.region.x.lo, u.region.x.hi,
+            u.region.y.lo, u.region.y.hi,
+            u.region.z.lo, u.region.z.hi,
+        );
     }
 
     for v in &report.violations {

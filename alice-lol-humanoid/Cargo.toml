@@ -2,6 +2,7 @@
 name = "alice-lol-humanoid"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.90"
 description = "Humanoid template for ALICE-LOL DSL — VRM/BVH → parametric humanoid SdfNode. Phase H.3 VRM import."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
@@ -13,7 +14,7 @@ keywords = ["dsl", "sdf", "humanoid", "vrm", "character"]
 categories = ["graphics", "game-development"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.4", default-features = false }
 glam = "0.29"
 
 # Optional (feature vrm)

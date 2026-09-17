@@ -2,6 +2,7 @@
 name = "alice-lol-robot"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.90"
 description = "Robot template for ALICE-LOL DSL — Phase 3 Intent verb → humanoid FK + 8-byte Kinematics packet. Wires intent.rs + alice-lol-humanoid + alice-kinematics."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
@@ -13,7 +14,7 @@ keywords = ["dsl", "sdf", "robot", "intent", "kinematics"]
 categories = ["graphics", "game-development", "robotics"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.4", default-features = false }
 alice-lol-humanoid = { path = "../alice-lol-humanoid", version = "0.1", default-features = false }
 glam = "0.29"
 

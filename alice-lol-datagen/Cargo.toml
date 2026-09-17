@@ -2,6 +2,7 @@
 name = "alice-lol-datagen"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.90"
 description = "Synthetic (caption, LOL) pair generator for ALICE-LOL — template families emit LOL text, bilingual captions and oracle points from the same parameters (Track C1)."
 license = "MIT OR Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
@@ -13,7 +14,7 @@ categories = ["graphics", "science"]
 publish = false
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.3", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.4", default-features = false }
 glam = "0.29"
 
 [features]
