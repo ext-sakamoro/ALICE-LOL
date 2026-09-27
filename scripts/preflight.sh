@@ -21,26 +21,55 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1 ($2)" >&2; 
 has_toolchain() { rustup toolchain list | grep -q "^$1"; }
 
 # Steps CI runs that this file cannot reproduce locally (they can only fail remotely):
-#   - ci.yml:test:Build (needs network / runner-only)
-#   - ci.yml:test:Test (needs network / runner-only)
-#   - ci.yml:test:Build examples (needs network / runner-only)
 #   - ci.yml:gpu-parity:Install Mesa software Vulkan (lavapipe) (needs network / runner-only)
 #   - security-audit.yml:audit:Install cargo-audit (needs network / runner-only)
 #   - security-audit.yml:deny:Install cargo-deny (needs network / runner-only)
 #   - security-audit.yml:coverage (job is continue-on-error: informational in CI)
 #   - security-audit.yml:semver-checks (job is continue-on-error: informational in CI)
-#   - fuzz.yml:fuzz:Create SDF dependency stubs (no cargo / grep)
-#   - fuzz.yml:fuzz:Install cargo-fuzz (needs network / runner-only)
-#   - fuzz.yml:fuzz:Build fuzz target (needs network / runner-only)
-#   - fuzz.yml:fuzz:Set fuzz duration (no cargo / grep)
-#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) (continue-on-error)
-#   - fuzz.yml:fuzz:Report crash (informational) (no cargo / grep)
+#   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_lol_parse] (no cargo / grep)
+#   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_lol_parse] (needs network / runner-only)
+#   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_parse] (no cargo / grep)
+#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_lol_parse] (continue-on-error)
+#   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_lol_parse] (no cargo / grep)
+#   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_lol_to_wgsl] (no cargo / grep)
+#   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_lol_to_wgsl] (needs network / runner-only)
+#   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_to_wgsl] (no cargo / grep)
+#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_lol_to_wgsl] (continue-on-error)
+#   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_lol_to_wgsl] (no cargo / grep)
+#   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_lol_eval] (no cargo / grep)
+#   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_lol_eval] (needs network / runner-only)
+#   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_eval] (no cargo / grep)
+#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_lol_eval] (continue-on-error)
+#   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_lol_eval] (no cargo / grep)
+#   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_lol_emit_parity] (no cargo / grep)
+#   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_lol_emit_parity] (needs network / runner-only)
+#   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_emit_parity] (no cargo / grep)
+#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_lol_emit_parity] (continue-on-error)
+#   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_lol_emit_parity] (no cargo / grep)
 
 need actionlint "brew install actionlint"
 need cargo-audit "cargo install cargo-audit --locked"
 need cargo-deny "cargo install cargo-deny --locked"
 need cargo-machete "cargo install cargo-machete --locked"
 has_toolchain 1.90 || { echo "missing toolchain 1.90 (rustup toolchain install 1.90)" >&2; exit 1; }
+
+step "ci.yml / test: Build"
+( export CARGO_TERM_COLOR="always"; cargo build )
+
+step "ci.yml / test: Build examples"
+( export CARGO_TERM_COLOR="always"; cargo build --examples )
+
+step "ci.yml / test: Build [features=--features llm-bridge]"
+( export CARGO_TERM_COLOR="always"; cargo build --features llm-bridge )
+
+step "ci.yml / test: Build examples [features=--features llm-bridge]"
+( export CARGO_TERM_COLOR="always"; cargo build --examples --features llm-bridge )
+
+step "ci.yml / test: Build [features=--features glsl,wgsl,hlsl]"
+( export CARGO_TERM_COLOR="always"; cargo build --features glsl,wgsl,hlsl )
+
+step "ci.yml / test: Build examples [features=--features glsl,wgsl,hlsl]"
+( export CARGO_TERM_COLOR="always"; cargo build --examples --features glsl,wgsl,hlsl )
 
 step "ci.yml / clippy: Clippy"
 relint
@@ -107,9 +136,46 @@ step "security-audit.yml / stub-guard: Detect TODO / FIXME / XXX / HACK (informa
   fi
 )
 
-step "fuzz.yml / build every fuzz target (nightly; the replay needs the runner)"
+step "fuzz.yml / fuzz: Build fuzz target [target=fuzz_lol_parse]"
 if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
-  (cd fuzz && cargo +nightly fuzz build)
+  (
+    export CARGO_TERM_COLOR="always"
+    cd fuzz
+    cargo +nightly fuzz build "fuzz_lol_parse"
+  )
+else
+  echo "skip: nightly / cargo-fuzz not installed" >&2
+fi
+
+step "fuzz.yml / fuzz: Build fuzz target [target=fuzz_lol_to_wgsl]"
+if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
+  (
+    export CARGO_TERM_COLOR="always"
+    cd fuzz
+    cargo +nightly fuzz build "fuzz_lol_to_wgsl"
+  )
+else
+  echo "skip: nightly / cargo-fuzz not installed" >&2
+fi
+
+step "fuzz.yml / fuzz: Build fuzz target [target=fuzz_lol_eval]"
+if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
+  (
+    export CARGO_TERM_COLOR="always"
+    cd fuzz
+    cargo +nightly fuzz build "fuzz_lol_eval"
+  )
+else
+  echo "skip: nightly / cargo-fuzz not installed" >&2
+fi
+
+step "fuzz.yml / fuzz: Build fuzz target [target=fuzz_lol_emit_parity]"
+if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
+  (
+    export CARGO_TERM_COLOR="always"
+    cd fuzz
+    cargo +nightly fuzz build "fuzz_lol_emit_parity"
+  )
 else
   echo "skip: nightly / cargo-fuzz not installed" >&2
 fi
@@ -117,6 +183,15 @@ fi
 if [[ $quick -eq 1 ]]; then
   echo; echo "preflight --quick OK (test / bench suites skipped)"; exit 0
 fi
+
+step "ci.yml / test: Test"
+( export CARGO_TERM_COLOR="always"; cargo test )
+
+step "ci.yml / test: Test [features=--features llm-bridge]"
+( export CARGO_TERM_COLOR="always"; cargo test --features llm-bridge )
+
+step "ci.yml / test: Test [features=--features glsl,wgsl,hlsl]"
+( export CARGO_TERM_COLOR="always"; cargo test --features glsl,wgsl,hlsl )
 
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
