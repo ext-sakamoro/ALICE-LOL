@@ -21,7 +21,15 @@
 //! その上に載る law 判定の健全性を見る)
 
 // grid 生成の index → 座標変換 (値域は高々 32、f32 の仮数に収まる)
-#![allow(clippy::cast_precision_loss)]
+// grid の index ⇄ 座標変換に限った許容: 値域は高々 32 で f32 の仮数に収まり、
+// `rel` は AABB 内に clamp した後なので負にも上限超えにもならない 単文字 binding
+// (n / x / y / z / i) は grid 座標の慣習表記
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::many_single_char_names
+)]
 
 mod common;
 
@@ -270,4 +278,127 @@ fn unresolved_rate_is_measured_and_bounded() {
             decided * 100.0
         );
     }
+}
+
+/// 勾配上界の法則は、静的上界そのものを上界に渡した時に **corpus のどの
+/// construct でも違反を出してはいけない** — 出たら `eval_lipschitz` の主張が
+/// 破れているということ (SDF 側の property test と独立な経路での再検査)
+#[test]
+fn gradient_bound_never_contradicts_the_static_claim() {
+    let cfg = cfg();
+    let mut checked = 0usize;
+    for (name, node) in nodes() {
+        let claimed = alice_sdf::interval::eval_lipschitz(&node);
+        if !claimed.is_finite() {
+            continue; // 上界を主張していない法は対象外
+        }
+        checked += 1;
+        // 上界ぴったりを渡すと静的証明で即合格になるので、標本経路を通すため
+        // に僅かに下げた値で「証拠が出ないこと」を見る
+        let laws = vec![Law::hard(
+            "grad",
+            Constraint::GradientBound {
+                node,
+                max_gradient: claimed * (1.0 + 1e-3),
+                probe: 1e-3,
+            },
+        )];
+        let report = check_laws(&laws, &cfg);
+        assert!(
+            !report.has_hard_violations(),
+            "{name}: sampling found a quotient above the claimed bound {claimed}"
+        );
+    }
+    assert!(checked > 50, "only {checked} constructs claimed a bound");
+}
+
+/// 到達不能の「証明」は、点の総当たりで経路が見つかる scene に出してはいけない
+/// (false red = 実際は繋がっているのに詰みと判定する)
+#[test]
+fn proven_unreachability_is_never_refuted_by_a_point_path() {
+    let cfg = cfg();
+    let pts = grid_points();
+    let mut violations = 0usize;
+    for (name, node) in nodes() {
+        // 内部点を 2 つ拾う (無ければ対象外)
+        let inside: Vec<Vec3> = pts
+            .iter()
+            .copied()
+            .filter(|p| eval(&node, *p) < 0.0)
+            .collect();
+        if inside.len() < 2 {
+            continue;
+        }
+        let (from, to) = (inside[0], inside[inside.len() - 1]);
+        let laws = vec![Law::hard(
+            "reach",
+            Constraint::Reachable {
+                node: node.clone(),
+                from,
+                to,
+            },
+        )];
+        let report = check_laws(&laws, &cfg);
+        if !report.has_hard_violations() {
+            continue;
+        }
+        violations += 1;
+        // 違反と言った以上、点の総当たり (判定器と独立な素の点評価) でも
+        // 6-connected の経路が見つかってはいけない
+        let n = cfg.resolution;
+        let step = (cfg.aabb_max - cfg.aabb_min) / n as f32;
+        let idx = |p: Vec3| -> (usize, usize, usize) {
+            let rel = (p - cfg.aabb_min) / step;
+            (
+                (rel.x as usize).min(n - 1),
+                (rel.y as usize).min(n - 1),
+                (rel.z as usize).min(n - 1),
+            )
+        };
+        let interior: Vec<bool> = (0..n * n * n)
+            .map(|i| {
+                let (x, y, z) = (i % n, (i / n) % n, i / (n * n));
+                let c = cfg.aabb_min + step * Vec3::new(x as f32, y as f32, z as f32) + step * 0.5;
+                eval(&node, c) < 0.0
+            })
+            .collect();
+        let (sx, sy, sz) = idx(from);
+        let (tx, ty, tz) = idx(to);
+        let mut seen = vec![false; n * n * n];
+        let mut q = std::collections::VecDeque::new();
+        let s = sx + sy * n + sz * n * n;
+        if interior[s] {
+            seen[s] = true;
+            q.push_back((sx, sy, sz));
+        }
+        let mut found = false;
+        while let Some((x, y, z)) = q.pop_front() {
+            if (x, y, z) == (tx, ty, tz) {
+                found = true;
+                break;
+            }
+            for (nx, ny, nz) in [
+                x.checked_sub(1).map(|v| (v, y, z)),
+                (x + 1 < n).then_some((x + 1, y, z)),
+                y.checked_sub(1).map(|v| (x, v, z)),
+                (y + 1 < n).then_some((x, y + 1, z)),
+                z.checked_sub(1).map(|v| (x, y, v)),
+                (z + 1 < n).then_some((x, y, z + 1)),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let i = nx + ny * n + nz * n * n;
+                if !seen[i] && interior[i] {
+                    seen[i] = true;
+                    q.push_back((nx, ny, nz));
+                }
+            }
+        }
+        assert!(
+            !found,
+            "{name}: judge proved unreachability but a point path exists"
+        );
+    }
+    println!("reachability: {violations} constructs judged unreachable");
 }

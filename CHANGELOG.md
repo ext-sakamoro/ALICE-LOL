@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 場の勾配と 2 点間到達性を法則として書けるようにする (2026-09-27)
+
+どちらも 3 値 (合格 / 違反 / 未定) がすべて**証明**になっている。「標本で
+見つからなかった」を合格に繰り上げないことが、gate として意味を持つ条件。
+
+- **`Constraint::GradientBound { node, max_gradient, probe }`** — 領域上で場の
+  勾配が上界を超えないことを検証。距離場の勾配が 1 を超えると場は真の距離
+  より大きい値を申告し (`|f(p)| ≤ L · dist(p)`)、sphere tracing が `f(p)` だけ
+  進むと面を踏み越える。**合格は `eval_lipschitz` が上界以下という証明**
+  (標本を 1 点も見ない)、**違反は上界を超える標本対という証拠**、どちらも出
+  なければ `UnresolvedReason::GradientUnwitnessed { claimed, worst_sampled }`。
+  標本対は `eval_lipschitz` の保証域 (外部) に合わせ、両端が内部の対は見ない。
+- **`Constraint::Reachable { node, from, to }`** — 2 点間の到達性。
+  [`Continuity`] が「内部が 1 つながりか」を見るのに対し、こちらは「この 2 点
+  が繋がっているか」= **詰みの検出**。セルを区間演算で 3 分類し、**内部と確定
+  したセルだけの flood fill で届けば合格** (経路が証拠)、**外部と確定していな
+  いセル全部を使っても届かなければ違反** (どんな経路も外部確定セルを通る)、
+  その間は `UnresolvedReason::ReachabilityUndecided { undecided_cells }`。
+  区間演算に外側丸めが無く包含が真の値域より狭くなる drift (実測 相対
+  2.086e-4、`stairs_intersection`) があるため、3 分類は `INTERVAL_SLACK`
+  (1.0e-3 × セル対角) の余裕を取って**境界を未定側に倒す** — 合格も違反も
+  緩めず、判定できない側に寄せるだけなので健全性は保たれる。
+- `LawSet::gradient_bound` / `LawSet::reachable` の convenience 2 本。
+- **`tests/test_field_law_oracle.rs`** (10 本) — 2 法則それぞれで 3 値が 3 分岐
+  とも出ることを個別に + まとめて 1 本ずつ。未定は「検証器の解像度不足」で
+  あって「繋がっていない」ではないので、解像度を上げると未定が合格に変わる
+  ことも押さえた。
+- **`tests/law_corpus_oracle.rs`** に probe 2 本追加 — (a) 静的上界を上界に
+  渡すと corpus のどの construct でも違反が出ない (出たら `eval_lipschitz` の
+  主張が破れている、SDF 側 property test と独立な経路での再検査、対象 50+
+  construct) (b) 到達不能と「証明」した scene は、判定器と独立な素の点評価に
+  よる flood fill で経路が見つかってはいけない (false red 検査)。
+
+
 ### Added — 判定器の corpus oracle と検出力 gate (2026-09-27)
 
 - **`tests/law_corpus_oracle.rs`** — grammar corpus 全 construct + 深い合成

@@ -127,6 +127,43 @@ pub enum Constraint {
         /// flood fill の起点 (内部点、sdf(seed) < 0 でなければ invalid)
         seed_point: Vec3,
     },
+    /// 領域上で場の勾配が上界を超えないことを検証
+    ///
+    /// 距離場の勾配が 1 を超えるとき、場は真の距離より大きい値を申告する
+    /// (`|f(p)| ≤ L · dist(p)`)。sphere tracing が `f(p)` だけ進むと面を
+    /// 踏み越えるので、薄い形状が貫通する。逆に 1 を下回るのは緩みで、
+    /// 正しさは保たれたまま step 数だけが増える。
+    ///
+    /// 三値の出方が他の法則と違う: 合格は**静的上界による証明**
+    /// (`eval_lipschitz(node) ≤ max_gradient`)、違反は**証拠の 2 点**
+    /// (差分商が上界を超える標本対)、そのどちらも出なければ未定
+    /// (標本は「無いこと」を証明できない)。
+    GradientBound {
+        /// 対象ノード
+        node: SdfNode,
+        /// 許容する最大勾配 (1.0 = 距離を過大申告しない)
+        max_gradient: f32,
+        /// 差分商を取る 2 点の間隔
+        probe: f32,
+    },
+    /// `from` から `to` へ内部領域を通って到達できることを検証
+    ///
+    /// [`Continuity`](Self::Continuity) が「内部が 1 つながりか」を見るのに
+    /// 対し、こちらは「この 2 点が繋がっているか」を見る。詰み (行きたい
+    /// 場所へ到達できない状態) の検出はこちらでしかできない。
+    ///
+    /// 三値はすべて証明になっている: 区間演算で**内部と確定した**セルだけを
+    /// 辿って到達できれば合格、**外部と確定した**セルが 2 点を隔てていれば
+    /// 違反 (どんな経路も外部を通らざるを得ない)、判定できないセルを通らな
+    /// ければ繋がらない場合は未定。
+    Reachable {
+        /// 対象ノード
+        node: SdfNode,
+        /// 出発点 (内部)
+        from: Vec3,
+        /// 目的点 (内部)
+        to: Vec3,
+    },
     /// morph 前後の体積保存を検証
     ///
     /// grid 上で before / after 各 SDF の内部セル数を count
@@ -207,6 +244,20 @@ pub enum UnresolvedReason {
     GapUnbracketed {
         /// 表面間距離の上界
         upper: f32,
+    },
+    /// 勾配の上界超過を示す標本対が見つからなかったが、静的上界も
+    /// 上界以下を保証しない (標本は「無いこと」を証明できない)
+    GradientUnwitnessed {
+        /// 静的上界が主張する値 (保証できなかった側)
+        claimed: f32,
+        /// 標本で見つかった最大の差分商
+        worst_sampled: f32,
+    },
+    /// 内部と確定したセルだけでは到達できず、外部と確定したセルだけでは
+    /// 隔てられてもいない (判定できないセルを経由すれば繋がる)
+    ReachabilityUndecided {
+        /// 判定できなかったセルを経由した経路の長さ (セル数)
+        undecided_cells: usize,
     },
 }
 
@@ -1027,6 +1078,14 @@ fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
             violation: check_continuity(node, *seed_point, &law.name, law.priority, config),
             unresolved: None,
         },
+        Constraint::GradientBound {
+            node,
+            max_gradient,
+            probe,
+        } => check_gradient_bound(node, *max_gradient, *probe, &law.name, law.priority, config),
+        Constraint::Reachable { node, from, to } => {
+            check_reachable(node, *from, *to, &law.name, law.priority, config)
+        }
         Constraint::VolumeConservation {
             before,
             after,
@@ -1285,6 +1344,265 @@ fn check_continuity(
     None
 }
 
+/// セルの箱を `Vec3Interval` にする
+fn cell_box(config: &CheckConfig, step: Vec3, ix: usize, iy: usize, iz: usize) -> Vec3Interval {
+    #[allow(clippy::cast_precision_loss)]
+    let lo = config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32);
+    let hi = lo + step;
+    Vec3Interval {
+        x: Interval { lo: lo.x, hi: hi.x },
+        y: Interval { lo: lo.y, hi: hi.y },
+        z: Interval { lo: lo.z, hi: hi.z },
+    }
+}
+
+/// 勾配上界の検証 — 合格は静的上界の証明、違反は証拠の 2 点、他は未定
+fn check_gradient_bound(
+    node: &SdfNode,
+    max_gradient: f32,
+    probe: f32,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    // 静的上界が上界以下なら、標本を 1 点も取らずに合格が証明される
+    let claimed = alice_sdf::interval::eval_lipschitz(node);
+    if claimed <= max_gradient {
+        return Verdict {
+            violation: None,
+            unresolved: None,
+        };
+    }
+
+    let n = config.resolution;
+    let extent = config.aabb_max - config.aabb_min;
+    #[allow(clippy::cast_precision_loss)]
+    let step = extent / (n as f32);
+    let h = if probe > 0.0 { probe } else { step.x * 0.25 };
+
+    let mut worst = 0.0_f32;
+    let mut worst_at = config.aabb_min;
+    let mut worst_cell = (0usize, 0usize, 0usize);
+
+    for (ix, iy, iz, _) in grid_indices(n) {
+        #[allow(clippy::cast_precision_loss)]
+        let center =
+            config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32) + step * 0.5;
+        let fp = sdf_eval(node, center);
+        for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+            let q = center + axis * h;
+            let fq = sdf_eval(node, q);
+            // eval_lipschitz の保証は外部の主張なので、両端が内部の対は見ない
+            if fp < 0.0 && fq < 0.0 {
+                continue;
+            }
+            if !fp.is_finite() || !fq.is_finite() {
+                continue;
+            }
+            let quotient = (fp - fq).abs() / h;
+            if quotient > worst {
+                worst = quotient;
+                worst_at = center;
+                worst_cell = (ix, iy, iz);
+            }
+        }
+    }
+
+    if worst > max_gradient {
+        // 証拠が出た = 違反が証明された
+        return Verdict {
+            violation: Some(Violation {
+                law_name: law_name.to_string(),
+                priority,
+                residual: worst - max_gradient,
+                point: worst_at,
+                region: cell_box(config, step, worst_cell.0, worst_cell.1, worst_cell.2),
+            }),
+            unresolved: None,
+        };
+    }
+
+    // 標本では超過が出なかったが、静的上界も上界以下を保証しない
+    Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point: worst_at,
+            region: cell_box(config, step, worst_cell.0, worst_cell.1, worst_cell.2),
+            reason: UnresolvedReason::GradientUnwitnessed {
+                claimed,
+                worst_sampled: worst,
+            },
+        }),
+    }
+}
+
+/// `a` から `b` へ、`allowed` なセルだけを 6-connected で辿れるか
+///
+/// 「どのセルを通ってよいか」を差し替えて 2 回呼ぶのがこの法則の要点:
+/// 内部と確定したセルだけで届けば合格の証拠、外部と確定していないセル
+/// 全部を使っても届かなければ到達不能の証拠になる。
+fn flood_reaches(
+    n: usize,
+    a: (usize, usize, usize, usize),
+    b: (usize, usize, usize),
+    allowed: &dyn Fn(usize) -> bool,
+) -> bool {
+    if !allowed(a.3) {
+        return false;
+    }
+    let mut visited = vec![false; n * n * n];
+    let mut queue = std::collections::VecDeque::new();
+    visited[a.3] = true;
+    queue.push_back((a.0, a.1, a.2));
+    while let Some((x, y, z)) = queue.pop_front() {
+        if (x, y, z) == b {
+            return true;
+        }
+        let neighbors = [
+            x.checked_sub(1).map(|v| (v, y, z)),
+            (x + 1 < n).then_some((x + 1, y, z)),
+            y.checked_sub(1).map(|v| (x, v, z)),
+            (y + 1 < n).then_some((x, y + 1, z)),
+            z.checked_sub(1).map(|v| (x, y, v)),
+            (z + 1 < n).then_some((x, y, z + 1)),
+        ];
+        for (nx, ny, nz) in neighbors.into_iter().flatten() {
+            let nidx = nx + ny * n + nz * n * n;
+            if !visited[nidx] && allowed(nidx) {
+                visited[nidx] = true;
+                queue.push_back((nx, ny, nz));
+            }
+        }
+    }
+    false
+}
+
+/// セルを「内部確定 / 外部確定 / 未定」に分ける時の余裕
+///
+/// 区間演算に外側丸めが無いので、包含が真の値域より **狭くなる** 方向の drift
+/// が実測で相対 2.086e-4 ある (`stairs_intersection` で子の区間が親の外に出た、
+/// 2026-09-27)。`lo >= 0` をそのまま「外部確定」に使うと、その分だけ偽の
+/// 到達不能 (偽の詰み) を主張しうる。判定を `lo > eps` / `hi < -eps` に狭める
+/// と、境界のセルは確定でなく **未定**に倒れる — 合格も違反も緩まず、判定
+/// できない側に寄るだけなので健全性は保たれる。
+const INTERVAL_SLACK: f32 = 1.0e-3;
+
+/// 2 点間の到達性 — 3 値すべてが証明になる
+///
+/// セルを区間演算で「内部と確定」「外部と確定」「未定」に分け、内部確定
+/// セルだけの flood fill で届けば合格、外部確定でないセル全体の flood fill
+/// でも届かなければ違反 (どんな経路も外部確定セルを通る)、その間なら未定。
+fn check_reachable(
+    node: &SdfNode,
+    from: Vec3,
+    to: Vec3,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let n = config.resolution;
+    let extent = config.aabb_max - config.aabb_min;
+    #[allow(clippy::cast_precision_loss)]
+    let step = extent / (n as f32);
+
+    // 区間演算による 3 分類 (INTERVAL_SLACK の余裕つき、境界は未定に倒す)
+    let slack = INTERVAL_SLACK * step.length().max(1.0);
+    let mut proven_inside = vec![false; n * n * n];
+    let mut proven_outside = vec![false; n * n * n];
+    let mut undecided: usize = 0;
+    for (ix, iy, iz, idx) in grid_indices(n) {
+        let iv = alice_sdf::interval::eval_interval(node, cell_box(config, step, ix, iy, iz));
+        if iv.lo > slack {
+            proven_outside[idx] = true;
+        } else if iv.hi < -slack {
+            proven_inside[idx] = true;
+        } else {
+            undecided += 1;
+        }
+    }
+
+    let cell_of = |p: Vec3| -> Option<(usize, usize, usize, usize)> {
+        let rel = (p - config.aabb_min) / step;
+        if rel.x < 0.0 || rel.y < 0.0 || rel.z < 0.0 {
+            return None;
+        }
+        let (x, y, z) = (
+            grid_index(rel.x, n),
+            grid_index(rel.y, n),
+            grid_index(rel.z, n),
+        );
+        Some((x, y, z, x + y * n + z * n * n))
+    };
+
+    let (Some(a), Some(b)) = (cell_of(from), cell_of(to)) else {
+        return Verdict {
+            violation: None,
+            unresolved: Some(Unresolved {
+                law_name: law_name.to_string(),
+                priority,
+                point: from,
+                region: cell_box(config, step, 0, 0, 0),
+                reason: UnresolvedReason::ReachabilityUndecided {
+                    undecided_cells: undecided,
+                },
+            }),
+        };
+    };
+
+    // 端点が外部と確定していれば、到達以前に前提が破れている
+    for (cell, p) in [(a, from), (b, to)] {
+        if proven_outside[cell.3] {
+            return Verdict {
+                violation: Some(Violation {
+                    law_name: law_name.to_string(),
+                    priority,
+                    residual: sdf_eval(node, p),
+                    point: p,
+                    region: cell_box(config, step, cell.0, cell.1, cell.2),
+                }),
+                unresolved: None,
+            };
+        }
+    }
+
+    // 内部と確定したセルだけで届けば、経路そのものが合格の証拠
+    if flood_reaches(n, a, (b.0, b.1, b.2), &|i| proven_inside[i]) {
+        return Verdict {
+            violation: None,
+            unresolved: None,
+        };
+    }
+    // 外部と確定していないセルを全部使っても届かなければ、どんな経路も
+    // 外部確定セルを通る = 到達不能が証明された
+    if !flood_reaches(n, a, (b.0, b.1, b.2), &|i| !proven_outside[i]) {
+        return Verdict {
+            violation: Some(Violation {
+                law_name: law_name.to_string(),
+                priority,
+                residual: -(from - to).length(),
+                point: to,
+                region: cell_box(config, step, b.0, b.1, b.2),
+            }),
+            unresolved: None,
+        };
+    }
+
+    Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point: to,
+            region: cell_box(config, step, b.0, b.1, b.2),
+            reason: UnresolvedReason::ReachabilityUndecided {
+                undecided_cells: undecided,
+            },
+        }),
+    }
+}
+
 /// grid の (ix, iy, iz, `flat_idx`) を返すヘルパー
 fn grid_indices(n: usize) -> impl Iterator<Item = (usize, usize, usize, usize)> {
     (0..n).flat_map(move |iz| {
@@ -1463,6 +1781,33 @@ impl LawSet {
     #[must_use]
     pub fn continuity(self, name: impl Into<String>, node: SdfNode, seed_point: Vec3) -> Self {
         self.hard(name, Constraint::Continuity { node, seed_point })
+    }
+
+    /// `GradientBound` 制約を hard で追加する convenience
+    ///
+    /// `max_gradient = 1.0` が「距離を過大申告しない」の意味。
+    #[must_use]
+    pub fn gradient_bound(
+        self,
+        name: impl Into<String>,
+        node: SdfNode,
+        max_gradient: f32,
+        probe: f32,
+    ) -> Self {
+        self.hard(
+            name,
+            Constraint::GradientBound {
+                node,
+                max_gradient,
+                probe,
+            },
+        )
+    }
+
+    /// `Reachable` 制約を hard で追加する convenience
+    #[must_use]
+    pub fn reachable(self, name: impl Into<String>, node: SdfNode, from: Vec3, to: Vec3) -> Self {
+        self.hard(name, Constraint::Reachable { node, from, to })
     }
 
     /// `VolumeConservation` 制約を hard で追加する convenience
