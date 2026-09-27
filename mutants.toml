@@ -1,0 +1,18 @@
+# cargo-mutants 設定 (`.github/workflows/quality-deep.yml` と local 実行で共有)
+#
+# 判定器 `alice-lol/src/law.rs` の生存変異は 0 を gate にする ただし「変異させ
+# ても結果が変わらない = 等価変異」は原理的に殺せないので、理由を書いた上で
+# 除外する 除外を足す時は **なぜ結果が変わらないか** を 1 行で書くこと
+# (「test を書くのが面倒」は理由にならない)
+
+# 判定器の区間による事前 filter は **速度のためだけ** の枝刈り:
+# `contact_upper_bound` の `if sdf_interval(a, e).lo > 0.0 || sdf_interval(b, e).lo > 0.0
+#  { continue; }` を緩めても、後段の `probe_ball` が交点を見つけられず `continue`
+# するので上界は変わらない (仕事量が増えるだけ) 逆に厳しくしても、落ちるのは
+# 上界候補であって「合格の証明」ではないため verdict は pass でなく未決定に
+# 倒れる = 健全性は保たれる
+exclude_re = [
+    "contact_upper_bound.*replace \\|\\| with &&",
+    "contact_upper_bound.*replace > with ==",
+    "contact_upper_bound.*replace > with >=",
+]

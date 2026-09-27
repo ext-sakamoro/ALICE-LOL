@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 判定器の corpus oracle と検出力 gate (2026-09-27)
+
+- **`tests/law_corpus_oracle.rs`** — grammar corpus 全 construct + 深い合成
+  fixture (計 244) を **総当たり反証器**と突き合わせる。`analytic_law.rs` が
+  手計算できる 16 scene を見るのに対し、こちらは LOL の入口 (`parse_lol`) から
+  到達できる形すべてに対して 2 方向を見る:
+  - **false green** — 素の点評価 (区間演算を使わない独立実装) が「両方の内部に
+    ある点」を実際に見つけたのに、判定器が `all_passed()` (= 証明付き合格) を
+    返したら fail。未決定は合格ではないので許容する。
+  - **false red** — hard violation を報告したなら、**その報告点で実際に両方が
+    負**でなければ fail (落ちた時だけ近傍を総当たりして切り分ける)。
+  - あわせて**未決定率を実測して print** する (resolution 4 / 8 / 16)。実測:
+    `MinThickness(0.2)` で決着率 87.7 % → 92.2 % → 99.6 %。
+  - 初回実行で `flange_mount` の **偽の証明付き合格**を検出した。真因は
+    `alice-sdf` の `PolarRepeat` 区間 (`count ≤ 2` で扇形が潰れる) で、
+    ALICE-SDF 3.1.1 側で修正済み。
+- **`.github/workflows/quality-deep.yml`** (canonical: ALICE-Physics) —
+  `cargo-mutants` で判定器 `law.rs` の**検出力**を測り、**生存変異 0 を gate**
+  にする。law.rs / 判定器 test を触った PR と週次 + 手動で実行 (1 mutant ≈
+  25 s build + 50 s test なので push 毎には回さない)。multi-repo layout では
+  `--in-place` が必須 (tree copy で sibling path dep が切れる) なので `-j 1`。
+  等価変異は **理由付きで `mutants.toml` に除外**を書く運用にした。
+- **`law::core_probe_tests` に 3 本追加** (2026-09-27 の mutants 実測で生き残って
+  いた変異を塞ぐ):
+  - `gap_exceeds_does_not_clear_a_box_whose_interval_touches_zero` — 区間の下界が
+    **厳密に 0.0** (表面に接する) の箱を「離れている」と刈ると、証明していない
+    gap を証明済と言う。`> 0.0` → `>= 0.0` の変異 2 件 (a 側 / b 側) を殺す。
+  - `contact_upper_bound_radius_includes_the_cell_diagonal` — 探索半径から cell
+    対角が落ちると上界を見失う。`(aabb_max − aabb_min)` の `−` を `+` / `/` に
+    する変異 2 件を殺す。
+  - `contact_upper_bound_only_samples_points_outside_both` — 上界の標本点は両方の
+    外側に限る。`fa <= 0.0 || fb <= 0.0` を `&&` にする変異を殺す。
+
 ### Changed — breaking: 法則検証器が場の値を距離として使わなくなった (0.4.0)
 - **距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) を Lipschitz 非依存の三値判定に置換** — 旧実装は `sdf_eval` の返り値を距離として使っていたので、TPMS (場が距離を √3〜7 倍に過大申告) では 0.058 の薄壁を 0.1 と読んで合格させ、union の内部 (場が過小) では 0.87 の肉厚を 0.5 と読んで不合格にし、格子より薄い重なり / はみ出しは標本点をすり抜けていた (セルフレビュー 2026-09-16 § 4「検証器が嘘をつく」) 新実装は `alice_sdf::interval::eval_interval` (区間演算) で「箱に表面なし」を **証明**、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の **証拠** (二分探索で締めた上界) を取り、八分木深さ `BALL_PROBE_DEPTH = 4` で決められなかった標本点は **unresolved** として報告する 違反の検出は健全 (偽陽性なし)、合格は標本点ごとの証明
 - **`LawReport` に `unresolved: Vec<Unresolved>` を追加、`all_passed()` は「違反なし かつ 判定不能なし」に変更** (silent 合格の廃止、struct literal で `LawReport` を組んでいる下流は field 追加で breaking) 新 API: `LawReport::has_unresolved()` / `Unresolved { law_name, priority, point, region, reason }` / `UnresolvedReason` (`SurfaceProximity { radius }` / `SignUndecided` / `GapUnbracketed { upper }`、`#[non_exhaustive]`) / `format_report` に `[UNDECIDED]` 行

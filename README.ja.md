@@ -254,6 +254,15 @@ let report = laws.check();
 
 MIT OR Apache-2.0
 
+### クレジット
+
+LOL DSL が公開しているのは [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF)
+の primitive 群なので、同 crate の attribution がそのまま適用される 距離関数の
+**数式の形**の多くは **Inigo Quilez** の記事 / Shadertoy 由来、stairs / columns /
+chamfer 系の演算子は **Mercury の hg_sdf** 由来、noise の勾配テーブルは
+**Ken Perlin** 由来で、実装自体は ALICE-SDF の Rust code 一覧:
+[ALICE-SDF/THIRD-PARTY-NOTICES.md](https://github.com/ext-sakamoro/ALICE-SDF/blob/main/THIRD-PARTY-NOTICES.md)
+
 ## 関連プロジェクト
 
 - [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) — SDF 評価、コンパイルバックエンド、SIMD、BVH

@@ -13,6 +13,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-det-math"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec8d3b3d03fd356783464757eb23dc02a9be962eab11455ca36915a49688c153"
+
+[[package]]
 name = "alice-kinematics"
 version = "0.1.0"
 dependencies = [
@@ -89,14 +95,14 @@ dependencies = [
 name = "alice-physics"
 version = "1.4.0"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.3.0",
 ]
 
 [[package]]
 name = "alice-sdf"
 version = "3.1.0"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.2.0",
  "bincode",
  "bytemuck",
  "crc32fast",
