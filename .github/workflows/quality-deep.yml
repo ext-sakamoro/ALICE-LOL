@@ -1,16 +1,31 @@
 # 深層品質 job (canonical: ALICE-Physics `.github/workflows/quality-deep.yml`)
 #
-# - mutants : cargo-mutants で **判定器 `alice-lol/src/law.rs` の検出力**を測る
+# - mutants : cargo-mutants で **sound 化した判定器の核の検出力**を測る
 #             test が green でも、比較演算子を 1 つ書き換えて誰も落ちないなら
 #             その分岐は検査されていない 生存変異 0 が gate (等価変異の除外は
 #             `mutants.toml` に理由付きで書く)
+#
+# 対象は `--re` で **核の関数に限定** する 2 つの理由 (2026-09-27 実測、初回
+# run 36320622842 の失敗から):
+#
+#   1. `--file alice-lol/src/law.rs` は 433 mutant を選ぶが、その 61 件は
+#      sound 化の**対象外**と既知の 3 proxy law (`check_continuity` /
+#      `check_thermal` / `check_volume_conservation`、格子解像度依存) にある
+#      → 「生存 0」を file 全体に課すと原理的に達成できない gate になる
+#   2. 433 mutant × 175 s ≈ 21 時間で runner が落ちた test 集合に
+#      `--test law_corpus_oracle` (debug 106 s) を入れていたのが主因なので、
+#      測定の test 集合は `--lib` + 解析解 oracle + law_tests に絞る
+#      (corpus oracle は ci.yml の test job 側で毎 push 回っている)
+#
+# **sound 化した law を足したら `--re` にその関数名を足すこと** — 足さないと
+# 新しい判定経路は測定対象外のまま green に見える
 #
 # 罠 #22 (continue-on-error は compile error も green に潰す) に従い
 # continue-on-error は使わない measurement の exit code (2 = missed、3 =
 # timeout) は受けてから中身で判定する
 #
-# 1 mutant ≈ 25 s build + 50 s test なので push 毎には回さない: law.rs と
-# 判定器 test を触った PR (--in-diff) / 週次 / 手動
+# 1 mutant ≈ 6 s build + 55 s test なので push 毎には回さない: law.rs と
+# 判定器 test を触った PR / 週次 / 手動 4 shard 並列で 1 shard 30-40 分
 name: Quality Deep
 
 on:
@@ -36,9 +51,13 @@ env:
 
 jobs:
   mutants:
-    name: Mutation testing (law verifier)
+    name: Mutation testing (law core, shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       # ci.yml と同じ multi-repo checkout (罠 #13 / #21: alice-lol は sibling の
       # 実 API を無条件 use するので stub では compile できない)
@@ -81,14 +100,19 @@ jobs:
       # in-place は tree を書き換えるので並列不可 — `--jobs` と併用すると
       # cargo-mutants 自身が usage error で落ちる (2026-09-27 実測)
       # test 集合は判定器を動かすものだけ (`--lib` が law.rs 内 `core_probe_tests`)
-      - name: Mutants (law verifier)
+      - name: Mutants (law core, shard ${{ matrix.shard }}/4)
         working-directory: ALICE-LOL
         run: |
+          # 罠 #44: 変異した `const fn` が rustc の const-eval を無限ループさせ、
+          # test timeout が効かないまま runner が OOM で死ぬ
+          ulimit -v 6291456
           set +e
-          cargo mutants --in-place --timeout 300 --build-timeout 240 \
+          cargo mutants --in-place --shard ${{ matrix.shard }}/4 \
+            --timeout 300 --build-timeout 240 \
             --output mutants.out \
             --file alice-lol/src/law.rs \
-            -- --lib --test analytic_law --test law_tests --test law_corpus_oracle
+            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact' \
+            -- --lib --test analytic_law --test law_tests
           rc=$?
           set -e
           # 0 = 全て caught、2 = missed あり、3 = timeout あり → ここでは測定結果
@@ -101,7 +125,7 @@ jobs:
         working-directory: ALICE-LOL
         run: |
           {
-            echo "## cargo-mutants — law verifier (\`alice-lol/src/law.rs\`)"
+            echo "## cargo-mutants — law core shard ${{ matrix.shard }}/4 (\`alice-lol/src/law.rs\`)"
             if [ -f mutants.out/outcomes.json ]; then
               python3 - <<'PY'
           import json
@@ -128,7 +152,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: mutants-law
+          name: mutants-law-shard-${{ matrix.shard }}
           path: ALICE-LOL/mutants.out
           if-no-files-found: ignore
           retention-days: 14
