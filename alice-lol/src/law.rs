@@ -2280,6 +2280,129 @@ mod core_probe_tests {
         );
     }
 
+    /// Containment も境界の点を witness にしてはいけない
+    ///
+    /// witness は `fi < 0.0 && fo > 0.0` (inner の**内部**かつ outer の**外部**)
+    /// `fi <= 0.0` にすると inner の表面上の点、`fo >= 0.0` にすると outer の
+    /// 表面上の点が「はみ出し」として報告される
+    ///
+    /// oracle: はみ出しの厚みを ε = 1e-3 にすると、深さ 4 の標本間隔 0.0625 で
+    /// 当たるのは境界ちょうどの 1 点だけになる (2026-09-27 run 36325718354 の
+    /// 生存変異 `law.rs:675` ×2)
+    // 厳密比較は **検査対象そのもの**: 軸平行な箱の面上 / 中点なので f32 でも
+    // 厳密に 0 / 0.5 になり、その厳密性が前提の oracle である
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn a_point_on_either_boundary_is_not_a_containment_witness() {
+        const EPS: f32 = 1.0e-3;
+        let config = CheckConfig {
+            aabb_min: Vec3::new(0.5, -0.5, -0.5),
+            aabb_max: Vec3::new(1.5, 0.5, 0.5),
+            resolution: 1,
+        };
+        let boundary = Vec3::new(1.0, 0.0, 0.0);
+
+        // (1) inner の表面 (fi = 0) かつ outer の外部 (fo > 0) — `fi <= 0.0` 変異用
+        let inner = SdfNode::box3d(2.0, 2.0, 2.0);
+        let outer = SdfNode::box3d(2.0f32.mul_add(-EPS, 2.0), 2.0, 2.0);
+        assert_eq!(
+            sdf_eval(&inner, boundary),
+            0.0,
+            "inner の表面が厳密 0 でない"
+        );
+        assert!(
+            sdf_eval(&outer, boundary) > 0.0,
+            "outer の外部になっていない"
+        );
+        let report = check_laws(
+            &[Law::hard(
+                "surface_of_inner",
+                Constraint::Containment { inner, outer },
+            )],
+            &config,
+        );
+        assert!(
+            !report.has_hard_violations(),
+            "inner の表面上の点 (fi = 0) をはみ出しの witness にした\n{}",
+            format_report(&report)
+        );
+
+        // (2) inner の内部 (fi < 0) かつ outer の表面 (fo = 0) — `fo >= 0.0` 変異用
+        let inner2 = SdfNode::box3d(2.0f32.mul_add(EPS, 2.0), 2.0, 2.0);
+        let outer2 = SdfNode::box3d(2.0, 2.0, 2.0);
+        assert!(
+            sdf_eval(&inner2, boundary) < 0.0,
+            "inner の内部になっていない"
+        );
+        assert_eq!(
+            sdf_eval(&outer2, boundary),
+            0.0,
+            "outer の表面が厳密 0 でない"
+        );
+        let report2 = check_laws(
+            &[Law::hard(
+                "surface_of_outer",
+                Constraint::Containment {
+                    inner: inner2,
+                    outer: outer2,
+                },
+            )],
+            &config,
+        );
+        assert!(
+            !report2.has_hard_violations(),
+            "outer の表面上の点 (fo = 0) をはみ出しの witness にした\n{}",
+            format_report(&report2)
+        );
+    }
+
+    /// gap が下限ちょうどの scene を「近すぎ」と報告しない
+    ///
+    /// oracle: 半幅 1 の箱 (`box3d` は全長を取る) を `x = 0` と `x = 3` に置くと
+    /// gap は厳密に 1.0 で、`min_distance = 1.0` を満たしている
+    ///
+    /// **この test は `ub < min_distance` → `<=` の変異を殺さない** (2026-09-27
+    /// 実測): 上界は `probe_ball` の八分木降下 + 二分探索が返す**緩い**上界で、
+    /// この scene では真の gap 1.0 に対し **1.1056** を返す 等号を踏ませるには
+    /// 上界の値を厳密に `min_distance` に一致させる必要があり、その値は探索順に
+    /// 依存する人工物なので構成しても意味がない 変異は `mutants.toml` に
+    /// **未達成** として理由付きで除外してある (等価ではない)
+    // 厳密比較は **検査対象そのもの**: 軸平行な箱の面上 / 中点なので f32 でも
+    // 厳密に 0 / 0.5 になり、その厳密性が前提の oracle である
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn contact_upper_bound_equal_to_min_distance_is_not_too_close() {
+        let a = SdfNode::box3d(2.0, 2.0, 2.0);
+        let b = SdfNode::box3d(2.0, 2.0, 2.0).translate(3.0, 0.0, 0.0);
+        // cell 中心が 2 表面の中点に乗る単一 cell
+        let config = CheckConfig {
+            aabb_min: Vec3::new(1.0, -0.5, -0.5),
+            aabb_max: Vec3::new(2.0, 0.5, 0.5),
+            resolution: 1,
+        };
+        let mid = Vec3::new(1.5, 0.0, 0.0);
+        assert_eq!(sdf_eval(&a, mid), 0.5, "a までの距離が 0.5 でない");
+        assert_eq!(sdf_eval(&b, mid), 0.5, "b までの距離が 0.5 でない");
+
+        let report = check_laws(
+            &[Law::hard(
+                "gap_at_the_lower_bound",
+                Constraint::Contact {
+                    a,
+                    b,
+                    min_distance: 1.0,
+                    max_distance: 2.0,
+                },
+            )],
+            &config,
+        );
+        assert!(
+            !report.has_hard_violations(),
+            "gap が下限ちょうど (1.0) の scene を「近すぎ」と報告した\n{}",
+            format_report(&report)
+        );
+    }
+
     /// 接している 2 形状では「gap が m を超える」が偽になる
     ///
     /// oracle: 半径 1 の球を `x = ±1` に置くと表面は原点で接し gap は 0
@@ -2292,6 +2415,66 @@ mod core_probe_tests {
         assert!(
             !gap_exceeds(&a, &b, 0.5, &config),
             "原点で接している 2 球が gap 0.5 を満たしてしまっている"
+        );
+    }
+
+    /// 片方の場が **厳密に 0** の標本点を witness にしてはいけない
+    ///
+    /// `interval_sign` の契約どおり `d = 0` は「外側 or 表面」側なので、witness は
+    /// `fa < 0.0 && fb < 0.0` (両方とも厳密に負) でなければならない `<=` に
+    /// 変えると **表面上の点で侵入を報告する**
+    ///
+    /// oracle: 半幅 1 の箱 (`box3d` は全長を取る) を ε = 1e-3 だけ重ねて置くと、
+    /// 面 `x = 1` は a の表面 (fa = 0) かつ b の内部 (fb = −ε) になる 真の重なりは
+    /// 厚さ ε しかなく、cell 1.0 を深さ 4 まで割った標本間隔 0.0625 では
+    /// **x = 1 ちょうどの標本しか当たらない** = 正しい実装は witness 無し (未決定)、
+    /// `<=` 変異だけが違反を報告する 役割を入れ替えた 2 例で a 側 / b 側の両方の
+    /// 比較を見る (2026-09-27 run 36325718354 の生存変異 `law.rs:636` ×2)
+    // 厳密比較は **検査対象そのもの**: 軸平行な箱の面上 / 中点なので f32 でも
+    // 厳密に 0 / 0.5 になり、その厳密性が前提の oracle である
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn a_point_on_one_surface_is_not_an_overlap_witness() {
+        const EPS: f32 = 1.0e-3;
+        // cell 中心が x = 1 に乗る単一 cell
+        let config = CheckConfig {
+            aabb_min: Vec3::new(0.5, -0.5, -0.5),
+            aabb_max: Vec3::new(1.5, 0.5, 0.5),
+            resolution: 1,
+        };
+        let touch = Vec3::new(1.0, 0.0, 0.0);
+
+        // (1) a の表面 (fa = 0) かつ b の内部 (fb < 0) — `fa <= 0.0` 変異が発火する
+        let a = SdfNode::box3d(2.0, 2.0, 2.0);
+        let b = SdfNode::box3d(2.0, 2.0, 2.0).translate(2.0 - EPS, 0.0, 0.0);
+        assert_eq!(sdf_eval(&a, touch), 0.0, "a の表面の場が厳密 0 でない");
+        assert!(sdf_eval(&b, touch) < 0.0, "b の内部になっていない");
+        let report = check_laws(
+            &[Law::hard("surface_of_a", Constraint::NonOverlap { a, b })],
+            &config,
+        );
+        assert!(
+            !report.has_hard_violations(),
+            "a の表面上の点 (fa = 0) を侵入の witness にした\n{}",
+            format_report(&report)
+        );
+
+        // (2) 役割を入れ替え: b の表面 (fb = 0) かつ a の内部 — `fb <= 0.0` 変異用
+        let a2 = SdfNode::box3d(2.0f32.mul_add(EPS, 2.0), 2.0, 2.0);
+        let b2 = SdfNode::box3d(2.0, 2.0, 2.0).translate(2.0, 0.0, 0.0);
+        assert_eq!(sdf_eval(&b2, touch), 0.0, "b の表面の場が厳密 0 でない");
+        assert!(sdf_eval(&a2, touch) < 0.0, "a の内部になっていない");
+        let report2 = check_laws(
+            &[Law::hard(
+                "surface_of_b",
+                Constraint::NonOverlap { a: a2, b: b2 },
+            )],
+            &config,
+        );
+        assert!(
+            !report2.has_hard_violations(),
+            "b の表面上の点 (fb = 0) を侵入の witness にした\n{}",
+            format_report(&report2)
         );
     }
 }
