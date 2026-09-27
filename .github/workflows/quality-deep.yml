@@ -1,0 +1,134 @@
+# 深層品質 job (canonical: ALICE-Physics `.github/workflows/quality-deep.yml`)
+#
+# - mutants : cargo-mutants で **判定器 `alice-lol/src/law.rs` の検出力**を測る
+#             test が green でも、比較演算子を 1 つ書き換えて誰も落ちないなら
+#             その分岐は検査されていない 生存変異 0 が gate (等価変異の除外は
+#             `mutants.toml` に理由付きで書く)
+#
+# 罠 #22 (continue-on-error は compile error も green に潰す) に従い
+# continue-on-error は使わない measurement の exit code (2 = missed、3 =
+# timeout) は受けてから中身で判定する
+#
+# 1 mutant ≈ 25 s build + 50 s test なので push 毎には回さない: law.rs と
+# 判定器 test を触った PR (--in-diff) / 週次 / 手動
+name: Quality Deep
+
+on:
+  schedule:
+    - cron: '0 18 * * 0' # 日曜 03:00 JST
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'alice-lol/src/law.rs'
+      - 'alice-lol/tests/analytic_law.rs'
+      - 'alice-lol/tests/law_tests.rs'
+      - 'alice-lol/tests/law_corpus_oracle.rs'
+      - 'mutants.toml'
+      - '.github/workflows/quality-deep.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  mutants:
+    name: Mutation testing (law verifier)
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      # ci.yml と同じ multi-repo checkout (罠 #13 / #21: alice-lol は sibling の
+      # 実 API を無条件 use するので stub では compile できない)
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+          fetch-depth: 0
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@cargo-mutants
+
+      # `--in-place` は multi-repo layout で必須 (tree copy すると `../../ALICE-SDF`
+      # 等の sibling path dep が切れる、ALICE-LOL/CLAUDE.md § mutants)
+      # in-place は tree を書き換えるので並列不可 — `--jobs` と併用すると
+      # cargo-mutants 自身が usage error で落ちる (2026-09-27 実測)
+      # test 集合は判定器を動かすものだけ (`--lib` が law.rs 内 `core_probe_tests`)
+      - name: Mutants (law verifier)
+        working-directory: ALICE-LOL
+        run: |
+          set +e
+          cargo mutants --in-place --timeout 300 --build-timeout 240 \
+            --output mutants.out \
+            --file alice-lol/src/law.rs \
+            -- --lib --test analytic_law --test law_tests --test law_corpus_oracle
+          rc=$?
+          set -e
+          # 0 = 全て caught、2 = missed あり、3 = timeout あり → ここでは測定結果
+          # として受け、下の gate で中身を見る それ以外 (4 = baseline red 等) は
+          # 「何も測れていない」ので即 fail
+          case $rc in 0 | 2 | 3) ;; *) echo "::error::cargo-mutants exit $rc (baseline red or usage error)"; exit $rc ;; esac
+
+      - name: Summary + gate (missed must be 0)
+        if: always()
+        working-directory: ALICE-LOL
+        run: |
+          {
+            echo "## cargo-mutants — law verifier (\`alice-lol/src/law.rs\`)"
+            if [ -f mutants.out/outcomes.json ]; then
+              python3 - <<'PY'
+          import json
+          d = json.load(open("mutants.out/outcomes.json"))
+          s = d.get("summary", d)
+          caught, missed = s.get("caught", 0), s.get("missed", 0)
+          un, to = s.get("unviable", 0), s.get("timeout", 0)
+          tot = caught + missed
+          print(f"- caught {caught} / missed {missed} / unviable {un} / timeout {to}")
+          print(f"- mutation score: {caught / tot * 100:.1f}%" if tot else "- no viable mutants")
+          PY
+              echo; echo "### missed"; head -50 mutants.out/missed.txt 2>/dev/null || echo "(none)"
+            else
+              echo "no output (build failed?)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # gate: 判定器の生存変異は 0 等価変異は mutants.toml で理由付き除外
+          if [ -s mutants.out/missed.txt ]; then
+            echo "::error::判定器に生存変異あり ($(wc -l < mutants.out/missed.txt) 件) — test を足すか、等価変異なら理由付きで mutants.toml に除外を書く"
+            cat mutants.out/missed.txt
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: mutants-law
+          path: ALICE-LOL/mutants.out
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1825,6 +1825,94 @@ mod core_probe_tests {
         );
     }
 
+    /// 区間の下界が **厳密に 0.0** の箱を「離れている」と刈ってはいけない
+    ///
+    /// oracle: `Box3d` の半幅 1 と、膨張後の面が `x = 1.0` にちょうど乗る cell
+    /// を取ると区間の下界は 0.0 ちょうどになる 下界 0.0 は「表面に接する」
+    /// = その箱に中点があり得るので、証明にはならない
+    ///
+    /// `sdf_interval(..).lo > 0.0` を `>= 0.0` に変えると深さ 0 の cell が即
+    /// 刈られて `gap_exceeds` が真を返す (= gap を証明していないのに証明済と
+    /// 言う) cell の低 x 側の子は膨張後も同じ面に乗り続けるので、正しい実装
+    /// では深さ上限まで決まらず偽になる a 側 / b 側の両方の比較を見るため
+    /// 役割を入れ替えた 2 例を assert する (2026-09-27 mutants 生存 2 件)
+    #[test]
+    fn gap_exceeds_does_not_clear_a_box_whose_interval_touches_zero() {
+        // `box3d` は **全長** を取るので半幅 1.0 は `box3d(2.0, …)`
+        let boxy = SdfNode::box3d(2.0, 2.0, 2.0);
+        // 区間が常に負 = 「この箱は決着しない」側を固定する相方
+        let everywhere = SdfNode::sphere(50.0);
+        // cell [1.5, 2.0]³ を half = 0.5 膨張すると [1.0, 2.5]³ で箱の面に接する
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(1.5),
+            aabb_max: Vec3::splat(2.0),
+            resolution: 1,
+        };
+        assert!(
+            !gap_exceeds(&boxy, &everywhere, 1.0, &config),
+            "a 側の区間下界 0.0 (表面に接する) を「離れている」と刈っている"
+        );
+        assert!(
+            !gap_exceeds(&everywhere, &boxy, 1.0, &config),
+            "b 側の区間下界 0.0 (表面に接する) を「離れている」と刈っている"
+        );
+    }
+
+    /// 探索半径は **cell 対角を含む** — 含まないと上界を見失う
+    ///
+    /// oracle: 半径 1 の球を `x = 0` と `x = 4` に置き `aabb −2..2` /
+    /// `resolution 2` で見ると、cell 中心 `(±1, ±1, ±1)` から各表面までは
+    /// 0.73 と 2.32 `min/max_distance` は 0.1 / 0.2 なので、cell 対角 3.46 が
+    /// 半径に入って初めて両表面に届く
+    ///
+    /// `(aabb_max − aabb_min)` の `−` を `+` に変えると対称 aabb では 0 に、
+    /// `/` に変えると 0.87 になり、どちらも届かず `None` が返る
+    /// (2026-09-27 mutants 生存 2 件)
+    #[test]
+    fn contact_upper_bound_radius_includes_the_cell_diagonal() {
+        let a = SdfNode::sphere(1.0);
+        let b = SdfNode::sphere(1.0).translate(4.0, 0.0, 0.0);
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-2.0),
+            aabb_max: Vec3::splat(2.0),
+            resolution: 2,
+        };
+        let found = contact_upper_bound(&a, &b, 0.1, 0.2, &config);
+        let Some((ub, point, _)) = found else {
+            panic!("cell 対角を含む半径なら上界が取れるはずが None");
+        };
+        // 三角不等式の上界なので真の gap 2.0 を下回ってはいけない
+        assert!(ub >= 2.0, "上界 {ub} が真の gap 2.0 を下回っている");
+        assert!(
+            sdf_eval(&a, point) > 0.0 && sdf_eval(&b, point) > 0.0,
+            "上界の標本点 {point:?} が形状の内部にある"
+        );
+    }
+
+    /// 上界の標本点は **両方の外側** に限る
+    ///
+    /// oracle: 検査範囲を球 a の内部だけ (`−1..1`、cell 中心 `(±0.5)³` は
+    /// `|p| = 0.87 < 1` で内部) に取ると、外側の標本点は 1 つも無いので上界は
+    /// 取れない = `None`
+    ///
+    /// `fa <= 0.0 || fb <= 0.0` を `&&` に変えると「a の内部だが b の外部」の
+    /// cell が処理され、内部の点から測った距離の和が上界として返る
+    /// (2026-09-27 mutants 生存 1 件)
+    #[test]
+    fn contact_upper_bound_only_samples_points_outside_both() {
+        let a = SdfNode::sphere(1.0);
+        let b = SdfNode::sphere(1.0).translate(2.6, 0.0, 0.0);
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-1.0),
+            aabb_max: Vec3::splat(1.0),
+            resolution: 2,
+        };
+        assert!(
+            contact_upper_bound(&a, &b, 0.1, 0.2, &config).is_none(),
+            "標本点が全て a の内部なのに上界を返した"
+        );
+    }
+
     /// 接している 2 形状では「gap が m を超える」が偽になる
     ///
     /// oracle: 半径 1 の球を `x = ±1` に置くと表面は原点で接し gap は 0

@@ -289,6 +289,16 @@ let report = laws.check();
 
 MIT OR Apache-2.0
 
+### Credits
+
+The LOL DSL exposes the [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF)
+primitive set, so the attribution of that crate carries over: a large part of
+the distance-function *forms* follow **Inigo Quilez**'s published articles and
+Shadertoy demos, the stairs / columns / chamfer operators follow **Mercury's
+hg_sdf**, and the noise gradient table follows **Ken Perlin**. The
+implementations are ALICE-SDF's own Rust code. Full list:
+[ALICE-SDF/THIRD-PARTY-NOTICES.md](https://github.com/ext-sakamoro/ALICE-SDF/blob/main/THIRD-PARTY-NOTICES.md).
+
 ## Claude Code / Codex Skill
 
 The `skills/lol-sdf/` directory bundles ALICE-LOL as an installable agent skill for Claude Code / Codex. It ships the GBNF grammar (`references/lol.gbnf`) for LLM constrained decoding, the print-oriented system prompt (`references/print-guide.md`), and thin CLI wrappers for STL/3MF export, Bambu H2D laser (`.lac`), and Roblox OBJ/FBX. See [`skills/lol-sdf/SKILL.md`](skills/lol-sdf/SKILL.md). Companion `alice-implicit-cad` skill (in the [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) repo) provides the lower-level SDF composition front-end.
