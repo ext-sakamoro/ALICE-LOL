@@ -1680,40 +1680,62 @@ pub fn format_report(report: &LawReport) -> String {
 // **実害のある変異** を殺す 核の関数は private なので integration test
 // (`tests/analytic_law.rs`) からは到達できない
 //
-// ## 意味的に等価で殺さない変異 (mutation testing の既知の限界)
+// ## 実測で生存が確認されている変異 (2026-09-27、run 36320622842)
 //
-// * `box_children` の `i & 1 != 0` → `== 0` (×3) — i を 0..8 で全走するので
-//   8 個の箱の集合は不変、順序だけ入れ替わる
-// * `probe_ball` の `f_centre > 0.0` → `>=` — 直前に `f_centre == 0.0` で
-//   return しているので `>` と `>=` は同じ分岐になる
+// 各行に **どの run で生存を観測したか** を書く 分類だけ書いて理由を検証
+// できない形にしない (下の「訂正」の原因がそれだった)
+//
+// * `box_children` の `i & 1 != 0` → `== 0` (×3、`law.rs:362-364`) — i を 0..8 で
+//   全走するので 8 個の箱の集合は不変、順序だけ入れ替わる **等価**
+// * `probe_ball` の `f_centre > 0.0` → `>=` (`law.rs:421`) — 直前に
+//   `f_centre == 0.0` で return しているので同じ分岐になる **等価**
+// * `probe_ball` の `near_dist > radius` → `>=` (`law.rs:431`) — 箱の最近点が
+//   **厳密に radius** の距離になる配置が要る 下の `gap_exceeds` の訂正を踏まえる
+//   と「作れない」とは言い切れないので、**未達成**と書く (octree の分割点と
+//   `cube(centre, radius)` の面が一致する配置を作れば殺せる可能性がある)
 // * `probe_ball` / `probe_pair` の `d < bd` → `<=` — 等しい時に更新するか
-//   しないかの違いで、保持される値は同じ
-// * `probe_ball` の `d < bd` → `>` / `==` (×4) — **到達困難** stack は centre に
-//   近い箱から訪問し、比較の直前に `best.is_some_and(|d| near_dist >= d)` で
-//   刈るので、`best` の比較が 2 回以上効く状況を作れない (最初に見つかった交点が
-//   最近で、以降の箱は比較に到達する前に刈られる) 2 球 union を原点から見る test
-//   でも殺せなかったので、当初「実害あり」と判定したのを訂正した
-// * `probe_ball` の `near_dist > radius` → `>=` — 箱の最近点が **厳密に radius**
-//   の距離になる配置が必要で、浮動小数で決定論的に作れない
+//   しないかの違いで、保持される値は同じ **等価**
+// * `probe_ball` の `d < bd` → `>` / `==` (×4) — stack は centre に近い箱から
+//   訪問し、比較の直前に `best.is_some_and(|d| near_dist >= d)` で刈るので、
+//   `best` の比較が 2 回以上効く状況を作れなかった **未達成** (2 球 union の
+//   test では殺せず)
 // * `probe_pair` の `residual(..).min(-f32::EPSILON)` の `-` 削除 — 差が出るのは
-//   residual が (-EPSILON, 0) に入る場合だけで、決定論的に踏ませられない
-// * `contact_upper_bound` の刈り込み条件 (`L804`) の境界 — 刈らなくても
-//   `probe_ball` が `Crossing` を返さず `continue` するので結果は同じ (性能のみ)
-// * `gap_exceeds` の `sdf_interval(..).lo > 0.0` → `>= 0.0` (×2) — 差が出るのは
-//   膨張箱の最近点が **表面に厳密に接する** (`lo == 0.0`) 場合だけで、interval
-//   演算を通して浮動小数で厳密 0 を作れない
+//   residual が (-EPSILON, 0) に入る場合だけ **未達成**
+// * `contact_upper_bound` の**区間による事前 filter** (`sdf_interval(..).lo > 0.0
+//   || ...`、`L808`) — 刈らなくても後段の `probe_ball` が `Crossing` を返さず
+//   `continue` するので上界は変わらない (仕事量が増えるだけ) **等価**、
+//   `mutants.toml` に理由付きで除外を書いてある
 //
-// ## 本 module で実際に caught に変えた変異 (2026-09-27 実測)
+// ## 2026-09-27 の訂正 (「等価 / 到達困難」と書いたが実際は殺せた 3 件)
+//
+// 分類だけ書いて理由を検証可能な形で残さなかったため、**誤った断定が doc に
+// 残っていた** 実測で覆ったものを記録する:
+//
+// * `gap_exceeds` の `sdf_interval(..).lo > 0.0` → `>= 0.0` (×2) — 「interval
+//   演算を通して浮動小数で厳密 0 を作れない」と書いたが **作れる**:
+//   `Box3d` の面に膨張箱の面が乗る配置 (`box3d(2,2,2)` の半幅 1.0 に対し
+//   cell `[1.5, 2.0]³` を `half = 0.5` 膨張 → `[1.0, 2.5]³`) で `lo == 0.0`
+//   ちょうどになる `gap_exceeds_does_not_clear_a_box_whose_interval_touches_zero`
+// * `contact_upper_bound` の `fa <= 0.0 || fb <= 0.0` (`L804`) — 「性能のみ」と
+//   書いたが **意味を変える**: `&&` にすると「a の内部だが b の外部」の cell が
+//   処理され、内部の点から測った距離の和が上界として返る (契約は「両方の外側の
+//   標本点から」) `contact_upper_bound_only_samples_points_outside_both`
+//
+// ## 本 module で caught に変えた変異 (2026-09-27 実測)
 //
 // * `interval_sign` の `iv.hi < 0.0` → `<= 0.0` — 表面ちょうどの箱を内側と断定
 //   する偽陽性を作る変異
 // * `gap_exceeds` の `depth >= BALL_PROBE_DEPTH` → `<` — 深さ 0 で即
 //   `return false` になる変異 **殺すには「細分に入る」配置が必須**で、配置を
 //   2 回外してから 3 回目で通した (経緯は該当 test の doc)
+// * `gap_exceeds` の `lo > 0.0` → `>= 0.0` (×2、上の訂正)
+// * `contact_upper_bound` の cell 対角 (`(aabb_max − aabb_min)` の `−` → `+` / `/`)
+//   と `L804` の `||` → `&&` (上の訂正)
 //
-// 検証: `--re "probe_ball|gap_exceeds|interval_sign"` で 48 mutant → 11 missed
-// (追加前) から 10 missed へ、`--re "gap_exceeds"` で 14 mutant → 3 missed から
-// 2 missed へ 残る missed は上の等価 / 到達困難リストに対応する
+// 測定は `.github/workflows/quality-deep.yml` (週次 + law.rs 系を触った PR)
+// 手元で回す時は `--in-place` 必須 (tree copy だと sibling path dep が切れる)、
+// `--jobs` とは併用不可、**中断すると変異がソースに残る** ので
+// `grep -rn "changed by cargo-mutants" alice-lol/src/` で確認すること
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #[cfg(test)]
