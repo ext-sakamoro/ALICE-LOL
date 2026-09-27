@@ -281,8 +281,11 @@ let report = laws.check();
 
 | Metric | Value |
 |--------|-------|
-| clippy (pedantic+nursery) | 0 warnings |
-| Tests | 228 |
+| clippy (pedantic+nursery) | 0 warnings, `--workspace --all-targets --all-features` |
+| Tests | lib 607 / integration 190 / doc 125 (default features, 2026-09-27) |
+| Law verifier oracle | `tests/analytic_law.rs` 16 (closed-form) + `tests/law_corpus_oracle.rs` (grammar corpus 244 constructs vs a brute-force refuter: no proven pass the refuter contradicts, every reported violation has a witness, undecided rate measured) |
+| Mutation score | `law.rs` must have **0 surviving mutants** (`.github/workflows/quality-deep.yml`, equivalent mutants excluded with a reason in `mutants.toml`) |
+| Shader parity | corpus + fixtures through naga validation and a real GPU (`gpu-parity` job, lavapipe) |
 | fmt | clean |
 
 ## License

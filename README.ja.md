@@ -246,8 +246,11 @@ let report = laws.check();
 
 | 指標 | 値 |
 |------|-----|
-| clippy (pedantic+nursery) | 0 warnings |
-| テスト数 | 228 |
+| clippy (pedantic+nursery) | 0 warnings (`--workspace --all-targets --all-features`) |
+| テスト数 | lib 607 / integration 190 / doc 125 (default features、2026-09-27 実測) |
+| 法則検証器の oracle | `tests/analytic_law.rs` 16 本 (解析解) + `tests/law_corpus_oracle.rs` (grammar corpus 244 construct を総当たり反証器と突合: 反証される証明付き合格を出さない / 報告した違反には証拠がある / 未決定率を実測) |
+| 変異検出力 | `law.rs` は**生存変異 0** が gate (`.github/workflows/quality-deep.yml`、等価変異は `mutants.toml` に理由付きで除外) |
+| shader parity | corpus + fixture を naga validate + 実 GPU 実行 (`gpu-parity` job、lavapipe) |
 | fmt | clean |
 
 ## ライセンス
