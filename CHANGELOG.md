@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Contact` の residual: 近すぎは `上界 − min_distance`、遠すぎは `max_distance − 上界` (上界を取れなければ `−∞`)、gap > m の証明は各 cell を m/2 広げた箱の区間で行う (中点が検査 AABB 内にある前提)
 
 ### Added
+- **`law.rs` に判定器の核の unit test 5 本 (`core_probe_tests`)** — `cargo mutants`
+  (433 mutant / 104 missed) の生存変異の精査結果 missed のうち 61 件は sound 化
+  対象外の 3 law (`check_continuity` 30 / `check_thermal` 16 /
+  `check_volume_conservation` 15、既知) で、残り 24 件が sound 化した 5 law の核に
+  あった そのうち **実際に test で殺せた 2 系統** を塞いだ:
+  `interval_sign` の `hi < 0.0` → `<= 0.0` (表面ちょうどの箱を内側と断定する偽陽性)
+  と `gap_exceeds` の `depth >= BALL_PROBE_DEPTH` → `<` (深さ 0 で即 `return false`)
+  後者は **「細分に入る」配置が必須**で、`GridSampler` の cell 境界が
+  `aabb_min + k·(extent/resolution)` である以上 resolution を奇数にして中央 cell を
+  原点にまたがせる必要がある (配置を 2 回外してから通した)
+  残る missed は等価 (`box_children` の `i & 1 != 0` は 8 child 全走で集合不変 等) か
+  到達困難 (`probe_ball` の `best` 比較は刈り込みが先に効く / 境界を浮動小数で作れ
+  ない) で、理由を `law.rs` の module doc に列挙した `BallProbe` に `Debug` を
+  derive (private enum、test の失敗時に返った variant を出すため)
 - **`tests/analytic_law.rs` — 法則検証器の解析解 oracle 9 本** (oracle 先行で red 4/7 を確認してから実装): gyroid 板の真の半厚 (平坦点で g ≈ √3·s、ε = 0.05778) / 2 球 union 内部の真の距離 (√0.75) / 球殻 R − r の境界 / 2 球 NonOverlap の侵入深さ上界 / 内球 Containment のはみ出し量 / Contact gap = 0.5 の 3 範囲 / 板 Stress / `InfiniteCone` (区間 EVERYTHING) が unresolved になること / `resolution` 1..8 で verdict 不変
 - **`tests/transpiler_naga_validate.rs` — grammar corpus 全構文 + fixture の WGSL / GLSL を naga で parse + validate** (Level 1.5、GPU 不要) 初回実行で alice-sdf 3.0.0 の `Terrain` が WGSL / HLSL に GLSL 構文を直書きし GLSL でも `vnoise` helper 未定義であることを検出 (SDF 側 Backlog)
 - **`tests/gpu_parity.rs` — grammar corpus 全構文 + 深い合成 fixture 7 本を実 GPU で実行して CPU `eval` と突合** (Level 2、Milestone A.4.1) + ci.yml `gpu-parity` job (lavapipe、`ALICE_SDF_REQUIRE_GPU=1`) 初回実行 (Metal) で fixture 7 本は drift ≤ 5e-6、corpus 237 中 235 一致、`Elongate` の CPU (`p − clamp(p, −a, a)`) と shader (`abs(p) − a` + 内部補正) の法則不一致と `Terrain` の WGSL 不正を検出 (いずれも alice-sdf 側、Backlog)

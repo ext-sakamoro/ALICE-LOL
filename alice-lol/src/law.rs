@@ -396,6 +396,10 @@ fn bisect_crossing(node: &SdfNode, p: Vec3, outside_p: bool, mut q: Vec3) -> f32
 }
 
 /// 球探索の結果
+///
+/// `Debug` は判定器の核の unit test (`core_probe_tests`) が「期待した variant で
+/// なかった時に何が返ったか」を出すために必要 (private enum なので API 影響なし)
+#[derive(Debug)]
 enum BallProbe {
     /// 球内は全て `p` と同符号 = 表面まで ≥ r
     Clear,
@@ -1660,4 +1664,179 @@ pub fn format_report(report: &LawReport) -> String {
     }
 
     out
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 判定器の核の unit test (2026-09-27、cargo-mutants の生存変異を殺すため追加)
+//
+// `cargo mutants --in-place -p alice-lol --file alice-lol/src/law.rs
+//  -- --test analytic_law --test law_tests` = 433 mutant / 104 missed
+//
+// missed のうち 61 件は sound 化対象外の 3 law (`check_continuity` 30 /
+// `check_thermal` 16 / `check_volume_conservation` 15) に集中しており、これは
+// 既知の弱点 (flood fill が格子解像度依存、Backlog 221)
+//
+// 残りは sound 化した 5 law の核に生き残ったもので、本 module はそのうち
+// **実害のある変異** を殺す 核の関数は private なので integration test
+// (`tests/analytic_law.rs`) からは到達できない
+//
+// ## 意味的に等価で殺さない変異 (mutation testing の既知の限界)
+//
+// * `box_children` の `i & 1 != 0` → `== 0` (×3) — i を 0..8 で全走するので
+//   8 個の箱の集合は不変、順序だけ入れ替わる
+// * `probe_ball` の `f_centre > 0.0` → `>=` — 直前に `f_centre == 0.0` で
+//   return しているので `>` と `>=` は同じ分岐になる
+// * `probe_ball` / `probe_pair` の `d < bd` → `<=` — 等しい時に更新するか
+//   しないかの違いで、保持される値は同じ
+// * `probe_ball` の `d < bd` → `>` / `==` (×4) — **到達困難** stack は centre に
+//   近い箱から訪問し、比較の直前に `best.is_some_and(|d| near_dist >= d)` で
+//   刈るので、`best` の比較が 2 回以上効く状況を作れない (最初に見つかった交点が
+//   最近で、以降の箱は比較に到達する前に刈られる) 2 球 union を原点から見る test
+//   でも殺せなかったので、当初「実害あり」と判定したのを訂正した
+// * `probe_ball` の `near_dist > radius` → `>=` — 箱の最近点が **厳密に radius**
+//   の距離になる配置が必要で、浮動小数で決定論的に作れない
+// * `probe_pair` の `residual(..).min(-f32::EPSILON)` の `-` 削除 — 差が出るのは
+//   residual が (-EPSILON, 0) に入る場合だけで、決定論的に踏ませられない
+// * `contact_upper_bound` の刈り込み条件 (`L804`) の境界 — 刈らなくても
+//   `probe_ball` が `Crossing` を返さず `continue` するので結果は同じ (性能のみ)
+// * `gap_exceeds` の `sdf_interval(..).lo > 0.0` → `>= 0.0` (×2) — 差が出るのは
+//   膨張箱の最近点が **表面に厳密に接する** (`lo == 0.0`) 場合だけで、interval
+//   演算を通して浮動小数で厳密 0 を作れない
+//
+// ## 本 module で実際に caught に変えた変異 (2026-09-27 実測)
+//
+// * `interval_sign` の `iv.hi < 0.0` → `<= 0.0` — 表面ちょうどの箱を内側と断定
+//   する偽陽性を作る変異
+// * `gap_exceeds` の `depth >= BALL_PROBE_DEPTH` → `<` — 深さ 0 で即
+//   `return false` になる変異 **殺すには「細分に入る」配置が必須**で、配置を
+//   2 回外してから 3 回目で通した (経緯は該当 test の doc)
+//
+// 検証: `--re "probe_ball|gap_exceeds|interval_sign"` で 48 mutant → 11 missed
+// (追加前) から 10 missed へ、`--re "gap_exceeds"` で 14 mutant → 3 missed から
+// 2 missed へ 残る missed は上の等価 / 到達困難リストに対応する
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#[cfg(test)]
+mod core_probe_tests {
+    use super::*;
+
+    /// `hi == 0.0` の区間は「表面を含む」ので符号は一様でない
+    ///
+    /// oracle: 区間 `[-1, 0]` は 0 を含むので内側と断定できない
+    /// `iv.hi < 0.0` を `<= 0.0` に変えるとこれが `Some(false)` になり、
+    /// **表面ちょうどの箱を「表面なし」として刈る** = 三値判定の健全性が崩れる
+    #[test]
+    fn an_interval_touching_zero_from_below_is_not_uniformly_negative() {
+        assert_eq!(interval_sign(Interval::new(-1.0, 0.0)), None);
+        // 両端が厳密に負 / 非負なら断定できる
+        assert_eq!(interval_sign(Interval::new(-1.0, -0.5)), Some(false));
+        assert_eq!(interval_sign(Interval::new(0.0, 1.0)), Some(true));
+    }
+
+    /// 球面より内側に入った表面は交点として拾う
+    ///
+    /// oracle: 半径 1 の球の表面は原点から 1.0 中心を `(2, 0, 0)`、探索半径を
+    /// 1.5 に取ると表面は中心から 1.0 = 球面より内側にあり、距離 1.0 が返る
+    /// `near_dist > radius` を `>=` に変えると、**箱の最近点が球面ちょうどに
+    /// 乗る箱** (= 表面を含む側の箱) が刈られて距離が悪化するか見失う
+    ///
+    /// なお `radius` を厳密に 1.0 (表面が球面上) にすると [`BallProbe::Clear`]
+    /// が正しい: [`interval_sign`] の契約では `d = 0` は「外側 or 表面」side な
+    /// ので、区間 `[0, …]` は一様に非負 = 表面なしと判定される
+    #[test]
+    fn probe_ball_finds_a_surface_inside_the_ball() {
+        let sphere = SdfNode::sphere(1.0);
+        let probe = probe_ball(&sphere, Vec3::new(2.0, 0.0, 0.0), 1.5);
+        match probe {
+            BallProbe::Crossing { distance } => {
+                assert!(
+                    (distance - 1.0).abs() < 1e-1,
+                    "表面までの距離は 1.0 のはずが {distance}"
+                );
+            }
+            other => panic!("球内の表面を拾えていない: {other:?}"),
+        }
+    }
+
+    /// 交点が複数あるときは **近い側** を返す
+    ///
+    /// oracle: 半径 1 の球を `x = ±3` に置いた union を原点から見ると、表面は
+    /// `x = ±2` (距離 2) と `x = ±4` (距離 4) にある 返る値は近い側でなければ
+    /// ならない (`best` 更新の `d < bd` を `>` / `==` に変えると 4 側が残る)
+    ///
+    /// 厳密な最近距離は 2.0 だが、`probe_ball` は octree の箱の最近点に向けて
+    /// 二分探索するので `BALL_PROBE_DEPTH = 4` の分割精度で上振れする (実測
+    /// 2.14) 上界として保守的な側にずれるので law の健全性には影響しない
+    /// ここで見るのは「**2 と 4 のどちらを選んだか**」であって小数第 2 位ではない
+    #[test]
+    fn probe_ball_returns_the_nearer_crossing_not_the_far_one() {
+        let left = SdfNode::sphere(1.0).translate(-3.0, 0.0, 0.0);
+        let right = SdfNode::sphere(1.0).translate(3.0, 0.0, 0.0);
+        let pair = SdfNode::union(left, right);
+        let probe = probe_ball(&pair, Vec3::ZERO, 5.0);
+        match probe {
+            BallProbe::Crossing { distance } => {
+                assert!(
+                    (2.0..3.0).contains(&distance),
+                    "近い側 (厳密 2.0、octree 精度で 2.1 前後) を選ぶべきが {distance} \
+                     — 4.0 付近なら遠い交点を採用している"
+                );
+            }
+            other => panic!("交点を拾えていない: {other:?}"),
+        }
+    }
+
+    /// gap が m を上回る 2 形状で真になる — **細分に入る配置で**
+    ///
+    /// oracle: 半径 1 の球を `x = ±2` に置くと向かい合う表面は `x = ∓1` なので
+    /// gap は 2.0 `m = 1.5` (`half = 0.75`) は満たす
+    ///
+    /// **配置の要件 (ここが本質)**: [`GridSampler`] の cell 境界は
+    /// `aabb_min + k · (extent / resolution)` なので、**resolution を奇数にすると
+    /// 中央 cell が原点をまたぐ** `aabb −3..3` / `resolution 3` なら step 2.0 で
+    /// 中央 cell は `[−1, 1]³`
+    ///
+    /// その cell を `half = 0.75` 膨張すると `[−1.75, 1.75]³` で、両球の最近点
+    /// (`x = ∓1.75`、中心から 0.25) の SDF は `−0.75 < 0` = **両方に触れるので
+    /// `continue` されず細分に入る** 子 (`[−1, 0]³` 等) を膨張した
+    /// `[−1.75, 0.75]³` は右球まで 1.25 (SDF `+0.25`) で離れるため `continue` し、
+    /// 最終的に真が返る
+    ///
+    /// この「細分に入る」ことが `depth >= BALL_PROBE_DEPTH` を `<` に変えた変異を
+    /// 殺す条件になる (変異後は深さ 0 の中央 cell で即 `return false`)
+    ///
+    /// 2026-09-27 に配置を 2 回外している: `x = ±5` (gap 8) は最初の cell で
+    /// `continue` されて細分に入らず、既定 config (`−5..5` / `resolution 8`、
+    /// cell 境界が原点に乗る) では `[0, 1.25]` を 0.75 膨張しても左球の表面
+    /// `x = −1` に 0.25 届かず、どちらも変異を殺せなかった
+    #[test]
+    fn gap_exceeds_is_true_and_subdivides_for_a_gap_just_above_m() {
+        let a = SdfNode::sphere(1.0).translate(-2.0, 0.0, 0.0);
+        let b = SdfNode::sphere(1.0).translate(2.0, 0.0, 0.0);
+        // 中央 cell を原点にまたがせるため resolution は奇数
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-3.0),
+            aabb_max: Vec3::splat(3.0),
+            resolution: 3,
+        };
+        assert!(
+            gap_exceeds(&a, &b, 1.5, &config),
+            "gap 2.0 の 2 球で m = 1.5 が満たされない"
+        );
+    }
+
+    /// 接している 2 形状では「gap が m を超える」が偽になる
+    ///
+    /// oracle: 半径 1 の球を `x = ±1` に置くと表面は原点で接し gap は 0
+    /// どんな正の m も満たさない
+    #[test]
+    fn gap_exceeds_is_false_for_touching_shapes() {
+        let a = SdfNode::sphere(1.0).translate(-1.0, 0.0, 0.0);
+        let b = SdfNode::sphere(1.0).translate(1.0, 0.0, 0.0);
+        let config = CheckConfig::default();
+        assert!(
+            !gap_exceeds(&a, &b, 0.5, &config),
+            "原点で接している 2 球が gap 0.5 を満たしてしまっている"
+        );
+    }
 }
