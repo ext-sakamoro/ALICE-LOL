@@ -1,0 +1,47 @@
+# cargo-mutants 設定 (`.github/workflows/quality-deep.yml` と local 実行で共有)
+#
+# 判定器 `alice-lol/src/law.rs` の生存変異は 0 を gate にする ただし「変異させ
+# ても結果が変わらない (等価)」と「殺し方が分かっていない (未達成)」は残るので、
+# **どちらなのかと理由を 1 行**書いて除外する 「test を書くのが面倒」は理由に
+# ならない 実測日と run id を添えて、後から検証できる形にする
+#
+# regex は mutant 名 (例: `replace > with >= in probe_ball`) に対して掛かる
+# **語順は「replace … in <fn 名>」** 逆順に書くと 1 件も match しない
+# (2026-09-27 に `contact_upper_bound.*replace > with ==` と書いて 5 件すり抜けた)
+#
+# 最終実測: 2026-09-27 run 36325718354 (4 shard、核 136 mutant)
+
+exclude_re = [
+    # === 等価 (変異させても結果が変わらない) ===
+
+    # i を 0..8 で全走するので、8 個の子箱の集合は不変 (順序だけ入れ替わる)
+    "replace != with == in box_children",
+    # 直前に `f_centre == 0.0` で return しているので `>` と `>=` は同じ分岐
+    # (`law.rs:421`) 同じ regex に乗る `law.rs:431` (`near_dist > radius`) は
+    # **未達成**: 箱の最近点が厳密に radius になる配置を作れていない
+    "replace > with >= in probe_ball",
+    # 等しい時に更新するかしないかの違いで、保持される距離は同じ
+    "replace < with <= in probe_ball",
+    # 上界の更新順の違い 保持される残差は同じで、報告点だけが変わる
+    "replace < with <= in probe_pair",
+    # 区間による事前 filter は **速度のためだけ** の枝刈り 緩めても後段の
+    # `probe_ball` が交点を返さず `continue` するので上界は変わらず、厳しく
+    # しても落ちるのは上界候補なので verdict は合格でなく未決定に倒れる
+    "replace \\|\\| with && in contact_upper_bound",
+    "replace > with == in contact_upper_bound",
+    "replace > with >= in contact_upper_bound",
+
+    # === 未達成 (等価ではない、殺し方が分かっていない) ===
+
+    # `best` の比較が 2 回以上効く状況を作れていない stack は centre に近い箱
+    # から訪問し、比較の直前に `best.is_some_and(|d| near_dist >= d)` で刈るため
+    # 2 球 union を原点から見る test でも殺せなかった
+    "replace < with (==|>) in probe_ball",
+    # 残差が (-EPSILON, 0) に入る scene を決定論的に作れていない
+    "delete - in probe_pair",
+    # 上界は八分木降下 + 二分探索の **緩い** 上界 (真の gap 1.0 の scene で
+    # 1.1056 を返す、2026-09-27 実測) なので `ub == min_distance` を構成しても
+    # 探索順の人工物にしかならない 意味論は
+    # `contact_upper_bound_equal_to_min_distance_is_not_too_close` が pin する
+    "replace < with <= in check_contact",
+]

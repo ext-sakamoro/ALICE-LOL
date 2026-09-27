@@ -3,7 +3,7 @@
 # - mutants : cargo-mutants で **sound 化した判定器の核の検出力**を測る
 #             test が green でも、比較演算子を 1 つ書き換えて誰も落ちないなら
 #             その分岐は検査されていない 生存変異 0 が gate (等価変異の除外は
-#             `mutants.toml` に理由付きで書く)
+#             `.cargo/mutants.toml` に理由付きで書く)
 #
 # 対象は `--re` で **核の関数に限定** する 2 つの理由 (2026-09-27 実測、初回
 # run 36320622842 の失敗から):
@@ -39,7 +39,7 @@ on:
       - 'alice-lol/tests/analytic_law.rs'
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
-      - 'mutants.toml'
+      - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
 
 concurrency:
@@ -107,9 +107,14 @@ jobs:
           # test timeout が効かないまま runner が OOM で死ぬ
           ulimit -v 6291456
           set +e
+          # `--output DIR` は **DIR の中に mutants.out を作る** ので、指定すると
+          # 結果は mutants.out/mutants.out/ に落ちる 既定 (workspace 直下の
+          # mutants.out) に任せて、下の gate と path を一致させる
+          # (2026-09-27 run 36325718354: gate が mutants.out/missed.txt を見て
+          #  いたが実体は mutants.out/mutants.out/missed.txt にあり、生存変異
+          #  22 件を抱えたまま 4 shard 全部が success = false green だった)
           cargo mutants --in-place --shard ${{ matrix.shard }}/4 \
             --timeout 300 --build-timeout 240 \
-            --output mutants.out \
             --file alice-lol/src/law.rs \
             --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact' \
             -- --lib --test analytic_law --test law_tests
@@ -142,9 +147,20 @@ jobs:
               echo "no output (build failed?)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          # gate: 判定器の生存変異は 0 等価変異は mutants.toml で理由付き除外
+          # 自己検査: gate が「何も検査していないのに通る」のを防ぐ
+          # (測定結果が無い = path ミス or build 失敗、どちらも green にしない)
+          if [ ! -f mutants.out/outcomes.json ] || [ ! -f mutants.out/missed.txt ]; then
+            echo "::error::mutants.out/{outcomes.json,missed.txt} が無い — gate が何も検査していない (path 指定 or build を確認)"
+            find mutants.out -maxdepth 3 2>/dev/null | head -40
+            exit 1
+          fi
+          if ! grep -q '"caught"' mutants.out/outcomes.json; then
+            echo "::error::outcomes.json に caught が無い — 測定が成立していない"
+            exit 1
+          fi
+          # gate: 判定器の生存変異は 0 等価 / 未達成は .cargo/mutants.toml で理由付き除外
           if [ -s mutants.out/missed.txt ]; then
-            echo "::error::判定器に生存変異あり ($(wc -l < mutants.out/missed.txt) 件) — test を足すか、等価変異なら理由付きで mutants.toml に除外を書く"
+            echo "::error::判定器に生存変異あり ($(wc -l < mutants.out/missed.txt) 件) — test を足すか、等価変異なら理由付きで .cargo/mutants.toml に除外を書く"
             cat mutants.out/missed.txt
             exit 1
           fi
