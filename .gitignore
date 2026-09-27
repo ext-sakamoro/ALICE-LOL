@@ -5,3 +5,7 @@ CLAUDE.md
 *.obj
 *.fbx
 lol_print_output/
+
+# cargo-mutants の成果物 (2 時間分、再生成可能)
+mutants.out/
+mutants.out.old/
