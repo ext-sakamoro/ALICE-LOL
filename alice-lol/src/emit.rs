@@ -649,6 +649,25 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             variant: "Polygon2D",
             reason: "arbitrary vertex lists have no LOL construct",
         }),
+        SdfNode::MetricBall { .. } => Err(EmitError::Unsupported {
+            variant: "MetricBall",
+            reason: "weighted-norm balls have no LOL construct (alice-sdf 4.0)",
+        }),
+        SdfNode::MetricBlend { .. } => Err(EmitError::Unsupported {
+            variant: "MetricBlend",
+            reason: "metric blends have no LOL construct (alice-sdf 4.0)",
+        }),
+
+        // `SdfNode` は alice-sdf 4.0 で `#[non_exhaustive]` になったので、
+        // この arm が無いと下流はコンパイルできない。代わりに「新しい variant
+        // を足したら emit が落ちる」という以前の性質は失われるので、**未知の
+        // variant は黙って捨てず Unsupported として報告する**。LOL 構文を
+        // 持つべき variant が本当に抜けていないかは、grammar corpus の
+        // round-trip test (`tests/emit_roundtrip.rs`) が別途見ている。
+        _ => Err(EmitError::Unsupported {
+            variant: "<unknown>",
+            reason: "variant added in a newer alice-sdf than this emitter knows",
+        }),
     }
 }
 

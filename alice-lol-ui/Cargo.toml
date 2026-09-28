@@ -15,7 +15,7 @@ categories = ["graphics", "gui", "no-std"]
 
 [dependencies]
 alice-lol = { path = "../alice-lol", version = "0.4", default-features = false }
-alice-sdf = { path = "../../ALICE-SDF", version = "3.0.0", default-features = false }
+alice-sdf = { path = "../../ALICE-SDF", version = "4.0.0", default-features = false }
 glam = "0.29"
 
 # alice-lol は現状 direct use なし (doc comment のみ)、public API contract として保持
