@@ -32,7 +32,8 @@ fn min_thickness(node: SdfNode, t: f32) -> Vec<Law> {
             node,
             min_thickness: t,
         },
-    )]
+    )
+    .expect("provable constraint")]
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -136,7 +137,8 @@ fn non_overlap_two_spheres_analytic() {
                 a: SdfNode::sphere(1.0),
                 b: SdfNode::sphere(1.0).translate(dx, 0.0, 0.0),
             },
-        )]
+        )
+        .expect("provable constraint")]
     };
     let cfg = grid(Vec3::new(-1.2, -1.2, -1.2), Vec3::new(3.4, 1.2, 1.2), 8);
 
@@ -167,7 +169,8 @@ fn containment_sphere_in_sphere_analytic() {
                 inner: SdfNode::sphere(0.5).translate(cx, 0.0, 0.0),
                 outer: SdfNode::sphere(1.0),
             },
-        )]
+        )
+        .expect("provable constraint")]
     };
     let cfg = grid(Vec3::splat(-1.5), Vec3::splat(1.5), 8);
 
@@ -206,7 +209,8 @@ fn contact_gap_between_spheres_analytic() {
                 min_distance: lo,
                 max_distance: hi,
             },
-        )]
+        )
+        .expect("provable constraint")]
     };
     let cfg = grid(Vec3::new(-1.2, -1.2, -1.2), Vec3::new(3.7, 1.2, 1.2), 10);
 
@@ -242,11 +246,16 @@ fn contact_gap_between_spheres_analytic() {
 
 /// 板 2 × 2 × 0.2 (z 半厚 0.1) の中央面 z = 0 の点: 表面まで 0.1
 /// 荷重 1.0 × 係数 0.15 = 必要 0.15 > 0.1 → 違反、係数 0.05 → pass
+///
+/// 0.5.0 から `Stress` は `Priority::Hard` を名乗れない (要求値が無次元の
+/// heuristic = `Evidence::Modelled`) ので `soft` で積む 測っている距離が
+/// 解析解と合うことは変わらない
 #[test]
 fn stress_plate_thickness_analytic() {
     let law = |factor: f32| {
-        vec![Law::hard(
+        vec![Law::soft(
             "load",
+            1.0,
             Constraint::Stress {
                 node: SdfNode::box3d(2.0, 2.0, 0.2),
                 load_points: vec![(Vec3::new(0.0, 0.0, 0.1), 1.0)],
@@ -264,12 +273,47 @@ fn stress_plate_thickness_analytic() {
     );
 
     let bad = check_laws(&law(0.15), &cfg);
-    assert!(bad.has_hard_violations(), "必要 0.15 > 真の距離 0.1");
+    assert_eq!(bad.violations.len(), 1, "必要 0.15 > 真の距離 0.1");
     let r = bad.violations[0].residual;
     assert!(
         (r - (0.1 - 0.15)).abs() < 0.004,
         "residual {r:.4} が解析解 −0.05 (±0.004) から外れた"
     );
+}
+
+/// `Stress` は距離を反例で押さえても、要求値が無次元の heuristic なので
+/// 結論はモデルに依る — `Priority::Hard` を名乗らせない
+#[test]
+fn stress_cannot_claim_hard_priority() {
+    let c = Constraint::Stress {
+        node: SdfNode::box3d(2.0, 2.0, 0.2),
+        load_points: vec![(Vec3::new(0.0, 0.0, 0.1), 1.0)],
+        min_thickness_factor: 0.15,
+    };
+    let err = Law::hard("load", c).expect_err("Stress が Hard を名乗れてしまった");
+    assert_eq!(err.constraint, "Stress");
+
+    let report = check_laws(&law_soft_stress(0.15), &single_cell(Vec3::ZERO, 0.01));
+    assert!(
+        !report.has_hard_violations(),
+        "soft で積んだ Stress が Hard 違反として出た"
+    );
+    assert!(
+        report.violations[0].evidence.model().is_some(),
+        "Stress の違反が Modelled として報告されていない"
+    );
+}
+
+fn law_soft_stress(factor: f32) -> Vec<Law> {
+    vec![Law::soft(
+        "load",
+        1.0,
+        Constraint::Stress {
+            node: SdfNode::box3d(2.0, 2.0, 0.2),
+            load_points: vec![(Vec3::new(0.0, 0.0, 0.1), 1.0)],
+            min_thickness_factor: factor,
+        },
+    )]
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -368,7 +412,8 @@ fn gap_thinner_than_probe_resolution_is_unresolved() {
             a: SdfNode::sphere(1.0),
             b: SdfNode::sphere(1.0).translate(2.02, 0.0, 0.0),
         },
-    )];
+    )
+    .expect("provable constraint")];
     // grid 境界が球面 (x = 1.0 / 1.02) に乗らないよう −1.25 始点 (cell 1.15)
     let report = check_laws(
         &laws,
@@ -402,7 +447,8 @@ fn containment_margin_thinner_than_probe_resolution_is_unresolved() {
             inner: SdfNode::sphere(0.99),
             outer: SdfNode::sphere(1.0),
         },
-    )];
+    )
+    .expect("provable constraint")];
     let report = check_laws(&laws, &grid(Vec3::splat(-1.2), Vec3::splat(1.2), 4));
     assert!(
         report.violations.is_empty(),
@@ -453,7 +499,8 @@ fn non_overlap_reports_the_deepest_overlap_regardless_of_sample_order() {
         let b = SdfNode::sphere(0.5)
             .translate(xd + 0.35, 0.0, 0.0)
             .union(SdfNode::sphere(0.5).translate(xs + 0.45, 0.0, 0.0));
-        let laws = vec![Law::hard("apart", Constraint::NonOverlap { a, b })];
+        let laws =
+            vec![Law::hard("apart", Constraint::NonOverlap { a, b }).expect("provable constraint")];
         let cfg = CheckConfig {
             aabb_min: Vec3::new(-3.0, -0.05, -0.05),
             aabb_max: Vec3::new(3.0, 0.05, 0.05),
@@ -481,10 +528,10 @@ fn containment_reports_the_largest_overflow_regardless_of_sample_order() {
         let inner = SdfNode::sphere(0.5)
             .translate(xb + 0.7, 0.0, 0.0)
             .union(SdfNode::sphere(0.5).translate(xs + 0.55, 0.0, 0.0));
-        let laws = vec![Law::hard(
-            "inside",
-            Constraint::Containment { inner, outer },
-        )];
+        let laws = vec![
+            Law::hard("inside", Constraint::Containment { inner, outer })
+                .expect("provable constraint"),
+        ];
         let cfg = CheckConfig {
             aabb_min: Vec3::new(-3.5, -0.05, -0.05),
             aabb_max: Vec3::new(3.5, 0.05, 0.05),
@@ -516,7 +563,8 @@ fn contact_too_far_without_upper_bound_reports_neg_infinity() {
             min_distance: 0.1,
             max_distance: 0.4,
         },
-    )];
+    )
+    .expect("provable constraint")];
     let cfg = grid(Vec3::new(-1.2, -1.2, -1.2), Vec3::new(6.2, 1.2, 1.2), 10);
     let report = check_laws(&laws, &cfg);
     assert!(
@@ -551,7 +599,8 @@ fn contact_margin_thinner_than_probe_resolution_is_unresolved() {
             min_distance: 0.51,
             max_distance: 1.0,
         },
-    )];
+    )
+    .expect("provable constraint")];
     let cfg = grid(Vec3::new(-1.2, -1.2, -1.2), Vec3::new(3.7, 1.2, 1.2), 10);
     let report = check_laws(&laws, &cfg);
     assert!(

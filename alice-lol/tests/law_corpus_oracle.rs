@@ -134,7 +134,7 @@ fn nodes() -> Vec<(String, SdfNode)> {
 }
 
 fn non_overlap(a: SdfNode, b: SdfNode) -> Vec<Law> {
-    vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b })]
+    vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")]
 }
 
 fn verdict(report: &LawReport) -> &'static str {
@@ -248,7 +248,8 @@ fn unresolved_rate_is_measured_and_bounded() {
                     node,
                     min_thickness: 0.2,
                 },
-            )];
+            )
+            .expect("provable constraint")];
             let report = check_laws(&laws, &config);
             match verdict(&report) {
                 "violation" => violated += 1,
@@ -302,7 +303,8 @@ fn gradient_bound_never_contradicts_the_static_claim() {
                 max_gradient: claimed * (1.0 + 1e-3),
                 probe: 1e-3,
             },
-        )];
+        )
+        .expect("provable constraint")];
         let report = check_laws(&laws, &cfg);
         assert!(
             !report.has_hard_violations(),
@@ -337,7 +339,8 @@ fn proven_unreachability_is_never_refuted_by_a_point_path() {
                 from,
                 to,
             },
-        )];
+        )
+        .expect("provable constraint")];
         let report = check_laws(&laws, &cfg);
         if !report.has_hard_violations() {
             continue;

@@ -39,6 +39,10 @@ use glam::Vec3;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// 制約の優先度
+///
+/// [`Hard`](Self::Hard) を名乗れるのは **証明か反例を返せる制約だけ** で、
+/// モデルによる推定しか返せない制約は [`Law::hard`] を通らない
+/// ([`Constraint::evidence_class`] / [`Evidence`] 参照)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Priority {
     /// 絶対不可侵 — 違反はエラー
@@ -47,11 +51,99 @@ pub enum Priority {
     Soft(f32),
 }
 
+/// 判定の根拠の種類
+///
+/// この検証器が「違反である」と言う時、その主張の裏付けには 3 つの強さがある
+/// 区別しないと、**格子解像度に依存した推定が証明と同じ重み ([`Priority::Hard`])
+/// で報告される** — 0.4.0 までの `Thermal` / `Continuity` /
+/// `VolumeConservation` / `Stress` がそうだった
+///
+/// 強さは `Proved` > `Witnessed` > `Modelled` の順だが、**前 2 つと `Modelled`
+/// の間だけが質的な差** で、そこが [`Law::hard`] の gate になる
+/// ([`Self::is_proof`])
+///
+/// 検証器 (本 crate) が構築し、利用側は読むだけ 根拠は今後増えるので
+/// `#[non_exhaustive]`、match には `_` 腕を置く
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Evidence {
+    /// 区間演算の包含による証明 — 標本の取り方に依存しない
+    ///
+    /// 「この箱の場は一様に正なので、どんな経路もここを通れない」のように、
+    /// 有限個の点を見たのではなく **領域全体** について言えている
+    Proved,
+    /// 点の反例 — 中間値定理 / 点評価で実際に見つけた具体的な証拠
+    ///
+    /// 「この 2 点で場の符号が違うので、間に表面がある」のように、
+    /// 示した点そのものが主張の裏付けになっている (偽陽性なし)
+    Witnessed,
+    /// モデルによる推定 — 証明でも反例でもない
+    ///
+    /// 格子解像度・無次元の閾値・場の値の距離への流用などに依存し、
+    /// **解像度を変えると結論が変わりうる** 違反を主張してよいが、
+    /// [`Priority::Hard`] は名乗れない
+    Modelled {
+        /// 何を仮定したモデルか (報告にそのまま出る)
+        model: &'static str,
+    },
+}
+
+impl Evidence {
+    /// 証明または反例か (= [`Priority::Hard`] を名乗ってよいか)
+    #[must_use]
+    pub const fn is_proof(self) -> bool {
+        !matches!(self, Self::Modelled { .. })
+    }
+
+    /// モデル推定ならその説明
+    #[must_use]
+    pub const fn model(self) -> Option<&'static str> {
+        match self {
+            Self::Modelled { model } => Some(model),
+            _ => None,
+        }
+    }
+}
+
+/// [`Law::hard`] を、モデル推定しか返せない制約に対して呼んだ
+///
+/// 降格するかを検証器が黙って決めると「証明なしの Hard 違反」が別の形で復活
+/// するので、呼び出し側に返して選ばせる ([`Law::soft`] で重みを付けるのが既定
+/// の対処)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotProvable {
+    /// 対象の制約 ([`Constraint::name`])
+    pub constraint: &'static str,
+    /// その制約が依存しているモデル
+    pub model: &'static str,
+}
+
+impl std::fmt::Display for NotProvable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} は証明も反例も返せない (根拠: {}) ので Priority::Hard を名乗れない — Law::soft で重みを付けて使う",
+            self.constraint, self.model
+        )
+    }
+}
+
+impl std::error::Error for NotProvable {}
+
 /// 制約の種類
 ///
-/// A.1.0 (2026-08-06) 時点で 3 variant (`NonOverlap` / Containment / `MinThickness`)
-/// A.2 (2026-08-06) で 5 variant 追加 (Stress / Thermal / Contact / Continuity / `VolumeConservation`)
-/// 新 5 variant は geometric proxy 評価 (grid + `sdf_eval)、精密` physics-backed 評価は A.2.1 で追加予定
+/// **variant ごとに主張の強さが違う** ([`Self::evidence_class`]):
+///
+/// - 区間演算の包含で証明する ([`Evidence::Proved`]): `Reachable`
+/// - 点の反例を返す ([`Evidence::Witnessed`]): `NonOverlap` / `Containment` /
+///   `MinThickness` / `Contact` / `GradientBound`
+/// - モデル推定にとどまる ([`Evidence::Modelled`]): `Stress` / `Thermal` /
+///   `Continuity` / `VolumeConservation` — [`Law::hard`] を通らない
+///
+/// 0.5.0 まで、この 4 つは幾何 proxy のまま [`Priority::Hard`] を名乗れた
+/// (`LawSet` の convenience が `Hard` を hardcode していた) 物理 backend
+/// (`alice-physics`) を繋いでも `Modelled` は `Modelled` のままで、
+/// 「モデルである」ことと「モデルが良い」ことは別の話
 #[derive(Debug, Clone)]
 pub enum Constraint {
     /// 2 つの SDF が重ならない（distance > 0）
@@ -178,6 +270,81 @@ pub enum Constraint {
     },
 }
 
+impl Constraint {
+    /// variant 名 (報告 / エラー用)
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::NonOverlap { .. } => "NonOverlap",
+            Self::Containment { .. } => "Containment",
+            Self::MinThickness { .. } => "MinThickness",
+            Self::Stress { .. } => "Stress",
+            Self::Thermal { .. } => "Thermal",
+            Self::Contact { .. } => "Contact",
+            Self::Continuity { .. } => "Continuity",
+            Self::GradientBound { .. } => "GradientBound",
+            Self::Reachable { .. } => "Reachable",
+            Self::VolumeConservation { .. } => "VolumeConservation",
+        }
+    }
+
+    /// この制約が返せる **最も強い** 根拠
+    ///
+    /// [`Law::hard`] の gate に使う 個々の違反が実際に何を根拠にしたかは
+    /// [`Violation::evidence`] 側に載る (例: `Contact` は干渉なら
+    /// [`Evidence::Witnessed`]、離れすぎの証明なら [`Evidence::Proved`] を
+    /// 返すが、ここでは弱い方の `Witnessed` を class として申告する)
+    #[must_use]
+    pub const fn evidence_class(&self) -> Evidence {
+        match self {
+            // 区間演算で内部確定セルの経路 / 外部確定セルの隔離を示す
+            Self::Reachable { .. } => Evidence::Proved,
+            // 反例の点そのものが証拠になる
+            Self::NonOverlap { .. }
+            | Self::Containment { .. }
+            | Self::MinThickness { .. }
+            | Self::Contact { .. }
+            | Self::GradientBound { .. } => Evidence::Witnessed,
+            // 以下 4 つは推定にとどまる (Hard を名乗れない)
+            Self::Stress { .. } => Evidence::Modelled {
+                model: MODEL_STRESS,
+            },
+            Self::Thermal { .. } => Evidence::Modelled {
+                model: MODEL_THERMAL,
+            },
+            Self::Continuity { .. } => Evidence::Modelled {
+                model: MODEL_CONTINUITY,
+            },
+            Self::VolumeConservation { .. } => Evidence::Modelled {
+                model: MODEL_VOLUME,
+            },
+        }
+    }
+}
+
+/// `Stress` が仮定しているモデル
+///
+/// 表面までの距離そのものは [`probe_ball`] で健全に測るが、**要求値**
+/// `force × min_thickness_factor` が無次元の heuristic で、探索半径
+/// `max(1.0, force)` も同様
+const MODEL_STRESS: &str =
+    "肉厚 ≥ force × min_thickness_factor の幾何 proxy (材料 / 断面係数 / 降伏応力を持たない)";
+
+/// `Thermal` が仮定しているモデル
+///
+/// 放熱面積比という proxy に加え、表面近傍の判定が `|f(p)| < step` = **場の値を
+/// 表面までの距離として流用** している (TPMS では場が真の距離の 1.7〜7.0 倍)
+const MODEL_THERMAL: &str =
+    "熱源近傍の 表面近傍セル数 / 内部セル数 比 (|f| を距離として流用、格子解像度依存)";
+
+/// `Continuity` が仮定しているモデル
+const MODEL_CONTINUITY: &str =
+    "格子セル中心の点標本 + 6-connected flood fill (格子より細い接続 / 分離を取りこぼす)";
+
+/// `VolumeConservation` が仮定しているモデル
+const MODEL_VOLUME: &str =
+    "格子セル中心の点標本による内部セル数 count (格子より細い体積差を取りこぼす)";
+
 /// 法則の定義
 #[derive(Debug, Clone)]
 pub struct Law {
@@ -190,9 +357,46 @@ pub struct Law {
 }
 
 impl Law {
-    /// ハード制約の法則を作成
-    #[must_use]
-    pub fn hard(name: impl Into<String>, constraint: Constraint) -> Self {
+    /// ハード制約の法則を作成 — **証明か反例を返せる制約に限る**
+    ///
+    /// # Errors
+    ///
+    /// モデル推定しか返せない制約 (`Stress` / `Thermal` / `Continuity` /
+    /// `VolumeConservation`) には [`NotProvable`] を返す 黙って
+    /// [`Priority::Soft`] に降格すると「証明なしの Hard 違反」が別の形で
+    /// 復活するので、降格は呼び出し側が明示的に選ぶ
+    ///
+    /// ```
+    /// use alice_lol::law::{Constraint, Law};
+    /// use alice_sdf::SdfNode;
+    /// use glam::Vec3;
+    ///
+    /// let node = SdfNode::sphere(1.0);
+    /// // 反例を返せるので Hard を名乗れる
+    /// let c = Constraint::MinThickness { node: node.clone(), min_thickness: 0.5 };
+    /// assert!(Law::hard("thick", c).is_ok());
+    ///
+    /// // 格子解像度依存の推定なので名乗れない
+    /// let c = Constraint::Continuity { node, seed_point: Vec3::ZERO };
+    /// assert_eq!(Law::hard("split", c).unwrap_err().constraint, "Continuity");
+    /// ```
+    pub fn hard(name: impl Into<String>, constraint: Constraint) -> Result<Self, NotProvable> {
+        if let Some(model) = constraint.evidence_class().model() {
+            return Err(NotProvable {
+                constraint: constraint.name(),
+                model,
+            });
+        }
+        Ok(Self::hard_unchecked(name, constraint))
+    }
+
+    /// gate を通さず Hard を作る (呼び出し側が provable を保証する内部用)
+    fn hard_unchecked(name: impl Into<String>, constraint: Constraint) -> Self {
+        debug_assert!(
+            constraint.evidence_class().is_proof(),
+            "hard_unchecked にモデル推定の制約 {} が渡された",
+            constraint.name()
+        );
         Self {
             name: name.into(),
             priority: Priority::Hard,
@@ -200,7 +404,7 @@ impl Law {
         }
     }
 
-    /// ソフト制約の法則を作成（weight: 0.0〜1.0）
+    /// ソフト制約の法則を作成（weight: 0.0〜1.0）— 任意の制約に使える
     #[must_use]
     pub fn soft(name: impl Into<String>, weight: f32, constraint: Constraint) -> Self {
         Self {
@@ -224,6 +428,12 @@ pub struct Violation {
     pub point: Vec3,
     /// 違反点を含むセルの AABB
     pub region: Vec3Interval,
+    /// **この違反の** 裏付け
+    ///
+    /// [`Constraint::evidence_class`] が「その制約が返せる最強の根拠」なのに
+    /// 対し、こちらは実際にこの 1 件が何に依っているか 同じ `Contact` でも
+    /// 干渉は [`Evidence::Witnessed`]、離れすぎは [`Evidence::Proved`] になる
+    pub evidence: Evidence,
 }
 
 /// 判定不能の理由
@@ -298,9 +508,24 @@ impl LawReport {
     }
 
     /// ハード制約の違反があるか
+    ///
+    /// 0.5.0 以降、`true` は **証明か反例のある違反** だけを意味する
+    /// ([`Law::hard`] がモデル推定の制約を弾くため)
     #[must_use]
     pub fn has_hard_violations(&self) -> bool {
         self.violations.iter().any(|v| v.priority == Priority::Hard)
+    }
+
+    /// モデル推定でなく証明 / 反例に裏付けられた違反だけを返す
+    ///
+    /// [`Priority`] と直交する軸 — Soft で足したモデル推定の法則と、
+    /// Soft で足した反例つきの法則を、報告側で分けたい時に使う
+    #[must_use]
+    pub fn proven_violations(&self) -> Vec<&Violation> {
+        self.violations
+            .iter()
+            .filter(|v| v.evidence.is_proof())
+            .collect()
     }
 
     /// 判定不能の法則があるか
@@ -562,6 +787,7 @@ fn accumulate_thickness(
 fn thickness_verdict(
     law_name: &str,
     priority: Priority,
+    evidence: Evidence,
     worst: Option<(f32, Vec3, Vec3Interval)>,
     undecided: Option<(Vec3, Vec3Interval, f32)>,
 ) -> Verdict {
@@ -572,6 +798,7 @@ fn thickness_verdict(
             residual,
             point,
             region,
+            evidence,
         }),
         unresolved: undecided.map(|(point, region, radius)| Unresolved {
             law_name: law_name.to_string(),
@@ -653,6 +880,8 @@ fn pair_verdict(
             residual,
             point,
             region,
+            // 両方の場が負 / はみ出しの点を実際に見つけている
+            evidence: Evidence::Witnessed,
         }),
         unresolved: undecided.map(|(point, region)| Unresolved {
             law_name: law_name.to_string(),
@@ -770,7 +999,8 @@ fn check_min_thickness(
         );
     }
 
-    thickness_verdict(law_name, priority, worst, undecided)
+    // 表面までの距離は probe_ball が交点を見つけて上から押さえる
+    thickness_verdict(law_name, priority, Evidence::Witnessed, worst, undecided)
 }
 
 /// Stress: 各 load point 近傍の内部標本点で、表面までの距離 < force × factor なら violation
@@ -805,7 +1035,17 @@ fn check_stress(
         }
     }
 
-    thickness_verdict(law_name, priority, worst, undecided)
+    // 距離そのものは反例で押さえているが、要求値 force × factor が無次元の
+    // heuristic なので、違反という結論はモデルに依る (MODEL_STRESS)
+    thickness_verdict(
+        law_name,
+        priority,
+        Evidence::Modelled {
+            model: MODEL_STRESS,
+        },
+        worst,
+        undecided,
+    )
 }
 
 /// 表面間距離 (gap) が `m` を超えることの証明
@@ -899,18 +1139,26 @@ fn check_contact(
     // 2. 上界
     let upper = contact_upper_bound(a, b, min_distance, max_distance, config);
 
-    let make_violation = |residual: f32, point: Vec3, region: Vec3Interval| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-    };
+    let make_violation =
+        |residual: f32, point: Vec3, region: Vec3Interval, evidence: Evidence| Violation {
+            law_name: law_name.to_string(),
+            priority,
+            residual,
+            point,
+            region,
+            evidence,
+        };
 
     if let Some((ub, point, region)) = upper {
         if ub < min_distance {
             return Verdict {
-                violation: Some(make_violation(ub - min_distance, point, region)),
+                // 交点を実際に見つけて三角不等式で上から押さえた
+                violation: Some(make_violation(
+                    ub - min_distance,
+                    point,
+                    region,
+                    Evidence::Witnessed,
+                )),
                 unresolved: None,
             };
         }
@@ -929,7 +1177,8 @@ fn check_contact(
             |(ub, p, r)| (max_distance - ub, p, r),
         );
         return Verdict {
-            violation: Some(make_violation(residual, point, region)),
+            // gap_exceeds は全セルを区間演算で潰して「gap > max」を証明する
+            violation: Some(make_violation(residual, point, region, Evidence::Proved)),
             unresolved: None,
         };
     }
@@ -1207,6 +1456,9 @@ fn check_thermal(
         residual,
         point,
         region,
+        evidence: Evidence::Modelled {
+            model: MODEL_THERMAL,
+        },
     })
 }
 
@@ -1229,28 +1481,21 @@ fn check_continuity(
     priority: Priority,
     config: &CheckConfig,
 ) -> Option<Violation> {
+    let violation = |residual: f32, point: Vec3, region: Vec3Interval| Violation {
+        law_name: law_name.to_string(),
+        priority,
+        residual,
+        point,
+        region,
+        evidence: Evidence::Modelled {
+            model: MODEL_CONTINUITY,
+        },
+    };
+
     let seed_dist = sdf_eval(node, seed_point);
     if seed_dist >= 0.0 {
-        return Some(Violation {
-            law_name: law_name.to_string(),
-            priority,
-            residual: seed_dist, // 正値 = seed 外部
-            point: seed_point,
-            region: Vec3Interval {
-                x: Interval {
-                    lo: seed_point.x,
-                    hi: seed_point.x,
-                },
-                y: Interval {
-                    lo: seed_point.y,
-                    hi: seed_point.y,
-                },
-                z: Interval {
-                    lo: seed_point.z,
-                    hi: seed_point.z,
-                },
-            },
-        });
+        // seed 点そのものを潰れた箱として報告する (領域ではなく 1 点が原因)
+        return Some(violation(seed_dist, seed_point, point_box(seed_point)));
     }
 
     let n = config.resolution;
@@ -1319,29 +1564,29 @@ fn check_continuity(
         // 到達不能な内部セルの 1 つを見つけて point / region 化
         for (ix, iy, iz, idx) in grid_indices(n) {
             if interior[idx] && !visited[idx] {
-                #[allow(clippy::cast_precision_loss)]
-                let lo = config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32);
-                let center = lo + step * 0.5;
-                let hi = lo + step;
+                let region = cell_box(config, step, ix, iy, iz);
                 #[allow(clippy::cast_precision_loss)]
                 let unreachable_ratio =
                     ((total_interior - reachable) as f32) / (total_interior as f32);
-                return Some(Violation {
-                    law_name: law_name.to_string(),
-                    priority,
-                    residual: -unreachable_ratio, // 負値 (到達不能 fraction)
-                    point: center,
-                    region: Vec3Interval {
-                        x: Interval { lo: lo.x, hi: hi.x },
-                        y: Interval { lo: lo.y, hi: hi.y },
-                        z: Interval { lo: lo.z, hi: hi.z },
-                    },
-                });
+                return Some(violation(
+                    -unreachable_ratio, // 負値 (到達不能 fraction)
+                    box_center(region),
+                    region,
+                ));
             }
         }
     }
 
     None
+}
+
+/// 1 点を潰れた箱として表す (領域ではなく点が原因だと報告する時)
+const fn point_box(p: Vec3) -> Vec3Interval {
+    Vec3Interval {
+        x: Interval { lo: p.x, hi: p.x },
+        y: Interval { lo: p.y, hi: p.y },
+        z: Interval { lo: p.z, hi: p.z },
+    }
 }
 
 /// セルの箱を `Vec3Interval` にする
@@ -1417,6 +1662,8 @@ fn check_gradient_bound(
                 residual: worst - max_gradient,
                 point: worst_at,
                 region: cell_box(config, step, worst_cell.0, worst_cell.1, worst_cell.2),
+                // 上界を超える差分商を取る 2 点が、そのまま反例になっている
+                evidence: Evidence::Witnessed,
             }),
             unresolved: None,
         };
@@ -1561,6 +1808,8 @@ fn check_reachable(
                     residual: sdf_eval(node, p),
                     point: p,
                     region: cell_box(config, step, cell.0, cell.1, cell.2),
+                    // 端点のセルが区間演算で「外部」と確定している
+                    evidence: Evidence::Proved,
                 }),
                 unresolved: None,
             };
@@ -1584,6 +1833,9 @@ fn check_reachable(
                 residual: -(from - to).length(),
                 point: to,
                 region: cell_box(config, step, b.0, b.1, b.2),
+                // 外部確定でないセルを全部使っても届かない = どんな経路も
+                // 外部確定セルを通る、という区間演算による証明
+                evidence: Evidence::Proved,
             }),
             unresolved: None,
         };
@@ -1673,6 +1925,9 @@ fn check_volume_conservation(
             residual: relative_tolerance - relative_diff, // 負 = 超過量
             point,
             region,
+            evidence: Evidence::Modelled {
+                model: MODEL_VOLUME,
+            },
         })
     } else {
         None
@@ -1696,17 +1951,31 @@ impl LawSet {
         Self::default()
     }
 
-    /// ハード制約を追加
-    #[must_use]
-    pub fn hard(mut self, name: impl Into<String>, constraint: Constraint) -> Self {
-        self.laws.push(Law::hard(name, constraint));
-        self
+    /// ハード制約を追加 — **証明か反例を返せる制約に限る**
+    ///
+    /// # Errors
+    ///
+    /// モデル推定しか返せない制約には [`NotProvable`] を返す ([`Law::hard`])
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn hard(
+        mut self,
+        name: impl Into<String>,
+        constraint: Constraint,
+    ) -> Result<Self, NotProvable> {
+        self.laws.push(Law::hard(name, constraint)?);
+        Ok(self)
     }
 
-    /// ソフト制約を追加
+    /// ソフト制約を追加 — 任意の制約に使える
     #[must_use]
     pub fn soft(mut self, name: impl Into<String>, weight: f32, constraint: Constraint) -> Self {
         self.laws.push(Law::soft(name, weight, constraint));
+        self
+    }
+
+    /// 証明 / 反例を返せる制約を Hard で積む内部用 (gate を通す必要がない)
+    fn push_provable(mut self, name: impl Into<String>, constraint: Constraint) -> Self {
+        self.laws.push(Law::hard_unchecked(name, constraint));
         self
     }
 
@@ -1716,17 +1985,22 @@ impl LawSet {
         &self.laws
     }
 
-    /// Stress 制約を hard で追加する convenience
+    /// Stress 制約を **soft で** 追加する convenience
+    ///
+    /// モデル推定 ([`Evidence::Modelled`]) なので Hard では積めない
+    /// 重み付けの根拠は [`Constraint::evidence_class`] の doc を参照
     #[must_use]
     pub fn stress(
         self,
         name: impl Into<String>,
+        weight: f32,
         node: SdfNode,
         load_points: Vec<(Vec3, f32)>,
         min_thickness_factor: f32,
     ) -> Self {
-        self.hard(
+        self.soft(
             name,
+            weight,
             Constraint::Stress {
                 node,
                 load_points,
@@ -1735,18 +2009,22 @@ impl LawSet {
         )
     }
 
-    /// Thermal 制約を hard で追加する convenience
+    /// Thermal 制約を **soft で** 追加する convenience
+    ///
+    /// モデル推定 ([`Evidence::Modelled`]) なので Hard では積めない
     #[must_use]
     pub fn thermal(
         self,
         name: impl Into<String>,
+        weight: f32,
         node: SdfNode,
         heat_sources: Vec<Vec3>,
         search_radius: f32,
         min_surface_ratio: f32,
     ) -> Self {
-        self.hard(
+        self.soft(
             name,
+            weight,
             Constraint::Thermal {
                 node,
                 heat_sources,
@@ -1756,7 +2034,7 @@ impl LawSet {
         )
     }
 
-    /// Contact 制約を hard で追加する convenience
+    /// Contact 制約を hard で追加する convenience (反例を返せるので gate 不要)
     #[must_use]
     pub fn contact(
         self,
@@ -1766,7 +2044,7 @@ impl LawSet {
         min_distance: f32,
         max_distance: f32,
     ) -> Self {
-        self.hard(
+        self.push_provable(
             name,
             Constraint::Contact {
                 a,
@@ -1777,10 +2055,19 @@ impl LawSet {
         )
     }
 
-    /// Continuity 制約を hard で追加する convenience
+    /// Continuity 制約を **soft で** 追加する convenience
+    ///
+    /// モデル推定 ([`Evidence::Modelled`]) なので Hard では積めない
+    /// 「この 2 点が繋がるか」を証明つきで問いたいなら [`Self::reachable`]
     #[must_use]
-    pub fn continuity(self, name: impl Into<String>, node: SdfNode, seed_point: Vec3) -> Self {
-        self.hard(name, Constraint::Continuity { node, seed_point })
+    pub fn continuity(
+        self,
+        name: impl Into<String>,
+        weight: f32,
+        node: SdfNode,
+        seed_point: Vec3,
+    ) -> Self {
+        self.soft(name, weight, Constraint::Continuity { node, seed_point })
     }
 
     /// `GradientBound` 制約を hard で追加する convenience
@@ -1794,7 +2081,7 @@ impl LawSet {
         max_gradient: f32,
         probe: f32,
     ) -> Self {
-        self.hard(
+        self.push_provable(
             name,
             Constraint::GradientBound {
                 node,
@@ -1804,23 +2091,27 @@ impl LawSet {
         )
     }
 
-    /// `Reachable` 制約を hard で追加する convenience
+    /// `Reachable` 制約を hard で追加する convenience (3 値とも証明なので gate 不要)
     #[must_use]
     pub fn reachable(self, name: impl Into<String>, node: SdfNode, from: Vec3, to: Vec3) -> Self {
-        self.hard(name, Constraint::Reachable { node, from, to })
+        self.push_provable(name, Constraint::Reachable { node, from, to })
     }
 
-    /// `VolumeConservation` 制約を hard で追加する convenience
+    /// `VolumeConservation` 制約を **soft で** 追加する convenience
+    ///
+    /// モデル推定 ([`Evidence::Modelled`]) なので Hard では積めない
     #[must_use]
     pub fn volume_conservation(
         self,
         name: impl Into<String>,
+        weight: f32,
         before: SdfNode,
         after: SdfNode,
         relative_tolerance: f32,
     ) -> Self {
-        self.hard(
+        self.soft(
             name,
+            weight,
             Constraint::VolumeConservation {
                 before,
                 after,
@@ -1996,9 +2287,15 @@ pub fn format_report(report: &LawReport) -> String {
             Priority::Hard => "ERROR",
             Priority::Soft(_) => "WARN ",
         };
+        let basis = match v.evidence {
+            Evidence::Proved => "proved",
+            Evidence::Modelled { .. } => "modelled",
+            // 反例つきが既定なので、既定でない 2 つだけを目立たせる
+            _ => "witnessed",
+        };
         let _ = writeln!(
             out,
-            "  [{severity}] {}: residual={:.4}, at=({:.2},{:.2},{:.2}), region=[{:.2}..{:.2}]x[{:.2}..{:.2}]x[{:.2}..{:.2}]",
+            "  [{severity}] {}: residual={:.4}, basis={basis}, at=({:.2},{:.2},{:.2}), region=[{:.2}..{:.2}]x[{:.2}..{:.2}]x[{:.2}..{:.2}]",
             v.law_name,
             v.residual,
             v.point.x, v.point.y, v.point.z,
@@ -2006,6 +2303,11 @@ pub fn format_report(report: &LawReport) -> String {
             v.region.y.lo, v.region.y.hi,
             v.region.z.lo, v.region.z.hi,
         );
+        // モデルに依る結論は、何を仮定したかまで出さないと読み手が重みを
+        // 判断できない
+        if let Some(model) = v.evidence.model() {
+            let _ = writeln!(out, "            model: {model}");
+        }
     }
 
     out
@@ -2323,10 +2625,10 @@ mod core_probe_tests {
             "outer の外部になっていない"
         );
         let report = check_laws(
-            &[Law::hard(
-                "surface_of_inner",
-                Constraint::Containment { inner, outer },
-            )],
+            &[
+                Law::hard("surface_of_inner", Constraint::Containment { inner, outer })
+                    .expect("provable constraint"),
+            ],
             &config,
         );
         assert!(
@@ -2354,7 +2656,8 @@ mod core_probe_tests {
                     inner: inner2,
                     outer: outer2,
                 },
-            )],
+            )
+            .expect("provable constraint")],
             &config,
         );
         assert!(
@@ -2401,7 +2704,8 @@ mod core_probe_tests {
                     min_distance: 1.0,
                     max_distance: 2.0,
                 },
-            )],
+            )
+            .expect("provable constraint")],
             &config,
         );
         assert!(
@@ -2458,7 +2762,8 @@ mod core_probe_tests {
         assert_eq!(sdf_eval(&a, touch), 0.0, "a の表面の場が厳密 0 でない");
         assert!(sdf_eval(&b, touch) < 0.0, "b の内部になっていない");
         let report = check_laws(
-            &[Law::hard("surface_of_a", Constraint::NonOverlap { a, b })],
+            &[Law::hard("surface_of_a", Constraint::NonOverlap { a, b })
+                .expect("provable constraint")],
             &config,
         );
         assert!(
@@ -2473,10 +2778,10 @@ mod core_probe_tests {
         assert_eq!(sdf_eval(&b2, touch), 0.0, "b の表面の場が厳密 0 でない");
         assert!(sdf_eval(&a2, touch) < 0.0, "a の内部になっていない");
         let report2 = check_laws(
-            &[Law::hard(
-                "surface_of_b",
-                Constraint::NonOverlap { a: a2, b: b2 },
-            )],
+            &[
+                Law::hard("surface_of_b", Constraint::NonOverlap { a: a2, b: b2 })
+                    .expect("provable constraint"),
+            ],
             &config,
         );
         assert!(
@@ -2484,5 +2789,247 @@ mod core_probe_tests {
             "b の表面上の点 (fb = 0) を侵入の witness にした\n{}",
             format_report(&report2)
         );
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 根拠 gate (0.5.0) — 「証明なしの Hard 違反」が復活していないことの機械検査
+//
+// `Constraint::evidence_class` は手で書いた表なので、**実装が実際に返す
+// `Violation::evidence` と食い違っても誰も気付かない** ここが drift すると
+// gate は形だけ残って意味を失うので、両者を突き合わせる test を置く
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#[cfg(test)]
+mod evidence_gate_tests {
+    use super::*;
+
+    /// 全 10 variant を 1 つずつ (網羅は `all_variants_are_classified` で固定)
+    fn every_constraint() -> Vec<Constraint> {
+        let n = || SdfNode::sphere(1.0);
+        vec![
+            Constraint::NonOverlap { a: n(), b: n() },
+            Constraint::Containment {
+                inner: n(),
+                outer: n(),
+            },
+            Constraint::MinThickness {
+                node: n(),
+                min_thickness: 0.5,
+            },
+            Constraint::Stress {
+                node: n(),
+                load_points: vec![(Vec3::ZERO, 1.0)],
+                min_thickness_factor: 0.2,
+            },
+            Constraint::Thermal {
+                node: n(),
+                heat_sources: vec![Vec3::ZERO],
+                search_radius: 1.0,
+                min_surface_ratio: 0.8,
+            },
+            Constraint::Contact {
+                a: n(),
+                b: n(),
+                min_distance: 0.1,
+                max_distance: 1.0,
+            },
+            Constraint::Continuity {
+                node: n(),
+                seed_point: Vec3::ZERO,
+            },
+            Constraint::GradientBound {
+                node: n(),
+                max_gradient: 1.0,
+                probe: 0.01,
+            },
+            Constraint::Reachable {
+                node: n(),
+                from: Vec3::ZERO,
+                to: Vec3::ZERO,
+            },
+            Constraint::VolumeConservation {
+                before: n(),
+                after: n(),
+                relative_tolerance: 0.05,
+            },
+        ]
+    }
+
+    /// variant を足したら必ずここに落ちる (`name` の網羅が抜けを教える)
+    #[test]
+    fn all_variants_are_classified() {
+        assert_eq!(
+            every_constraint().len(),
+            10,
+            "variant を足したら every_constraint にも足す"
+        );
+        let modelled: Vec<&str> = every_constraint()
+            .iter()
+            .filter(|c| !c.evidence_class().is_proof())
+            .map(Constraint::name)
+            .collect();
+        assert_eq!(
+            modelled,
+            ["Stress", "Thermal", "Continuity", "VolumeConservation"],
+            "モデル推定の顔ぶれが変わった — 意図した変更なら CHANGELOG に書く"
+        );
+    }
+
+    /// モデル推定は `Law::hard` を通らない / 証明・反例つきは通る
+    #[test]
+    fn hard_is_gated_by_evidence_class() {
+        for c in every_constraint() {
+            let (name, class) = (c.name(), c.evidence_class());
+            let got = Law::hard("x", c);
+            assert_eq!(
+                got.is_ok(),
+                class.is_proof(),
+                "{name} の gate が evidence_class と食い違う"
+            );
+            if let Err(e) = got {
+                assert_eq!(e.constraint, name);
+                assert_eq!(Some(e.model), class.model(), "{name} の model 説明が違う");
+                assert!(
+                    e.to_string().contains("Law::soft"),
+                    "{name}: 対処法が message に無い"
+                );
+            }
+        }
+    }
+
+    /// モデル推定の制約は `Priority::Hard` の違反を出せない
+    ///
+    /// これが 0.5.0 の要点 — gate を外すとここが落ちる
+    #[test]
+    fn modelled_constraints_cannot_produce_hard_violations() {
+        // 離れた 2 球 = Continuity / VolumeConservation が違反を出す形
+        let split = SdfNode::sphere(0.8).union(SdfNode::sphere(0.8).translate(4.0, 0.0, 0.0));
+        let config = CheckConfig {
+            aabb_min: Vec3::new(-2.0, -2.0, -2.0),
+            aabb_max: Vec3::new(6.0, 2.0, 2.0),
+            resolution: 16,
+        };
+        let report = LawSet::new()
+            .continuity("split", 1.0, split.clone(), Vec3::ZERO)
+            .volume_conservation("shrunk", 1.0, split, SdfNode::sphere(0.8), 0.05)
+            .check(&config);
+
+        assert!(
+            !report.violations.is_empty(),
+            "検査対象が違反を出していない (test が無意味になっている)"
+        );
+        assert!(
+            !report.has_hard_violations(),
+            "モデル推定が Hard 違反として出た\n{}",
+            format_report(&report)
+        );
+        assert!(
+            report.proven_violations().is_empty(),
+            "モデル推定が proven_violations に混ざった"
+        );
+        for v in &report.violations {
+            assert!(
+                v.evidence.model().is_some(),
+                "{} の違反が Modelled でない",
+                v.law_name
+            );
+        }
+    }
+
+    /// 実装が返す `Violation::evidence` が `evidence_class` より強くなっていない
+    ///
+    /// class は「返せる最強の根拠」なので、実際の違反がそれを **超えて**
+    /// いたら表が古い (逆に弱いのは Contact の干渉側などで正常)
+    #[test]
+    fn reported_evidence_never_exceeds_the_declared_class() {
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-2.0),
+            aabb_max: Vec3::splat(2.0),
+            resolution: 8,
+        };
+        // 重なる 2 球 / 薄い板 / 潰れた熱源 — 各法則が違反を出す形を 1 つずつ
+        let overlap = SdfNode::sphere(1.0);
+        let cases: Vec<Law> = vec![
+            Law::hard(
+                "overlap",
+                Constraint::NonOverlap {
+                    a: overlap.clone(),
+                    b: overlap.clone(),
+                },
+            )
+            .expect("provable constraint"),
+            Law::soft(
+                "heat",
+                1.0,
+                Constraint::Thermal {
+                    node: overlap.clone(),
+                    heat_sources: vec![Vec3::ZERO],
+                    search_radius: 1.5,
+                    min_surface_ratio: 0.99,
+                },
+            ),
+            Law::soft(
+                "load",
+                1.0,
+                Constraint::Stress {
+                    node: overlap,
+                    load_points: vec![(Vec3::ZERO, 5.0)],
+                    min_thickness_factor: 0.5,
+                },
+            ),
+        ];
+        let classes: Vec<(String, Evidence)> = cases
+            .iter()
+            .map(|l| (l.name.clone(), l.constraint.evidence_class()))
+            .collect();
+        let report = check_laws(&cases, &config);
+        assert!(
+            !report.violations.is_empty(),
+            "どの法則も違反を出さなかった"
+        );
+
+        for v in &report.violations {
+            let (_, class) = classes
+                .iter()
+                .find(|(n, _)| *n == v.law_name)
+                .expect("報告された法則名が入力に無い");
+            assert!(
+                !v.evidence.is_proof() || class.is_proof(),
+                "{}: 実際の根拠 {:?} が申告した class {:?} より強い — \
+                 evidence_class の表が実装から遅れている",
+                v.law_name,
+                v.evidence,
+                class
+            );
+        }
+    }
+
+    /// `LawSet` の convenience が Hard を作り直していないか
+    #[test]
+    fn lawset_convenience_keeps_modelled_laws_soft() {
+        let n = || SdfNode::sphere(1.0);
+        let set = LawSet::new()
+            .stress("s", 0.5, n(), vec![(Vec3::ZERO, 1.0)], 0.2)
+            .thermal("t", 0.5, n(), vec![Vec3::ZERO], 1.0, 0.8)
+            .continuity("c", 0.5, n(), Vec3::ZERO)
+            .volume_conservation("v", 0.5, n(), n(), 0.05);
+        assert_eq!(set.laws().len(), 4);
+        for law in set.laws() {
+            assert_eq!(
+                law.priority,
+                Priority::Soft(0.5),
+                "{} が Hard で積まれた",
+                law.name
+            );
+        }
+
+        // 証明・反例つきの 3 つは Hard のまま
+        let provable = LawSet::new()
+            .contact("k", n(), n(), 0.1, 1.0)
+            .gradient_bound("g", n(), 1.0, 0.01)
+            .reachable("r", n(), Vec3::ZERO, Vec3::ZERO);
+        for law in provable.laws() {
+            assert_eq!(law.priority, Priority::Hard, "{} が降格した", law.name);
+        }
     }
 }

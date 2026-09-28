@@ -10,7 +10,9 @@ fn non_overlap_overlapping_spheres() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(0.5, 0.0, 0.0, sphere(1.0)) };
 
-    let laws = vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b })];
+    let laws = vec![
+        Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")
+    ];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -34,7 +36,9 @@ fn non_overlap_separated_spheres() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(5.0, 0.0, 0.0, sphere(1.0)) };
 
-    let laws = vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b })];
+    let laws = vec![
+        Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")
+    ];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-3.0),
@@ -55,10 +59,10 @@ fn containment_inside() {
     let inner = lol! { sphere(0.5) };
     let outer = lol! { sphere(2.0) };
 
-    let laws = vec![Law::hard(
-        "contained",
-        Constraint::Containment { inner, outer },
-    )];
+    let laws = vec![
+        Law::hard("contained", Constraint::Containment { inner, outer })
+            .expect("provable constraint"),
+    ];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-3.0),
@@ -78,10 +82,10 @@ fn containment_overflow() {
     let inner = lol! { translate(2.5, 0.0, 0.0, sphere(1.0)) };
     let outer = lol! { sphere(2.0) };
 
-    let laws = vec![Law::hard(
-        "contained",
-        Constraint::Containment { inner, outer },
-    )];
+    let laws = vec![
+        Law::hard("contained", Constraint::Containment { inner, outer })
+            .expect("provable constraint"),
+    ];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-4.0),
@@ -138,7 +142,8 @@ fn min_thickness_thin_object() {
             node,
             min_thickness: 0.5,
         },
-    )];
+    )
+    .expect("provable constraint")];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -167,7 +172,8 @@ fn min_thickness_thick_solid() {
             node,
             min_thickness: 0.1,
         },
-    )];
+    )
+    .expect("provable constraint")];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-1.0),
@@ -188,8 +194,9 @@ fn multiple_laws() {
     let outer = lol! { sphere(2.0) };
 
     let laws = vec![
-        Law::hard("no_overlap", Constraint::NonOverlap { a, b }),
-        Law::hard("contained", Constraint::Containment { inner, outer }),
+        Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint"),
+        Law::hard("contained", Constraint::Containment { inner, outer })
+            .expect("provable constraint"),
     ];
 
     let config = CheckConfig {
@@ -210,7 +217,9 @@ fn format_report_output() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(0.5, 0.0, 0.0, sphere(1.0)) };
 
-    let laws = vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b })];
+    let laws = vec![
+        Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")
+    ];
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -260,7 +269,9 @@ fn lawset_builder_basic() {
 
     let set = LawSet::new()
         .hard("no_overlap", Constraint::NonOverlap { a, b })
-        .hard("contained", Constraint::Containment { inner, outer });
+        .expect("provable constraint")
+        .hard("contained", Constraint::Containment { inner, outer })
+        .expect("provable constraint");
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -289,6 +300,7 @@ fn lawset_mixed_hard_soft() {
                 b: b.clone(),
             },
         )
+        .expect("provable constraint")
         .soft("soft_no_overlap", 0.5, Constraint::NonOverlap { a, b });
 
     let config = CheckConfig {
@@ -325,6 +337,7 @@ fn lawset_laws_accessor() {
                 b: b.clone(),
             },
         )
+        .expect("provable constraint")
         .soft("law2", 0.3, Constraint::NonOverlap { a, b });
 
     assert_eq!(set.laws().len(), 2);
@@ -350,7 +363,9 @@ fn contradiction_non_overlap_and_containment() {
                 b: b.clone(),
             },
         )
-        .hard("a_in_b", Constraint::Containment { inner: a, outer: b });
+        .expect("provable constraint")
+        .hard("a_in_b", Constraint::Containment { inner: a, outer: b })
+        .expect("provable constraint");
 
     let contradictions = set.detect_contradictions();
     assert_eq!(contradictions.len(), 1);
@@ -370,7 +385,9 @@ fn no_contradiction_different_nodes() {
 
     let set = LawSet::new()
         .hard("no_overlap_ab", Constraint::NonOverlap { a, b })
-        .hard("c_in_d", Constraint::Containment { inner: c, outer: d });
+        .expect("provable constraint")
+        .hard("c_in_d", Constraint::Containment { inner: c, outer: d })
+        .expect("provable constraint");
 
     let contradictions = set.detect_contradictions();
     assert!(
@@ -393,6 +410,7 @@ fn no_contradiction_same_type() {
                 b: b.clone(),
             },
         )
+        .expect("provable constraint")
         .soft("overlap2", 0.5, Constraint::NonOverlap { a, b });
 
     let contradictions = set.detect_contradictions();
@@ -415,13 +433,15 @@ fn top_violations_filter() {
 
     let set = LawSet::new()
         .hard("no_overlap", Constraint::NonOverlap { a, b })
+        .expect("provable constraint")
         .hard(
             "min_wall",
             Constraint::MinThickness {
                 node: thin,
                 min_thickness: 0.5,
             },
-        );
+        )
+        .expect("provable constraint");
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -455,6 +475,7 @@ fn filter_hard_violations() {
                 b: b.clone(),
             },
         )
+        .expect("provable constraint")
         .soft("soft_rule", 0.3, Constraint::NonOverlap { a, b });
 
     let config = CheckConfig {
@@ -498,7 +519,9 @@ fn filter_no_violations() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(5.0, 0.0, 0.0, sphere(1.0)) };
 
-    let set = LawSet::new().hard("separated", Constraint::NonOverlap { a, b });
+    let set = LawSet::new()
+        .hard("separated", Constraint::NonOverlap { a, b })
+        .expect("provable constraint");
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-3.0),
@@ -523,6 +546,7 @@ fn stress_thin_bar_high_load() {
     let bar = lol! { box3d(2.0, 0.15, 0.15) };
     let set = LawSet::new().stress(
         "bar_stress",
+        1.0,
         bar,
         vec![(Vec3::new(0.0, 0.0, 0.0), 5.0)],
         0.2,
@@ -535,10 +559,16 @@ fn stress_thin_bar_high_load() {
     };
 
     let report = set.check(&config);
+    // 0.5.0: Stress は Modelled なので Hard を名乗れない 違反は出るが soft
     assert!(
-        report.has_hard_violations(),
+        !report.violations.is_empty(),
         "薄い bar は stress 違反を検出すべき"
     );
+    assert!(
+        !report.has_hard_violations(),
+        "Stress が Hard で出てはいけない"
+    );
+    assert!(report.violations[0].evidence.model().is_some());
     assert!(report.violations[0].residual < 0.0);
 }
 
@@ -549,6 +579,7 @@ fn stress_thick_block_low_load() {
     let block = lol! { box3d(1.0, 1.0, 1.0) };
     let set = LawSet::new().stress(
         "block_stress",
+        1.0,
         block,
         vec![(Vec3::new(0.0, 0.0, 0.0), 1.0)],
         0.2,
@@ -571,6 +602,7 @@ fn thermal_bulky_shape_near_source() {
     let bulk = lol! { sphere(3.0) };
     let set = LawSet::new().thermal(
         "cooling",
+        1.0,
         bulk,
         vec![Vec3::new(0.0, 0.0, 0.0)],
         1.5, // search_radius
@@ -584,10 +616,16 @@ fn thermal_bulky_shape_near_source() {
     };
 
     let report = set.check(&config);
+    // 0.5.0: Thermal は Modelled (|f| を距離に流用しているため)
     assert!(
-        report.has_hard_violations(),
+        !report.violations.is_empty(),
         "bulky 形状は放熱面積不足 violation"
     );
+    assert!(
+        !report.has_hard_violations(),
+        "Thermal が Hard で出てはいけない"
+    );
+    assert!(report.violations[0].evidence.model().is_some());
 }
 
 /// Contact: 距離が範囲内 → pass
@@ -633,7 +671,7 @@ fn contact_too_far() {
 #[test]
 fn continuity_single_sphere() {
     let sphere_node = lol! { sphere(1.0) };
-    let set = LawSet::new().continuity("connected", sphere_node, Vec3::ZERO);
+    let set = LawSet::new().continuity("connected", 1.0, sphere_node, Vec3::ZERO);
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -650,7 +688,7 @@ fn continuity_single_sphere() {
 fn continuity_disjoint_spheres() {
     // 2 つ離れた sphere の union — seed は左側 sphere
     let disjoint = lol! { union(sphere(0.8), translate(4.0, 0.0, 0.0, sphere(0.8))) };
-    let set = LawSet::new().continuity("connected", disjoint, Vec3::ZERO);
+    let set = LawSet::new().continuity("connected", 1.0, disjoint, Vec3::ZERO);
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -659,10 +697,17 @@ fn continuity_disjoint_spheres() {
     };
 
     let report = set.check(&config);
+    // 0.5.0: Continuity は Modelled (格子解像度の flood fill)
+    // 証明つきで問いたいなら LawSet::reachable
     assert!(
-        report.has_hard_violations(),
+        !report.violations.is_empty(),
         "離れた 2 sphere は disjoint region violation"
     );
+    assert!(
+        !report.has_hard_violations(),
+        "Continuity が Hard で出てはいけない"
+    );
+    assert!(report.violations[0].evidence.model().is_some());
 }
 
 /// `VolumeConservation`: 同じ SDF → pass (差 = 0)
@@ -670,7 +715,7 @@ fn continuity_disjoint_spheres() {
 fn volume_conservation_identity() {
     let before = lol! { sphere(1.0) };
     let after = lol! { sphere(1.0) };
-    let set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+    let set = LawSet::new().volume_conservation("conserved", 1.0, before, after, 0.05);
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-2.0),
@@ -687,7 +732,7 @@ fn volume_conservation_identity() {
 fn volume_conservation_large_diff() {
     let before = lol! { sphere(1.0) };
     let after = lol! { sphere(2.0) }; // 体積 8 倍
-    let set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+    let set = LawSet::new().volume_conservation("conserved", 1.0, before, after, 0.05);
 
     let config = CheckConfig {
         aabb_min: Vec3::splat(-3.0),
@@ -696,10 +741,16 @@ fn volume_conservation_large_diff() {
     };
 
     let report = set.check(&config);
+    // 0.5.0: VolumeConservation は Modelled (格子セル count)
     assert!(
-        report.has_hard_violations(),
+        !report.violations.is_empty(),
         "半径 2 倍は体積 8 倍 = tolerance 5% 大幅超過"
     );
+    assert!(
+        !report.has_hard_violations(),
+        "VolumeConservation が Hard で出てはいけない"
+    );
+    assert!(report.violations[0].evidence.model().is_some());
 }
 
 /// Contradiction: Contact(min=0) + `NonOverlap` 同一ペア → 矛盾検出
@@ -709,7 +760,8 @@ fn contradiction_contact_nonoverlap_conflict() {
     let b = lol! { translate(2.0, 0.0, 0.0, sphere(1.0)) };
     let set = LawSet::new()
         .contact("mating", a.clone(), b.clone(), 0.0, 1.0)
-        .hard("no_overlap", Constraint::NonOverlap { a, b });
+        .hard("no_overlap", Constraint::NonOverlap { a, b })
+        .expect("provable constraint");
 
     let contradictions = set.detect_contradictions();
     assert!(!contradictions.is_empty(), "矛盾検出されるべき");
