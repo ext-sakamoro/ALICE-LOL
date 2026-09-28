@@ -268,6 +268,53 @@ pub enum Constraint {
         /// 相対許容誤差 (例: 0.05 = 5% 以内なら pass)
         relative_tolerance: f32,
     },
+    /// 熱源を与えた時の **実温度場** の最高温度が上限を超えないことを検証
+    ///
+    /// [`Thermal`](Self::Thermal) が「放熱面積比」という幾何 proxy なのに対し、
+    /// こちらは `alice_physics` の熱伝導 solver
+    /// ([`transient_step_3d`](alice_physics::transient_thermal::transient_step_3d))
+    /// で温度場そのものを解く。
+    ///
+    /// # 境界条件を 1 つに決めず、上下から挟む
+    ///
+    /// 表面からどれだけ熱が逃げるか (対流熱伝達率 `h`) は形状と設置環境で
+    /// 決まり、設計時には分からない。`h` を 1 つ決め打ちすると、その値が
+    /// 外れた分だけ判定が嘘になる。最高温度は `h` に対して**単調に減少**
+    /// するので、両端で解いて挟む:
+    ///
+    /// - `h = 0` (断熱、熱が一切逃げない) → 最高温度の **上界**
+    /// - `h = ∞` (表面が周囲温度に固定) → 最高温度の **下界**
+    ///
+    /// 下界 > 上限なら違反 (どれだけ冷やしても超える)、上界 ≤ 上限なら合格
+    /// (一切冷えなくても収まる)、挟んだら未定
+    /// ([`UnresolvedReason::TemperatureUnbracketed`])。
+    ///
+    /// # 単位
+    ///
+    /// `alice_physics` の材料定数は SI (`W/(m·K)` / `J/(kg·K)` / `kg/m³`) なので、
+    /// SDF の座標が何 m かを [`metres_per_unit`](Self::ThermalField::metres_per_unit)
+    /// で明示する。mm で設計した形状にそのまま SI を当てると拡散率の効き方が
+    /// 10⁶ ずれる。
+    ///
+    /// `physics` feature が要る (`alice-physics` は **AGPL-3.0-or-later** なので
+    /// 有効化すると下流にも伝播する)。
+    #[cfg(feature = "physics")]
+    ThermalField {
+        /// 対象ノード
+        node: SdfNode,
+        /// 熱源リスト (位置 \[SDF 単位\], 発熱 \[W\])
+        sources: Vec<(Vec3, f32)>,
+        /// 材料 (`ThermalMaterial::pla_polymer()` 等)
+        material: alice_physics::transient_thermal::ThermalMaterial,
+        /// SDF の 1 単位が何 m か (mm 設計なら 0.001)
+        metres_per_unit: f32,
+        /// 周囲温度 \[°C\]
+        ambient_c: f32,
+        /// 許容する最高温度 \[°C\]
+        max_temperature_c: f32,
+        /// 何秒後の温度場を見るか \[s\]
+        duration_s: f32,
+    },
 }
 
 impl Constraint {
@@ -285,6 +332,8 @@ impl Constraint {
             Self::GradientBound { .. } => "GradientBound",
             Self::Reachable { .. } => "Reachable",
             Self::VolumeConservation { .. } => "VolumeConservation",
+            #[cfg(feature = "physics")]
+            Self::ThermalField { .. } => "ThermalField",
         }
     }
 
@@ -318,6 +367,11 @@ impl Constraint {
             Self::VolumeConservation { .. } => Evidence::Modelled {
                 model: MODEL_VOLUME,
             },
+            // 実温度場だが数値解 + 格子離散化 + 境界条件の両端しか挟まない
+            #[cfg(feature = "physics")]
+            Self::ThermalField { .. } => Evidence::Modelled {
+                model: MODEL_THERMAL_FIELD,
+            },
         }
     }
 }
@@ -340,6 +394,14 @@ const MODEL_THERMAL: &str =
 /// `Continuity` が仮定しているモデル
 const MODEL_CONTINUITY: &str =
     "格子セル中心の点標本 + 6-connected flood fill (格子より細い接続 / 分離を取りこぼす)";
+
+/// `ThermalField` が仮定しているモデル
+///
+/// 幾何 proxy ではなく実温度場だが、**証明ではない**: 陽解法の数値解 /
+/// 格子離散化 / 対流熱伝達率を両端 (h = 0 と h = ∞) でしか挟んでいない /
+/// 内外が確定しないセルを一律で材料として扱う (形状側の誤差は挟んでいない)
+const MODEL_THERMAL_FIELD: &str = "alice_physics の陽解法 3D 熱伝導 (格子離散化、\
+境界条件は h = 0 と h = ∞ で挟む、形状の未確定セルは材料として扱う)";
 
 /// `VolumeConservation` が仮定しているモデル
 const MODEL_VOLUME: &str =
@@ -478,6 +540,25 @@ pub enum UnresolvedReason {
         lo: f32,
         /// 表面比の上界
         hi: f32,
+    },
+    /// 最高温度が上限を挟んでしまい、超えるとも収まるとも決まらなかった
+    ///
+    /// 対流熱伝達率 `h` は設計時に決まらないので両端で挟む — `h = ∞`
+    /// (表面が周囲温度、最大冷却) が下界、`h = 0` (断熱) が上界
+    TemperatureUnbracketed {
+        /// 最高温度の下界 \[°C\] (h = ∞)
+        lo_c: f32,
+        /// 最高温度の上界 \[°C\] (h = 0)
+        hi_c: f32,
+    },
+    /// 熱伝導 solver が要求する格子の前提を満たさず、解けなかった
+    ///
+    /// `transient_step_3d` は 1 つの `dx` しか取らない (= 立方セル必須) / 各軸
+    /// 3 セル以上必要 / 陽解法の CFL 条件で刻みが決まるので、評価時間に対して
+    /// step 数が多すぎると解ききれない
+    ThermalGridUnusable {
+        /// 何が足りなかったか
+        why: &'static str,
     },
     /// 体積の相対差が許容値を挟んでしまい、超えるとも収まるとも決まらなかった
     VolumeUnbracketed {
@@ -1440,6 +1521,27 @@ fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
             law.priority,
             config,
         ),
+        #[cfg(feature = "physics")]
+        Constraint::ThermalField {
+            node,
+            sources,
+            material,
+            metres_per_unit,
+            ambient_c,
+            max_temperature_c,
+            duration_s,
+        } => check_thermal_field(
+            node,
+            sources,
+            material,
+            *metres_per_unit,
+            *ambient_c,
+            *max_temperature_c,
+            *duration_s,
+            &law.name,
+            law.priority,
+            config,
+        ),
     }
 }
 
@@ -1626,6 +1728,279 @@ fn check_thermal(
             point,
             region,
             reason: UnresolvedReason::SurfaceRatioUnbracketed { lo, hi },
+        }),
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ThermalField — 実温度場 (`physics` feature、AGPL 伝播あり)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 陽解法の step 数上限 (超えたら解かずに未定を返す)
+///
+/// CFL は `dt ≤ dx² / (6α)` なので、拡散率の高い材料 (Al は PLA の 700 倍) を
+/// 細かい格子で長時間回すと step が爆発する 黙って粗い `dt` で回すと解が
+/// 発散するので、解けないことを報告する側に倒す
+#[cfg(feature = "physics")]
+const THERMAL_MAX_STEPS: u32 = 6000;
+
+/// 表面から熱が逃げる度合い (対流熱伝達率) の両端
+#[cfg(feature = "physics")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SurfaceCooling {
+    /// `h = 0` — 熱が一切逃げない (最高温度の上界)
+    Adiabatic,
+    /// `h = ∞` — 表面が周囲温度に固定される (最高温度の下界)
+    Isothermal,
+}
+
+/// 熱伝導を解くのに要る入力一式 (引数の取り違えを型で防ぐ)
+#[cfg(feature = "physics")]
+struct ThermalScene<'a> {
+    /// セルが材料か (格子と同じ並び)
+    solid: &'a [bool],
+    /// 熱源 (位置 \[SDF 単位\], 発熱 \[W\])
+    sources: &'a [(Vec3, f32)],
+    /// 材料
+    material: &'a alice_physics::transient_thermal::ThermalMaterial,
+    /// SDF の 1 単位が何 m か
+    metres_per_unit: f32,
+    /// 周囲温度 \[°C\]
+    ambient_c: f32,
+    /// 評価する経過時間 \[s\]
+    duration_s: f32,
+}
+
+/// 熱源 / 材料 / 境界条件を与えて `duration_s` 後の最高温度 \[°C\] を返す
+///
+/// `alice_physics::transient_thermal::transient_step_3d` は **熱源項を持たず、
+/// 箱の 6 面が Neumann 固定** なので、熱源の注入と形状表面の境界条件は
+/// step の合間にこちら側で与える (演算子分離):
+///
+/// 1. 熱源セルに `P·dt / (ρ·cp·dx³)` を加える
+/// 2. 拡散を 1 step 進める
+/// 3. 形状の外のセルを境界条件に従って上書きする
+///    - 断熱: 隣接する材料セルの値で埋める (勾配 0 = 流束 0 の ghost cell)
+///    - 等温: 周囲温度に固定する
+#[cfg(feature = "physics")]
+fn solve_peak_temperature(
+    scene: &ThermalScene<'_>,
+    cooling: SurfaceCooling,
+    config: &CheckConfig,
+) -> Option<f32> {
+    use alice_physics::transient_thermal::{stable_dt_3d, transient_step_3d};
+
+    let ThermalScene {
+        solid,
+        sources,
+        material,
+        metres_per_unit,
+        ambient_c,
+        duration_s,
+    } = *scene;
+
+    let n = config.resolution;
+    let step = grid_step(config);
+    let dx_m = step.x * metres_per_unit;
+    let cell_volume = dx_m * dx_m * dx_m;
+
+    let mut t = vec![ambient_c; n * n * n];
+
+    // 熱源をセルに割り付ける (形状の外の熱源は効かない)
+    let mut source_cells: Vec<(usize, f32)> = Vec::new();
+    for &(p, watts) in sources {
+        let rel = (p - config.aabb_min) / step;
+        if rel.x < 0.0 || rel.y < 0.0 || rel.z < 0.0 {
+            continue;
+        }
+        let (ix, iy, iz) = (
+            grid_index(rel.x, n),
+            grid_index(rel.y, n),
+            grid_index(rel.z, n),
+        );
+        let idx = ix + iy * n + iz * n * n;
+        if solid[idx] {
+            source_cells.push((idx, watts));
+        }
+    }
+
+    // CFL で刻みを決める (温度が上がると拡散率が変わるので、まず周囲温度で見積る)
+    let dt_max = stable_dt_3d(&t, material, dx_m);
+    if !dt_max.is_finite() || dt_max <= 0.0 {
+        // 拡散率 0 = 熱が動かない 熱源セルだけが上がる
+        return None;
+    }
+    // 安全率 0.5 (温度上昇で α が増えても CFL を割らないため)
+    let dt = (dt_max * 0.5).min(duration_s);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let steps = (duration_s / dt).ceil() as u32;
+    if steps > THERMAL_MAX_STEPS {
+        return None;
+    }
+
+    // 断熱境界で ghost cell を埋める時の「隣の材料セル」
+    let neighbours = |idx: usize| -> [Option<usize>; 6] {
+        let (ix, iy, iz) = (idx % n, (idx / n) % n, idx / (n * n));
+        [
+            ix.checked_sub(1).map(|v| v + iy * n + iz * n * n),
+            (ix + 1 < n).then_some((ix + 1) + iy * n + iz * n * n),
+            iy.checked_sub(1).map(|v| ix + v * n + iz * n * n),
+            (iy + 1 < n).then_some(ix + (iy + 1) * n + iz * n * n),
+            iz.checked_sub(1).map(|v| ix + iy * n + v * n * n),
+            (iz + 1 < n).then_some(ix + iy * n + (iz + 1) * n * n),
+        ]
+    };
+
+    for _ in 0..steps {
+        for &(idx, watts) in &source_cells {
+            let rho_cp = material.heat_capacity_at(t[idx]);
+            if rho_cp > 0.0 && rho_cp.is_finite() {
+                t[idx] += watts * dt / (rho_cp * cell_volume);
+            }
+        }
+
+        transient_step_3d(&mut t, n, n, n, material, dx_m, dt);
+
+        // 形状の外を境界条件で上書きする
+        match cooling {
+            SurfaceCooling::Isothermal => {
+                for (idx, &is_solid) in solid.iter().enumerate() {
+                    if !is_solid {
+                        t[idx] = ambient_c;
+                    }
+                }
+            }
+            SurfaceCooling::Adiabatic => {
+                // 材料セルに隣接する外側セルを、その材料セルの値で埋める
+                // = 境界を跨ぐ勾配が 0 になり流束が消える
+                let snapshot = t.clone();
+                for idx in 0..solid.len() {
+                    if solid[idx] {
+                        continue;
+                    }
+                    let mut sum = 0.0_f32;
+                    let mut count = 0_u32;
+                    for nb in neighbours(idx).into_iter().flatten() {
+                        if solid[nb] {
+                            sum += snapshot[nb];
+                            count += 1;
+                        }
+                    }
+                    t[idx] = if count == 0 {
+                        ambient_c
+                    } else {
+                        #[allow(clippy::cast_precision_loss)]
+                        let c = f32::from(u16::try_from(count).unwrap_or(u16::MAX));
+                        sum / c
+                    };
+                }
+            }
+        }
+    }
+
+    // 最高温度は材料セルだけで取る (外側は境界条件の産物で物理量ではない)
+    let peak = t
+        .iter()
+        .zip(solid)
+        .filter_map(|(v, &is_solid)| is_solid.then_some(*v))
+        .fold(f32::NEG_INFINITY, f32::max);
+    peak.is_finite().then_some(peak)
+}
+
+/// `ThermalField`: 最高温度を境界条件の両端で挟み、3 値で判定する
+#[cfg(feature = "physics")]
+#[allow(clippy::too_many_arguments)]
+fn check_thermal_field(
+    node: &SdfNode,
+    sources: &[(Vec3, f32)],
+    material: &alice_physics::transient_thermal::ThermalMaterial,
+    metres_per_unit: f32,
+    ambient_c: f32,
+    max_temperature_c: f32,
+    duration_s: f32,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let step = grid_step(config);
+    let unusable = |why: &'static str| Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point: box_center(Vec3Interval::from_bounds(config.aabb_min, config.aabb_max)),
+            region: Vec3Interval::from_bounds(config.aabb_min, config.aabb_max),
+            reason: UnresolvedReason::ThermalGridUnusable { why },
+        }),
+    };
+
+    if config.resolution < 3 {
+        return unusable("格子が各軸 3 セル未満 (transient_step_3d が解かない)");
+    }
+    // `transient_step_3d` は dx を 1 つしか取らない = 立方セルが前提
+    let aniso = (step.x - step.y).abs().max((step.x - step.z).abs());
+    if aniso > step.x.abs() * 1.0e-4 {
+        return unusable("セルが立方でない (検査 AABB を立方体にする)");
+    }
+    if !(metres_per_unit > 0.0 && duration_s > 0.0) {
+        return unusable("metres_per_unit / duration_s が正でない");
+    }
+
+    // 内外が確定しないセルは材料として扱う (形状側の誤差は挟んでいない、
+    // MODEL_THERMAL_FIELD に明記)
+    let signs = classify_cells(node, config, step);
+    let solid: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
+    if !solid.iter().any(|b| *b) {
+        return unusable("材料セルが 1 つも無い");
+    }
+
+    let scene = ThermalScene {
+        solid: &solid,
+        sources,
+        material,
+        metres_per_unit,
+        ambient_c,
+        duration_s,
+    };
+    let solve = |cooling| solve_peak_temperature(&scene, cooling, config);
+    let (Some(hi_c), Some(lo_c)) = (
+        solve(SurfaceCooling::Adiabatic),
+        solve(SurfaceCooling::Isothermal),
+    ) else {
+        return unusable("CFL 条件で step 数が上限を超えた (解像度を下げるか時間を短く)");
+    };
+
+    // どれだけ冷やしても超える = 違反
+    if lo_c > max_temperature_c {
+        return Verdict {
+            violation: Some(Violation {
+                law_name: law_name.to_string(),
+                priority,
+                residual: max_temperature_c - lo_c, // 負 = 下界でも超過 \[K\]
+                point: box_center(Vec3Interval::from_bounds(config.aabb_min, config.aabb_max)),
+                region: Vec3Interval::from_bounds(config.aabb_min, config.aabb_max),
+                evidence: Evidence::Modelled {
+                    model: MODEL_THERMAL_FIELD,
+                },
+            }),
+            unresolved: None,
+        };
+    }
+    // 一切冷えなくても収まる = 合格
+    if hi_c <= max_temperature_c {
+        return Verdict {
+            violation: None,
+            unresolved: None,
+        };
+    }
+    Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point: box_center(Vec3Interval::from_bounds(config.aabb_min, config.aabb_max)),
+            region: Vec3Interval::from_bounds(config.aabb_min, config.aabb_max),
+            reason: UnresolvedReason::TemperatureUnbracketed { lo_c, hi_c },
         }),
     }
 }
@@ -2430,6 +2805,40 @@ impl LawSet {
                 before,
                 after,
                 relative_tolerance,
+            },
+        )
+    }
+
+    /// `ThermalField` 制約を **soft で** 追加する convenience
+    ///
+    /// 実温度場でも数値解 + 離散化 + 境界条件の両端しか挟んでいないので
+    /// [`Evidence::Modelled`]、つまり Hard では積めない
+    #[cfg(feature = "physics")]
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn thermal_field(
+        self,
+        name: impl Into<String>,
+        weight: f32,
+        node: SdfNode,
+        sources: Vec<(Vec3, f32)>,
+        material: alice_physics::transient_thermal::ThermalMaterial,
+        metres_per_unit: f32,
+        ambient_c: f32,
+        max_temperature_c: f32,
+        duration_s: f32,
+    ) -> Self {
+        self.soft(
+            name,
+            weight,
+            Constraint::ThermalField {
+                node,
+                sources,
+                material,
+                metres_per_unit,
+                ambient_c,
+                max_temperature_c,
+                duration_s,
             },
         )
     }
@@ -3391,6 +3800,282 @@ mod evidence_gate_tests {
              届いていない = 帯が場の値で痩せている \
              (straddling={straddling} inside={inside} missed_by_field={missed_by_field})"
         );
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ThermalField の物理 oracle (`physics` feature)
+    //
+    // 期待値は**閉形式**から出す (実装の出力を pin しない):
+    // エネルギー保存 / 境界条件の単調性 / 熱源ゼロの恒等性
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// 温度依存のない材料 (エネルギー収支を閉形式で書けるようにする)
+    ///
+    /// α が一様なら 7 点 Laplacian は Σ T を厳密に保存するので、
+    /// 断熱系では「入れた熱 = 上がった温度 × 熱容量」が丸め誤差の範囲で成り立つ
+    #[cfg(feature = "physics")]
+    fn constant_material(
+        k: f32,
+        cp: f32,
+        rho: f32,
+    ) -> alice_physics::transient_thermal::ThermalMaterial {
+        use alice_physics::transient_thermal::{TemperatureDependence as Dep, ThermalMaterial};
+        ThermalMaterial {
+            name: "oracle_constant",
+            conductivity: Dep::Constant(k),
+            specific_heat: Dep::Constant(cp),
+            density: Dep::Constant(rho),
+            reference_temperature: 293.15,
+        }
+    }
+
+    /// 検査範囲を丸ごと材料で埋めた立方格子 (外側セルが無い = 純粋な断熱系)
+    #[cfg(feature = "physics")]
+    fn filled_cube(n: usize, half: f32) -> (CheckConfig, Vec<bool>) {
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-half),
+            aabb_max: Vec3::splat(half),
+            resolution: n,
+        };
+        (config, vec![true; n * n * n])
+    }
+
+    /// 断熱系は **入れた熱をすべて保持する** — 最高温度がエネルギー収支で挟まれる
+    ///
+    /// 熱源 `P` を `t` 秒入れた時、系の内部エネルギーは厳密に `P·t` 増える
+    /// (断熱 = 流出なし)。平均温度上昇は `ΔT̄ = P·t / (ρ·cp·V)` で、最高温度は
+    ///
+    /// - 平均以上 (最大 ≥ 平均)
+    /// - 全部が 1 セルに溜まった場合以下 (`P·t / (ρ·cp·V_cell)`)
+    ///
+    /// の間に必ず入る。さらに **時間を延ばすほど場は均され**、最高温度は
+    /// 平均に寄る — 絶対値の勘ではなく「比が単調に 1 へ近づく」で見る
+    /// (拡散長 √(αt) が領域寸法に届くかは材料と時間の組合せ次第なので、
+    /// 決め打ちの係数を書くと oracle が実装でなく私の見積もりを測る)
+    #[cfg(feature = "physics")]
+    #[test]
+    fn adiabatic_peak_is_bounded_by_the_energy_balance() {
+        let (k, cp, rho) = (200.0_f32, 900.0_f32, 2700.0_f32); // Al 相当の定数近似
+        let material = constant_material(k, cp, rho);
+        let n = 9;
+        let half = 0.5_f32; // 検査範囲 1 m 角 (metres_per_unit = 1)
+        let (config, solid) = filled_cube(n, half);
+        let (watts, ambient) = (50.0_f32, 20.0_f32);
+
+        let volume = (2.0 * half).powi(3);
+        #[allow(clippy::cast_precision_loss)]
+        let cell_volume = volume / (n * n * n) as f32;
+
+        let peak_of = |duration: f32| {
+            let scene = ThermalScene {
+                solid: &solid,
+                sources: &[(Vec3::ZERO, watts)],
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: ambient,
+                duration_s: duration,
+            };
+            solve_peak_temperature(&scene, SurfaceCooling::Adiabatic, &config).expect("解けるはず")
+        };
+
+        let mut previous_ratio = f32::INFINITY;
+        let mut excess = Vec::new();
+        for duration in [200.0_f32, 1000.0, 5000.0] {
+            let peak = peak_of(duration);
+            let mean_rise = watts * duration / (rho * cp * volume);
+            let single_cell_rise = watts * duration / (rho * cp * cell_volume);
+
+            // (1) 断熱系は熱を失わない
+            assert!(
+                peak >= ambient + mean_rise * 0.999,
+                "t={duration}: 最高温度 {peak:.4} が平均 {:.4} 未満 = 熱が消えている",
+                ambient + mean_rise
+            );
+            // (2) 熱は湧かない (全部 1 セルに溜まった場合が上限)
+            assert!(
+                peak <= ambient + single_cell_rise,
+                "t={duration}: 最高温度 {peak:.4} が 1 セル集中の上限 {:.4} 超 = 熱が湧いている",
+                ambient + single_cell_rise
+            );
+            // (3) 平均に対する比は時間とともに 1 へ向かう
+            let ratio = (peak - ambient) / mean_rise;
+            assert!(
+                ratio < previous_ratio,
+                "t={duration}: 最高/平均 の比 {ratio:.3} が前回 {previous_ratio:.3} から \
+                 下がらない = 拡散が進んでいない"
+            );
+            previous_ratio = ratio;
+            excess.push(peak - ambient - mean_rise);
+        }
+
+        // (4) 熱源セルの **超過温度は定常値に収束する** (平均は時間に比例して
+        //     上がるが、熱源と周囲の温度差は一定に落ち着く)
+        let (d1, d2) = ((excess[1] - excess[0]).abs(), (excess[2] - excess[1]).abs());
+        assert!(
+            d2 * 5.0 < d1,
+            "超過温度が収束しない (差 {d1:.6} → {d2:.6}) = 定常状態に入っていない"
+        );
+
+        // (5) その定常超過は **熱伝導率で決まる**: 熱源セルが P を 6 面から
+        //     逃がすので ΔT ≈ P / (6·k·dx) 離散 stencil の幾何係数の分だけ
+        //     連続体の見積もりとずれるが、桁と k 依存性はここで固定される
+        //     (k を 2 倍 / 半分にすると範囲から外れる)
+        #[allow(clippy::cast_precision_loss)]
+        let dx = 2.0 * half / n as f32;
+        let continuum = watts / (6.0 * k * dx);
+        let rel = excess[2] / continuum;
+        assert!(
+            (0.6..=1.4).contains(&rel),
+            "定常超過 {:.4} が連続体の見積もり {continuum:.4} の {rel:.3} 倍 = \
+             熱伝導率か単位の扱いがずれている",
+            excess[2]
+        );
+    }
+
+    /// 熱源が無ければ温度は周囲のまま (定数場の Laplacian は 0、厳密)
+    #[cfg(feature = "physics")]
+    #[test]
+    fn no_source_keeps_the_field_at_ambient() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let (config, solid) = filled_cube(9, 0.5);
+        for cooling in [SurfaceCooling::Adiabatic, SurfaceCooling::Isothermal] {
+            let scene = ThermalScene {
+                solid: &solid,
+                sources: &[],
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: 100.0,
+            };
+            let peak = solve_peak_temperature(&scene, cooling, &config).expect("解けるはず");
+            assert!(
+                (peak - 20.0).abs() < 1.0e-3,
+                "熱源なしで温度が {peak:.6} に動いた"
+            );
+        }
+    }
+
+    /// 冷却が強いほど最高温度は下がる — 両端の順序が壊れたら bracket が嘘になる
+    #[cfg(feature = "physics")]
+    #[test]
+    fn isothermal_never_exceeds_adiabatic() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let n = 9;
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-0.5),
+            aabb_max: Vec3::splat(0.5),
+            resolution: n,
+        };
+        // 箱の中に球 = 外側セルがあるので境界条件が効く
+        let signs = classify_cells(&SdfNode::sphere(0.35), &config, grid_step(&config));
+        let solid: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
+        assert!(solid.iter().any(|b| *b), "材料セルが無い");
+        assert!(
+            solid.iter().any(|b| !*b),
+            "外側セルが無い (境界条件が効かない)"
+        );
+
+        let solve = |c| {
+            let scene = ThermalScene {
+                solid: &solid,
+                sources: &[(Vec3::ZERO, 50.0)],
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: 200.0,
+            };
+            solve_peak_temperature(&scene, c, &config).expect("解けるはず")
+        };
+        let (hot, cold) = (
+            solve(SurfaceCooling::Adiabatic),
+            solve(SurfaceCooling::Isothermal),
+        );
+        assert!(
+            cold <= hot,
+            "等温 (h = ∞) の最高温度 {cold:.4} が断熱 (h = 0) の {hot:.4} を超えた \
+             = 上下界が逆転している"
+        );
+        assert!(
+            cold < hot,
+            "境界条件を変えても最高温度が動かない ({cold:.4}) = 表面が効いていない"
+        );
+    }
+
+    /// 球を箱に入れた scene (外側セルがあり境界条件が効く)
+    #[cfg(feature = "physics")]
+    fn sphere_in_box(n: usize) -> (CheckConfig, Vec<bool>) {
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-0.5),
+            aabb_max: Vec3::splat(0.5),
+            resolution: n,
+        };
+        let signs = classify_cells(&SdfNode::sphere(0.35), &config, grid_step(&config));
+        let solid: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
+        assert!(solid.iter().any(|b| *b), "材料セルが無い");
+        assert!(solid.iter().any(|b| !*b), "外側セルが無い");
+        (config, solid)
+    }
+
+    /// **等温境界は定常状態を持ち、断熱境界は持たない**
+    ///
+    /// `h = ∞` では表面から出る熱が発熱と釣り合った時点で温度が止まる。
+    /// `h = 0` では熱が一切逃げないので平均温度は時間に比例して上がり続ける。
+    /// この差が bracket の下界を「下界」たらしめている性質で、
+    /// [`isothermal_never_exceeds_adiabatic`] の大小比較では捕まらない
+    /// (外側セルを素通しにしても大小は保たれてしまう、2026-09-29 実測)
+    #[cfg(feature = "physics")]
+    #[test]
+    fn isothermal_saturates_but_adiabatic_keeps_rising() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let (config, solid) = sphere_in_box(9);
+        let rise = |cooling, duration| {
+            let scene = ThermalScene {
+                solid: &solid,
+                sources: &[(Vec3::ZERO, 50.0)],
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: duration,
+            };
+            solve_peak_temperature(&scene, cooling, &config).expect("解けるはず") - 20.0
+        };
+
+        // 拡散時間 L²/α ≈ 0.35²/8.2e-5 ≈ 1500 s なので 3000 s で定常に入る
+        let iso_short = rise(SurfaceCooling::Isothermal, 3000.0);
+        let iso_long = rise(SurfaceCooling::Isothermal, 30000.0);
+        let adi_short = rise(SurfaceCooling::Adiabatic, 3000.0);
+        let adi_long = rise(SurfaceCooling::Adiabatic, 30000.0);
+
+        assert!(
+            iso_long < iso_short * 1.2,
+            "等温境界で時間を 10 倍にしたら温度上昇が {iso_short:.4} → {iso_long:.4} \
+             (1.2 倍超) = 定常に入っていない = 表面が周囲温度に固定されていない"
+        );
+        assert!(
+            adi_long > adi_short * 3.0,
+            "断熱境界で時間を 10 倍にしても温度上昇が {adi_short:.4} → {adi_long:.4} \
+             (3 倍未満) = 熱が逃げている"
+        );
+    }
+
+    /// 同じ入力は同じ温度場を返す (f32 の + - * / のみなので bit 一致するはず)
+    #[cfg(feature = "physics")]
+    #[test]
+    fn thermal_solve_is_bit_reproducible() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let (config, solid) = filled_cube(9, 0.5);
+        let run = || {
+            let scene = ThermalScene {
+                solid: &solid,
+                sources: &[(Vec3::new(0.1, -0.2, 0.05), 50.0)],
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: 150.0,
+            };
+            solve_peak_temperature(&scene, SurfaceCooling::Adiabatic, &config).expect("解けるはず")
+        };
+        assert_eq!(run().to_bits(), run().to_bits(), "同じ入力で結果が揺れた");
     }
 
     /// `LawSet` の convenience が Hard を作り直していないか

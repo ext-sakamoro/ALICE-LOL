@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `Thermal` を実温度場にする `ThermalField` (`physics` feature、2026-09-29)
+
+`Thermal` は「熱源近傍の 表面セル数 / 内部セル数 比」という**幾何 proxy**
+だった。0.4.0 で場の値の距離への流用はやめたが、**放熱面積比そのものが
+熱の物理ではない**ことは変わっていなかった。
+
+`alice-physics` の 3D 熱伝導 solver
+(`transient_thermal::transient_step_3d` + `ThermalMaterial`) で温度場を解き、
+**「最高温度 ≤ 上限」**で判定する `Constraint::ThermalField` を追加した。
+
+⚠️ `alice-physics` は **AGPL-3.0-or-later** なので、`physics` feature を
+有効にすると下流にも伝播する。`deny.toml` に exception は足していない
+(feature 表と README に伝播を明記する側で対応)。
+
+#### 境界条件を 1 つに決めず、両端で挟む
+
+表面からどれだけ熱が逃げるか (対流熱伝達率 `h`) は形状と設置環境で決まり、
+設計時には分からない。`h` を決め打ちすると、その値が外れた分だけ判定が嘘に
+なる。最高温度は `h` に対して**単調に減少**するので両端で解いて挟む:
+
+- `h = 0` (断熱) → 最高温度の**上界**
+- `h = ∞` (表面が周囲温度に固定) → 最高温度の**下界**
+
+下界 > 上限なら違反 (どれだけ冷やしても超える)、上界 ≤ 上限なら合格
+(一切冷えなくても収まる)、挟んだら未定
+(`UnresolvedReason::TemperatureUnbracketed { lo_c, hi_c }`)。
+
+#### 実装上の判断
+
+- `transient_step_3d` は**熱源項を持たず、箱の 6 面が Neumann 固定**なので、
+  熱源の注入 (`P·dt / (ρ·cp·dx³)`) と形状表面の境界条件は step の合間に
+  LOL 側で与える (演算子分離)。断熱側は外側セルを隣接材料セルの値で埋める
+  ghost cell 方式で勾配 0 = 流束 0 を作る。
+- **単位を型で要求する**: `metres_per_unit` を必須パラメータにした。
+  `alice-physics` の材料定数は SI なので、mm で設計した形状にそのまま
+  当てると拡散率の効き方が 10⁶ ずれる。
+- 内外が確定しないセルは材料として扱う (形状側の誤差は挟んでいない)。
+  この限界は `Evidence::Modelled` の model 文字列に明記。
+- solver の前提 (立方セル / 各軸 3 セル以上 / CFL で step 数が上限内) を
+  満たさない時は**黙って通さず** `ThermalGridUnusable { why }` で未定にする。
+- `Evidence` は `Modelled`。実温度場でも陽解法の数値解 + 格子離散化 +
+  境界条件の両端しか挟んでいないので証明ではない。したがって
+  `Priority::Hard` は名乗れない (`LawSet::thermal_field` は soft)。
+
+#### 決定性
+
+`transient_thermal` は `+ - * /` のみで `mul_add` も超越関数も使っていない
+(実測)。IEEE-754 の正確丸め演算だけなので、Fix128 を経由しなくても
+**cross-platform で bit-exact**。`thermal_solve_is_bit_reproducible` で固定。
+
+### Added — `ThermalField` の物理 oracle と法則 oracle (2026-09-29)
+
+期待値は**閉形式**から出しており、実装の出力を pin していない。
+
+`law::evidence_gate_tests` (`physics` feature、5 本):
+
+- `adiabatic_peak_is_bounded_by_the_energy_balance` — 断熱系は熱を失わない
+  ので、最高温度は `平均上昇 = P·t/(ρ·cp·V)` 以上、`1 セル集中 = P·t/(ρ·cp·V_cell)`
+  以下に必ず入る。さらに熱源セルの**定常超過温度は収束**し、その値は
+  連続体の見積もり `P/(6·k·dx)` の 0.6〜1.4 倍に入る (熱伝導率と単位の扱いを固定)
+- `no_source_keeps_the_field_at_ambient` — 定数場の Laplacian は 0 (厳密)
+- `isothermal_never_exceeds_adiabatic` — 上下界の順序
+- `isothermal_saturates_but_adiabatic_keeps_rising` — **等温境界は定常状態を
+  持ち、断熱境界は持たない**。大小比較だけでは外側セルを素通しにしても
+  通ってしまうため、境界条件の定義的性質をこちらで固定する
+- `thermal_solve_is_bit_reproducible`
+
+`tests/analytic_thermal.rs` (4 本) は法則として 3 値が 3 分岐とも出るか、
+発熱を増やした時に判定が緩くならないか、Hard を名乗れないか、solver の
+前提を満たさない格子で黙って合格しないかを見る。
+
+実装を 3 通り壊して red を実測した: 熱源注入で熱容量を無視すると
+エネルギー収支が、断熱の ghost cell を周囲温度にすると上下界の順序が、
+**等温境界を無効化すると飽和の test が**落ちる。3 つ目は最初
+`isothermal_never_exceeds_adiabatic` では捕まらず (外側セルを素通しにしても
+大小は保たれる)、飽和の test を足して塞いだ。
+
+
 ### Fixed — `lol.gbnf` が publish された crate に入らず、公開版が build 不能だった (2026-09-28)
 
 `pub const LOL_GBNF` は `include_str!("../../lol.gbnf")` で **package の外**
