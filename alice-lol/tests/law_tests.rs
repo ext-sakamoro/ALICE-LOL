@@ -1,6 +1,6 @@
 //! 法則（Law）制約チェッカーのテスト
 
-use alice_lol::law::{check_laws, CheckConfig, Constraint, Law, Priority};
+use alice_lol::law::{check_laws, CheckConfig, Constraint, Law, Priority, UnresolvedReason};
 use alice_lol::lol;
 use glam::Vec3;
 
@@ -710,7 +710,18 @@ fn continuity_disjoint_spheres() {
     assert!(report.violations[0].evidence.model().is_some());
 }
 
-/// `VolumeConservation`: 同じ SDF → pass (差 = 0)
+/// `VolumeConservation`: 同じ SDF → 違反ではない
+///
+/// **0.5.0 で「合格」から「未定」に変わった** 0.4.0 はセル中心の点標本で
+/// 数えて差 0 を得ていたが、それは「たまたま同じ中心が拾われた」だけで
+/// 体積が一致する証明ではない (同じ数え方が平行移動には 12% の差を申告する、
+/// `analytic_law::volume_conservation_must_not_flag_a_translation`)
+///
+/// 区間演算で数えると、内外が確定しないセル (球の殻) が内部確定セルより
+/// 多いため、**相対差が許容 5% を下回ることをこの解像度では証明できない**
+/// → 未定 これは検証器の後退ではなく、元々できていなかったことが見えた形
+/// (格子 count で 5% を示すには殻 / 体積比を 5% 未満にする必要があり、比は
+/// O(1/n) でしか縮まない)
 #[test]
 fn volume_conservation_identity() {
     let before = lol! { sphere(1.0) };
@@ -724,7 +735,22 @@ fn volume_conservation_identity() {
     };
 
     let report = set.check(&config);
-    assert!(report.all_passed(), "同一 SDF は体積保存");
+    assert!(
+        report.violations.is_empty(),
+        "同一 SDF を体積変化と申告した\n{}",
+        alice_lol::law::format_report(&report)
+    );
+    assert!(report.has_unresolved(), "証明できないのに合格を名乗った");
+    match &report.unresolved[0].reason {
+        UnresolvedReason::VolumeUnbracketed { lo, hi } => {
+            assert!(
+                (*lo - 0.0).abs() < 1e-6,
+                "同一 SDF なら相対差の下界は 0 のはず (実測 {lo})"
+            );
+            assert!(*hi > 0.05, "上界 {hi} が許容 0.05 以下なら合格できたはず");
+        }
+        other => panic!("unexpected reason {other:?}"),
+    }
 }
 
 /// `VolumeConservation`: 大きく違う体積 → violation

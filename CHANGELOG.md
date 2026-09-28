@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — 残り 3 法則を三値化し、場の値の距離への流用をやめる (2026-09-28)
+
+`Thermal` / `Continuity` / `VolumeConservation` は `check_one` の dispatch で
+`unresolved: None` が literal 固定され、戻り値の型 (`Option<Violation>`) が
+**三値を表現できなかった**。0.4.0 の「判定不能を合格にしない」原則がこの 3 つ
+だけ効いておらず、`LawReport::all_passed()` が証明なしで `true` を返していた。
+
+合わせて、**合格側の嘘** も 3 件潰した。違反の検出が健全でも、満たしている
+形状を違反と断言すれば gate としては同じく壊れる。
+
+- **`Thermal`** — 表面近傍を `|f(center)| < step` で取っていた。これは **場の値を
+  表面までの距離として流用** しており、場が真の距離を過大申告する node
+  (TPMS は 1.7〜7.0 倍) では帯がその分痩せ、表面セルを取りこぼして比を
+  過小評価する。実測: `gyroid(1.0, 0.3)` は真の表面比 1.5615 (角の符号反転 =
+  中間値定理で独立計算) に対し、閾値 1.4834 で違反と断言していた。
+  場の値を使わず区間演算の三分類だけで比を上下から挟む方式に置換。
+- **`Continuity`** — **セル中心の点標本だけ** で内部 mask を作っていたため、
+  格子より細い接続 (首 / 薄板) は中心が 1 つも内部に落ちず、繋がっている
+  形状を分離と断言していた。実測: 半径 0.1 の首で繋いだ 2 球を res 8 / 16 /
+  24 のどれでも「分離」と報告。`Reachable` と同じ区間演算の三分類に移した。
+  違反は「外部確定でないセル全部を使っても届かない」= 分離の証明。
+- **`VolumeConservation`** — セル中心の count は、どの中心が内側に落ちるかで
+  動く。実測: **体積が厳密に保存される平行移動**に対し res=8 shift=0.25 で
+  12.5% の差を申告していた。セルごとの占有割合の上下界から
+  `V_after − V_before` を挟む方式に置換。未定セルを一律 ±1 にすると向きが
+  決まっている場合まで両振れ扱いになって検出力を落とすので、符号の組合せ
+  ごとに寄与の上下界を取る。
+- `UnresolvedReason` に `SurfaceRatioUnbracketed { lo, hi }` /
+  `VolumeUnbracketed { lo, hi }` を追加 (`#[non_exhaustive]` なので非破壊)。
+
+**挙動の変化**: `volume_conservation_identity` 相当 (同一 SDF) が **合格から
+未定に変わる**。0.4.0 は点標本で差 0 を得ていたが、それは「たまたま同じ中心が
+拾われた」だけで体積一致の証明ではない (同じ数え方が平行移動には 12% を
+申告する)。区間で数えると内外が確定しないセルが内部確定セルより多く、
+相対差が許容 5% を下回ることを**この解像度では証明できない**。格子 count で
+5% を示すには殻 / 体積比を 5% 未満にする必要があり、比は O(1/n) でしか
+縮まないので、実用解像度では未定が既定になる。検証器の後退ではなく、
+元々できていなかったことが見えた形。
+
+### Added — 3 法則の解析解 oracle と表面帯の白箱 gate (2026-09-28)
+
+`tests/analytic_law.rs` (17 → 20 本)。この 3 法則は oracle が 1 本も無く、
+`law_tests.rs` 側にあるのは**実装の出力を pin した変化検出器**だった。
+
+- `thermal_surface_ratio_must_not_shrink_with_the_field_scale` — 真の表面比を
+  角の符号反転で独立に数え、その 95% を閾値にする。場 = 真の距離の球を
+  対照に置き、格子 count 自体の問題でないことを切り分ける
+- `continuity_must_not_call_a_thin_neck_disconnected`
+- `volume_conservation_must_not_flag_a_translation`
+
+3 本とも実装より先に commit し、旧実装に対して red を実測してから置換した。
+
+`law::evidence_gate_tests::surface_band_does_not_depend_on_the_field_scale` —
+上の Thermal oracle は**三値化の側だけを pin していて、表面帯の判定基準の
+差までは捕まえられなかった** (`|f| < step` に戻しても比の上界が閾値を上回る
+ので verdict が動かない、実測)。基準そのものを白箱で固定する gate を別途
+置き、壊して red を確認した (上界 0.3087 < 必要 0.3667)。scene は「内部確定
+セルが多い」かつ「場の帯が取りこぼす」の両方が要り、薄い `gyroid(1.0, 0.3)`
+では内部確定セルが 0 になって測れないので `gyroid(0.6, 1.2)` を使う。
+
 ### Changed — 証明のない法則に `Priority::Hard` を名乗らせない (2026-09-28、breaking)
 
 検証器が「違反である」と言う時の裏付けには強さの差がある。0.4.0 まで、

@@ -469,6 +469,23 @@ pub enum UnresolvedReason {
         /// 判定できなかったセルを経由した経路の長さ (セル数)
         undecided_cells: usize,
     },
+    /// 表面比が下限を挟んでしまい、上回るとも下回るとも決まらなかった
+    ///
+    /// 区間演算で内外が確定しないセルは「表面を含みうる」かつ「内部かもしれ
+    /// ない」の両方に効くので、比は 1 点でなく幅を持つ
+    SurfaceRatioUnbracketed {
+        /// 表面比の下界
+        lo: f32,
+        /// 表面比の上界
+        hi: f32,
+    },
+    /// 体積の相対差が許容値を挟んでしまい、超えるとも収まるとも決まらなかった
+    VolumeUnbracketed {
+        /// 相対差の下界
+        lo: f32,
+        /// 相対差の上界
+        hi: f32,
+    },
 }
 
 /// 判定不能レポート — 違反でも合格でもない (検証器の解像度 / 区間演算の
@@ -1297,18 +1314,15 @@ fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
             heat_sources,
             search_radius,
             min_surface_ratio,
-        } => Verdict {
-            violation: check_thermal(
-                node,
-                heat_sources,
-                *search_radius,
-                *min_surface_ratio,
-                &law.name,
-                law.priority,
-                config,
-            ),
-            unresolved: None,
-        },
+        } => check_thermal(
+            node,
+            heat_sources,
+            *search_radius,
+            *min_surface_ratio,
+            &law.name,
+            law.priority,
+            config,
+        ),
         Constraint::Contact {
             a,
             b,
@@ -1323,10 +1337,9 @@ fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
             law.priority,
             config,
         ),
-        Constraint::Continuity { node, seed_point } => Verdict {
-            violation: check_continuity(node, *seed_point, &law.name, law.priority, config),
-            unresolved: None,
-        },
+        Constraint::Continuity { node, seed_point } => {
+            check_continuity(node, *seed_point, &law.name, law.priority, config)
+        }
         Constraint::GradientBound {
             node,
             max_gradient,
@@ -1339,17 +1352,14 @@ fn check_one(law: &Law, config: &CheckConfig) -> Verdict {
             before,
             after,
             relative_tolerance,
-        } => Verdict {
-            violation: check_volume_conservation(
-                before,
-                after,
-                *relative_tolerance,
-                &law.name,
-                law.priority,
-                config,
-            ),
-            unresolved: None,
-        },
+        } => check_volume_conservation(
+            before,
+            after,
+            *relative_tolerance,
+            &law.name,
+            law.priority,
+            config,
+        ),
     }
 }
 
@@ -1392,10 +1402,100 @@ pub fn check_laws(laws: &[Law], config: &CheckConfig) -> LawReport {
     }
 }
 
-/// Thermal: 各 heat source 近傍の 表面近傍セル数 / 内部セル数 の ratio が下限未満なら violation
+/// 1 熱源の表面比を区間で挟む — `(lo, hi, 代表セル)`
 ///
-/// step (グリッド 1 セル辺) を「表面近傍」判定に流用
-/// residual = `actual_ratio` - `min_surface_ratio` (負 = 不足)
+/// 未定セルは「表面を含みうる」と「内部かもしれない」の両方に効くので、
+/// 比を最小にする取り方 (表面は確定分だけ / 内部は未定も足す) と最大にする
+/// 取り方 (表面は未定も足す / 内部は確定分だけ) で上下から挟む
+fn surface_ratio_bracket(
+    node: &SdfNode,
+    source: Vec3,
+    search_radius: f32,
+    config: &CheckConfig,
+    signs: &[CellSign],
+) -> Option<(f32, f32, (Vec3, Vec3Interval))> {
+    let n = config.resolution;
+    let step = grid_step(config);
+    let (mut surface_lo, mut surface_hi) = (0usize, 0usize);
+    let (mut interior_lo, mut interior_hi) = (0usize, 0usize);
+    let mut representative: Option<(Vec3, Vec3Interval)> = None;
+
+    for (ix, iy, iz, idx) in grid_indices(n) {
+        let center = cell_center(config, step, ix, iy, iz);
+        if center.distance(source) > search_radius {
+            continue;
+        }
+        let region = cell_box(config, step, ix, iy, iz);
+        match signs[idx] {
+            CellSign::Inside => {
+                interior_lo += 1;
+                interior_hi += 1;
+                if representative.is_none() {
+                    representative = Some((center, region));
+                }
+            }
+            CellSign::Outside => {}
+            CellSign::Undecided => {
+                // 表面を含みうる = 上界に効く / 内部かもしれない = 内部の上界に効く
+                surface_hi += 1;
+                interior_hi += 1;
+                // 符号が実際に割れていれば、中間値定理で表面の存在が確定する
+                if cell_straddles_surface(node, region) {
+                    surface_lo += 1;
+                }
+            }
+        }
+    }
+
+    if interior_hi == 0 {
+        return None; // 熱源近傍に内部セルなし = 対象外
+    }
+    let representative = representative.or_else(|| {
+        // 内部確定セルが無い時は探索球の中心を代表にする
+        Some((source, cube(source, step.length() * 0.5)))
+    })?;
+
+    #[allow(clippy::cast_precision_loss)]
+    let lo = surface_lo as f32 / interior_hi as f32;
+    #[allow(clippy::cast_precision_loss)]
+    let hi = if interior_lo == 0 {
+        f32::INFINITY // 内部の下界が 0 なら比の上界は押さえられない
+    } else {
+        surface_hi as f32 / interior_lo as f32
+    };
+    Some((lo, hi, representative))
+}
+
+/// セル内の標本点で場の符号が割れるか (中間値定理で表面の存在が確定する)
+fn cell_straddles_surface(node: &SdfNode, region: Vec3Interval) -> bool {
+    let lo = Vec3::new(region.x.lo, region.y.lo, region.z.lo);
+    let hi = Vec3::new(region.x.hi, region.y.hi, region.z.hi);
+    let first = sdf_eval(node, lo) >= 0.0;
+    for c in 1..8u32 {
+        let p = Vec3::new(
+            if c & 1 == 0 { lo.x } else { hi.x },
+            if c & 2 == 0 { lo.y } else { hi.y },
+            if c & 4 == 0 { lo.z } else { hi.z },
+        );
+        if (sdf_eval(node, p) >= 0.0) != first {
+            return true;
+        }
+    }
+    (sdf_eval(node, box_center(region)) >= 0.0) != first
+}
+
+/// Thermal: 各 heat source 近傍の 表面セル数 / 内部セル数 の比が下限未満なら violation
+///
+/// 0.5.0 まで表面近傍を `|f(center)| < step` で取っていたが、これは **場の値を
+/// 表面までの距離として流用** している 場が真の距離を過大申告する node
+/// (TPMS は 1.7〜7.0 倍) では帯がその分痩せ、表面セルを取りこぼして比を
+/// 過小評価し、**満たしている形状を違反と断言していた**
+///
+/// 場の値は使わず、区間演算の三分類だけで比を上下から挟む
+/// ([`surface_ratio_bracket`])
+/// - 上界 < 下限 → 違反 (どう取っても足りない)
+/// - 下界 ≥ 下限 → 合格
+/// - 下限を挟む → 未定 ([`UnresolvedReason::SurfaceRatioUnbracketed`])
 fn check_thermal(
     node: &SdfNode,
     heat_sources: &[Vec3],
@@ -1404,62 +1504,50 @@ fn check_thermal(
     law_name: &str,
     priority: Priority,
     config: &CheckConfig,
-) -> Option<Violation> {
-    let extent = config.aabb_max - config.aabb_min;
-    #[allow(clippy::cast_precision_loss)]
-    let step = extent.x / (config.resolution as f32);
-    let surface_threshold = step;
+) -> Verdict {
+    let step = grid_step(config);
+    let signs = classify_cells(node, config, step);
 
     let mut worst: Option<(f32, Vec3, Vec3Interval)> = None;
+    let mut undecided: Option<(Vec3, Vec3Interval, f32, f32)> = None;
 
     for &source in heat_sources {
-        let mut surface_count: usize = 0;
-        let mut interior_count: usize = 0;
-        let mut worst_cell: Option<(Vec3, Vec3Interval)> = None;
+        let Some((lo, hi, (point, region))) =
+            surface_ratio_bracket(node, source, search_radius, config, &signs)
+        else {
+            continue;
+        };
 
-        for (center, bounds) in GridSampler::new(config) {
-            if center.distance(source) > search_radius {
-                continue;
+        if hi < min_surface_ratio {
+            let residual = hi - min_surface_ratio; // 負 = 上界でも不足
+            match &worst {
+                Some((w, _, _)) if residual >= *w => {}
+                _ => worst = Some((residual, point, region)),
             }
-            let d = sdf_eval(node, center);
-            if d < 0.0 {
-                interior_count += 1;
-                if worst_cell.is_none() {
-                    worst_cell = Some((center, bounds));
-                }
-            }
-            if d.abs() < surface_threshold {
-                surface_count += 1;
-            }
-        }
-
-        if interior_count == 0 {
-            continue; // 熱源近傍に内部セルなし = 対象外
-        }
-
-        #[allow(clippy::cast_precision_loss)]
-        let ratio = (surface_count as f32) / (interior_count as f32);
-        if ratio < min_surface_ratio {
-            let residual = ratio - min_surface_ratio; // 負 = 不足
-            if let Some((point, region)) = worst_cell {
-                match &worst {
-                    Some((w, _, _)) if residual >= *w => {}
-                    _ => worst = Some((residual, point, region)),
-                }
-            }
+        } else if lo < min_surface_ratio && undecided.is_none() {
+            undecided = Some((point, region, lo, hi));
         }
     }
 
-    worst.map(|(residual, point, region)| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-        evidence: Evidence::Modelled {
-            model: MODEL_THERMAL,
-        },
-    })
+    Verdict {
+        violation: worst.map(|(residual, point, region)| Violation {
+            law_name: law_name.to_string(),
+            priority,
+            residual,
+            point,
+            region,
+            evidence: Evidence::Modelled {
+                model: MODEL_THERMAL,
+            },
+        }),
+        unresolved: undecided.map(|(point, region, lo, hi)| Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point,
+            region,
+            reason: UnresolvedReason::SurfaceRatioUnbracketed { lo, hi },
+        }),
+    }
 }
 
 /// grid 座標 (cell 単位、f32) → `[0, n)` の cell index
@@ -1471,77 +1559,20 @@ fn grid_index(coord: f32, n: usize) -> usize {
     (coord.max(0.0) as usize).min(n - 1)
 }
 
-/// Continuity: seed から 6-connected flood fill で 到達不能な内部セルがあれば violation
-///
-/// seed が内部でない (sdf(seed) >= 0) なら violation として即報告
-fn check_continuity(
-    node: &SdfNode,
-    seed_point: Vec3,
-    law_name: &str,
-    priority: Priority,
-    config: &CheckConfig,
-) -> Option<Violation> {
-    let violation = |residual: f32, point: Vec3, region: Vec3Interval| Violation {
-        law_name: law_name.to_string(),
-        priority,
-        residual,
-        point,
-        region,
-        evidence: Evidence::Modelled {
-            model: MODEL_CONTINUITY,
-        },
-    };
-
-    let seed_dist = sdf_eval(node, seed_point);
-    if seed_dist >= 0.0 {
-        // seed 点そのものを潰れた箱として報告する (領域ではなく 1 点が原因)
-        return Some(violation(seed_dist, seed_point, point_box(seed_point)));
-    }
-
-    let n = config.resolution;
-    let extent = config.aabb_max - config.aabb_min;
-    #[allow(clippy::cast_precision_loss)]
-    let step = extent / (n as f32);
-
-    // grid 上の interior mask を構築
-    let mut interior = vec![false; n * n * n];
-    let mut total_interior: usize = 0;
-    for (ix, iy, iz, idx) in grid_indices(n) {
-        #[allow(clippy::cast_precision_loss)]
-        let center =
-            config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32) + step * 0.5;
-        if sdf_eval(node, center) < 0.0 {
-            interior[idx] = true;
-            total_interior += 1;
-        }
-    }
-
-    if total_interior == 0 {
-        // 内部セルなし = 対象外 (seed が内部だが grid 解像度で拾えず)
-        return None;
-    }
-
-    // seed セルの grid index
-    let rel = (seed_point - config.aabb_min) / step;
-    let sx = grid_index(rel.x, n);
-    let sy = grid_index(rel.y, n);
-    let sz = grid_index(rel.z, n);
-    let seed_idx = sx + sy * n + sz * n * n;
-
-    if !interior[seed_idx] {
-        // seed 点は内部でも該当セル中心が内部でない = 精度不足で seed セルが空
-        return None;
-    }
-
-    // BFS flood fill
+/// `idx` から全セルを 6-connected で flood fill し、到達したセルの mask を返す
+fn flood_mask(
+    n: usize,
+    start: (usize, usize, usize, usize),
+    allowed: &dyn Fn(usize) -> bool,
+) -> Vec<bool> {
     let mut visited = vec![false; n * n * n];
+    if !allowed(start.3) {
+        return visited;
+    }
     let mut queue = std::collections::VecDeque::new();
-    queue.push_back((sx, sy, sz));
-    visited[seed_idx] = true;
-    let mut reachable: usize = 1;
-
+    visited[start.3] = true;
+    queue.push_back((start.0, start.1, start.2));
     while let Some((x, y, z)) = queue.pop_front() {
-        // 6-connected 隣接 (grid 外は None、符号付き演算なし)
         let neighbors = [
             x.checked_sub(1).map(|v| (v, y, z)),
             (x + 1 < n).then_some((x + 1, y, z)),
@@ -1552,32 +1583,115 @@ fn check_continuity(
         ];
         for (nx, ny, nz) in neighbors.into_iter().flatten() {
             let nidx = nx + ny * n + nz * n * n;
-            if !visited[nidx] && interior[nidx] {
+            if !visited[nidx] && allowed(nidx) {
                 visited[nidx] = true;
-                reachable += 1;
                 queue.push_back((nx, ny, nz));
             }
         }
     }
+    visited
+}
 
-    if reachable < total_interior {
-        // 到達不能な内部セルの 1 つを見つけて point / region 化
-        for (ix, iy, iz, idx) in grid_indices(n) {
-            if interior[idx] && !visited[idx] {
-                let region = cell_box(config, step, ix, iy, iz);
-                #[allow(clippy::cast_precision_loss)]
-                let unreachable_ratio =
-                    ((total_interior - reachable) as f32) / (total_interior as f32);
-                return Some(violation(
-                    -unreachable_ratio, // 負値 (到達不能 fraction)
-                    box_center(region),
-                    region,
-                ));
-            }
-        }
+/// Continuity: 内部が 1 つながりかを 3 値で判定する
+///
+/// 0.5.0 まで **セル中心の点標本だけ** で内部 mask を作っていたため、格子より
+/// 細い接続 (首 / 薄板) は中心が 1 つも内部に落ちず、繋がっている形状を
+/// **分離と断言していた** ([`check_reachable`] と同じ区間演算の三分類に移す)
+///
+/// - 違反: 内部と確定したセルが、**外部確定でないセル全部を使っても** seed から
+///   到達できない (どんな経路も外部確定セルを通る = 分離が確定)
+/// - 合格: 内部確定セルが全て内部確定セルだけで到達でき、かつ未定セルも
+///   seed の塊と繋がっている (未定の島に別成分が隠れていない)
+/// - それ以外: 未定 ([`UnresolvedReason::ReachabilityUndecided`])
+fn check_continuity(
+    node: &SdfNode,
+    seed_point: Vec3,
+    law_name: &str,
+    priority: Priority,
+    config: &CheckConfig,
+) -> Verdict {
+    let violation = |residual: f32, point: Vec3, region: Vec3Interval| Violation {
+        law_name: law_name.to_string(),
+        priority,
+        residual,
+        point,
+        region,
+        evidence: Evidence::Modelled {
+            model: MODEL_CONTINUITY,
+        },
+    };
+    let undecided_verdict = |point: Vec3, region: Vec3Interval, cells: usize| Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
+            law_name: law_name.to_string(),
+            priority,
+            point,
+            region,
+            reason: UnresolvedReason::ReachabilityUndecided {
+                undecided_cells: cells,
+            },
+        }),
+    };
+
+    let seed_dist = sdf_eval(node, seed_point);
+    if seed_dist >= 0.0 {
+        // seed 点そのものを潰れた箱として報告する (領域ではなく 1 点が原因)
+        return Verdict {
+            violation: Some(violation(seed_dist, seed_point, point_box(seed_point))),
+            unresolved: None,
+        };
     }
 
-    None
+    let n = config.resolution;
+    let step = grid_step(config);
+    let signs = classify_cells(node, config, step);
+    let undecided_cells = signs.iter().filter(|s| **s == CellSign::Undecided).count();
+
+    let rel = (seed_point - config.aabb_min) / step;
+    let (sx, sy, sz) = (
+        grid_index(rel.x, n),
+        grid_index(rel.y, n),
+        grid_index(rel.z, n),
+    );
+    let seed = (sx, sy, sz, sx + sy * n + sz * n * n);
+    let seed_region = cell_box(config, step, sx, sy, sz);
+
+    let inside_total = signs.iter().filter(|s| **s == CellSign::Inside).count();
+    if inside_total == 0 {
+        // 内部と確定したセルが 1 つも無い = この解像度では何も言えない
+        return undecided_verdict(seed_point, seed_region, undecided_cells);
+    }
+
+    // (1) 外部確定でないセルを全部使って到達できない内部確定セル = 分離の証明
+    let loose = flood_mask(n, seed, &|i| signs[i] != CellSign::Outside);
+    let stranded =
+        grid_indices(n).find(|&(_, _, _, idx)| signs[idx] == CellSign::Inside && !loose[idx]);
+    if let Some((ix, iy, iz, _)) = stranded {
+        let unreachable = grid_indices(n)
+            .filter(|&(_, _, _, idx)| signs[idx] == CellSign::Inside && !loose[idx])
+            .count();
+        #[allow(clippy::cast_precision_loss)]
+        let ratio = unreachable as f32 / inside_total as f32;
+        let region = cell_box(config, step, ix, iy, iz);
+        return Verdict {
+            violation: Some(violation(-ratio, box_center(region), region)),
+            unresolved: None,
+        };
+    }
+
+    // (2) 内部確定セルだけで全部届き、未定セルも seed の塊に繋がっていれば合格
+    let strict = flood_mask(n, seed, &|i| signs[i] == CellSign::Inside);
+    let all_inside_linked = (0..signs.len()).all(|i| signs[i] != CellSign::Inside || strict[i]);
+    let no_detached_undecided =
+        (0..signs.len()).all(|i| signs[i] != CellSign::Undecided || loose[i]);
+    if all_inside_linked && no_detached_undecided {
+        return Verdict {
+            violation: None,
+            unresolved: None,
+        };
+    }
+
+    undecided_verdict(box_center(seed_region), seed_region, undecided_cells)
 }
 
 /// 1 点を潰れた箱として表す (領域ではなく点が原因だと報告する時)
@@ -1736,6 +1850,58 @@ fn flood_reaches(
 /// できない側に寄るだけなので健全性は保たれる。
 const INTERVAL_SLACK: f32 = 1.0e-3;
 
+/// 区間演算によるセルの三分類
+///
+/// `Undecided` は「表面を含みうる」と「内部かもしれない」の両方を意味する
+/// ので、数え上げ系の法則ではこのセルが上界・下界の両方に効く
+/// `Debug` は帯の白箱 test が「どの分類になったか」を出すために要る
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CellSign {
+    /// セル全体が内部と確定
+    Inside,
+    /// セル全体が外部と確定
+    Outside,
+    /// 確定しない (表面を含みうる)
+    Undecided,
+}
+
+/// 格子の全セルを区間演算で三分類する
+///
+/// 境界は [`INTERVAL_SLACK`] の余裕で **未定側に倒す** — 合格も違反も緩めず、
+/// 判定できない側に寄せるだけなので健全性は保たれる ([`check_reachable`] と
+/// 同じ契約) `interval_sign` と違い `d = 0` の扱いで悩まなくて済むのは、
+/// slack が 0 の両側を未定にするため
+fn classify_cells(node: &SdfNode, config: &CheckConfig, step: Vec3) -> Vec<CellSign> {
+    let n = config.resolution;
+    let slack = INTERVAL_SLACK * step.length().max(1.0);
+    let mut out = vec![CellSign::Undecided; n * n * n];
+    for (ix, iy, iz, idx) in grid_indices(n) {
+        let iv = sdf_interval(node, cell_box(config, step, ix, iy, iz));
+        out[idx] = if iv.lo > slack {
+            CellSign::Outside
+        } else if iv.hi < -slack {
+            CellSign::Inside
+        } else {
+            CellSign::Undecided
+        };
+    }
+    out
+}
+
+/// `config` の格子 1 セルの辺
+fn grid_step(config: &CheckConfig) -> Vec3 {
+    #[allow(clippy::cast_precision_loss)]
+    let n = config.resolution as f32;
+    (config.aabb_max - config.aabb_min) / n
+}
+
+/// セル index から中心座標
+fn cell_center(config: &CheckConfig, step: Vec3, ix: usize, iy: usize, iz: usize) -> Vec3 {
+    #[allow(clippy::cast_precision_loss)]
+    let lo = config.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32);
+    lo + step * 0.5
+}
+
 /// 2 点間の到達性 — 3 値すべてが証明になる
 ///
 /// セルを区間演算で「内部と確定」「外部と確定」「未定」に分け、内部確定
@@ -1862,7 +2028,19 @@ fn grid_indices(n: usize) -> impl Iterator<Item = (usize, usize, usize, usize)> 
     })
 }
 
-/// `VolumeConservation`: before / after の内部セル数を count、相対差が tolerance 超過で violation
+/// `VolumeConservation`: 体積の相対差を区間で挟み、3 値で判定する
+///
+/// 0.5.0 まで **セル中心の点標本** で内部セル数を数えていたため、どの中心が
+/// 内側に落ちるかで count が動き、**体積が厳密に保存される平行移動に対して
+/// 数 % 〜 12% の差を申告していた**
+///
+/// 区間演算の三分類で、セルごとに「両方内部 / 両方外部 (差に効かない)」
+/// 「片方が内部と確定し他方が外部と確定 (必ず 1 セル分の差)」「それ以外
+/// (±1 セル分まで動きうる)」を分け、差と体積の両方を上下から挟む
+///
+/// - 差の下界 > 許容 × 体積の上界 → 違反 (どう取っても超える)
+/// - 差の上界 ≤ 許容 × 体積の下界 → 合格
+/// - 挟む → 未定 ([`UnresolvedReason::VolumeUnbracketed`])
 fn check_volume_conservation(
     before: &SdfNode,
     after: &SdfNode,
@@ -1870,67 +2048,123 @@ fn check_volume_conservation(
     law_name: &str,
     priority: Priority,
     config: &CheckConfig,
-) -> Option<Violation> {
-    let mut before_count: usize = 0;
-    let mut after_count: usize = 0;
-    let mut sample_region: Option<(Vec3, Vec3Interval)> = None;
+) -> Verdict {
+    let n = config.resolution;
+    let step = grid_step(config);
+    let sb = classify_cells(before, config, step);
+    let sa = classify_cells(after, config, step);
 
-    for (center, bounds) in GridSampler::new(config) {
-        let db = sdf_eval(before, center);
-        let da = sdf_eval(after, center);
-        if db < 0.0 {
-            before_count += 1;
-        }
-        if da < 0.0 {
-            after_count += 1;
-            if sample_region.is_none() {
-                sample_region = Some((center, bounds));
+    // V_after − V_before をセル単位で上下から積む
+    //
+    // セルが内部を占める割合は Inside = 1 / Outside = 0 / Undecided = [0, 1]
+    // なので、1 セルの寄与は (after の下界 − before の上界, after の上界 −
+    // before の下界) 未定セルを一律 ±1 にすると、**向きが決まっているのに
+    // 両振れ扱い**になって検出力を落とす (例: before 外部確定 × after 未定は
+    // 増える側にしか振れない)
+    let (mut delta_lo, mut delta_hi) = (0i64, 0i64);
+    // 変形前の体積の下界 / 上界 (セル数)
+    let (mut vol_lo, mut vol_hi) = (0usize, 0usize);
+    let mut witness: Option<(Vec3, Vec3Interval)> = None;
+
+    let frac_bounds = |s: CellSign| match s {
+        CellSign::Inside => (1i64, 1i64),
+        CellSign::Outside => (0, 0),
+        CellSign::Undecided => (0, 1),
+    };
+
+    for (ix, iy, iz, idx) in grid_indices(n) {
+        let (b_lo, b_hi) = frac_bounds(sb[idx]);
+        let (a_lo, a_hi) = frac_bounds(sa[idx]);
+        // 変形前の体積は占有割合の下界 / 上界をそのまま積む (0 か 1 のみ)
+        match sb[idx] {
+            CellSign::Inside => {
+                vol_lo += 1;
+                vol_hi += 1;
             }
-        } else if db < 0.0 && sample_region.is_none() {
-            sample_region = Some((center, bounds));
+            CellSign::Undecided => vol_hi += 1,
+            CellSign::Outside => {}
+        }
+        delta_lo += a_lo - b_hi;
+        delta_hi += a_hi - b_lo;
+
+        // 片方だけが内部と確定したセル = 差があることが確定した場所
+        if witness.is_none()
+            && matches!(
+                (sb[idx], sa[idx]),
+                (CellSign::Outside, CellSign::Inside) | (CellSign::Inside, CellSign::Outside)
+            )
+        {
+            let r = cell_box(config, step, ix, iy, iz);
+            witness = Some((box_center(r), r));
         }
     }
 
-    if before_count == 0 {
-        return None; // 変形前が空 = 対象外
+    if vol_hi == 0 {
+        return Verdict {
+            violation: None,
+            unresolved: None, // 変形前が空 = 対象外
+        };
     }
 
-    let diff = after_count.abs_diff(before_count);
-    #[allow(clippy::cast_precision_loss)]
-    let relative_diff = (diff as f32) / (before_count as f32);
+    // |V_after − V_before| の範囲 — delta が 0 を跨ぐなら差 0 があり得る
+    let (abs_lo, abs_hi) = if delta_lo <= 0 && delta_hi >= 0 {
+        (0i64, delta_lo.abs().max(delta_hi))
+    } else {
+        let (x, y) = (delta_lo.abs(), delta_hi.abs());
+        (x.min(y), x.max(y))
+    };
 
-    if relative_diff > relative_tolerance {
-        let (point, region) = sample_region.unwrap_or_else(|| {
-            (
-                (config.aabb_min + config.aabb_max) * 0.5,
-                Vec3Interval {
-                    x: Interval {
-                        lo: config.aabb_min.x,
-                        hi: config.aabb_max.x,
-                    },
-                    y: Interval {
-                        lo: config.aabb_min.y,
-                        hi: config.aabb_max.y,
-                    },
-                    z: Interval {
-                        lo: config.aabb_min.z,
-                        hi: config.aabb_max.z,
-                    },
+    #[allow(clippy::cast_precision_loss)]
+    let (diff_lo, diff_hi) = (abs_lo as f32, abs_hi as f32);
+    #[allow(clippy::cast_precision_loss)]
+    let (v_lo, v_hi) = (vol_lo as f32, vol_hi as f32);
+
+    // 相対差の下界は体積を最大に取った時、上界は体積を最小に取った時
+    let rel_lo = diff_lo / v_hi;
+    let rel_hi = if v_lo > 0.0 {
+        diff_hi / v_lo
+    } else {
+        f32::INFINITY
+    };
+
+    let (point, region) = witness.unwrap_or_else(|| {
+        let r = Vec3Interval::from_bounds(config.aabb_min, config.aabb_max);
+        (box_center(r), r)
+    });
+
+    if rel_lo > relative_tolerance {
+        return Verdict {
+            violation: Some(Violation {
+                law_name: law_name.to_string(),
+                priority,
+                residual: relative_tolerance - rel_lo, // 負 = 下界でも超過
+                point,
+                region,
+                evidence: Evidence::Modelled {
+                    model: MODEL_VOLUME,
                 },
-            )
-        });
-        Some(Violation {
+            }),
+            unresolved: None,
+        };
+    }
+    if rel_hi <= relative_tolerance {
+        return Verdict {
+            violation: None,
+            unresolved: None,
+        };
+    }
+    Verdict {
+        violation: None,
+        unresolved: Some(Unresolved {
             law_name: law_name.to_string(),
             priority,
-            residual: relative_tolerance - relative_diff, // 負 = 超過量
             point,
             region,
-            evidence: Evidence::Modelled {
-                model: MODEL_VOLUME,
+            reason: UnresolvedReason::VolumeUnbracketed {
+                lo: rel_lo,
+                hi: rel_hi,
             },
-        })
-    } else {
-        None
+        }),
     }
 }
 
@@ -3002,6 +3236,81 @@ mod evidence_gate_tests {
                 class
             );
         }
+    }
+
+    /// 表面帯の判定基準が **場の値に依存していない** こと (0.5.0)
+    ///
+    /// `|f(center)| < step` で帯を取ると、場が真の距離を過大申告する node
+    /// (TPMS は 1.7〜7.0 倍) では帯がその分痩せ、**表面を含むセルを帯から
+    /// 落とす** = `surface_hi` が上界でなくなる
+    ///
+    /// `analytic_law::thermal_surface_ratio_must_not_shrink_with_the_field_scale`
+    /// は三値化の側を pin していて、**この基準の差までは捕まえられなかった**
+    /// (`|f| < step` に戻しても比の上界が閾値を上回るので verdict が動かない、
+    /// 2026-09-28 実測) ので、基準そのものを白箱で固定する
+    ///
+    /// scene は「区間演算で内部と確定するセルが多い」(= 比の上界が発散しない)
+    /// かつ「場の帯が表面セルを取りこぼす」を満たす必要があり、薄い
+    /// `gyroid(1.0, 0.3)` では内部確定セルが 0 になって測れない
+    #[test]
+    fn surface_band_does_not_depend_on_the_field_scale() {
+        let node = SdfNode::gyroid(0.6, 1.2);
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-2.0),
+            aabb_max: Vec3::splat(2.0),
+            resolution: 24,
+        };
+        let (src, radius) = (Vec3::ZERO, 1.5_f32);
+        let step = grid_step(&config);
+        let signs = classify_cells(&node, &config, step);
+
+        let (mut straddling, mut missed_by_field, mut inside) = (0usize, 0usize, 0usize);
+        for (ix, iy, iz, idx) in grid_indices(config.resolution) {
+            let center = cell_center(&config, step, ix, iy, iz);
+            if center.distance(src) > radius {
+                continue;
+            }
+            if signs[idx] == CellSign::Inside {
+                inside += 1;
+            }
+            let region = cell_box(&config, step, ix, iy, iz);
+            if !cell_straddles_surface(&node, region) {
+                continue;
+            }
+            straddling += 1;
+            // 表面を含むセルは区間演算では必ず未定 = 帯が上界であることの担保
+            assert_eq!(
+                signs[idx],
+                CellSign::Undecided,
+                "表面を含むセルが内外確定になった (帯が上界でない)"
+            );
+            if sdf_eval(&node, center).abs() >= step.x {
+                missed_by_field += 1;
+            }
+        }
+
+        assert!(
+            straddling > 0 && inside > 0,
+            "検査対象が空 (straddling={straddling} inside={inside})"
+        );
+        assert!(
+            missed_by_field > 0,
+            "場の帯と区間の帯が一致してしまい基準の差を測れない — \
+             場が過大申告する node に変える"
+        );
+
+        // `check_thermal` が実際にその帯を使っていることを比の上界経由で固定
+        // 旧基準に戻すと `surface_hi` が straddling を下回り、ここが落ちる
+        let (_, hi, _) = surface_ratio_bracket(&node, src, radius, &config, &signs)
+            .expect("内部確定セルがあるので bracket が取れる");
+        #[allow(clippy::cast_precision_loss)]
+        let needed = straddling as f32 / inside as f32;
+        assert!(
+            hi >= needed,
+            "表面比の上界 {hi:.4} が、表面を含むと確定したセル分 {needed:.4} に \
+             届いていない = 帯が場の値で痩せている \
+             (straddling={straddling} inside={inside} missed_by_field={missed_by_field})"
+        );
     }
 
     /// `LawSet` の convenience が Hard を作り直していないか
