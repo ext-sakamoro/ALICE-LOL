@@ -289,6 +289,19 @@ pub enum Constraint {
     /// (一切冷えなくても収まる)、挟んだら未定
     /// ([`UnresolvedReason::TemperatureUnbracketed`])。
     ///
+    /// # 形状も同じく挟む
+    ///
+    /// 区間演算で内外が決まらないセルがあるので、真の材料 `M` は
+    /// `Inside ⊆ M ⊆ Inside ∪ Undecided` の範囲にある。材料を増やした時に
+    /// 最高温度が動く向きは **境界条件によって逆**で、断熱は下がり
+    /// (質量が増えて同じ熱量を吸う)、等温は上がる (周囲温度に固定される面が
+    /// 熱源から遠のく)。したがって**両端とも最小材料 = `Inside` で極値を取る**
+    /// ので、どちらの run も `Inside` だけで解く。
+    ///
+    /// `Inside` に絞ると材料が消える / 熱源が乗らない / 格子の都合で島が
+    /// 千切れる形状が出る。いずれも黙って通さず
+    /// [`UnresolvedReason::ThermalGridUnusable`] にする。
+    ///
     /// # 単位
     ///
     /// `alice_physics` の材料定数は SI (`W/(m·K)` / `J/(kg·K)` / `kg/m³`) なので、
@@ -398,10 +411,12 @@ const MODEL_CONTINUITY: &str =
 /// `ThermalField` が仮定しているモデル
 ///
 /// 幾何 proxy ではなく実温度場だが、**証明ではない**: 陽解法の数値解 /
-/// 格子離散化 / 対流熱伝達率を両端 (h = 0 と h = ∞) でしか挟んでいない /
-/// 内外が確定しないセルを一律で材料として扱う (形状側の誤差は挟んでいない)
+/// 格子離散化 / 挟んでいるのは対流熱伝達率と形状の 2 軸だけ
+///
+/// 形状は `Inside ⊆ 真の材料 ⊆ Inside ∪ Undecided` の範囲にあり、両端とも
+/// 最小材料 (`Inside`) で極値を取る (材料を増やすと断熱は下がり等温は上がる)
 const MODEL_THERMAL_FIELD: &str = "alice_physics の陽解法 3D 熱伝導 (格子離散化、\
-境界条件は h = 0 と h = ∞ で挟む、形状の未確定セルは材料として扱う)";
+境界条件 h と形状を両端で挟む: 上界 = 断熱 × 内部確定セルのみ、下界 = 等温 × 同)";
 
 /// `VolumeConservation` が仮定しているモデル
 const MODEL_VOLUME: &str =
@@ -1745,8 +1760,10 @@ fn check_thermal(
 const THERMAL_MAX_STEPS: u32 = 6000;
 
 /// 表面から熱が逃げる度合い (対流熱伝達率) の両端
+///
+/// `Debug` は bracket の test が「どちらの端で外れたか」を出すために要る
 #[cfg(feature = "physics")]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SurfaceCooling {
     /// `h = 0` — 熱が一切逃げない (最高温度の上界)
     Adiabatic,
@@ -1907,6 +1924,58 @@ fn solve_peak_temperature(
     peak.is_finite().then_some(peak)
 }
 
+/// 熱源が `Inside` の材料に乗っているか、乗っている島が離散化で千切れていないか
+///
+/// 返り値が `Some` なら解けない理由
+///
+/// - **熱源が材料に乗らない**: 0.4.0 は「形状の外の熱源は効かない」と黙って
+///   捨てていた = 熱が入らず上界も周囲温度になり **偽の合格**になる経路
+///   (`Inside ∪ Undecided` で解いていたので踏みにくかっただけで、元からある穴)
+/// - **熱源の島が離散化で千切れている**: `Inside` に絞ると薄い部分がバラバラの
+///   島になり、熱源の乗った島だけが加熱されて上界が跳ね上がる 判定としては
+///   安全側だが「解像度を上げれば直る」ことが利用者に伝わらない
+///
+///   本当に分かれている部品と区別するために、**`Inside` の連結成分と
+///   `Inside ∪ Undecided` の連結成分を比べる** — 後者で繋がっているのに前者で
+///   切れているなら、それは形状でなく格子の都合 (閾値を置かずに区別できる)
+#[cfg(feature = "physics")]
+fn thermal_source_placement_problem(
+    sources: &[(Vec3, f32)],
+    solid: &[bool],
+    loose: &[bool],
+    config: &CheckConfig,
+    step: Vec3,
+) -> Option<&'static str> {
+    let n = config.resolution;
+    for &(p, watts) in sources {
+        if watts == 0.0 {
+            continue; // 発熱しない source は配置を問わない
+        }
+        let rel = (p - config.aabb_min) / step;
+        if rel.x < 0.0 || rel.y < 0.0 || rel.z < 0.0 {
+            return Some("熱源が検査 AABB の外にある");
+        }
+        let (ix, iy, iz) = (
+            grid_index(rel.x, n),
+            grid_index(rel.y, n),
+            grid_index(rel.z, n),
+        );
+        let start = (ix, iy, iz, ix + iy * n + iz * n * n);
+        if !solid[start.3] {
+            return Some("熱源が内部と確定したセルに乗っていない (解像度を上げる)");
+        }
+        let strict = flood_mask(n, start, &|i| solid[i]);
+        let relaxed = flood_mask(n, start, &|i| loose[i]);
+        if (0..solid.len()).any(|i| solid[i] && relaxed[i] && !strict[i]) {
+            return Some(
+                "熱源のある材料が格子の都合で分断されている \
+                 (形状としては繋がっているので解像度を上げる)",
+            );
+        }
+    }
+    None
+}
+
 /// `ThermalField`: 最高温度を境界条件の両端で挟み、3 値で判定する
 #[cfg(feature = "physics")]
 #[allow(clippy::too_many_arguments)]
@@ -1946,12 +2015,26 @@ fn check_thermal_field(
         return unusable("metres_per_unit / duration_s が正でない");
     }
 
-    // 内外が確定しないセルは材料として扱う (形状側の誤差は挟んでいない、
-    // MODEL_THERMAL_FIELD に明記)
+    // **両端とも「内部と確定したセルだけ」で解く**
+    //
+    // 真の材料 `M` は `Inside ⊆ M ⊆ Inside ∪ Undecided` の範囲にあるが、材料を
+    // 増やした時に最高温度が動く向きは境界条件で逆になる:
+    //
+    // - 断熱 (`h = 0`): 質量が増えて同じ熱量を吸うので **下がる**
+    // - 等温 (`h = ∞`): 周囲温度に固定される面が熱源から遠のくので **上がる**
+    //
+    // したがって `T(M, h_true) ≤ T_断熱(M) ≤ T_断熱(Inside)` かつ
+    // `T(M, h_true) ≥ T_等温(M) ≥ T_等温(Inside)` で、**両端とも最小材料 =
+    // `Inside` で極値を取る** (`Inside ∪ Undecided` で解くと上界は下がり下界は
+    // 上がって、bracket が両側から食われる = 0.4.0 の実装の誤り)
     let signs = classify_cells(node, config, step);
-    let solid: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
+    let solid: Vec<bool> = signs.iter().map(|s| *s == CellSign::Inside).collect();
+    let loose: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
     if !solid.iter().any(|b| *b) {
-        return unusable("材料セルが 1 つも無い");
+        return unusable("内部と確定したセルが 1 つも無い (解像度を上げる)");
+    }
+    if let Some(why) = thermal_source_placement_problem(sources, &solid, &loose, config, step) {
+        return unusable(why);
     }
 
     let scene = ThermalScene {
@@ -4056,6 +4139,145 @@ mod evidence_gate_tests {
             "断熱境界で時間を 10 倍にしても温度上昇が {adi_short:.4} → {adi_long:.4} \
              (3 倍未満) = 熱が逃げている"
         );
+    }
+
+    /// 材料の増減に対する最高温度の向き — bracket の両端が最小材料に来る根拠
+    ///
+    /// **この 2 本が設計の前提そのもの**。向きが逆だったり動かなかったりしたら
+    /// `Inside` で挟む方式が成立しないので、実装より先に実測する。
+    ///
+    /// - 断熱: 材料を増やす = 同じ熱量をより多い質量が吸う → **下がる**
+    /// - 等温: 材料を増やす = 周囲温度に固定される面が熱源から遠のく → **上がる**
+    #[cfg(feature = "physics")]
+    #[test]
+    fn material_moves_the_peak_in_opposite_directions_per_boundary() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-0.5),
+            aabb_max: Vec3::splat(0.5),
+            resolution: 9,
+        };
+        let signs = classify_cells(&SdfNode::sphere(0.35), &config, grid_step(&config));
+        let strict: Vec<bool> = signs.iter().map(|s| *s == CellSign::Inside).collect();
+        let loose: Vec<bool> = signs.iter().map(|s| *s != CellSign::Outside).collect();
+        let extra = (0..signs.len()).filter(|&i| loose[i] && !strict[i]).count();
+        assert!(
+            strict.iter().any(|b| *b) && extra > 0,
+            "内部確定セルと未確定セルが両方要る (strict={} extra={extra})",
+            strict.iter().filter(|b| **b).count()
+        );
+
+        let sources = [(Vec3::ZERO, 50.0)];
+        let peak = |solid: &[bool], cooling| {
+            let scene = ThermalScene {
+                solid,
+                sources: &sources,
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: 2000.0,
+            };
+            solve_peak_temperature(&scene, cooling, &config).expect("解けるはず")
+        };
+
+        let adi_small = peak(&strict, SurfaceCooling::Adiabatic);
+        let adi_big = peak(&loose, SurfaceCooling::Adiabatic);
+        assert!(
+            adi_big < adi_small,
+            "断熱で材料を増やしたのに最高温度が下がらない ({adi_small:.4} → {adi_big:.4}) \
+             = 上界を最小材料に置く根拠が崩れる"
+        );
+
+        let iso_small = peak(&strict, SurfaceCooling::Isothermal);
+        let iso_big = peak(&loose, SurfaceCooling::Isothermal);
+        assert!(
+            iso_big > iso_small,
+            "等温で材料を増やしたのに最高温度が上がらない ({iso_small:.4} → {iso_big:.4}) \
+             = 下界を最小材料に置く根拠が崩れる"
+        );
+    }
+
+    /// `Undecided` セルの任意の部分集合を材料に足しても bracket の内側に入る
+    ///
+    /// 真の材料 `M` は `Inside ⊆ M ⊆ Inside ∪ Undecided` のどれかなので、
+    /// **その範囲の `M` を実際に何通りも作って**、どれも
+    /// `[T_等温(Inside), T_断熱(Inside)]` に収まることを見る。
+    /// 形状 (半径) を変えるのではなく `Undecided` の部分集合を直接作るのが要点で、
+    /// 範囲を外れた形状を混ぜると「入らなくて当然」になり oracle が嘘の red を出す。
+    #[cfg(feature = "physics")]
+    #[test]
+    fn bracket_contains_every_admissible_material_set() {
+        let material = constant_material(200.0, 900.0, 2700.0);
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-0.5),
+            aabb_max: Vec3::splat(0.5),
+            resolution: 9,
+        };
+        let signs = classify_cells(&SdfNode::sphere(0.35), &config, grid_step(&config));
+        let strict: Vec<bool> = signs.iter().map(|s| *s == CellSign::Inside).collect();
+        let undecided: Vec<usize> = (0..signs.len())
+            .filter(|&i| signs[i] == CellSign::Undecided)
+            .collect();
+        assert!(!undecided.is_empty(), "未確定セルが無いと挟む意味が無い");
+
+        let sources = [(Vec3::ZERO, 50.0)];
+        let peak = |solid: &[bool], cooling| {
+            let scene = ThermalScene {
+                solid,
+                sources: &sources,
+                material: &material,
+                metres_per_unit: 1.0,
+                ambient_c: 20.0,
+                duration_s: 2000.0,
+            };
+            solve_peak_temperature(&scene, cooling, &config).expect("解けるはず")
+        };
+
+        // bracket は **法則が報告した値** を読む (solver を直接呼ぶと
+        // `check_thermal_field` がどの形状を選んでいるかを見ないので、
+        // 形状選択を戻しても落ちない test になってしまう)
+        let probe = peak(&strict, SurfaceCooling::Adiabatic)
+            .midpoint(peak(&strict, SurfaceCooling::Isothermal));
+        let report = check_laws(
+            &[Law::soft(
+                "heat",
+                1.0,
+                Constraint::ThermalField {
+                    node: SdfNode::sphere(0.35),
+                    sources: vec![(Vec3::ZERO, 50.0)],
+                    material,
+                    metres_per_unit: 1.0,
+                    ambient_c: 20.0,
+                    max_temperature_c: probe,
+                    duration_s: 2000.0,
+                },
+            )],
+            &config,
+        );
+        let (lo, hi) = match report.unresolved.first().map(|u| &u.reason) {
+            Some(UnresolvedReason::TemperatureUnbracketed { lo_c, hi_c }) => (*lo_c, *hi_c),
+            other => panic!("bracket の中点なら未定になるはず (実際 {other:?} / {report:?})"),
+        };
+        assert!(lo < hi, "bracket が潰れている ({lo:.4}, {hi:.4})");
+
+        // 未確定セルを 0 / 25 / 50 / 75 / 100 % 採用した材料集合を作る
+        // (決定論的に間引く — 乱数を使うと落ちた時に再現できない)
+        for numerator in [0_usize, 1, 2, 3, 4] {
+            let mut m = strict.clone();
+            for (rank, &idx) in undecided.iter().enumerate() {
+                if rank * 4 < numerator * undecided.len() {
+                    m[idx] = true;
+                }
+            }
+            for cooling in [SurfaceCooling::Adiabatic, SurfaceCooling::Isothermal] {
+                let t = peak(&m, cooling);
+                assert!(
+                    (lo..=hi).contains(&t),
+                    "未確定セル {numerator}/4 採用 / {cooling:?} の最高温度 {t:.4} が \
+                     bracket [{lo:.4}, {hi:.4}] の外 = 挟めていない"
+                );
+            }
+        }
     }
 
     /// 同じ入力は同じ温度場を返す (f32 の + - * / のみなので bit 一致するはず)
