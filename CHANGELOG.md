@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — alice-sdf 4.0.0 追従 (2026-09-28)
+
+- **`alice-sdf` 要件 `3.0.0` → `4.0.0`** — 4.0.0 は計量そのものを値にする 2 node と場の主張を測る 2 API を追加し、`SdfNode` / `OpCode` を `#[non_exhaustive]` にした 外部 crate からの wildcard なし `match` は `E0004` になるので `emit::write_node_inner` に `MetricBall` / `MetricBlend` の arm と wildcard arm を追加 (未知 variant は黙って捨てず `EmitError::Unsupported` として報告する)
+- **`law::interval_sign` の unit test を `Interval { lo, hi }` の struct literal 構築に変更** — alice-sdf 4.0 から `Interval::new` が外側丸め (`next_down` / `next_up`) を掛けるので、`new(0.0, 1.0)` の lo は 0 のわずか下になる すると「lo が厳密に 0 なら外側と断定する」という**検査対象そのものの性質**が測れなくなる (答えが `None` に化ける) ので、境界を動かさない構築に寄せた
+- `Cargo.lock` / `fuzz/Cargo.lock` — `alice-sdf` 4.0.0 / `alice-det-math` 0.3.1 に更新
+
 ### Added — 場の勾配と 2 点間到達性を法則として書けるようにする (2026-09-27)
 
 どちらも 3 値 (合格 / 違反 / 未定) がすべて**証明**になっている。「標本で

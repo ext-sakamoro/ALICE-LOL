@@ -2094,10 +2094,18 @@ mod core_probe_tests {
     /// **表面ちょうどの箱を「表面なし」として刈る** = 三値判定の健全性が崩れる
     #[test]
     fn an_interval_touching_zero_from_below_is_not_uniformly_negative() {
-        assert_eq!(interval_sign(Interval::new(-1.0, 0.0)), None);
+        // 検査対象は `interval_sign` の契約なので、境界を動かさないように
+        // **struct literal で組む**。`Interval::new` は alice-sdf 4.0 の
+        // `ba8b967` から外側丸め (`next_down` / `next_up`) を掛けるので、
+        // `new(0.0, 1.0)` の lo は 0 のわずか下になり「外側と断定できない」
+        // = `None` が正しい答えになってしまい、この test が見たい性質
+        // (lo が厳密に 0 なら外側と断定する) を測れなくなる。
+        assert_eq!(interval_sign(Interval { lo: -1.0, hi: 0.0 }), None);
         // 両端が厳密に負 / 非負なら断定できる
-        assert_eq!(interval_sign(Interval::new(-1.0, -0.5)), Some(false));
-        assert_eq!(interval_sign(Interval::new(0.0, 1.0)), Some(true));
+        assert_eq!(interval_sign(Interval { lo: -1.0, hi: -0.5 }), Some(false));
+        assert_eq!(interval_sign(Interval { lo: 0.0, hi: 1.0 }), Some(true));
+        // 外側丸めを通した区間は、境界に触れていれば断定しない (健全側)
+        assert_eq!(interval_sign(Interval::new(0.0, 1.0)), None);
     }
 
     /// 球面より内側に入った表面は交点として拾う
