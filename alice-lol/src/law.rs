@@ -415,6 +415,11 @@ const MODEL_CONTINUITY: &str =
 ///
 /// 形状は `Inside ⊆ 真の材料 ⊆ Inside ∪ Undecided` の範囲にあり、両端とも
 /// 最小材料 (`Inside`) で極値を取る (材料を増やすと断熱は下がり等温は上がる)
+///
+/// `ThermalField` は `physics` feature 限定なので、この定数もそれに合わせる
+/// (gate を忘れると既定 build で dead code になる CI の clippy は
+/// `--all-features` で回るので、既定 build だけの警告は捕まらない)
+#[cfg(feature = "physics")]
 const MODEL_THERMAL_FIELD: &str = "alice_physics の陽解法 3D 熱伝導 (格子離散化、\
 境界条件 h と形状を両端で挟む: 上界 = 断熱 × 内部確定セルのみ、下界 = 等温 × 同)";
 
@@ -1745,6 +1750,79 @@ fn check_thermal(
             reason: UnresolvedReason::SurfaceRatioUnbracketed { lo, hi },
         }),
     }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 応力特異点の **計測** — 判定器はまだ無い
+//
+// 線形弾性では材料側の内角 `α > π` の入隅で応力が `σ ~ r^(λ−1)` (λ < 1) で
+// 発散する (Williams、α = 2π のき裂で λ = 1/2) つまりその形状に対して
+// **「最大応力」という量が存在しない** ので、応力を見る法則はそこで判定を
+// 降りる必要がある
+//
+// ⚠️ **ここにあるのは計測だけで、判定器 (形状を走査して入隅を探す層) は
+// 未実装** 走査層は 2026-09-29 に一度書いたが、(1) 尺度不変性の判定がどの
+// test でも load-bearing でない (判定を丸ごと外しても green) (2) 「決められ
+// ない」分岐が 20 通りの scene で一度も発火しない (3) フィレット済の形状に
+// 偽陽性が残り、報告値が最悪点でない (最初の一致で返すため) の 3 点が
+// 破壊試験で出たので破棄した 再設計は Backlog
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 占有率を測る球面標本の数 (Fibonacci 格子、決定論)
+///
+/// 標本は球 **面** に置く — 体積で測ると表面を跨ぐセルが 2 割近く出て、
+/// 内外が確定しない分が占有率の幅を 0.4〜0.6 に広げてしまい、内角 3π/2
+/// (占有率 0.75) すら決められなくなる (2026-09-29 実測)
+/// 立体角なら各標本が内か外かに確定し、楔に対しては厳密に `α / 2π` になる
+/// 判定器 (走査層) が入るまで production からは呼ばれない
+#[allow(dead_code)]
+const FRACTION_SAMPLES: usize = 512;
+
+/// 点 `p` を中心とする半径 `r` の **球面** 上で材料が占める割合
+///
+/// 材料側の内角 `α` に対して `α / 2π` に収束する (平面なら 0.5) ので、
+/// **Williams の特異条件 `α > π` は「占有率が 0.5 を超えるか」で測れる**
+///
+/// # 曲率 API を使わない理由
+///
+/// `alice_sdf::autodiff::principal_curvatures` は `eval_hessian` = 勾配の
+/// 有限差分に依るので、**勾配が不連続な鋭い入隅では `|k| ~ 1/ε` で発散** する
+/// (滑らかな面では正しく収束するので API が壊れているわけではない)
+/// 「曲率 < −閾値なら入隅」は閾値が実質 length scale になり、`ε` を変えると
+/// 結論が変わる 占有率は逆に `r → 0` で内角そのものに収束する
+///
+/// # 実測 (2026-09-29)
+///
+/// 内角 3π/2 の鋭い入隅の稜線上で、`r` を 8 倍変えても **0.752 で不変**
+/// (`α / 2π = 0.75` と一致) 曲率有限のフィレット面では `0.5` からの隔たりが
+/// `r` に比例して縮む (`r` を半分にすると隔たりも 0.50〜0.63 倍)
+/// **この差が「閾値でなく尺度不変性で判定する」根拠**
+///
+/// # これは計測であって判定ではない
+///
+/// 球面上の点標本なので区間演算のような上下界ではない。形状を走査して
+/// 「入隅があるか」を答える層は未実装 (module 冒頭の comment 参照) なので、
+/// production からはまだ呼ばれない (下の oracle 2 本が唯一の呼び出し元)
+#[allow(dead_code)]
+fn material_fraction(node: &SdfNode, p: Vec3, r: f32) -> f32 {
+    // Fibonacci 格子 (決定論、乱数を使わないので落ちた時に再現できる)
+    const GOLDEN_ANGLE: f32 = 2.399_963_2; // π (3 − √5)
+    let mut inside = 0_u32;
+    for i in 0..FRACTION_SAMPLES {
+        #[allow(clippy::cast_precision_loss)]
+        let t = (i as f32 + 0.5) / FRACTION_SAMPLES as f32;
+        let z = 2.0f32.mul_add(-t, 1.0);
+        let rho = (1.0 - z * z).max(0.0).sqrt();
+        #[allow(clippy::cast_precision_loss)]
+        let theta = GOLDEN_ANGLE * i as f32;
+        let dir = Vec3::new(rho * theta.cos(), rho * theta.sin(), z);
+        if sdf_eval(node, p + dir * r) < 0.0 {
+            inside += 1;
+        }
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let frac = f32::from(u16::try_from(inside).unwrap_or(u16::MAX)) / FRACTION_SAMPLES as f32;
+    frac
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -4311,6 +4389,92 @@ mod evidence_gate_tests {
             solve_peak_temperature(&scene, SurfaceCooling::Adiabatic, &config).expect("解けるはず")
         };
         assert_eq!(run().to_bits(), run().to_bits(), "同じ入力で結果が揺れた");
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 応力特異点の計測 — Williams の条件が占有率で測れることの実証
+    //
+    // 判定器 (走査層) は未実装なので、ここで固定するのは **計測の物理** だけ
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /// L 字の 2 腕 (稜線は z 軸に平行、材料側の内角は 3π/2)
+    ///
+    /// `arm_x` は y ∈ \[−0.3, 0\]、`arm_y` は x ∈ \[−0.3, 0\] なので、
+    /// 空気側の象限 (x < −0.3 かつ y < −0.3) が π/2 = 材料 3π/2
+    /// 入隅の稜線は (−0.3, −0.3) 上
+    fn l_arms() -> (SdfNode, SdfNode) {
+        (
+            SdfNode::box3d_half_extents(0.5, 0.15, 1.0).translate(-0.5, -0.15, 0.0),
+            SdfNode::box3d_half_extents(0.15, 0.5, 1.0).translate(-0.15, -0.5, 0.0),
+        )
+    }
+
+    /// 鋭い入隅の占有率は **尺度を変えても動かない** = `α / 2π` に等しい
+    ///
+    /// これが「閾値でなく尺度不変性で判定する」の根拠で、Williams の特異条件
+    /// (`α > π`) が占有率で測れることの実証
+    #[test]
+    fn solid_angle_fraction_is_scale_invariant_at_a_sharp_corner() {
+        let (arm_x, arm_y) = l_arms();
+        let node = arm_x.union(arm_y);
+        let corner = Vec3::new(-0.3, -0.3, 0.0);
+
+        let seen: Vec<f32> = [0.26_f32, 0.13, 0.065, 0.032]
+            .iter()
+            .map(|&r| material_fraction(&node, corner, r))
+            .collect();
+
+        for f in &seen {
+            assert!(
+                (0.72..=0.78).contains(f),
+                "占有率 {f:.3} が内角 3π/2 の α/2π = 0.75 近傍にない: {seen:?}"
+            );
+        }
+        let spread = seen.iter().copied().fold(f32::MIN, f32::max)
+            - seen.iter().copied().fold(f32::MAX, f32::min);
+        assert!(
+            spread < 0.02,
+            "尺度を 8 倍変えて占有率が {spread:.3} 動いた = 尺度不変でない: {seen:?}"
+        );
+    }
+
+    /// 曲率有限の面では 0.5 からの隔たりが **半径に比例して縮む**
+    ///
+    /// 鋭い入隅 (比 1.0) との差がそのまま判定基準になる
+    /// 実測 (2026-09-29): `smooth_union` のフィレット面で比 0.50〜0.63 (理論 0.5)
+    #[test]
+    fn solid_angle_fraction_decays_with_radius_on_a_fillet() {
+        let (arm_x, arm_y) = l_arms();
+        let node = arm_x.smooth_union(arm_y, 0.35);
+        // フィレット面上の点へ Newton 射影 (空気側の bisector から入る)
+        let mut surf = Vec3::new(-0.45, -0.45, 0.0);
+        for _ in 0..12 {
+            let value = sdf_eval(&node, surf);
+            let grad = alice_sdf::eval::eval_gradient(&node, surf);
+            let norm_sq = grad.length_squared();
+            assert!(norm_sq > 1.0e-12, "勾配が消えた = 射影できない");
+            surf -= grad * (value / norm_sq);
+        }
+        assert!(
+            sdf_eval(&node, surf).abs() < 1.0e-3,
+            "フィレット面へ射影できていない (f = {})",
+            sdf_eval(&node, surf)
+        );
+
+        for radius in [0.26_f32, 0.173, 0.13] {
+            let d_far = material_fraction(&node, surf, radius) - 0.5;
+            let d_near = material_fraction(&node, surf, radius * 0.5) - 0.5;
+            assert!(
+                d_far > 0.01,
+                "r={radius}: フィレット面なのに隔たり {d_far:.3} が小さすぎて比を測れない"
+            );
+            let ratio = d_near / d_far;
+            assert!(
+                (0.35..=0.75).contains(&ratio),
+                "r={radius}: 比 {ratio:.3} が理論値 0.5 の近傍にない \
+                 (鋭い入隅なら 1.0 になるので、0.75 以上だと区別が付かない)"
+            );
+        }
     }
 
     /// `LawSet` の convenience が Hard を作り直していないか
