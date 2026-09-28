@@ -847,8 +847,8 @@ fn non_overlap_residual_is_a_distance_not_a_field_value() {
     assert!((alice_sdf::eval(&a, Vec3::ZERO) - (-0.5)).abs() < 1e-5);
     assert!(alice_sdf::eval(&b, Vec3::ZERO) < -4.9);
 
-    let laws = vec![Law::hard("overlap", Constraint::NonOverlap { a, b })
-        .expect("provable constraint")];
+    let laws =
+        vec![Law::hard("overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")];
     let report = check_laws(&laws, &single_cell(Vec3::ZERO, 0.01));
     assert!(report.has_hard_violations(), "原点は両方の内部なので重なり");
 
@@ -862,35 +862,46 @@ fn non_overlap_residual_is_a_distance_not_a_field_value() {
 
 /// `Containment` の残差は **はみ出し量** であって場の値ではない
 ///
-/// outer = 半径 1 の 2 球 (中心 0 と 1.8) の intersection = 薄いレンズ
-/// (x 半幅 0.1、y/z 半径 0.436) intersection の外側の場 `max(f1, f2)` は
+/// outer = 半径 2 の 2 球 (中心 0 と (3,0,0)) の intersection = レンズ
+/// (x 半幅 0.5、y/z 半径 1.3229) intersection の外側の場 `max(f1, f2)` は
 /// 真の距離を **過小** 申告する
 ///
-/// p = (0.9, 0, 2.0) で場は 1.193 だが、レンズ上端 (0.9, 0, 0.436) までの
-/// 真の距離は 1.564 場の値を残差にすると **はみ出しを 24% 小さく報告する**
+/// p = (1.5, 0, 3.3229) で場は 1.6458 だが、レンズ上端 (1.5, 0, 1.3229)
+/// までの真の距離は厳密に 2.0 場の値を残差にすると
+/// **はみ出しを 18% 小さく報告する**
+///
+/// レンズを薄くするほど場と距離の差は開く (半径 1 / 中心間 1.8 なら 24%) が、
+/// **形状が八分木の葉より薄くなると `probe_ball` が点標本で跨げず** 距離を
+/// 決められなくなる 測りたいのは場と距離の差であって判定器の解像度では
+/// ないので、葉より十分厚いレンズを使う
 #[test]
 fn containment_residual_is_a_distance_not_a_field_value() {
-    let outer = SdfNode::sphere(1.0).intersection(SdfNode::sphere(1.0).translate(1.8, 0.0, 0.0));
-    let p = Vec3::new(0.9, 0.0, 2.0);
-    let inner = SdfNode::sphere(0.2).translate(p.x, p.y, p.z);
+    let outer = SdfNode::sphere(2.0).intersection(SdfNode::sphere(2.0).translate(3.0, 0.0, 0.0));
+    let z_top = (4.0_f32 - 2.25).sqrt(); // 1.3229
+    let p = Vec3::new(1.5, 0.0, z_top + 2.0);
+    let inner = SdfNode::sphere(0.3).translate(p.x, p.y, p.z);
 
-    // 前提の確認: p は inner の内部かつ outer の外部、outer の場は約 1.193
+    // 前提の確認: p は inner の内部かつ outer の外部、outer の場は約 1.6458
     assert!(alice_sdf::eval(&inner, p) < 0.0);
     let field = alice_sdf::eval(&outer, p);
     assert!(
-        (1.15..1.25).contains(&field),
-        "outer の場 {field:.4} が想定 1.193 から外れた"
+        (1.60..1.70).contains(&field),
+        "outer の場 {field:.4} が想定 1.6458 から外れた"
     );
 
-    let laws = vec![Law::hard("inside", Constraint::Containment { inner, outer })
-        .expect("provable constraint")];
+    let laws = vec![
+        Law::hard("inside", Constraint::Containment { inner, outer }).expect("provable constraint"),
+    ];
     let report = check_laws(&laws, &single_cell(p, 0.01));
-    assert!(report.has_hard_violations(), "p は outer の外なのではみ出し");
+    assert!(
+        report.has_hard_violations(),
+        "p は outer の外なのではみ出し"
+    );
 
     let r = report.violations[0].residual;
     assert!(
-        (-1.85..=-1.45).contains(&r),
-        "residual {r:.4} が真のはみ出し量 1.564 の近傍にない \
-         (場の値 −1.193 をそのまま報告していないか)"
+        (-2.40..=-1.90).contains(&r),
+        "residual {r:.4} が真のはみ出し量 2.0 の近傍にない \
+         (場の値 −1.6458 をそのまま報告していないか)"
     );
 }

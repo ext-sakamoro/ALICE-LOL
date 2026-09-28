@@ -772,6 +772,52 @@ fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
     }
 }
 
+/// `p` から表面までの距離の上界を求める
+///
+/// [`probe_ball`] は「半径 r の球の中に表面があるか」を返すので、交点が出る
+/// まで半径を倍にしていく 場の値 `|f(p)|` を初期半径に使うが、**これは
+/// 当たりを付けるためだけ** で、返す値は二分探索で締めた実距離の上界
+/// (場が距離を過大申告する node でも過小申告する node でも正しい)
+///
+/// 上限まで探して見つからなければ `None`
+///
+/// 上限は `floor` (検査 AABB の対角) と **場の値の定数倍** の大きい方
+/// 検査範囲を 1 セルに絞った使い方だと AABB の対角が表面まで届かないので、
+/// 場の値を距離のスケールの当たりとして併用する (場が距離を数倍ずらしても
+/// 届く倍率を取る)
+fn surface_distance(node: &SdfNode, p: Vec3, floor: f32) -> Option<f32> {
+    let field = sdf_eval(node, p).abs();
+    let cap = floor.max(field * SURFACE_SEARCH_SLACK).max(f32::EPSILON);
+    let mut r = field.max(cap * 1.0e-3);
+    // 回数で切る (`cap` までの倍増は高々 log2(SURFACE_SEARCH_SLACK) + 余裕、
+    // 浮動小数を while の条件にすると NaN で止まらなくなる)
+    for _ in 0..SURFACE_SEARCH_STEPS {
+        if let BallProbe::Crossing { distance } = probe_ball(node, p, r.min(cap)) {
+            return Some(distance);
+        }
+        if r >= cap {
+            break;
+        }
+        r *= 2.0;
+    }
+    None
+}
+
+/// 距離探索の倍増回数の上限
+const SURFACE_SEARCH_STEPS: u32 = 10;
+
+/// 場の値から距離探索の上限を作る時の倍率
+///
+/// 場が真の距離を過小申告する合成 (union の内部 / intersection の外部) でも
+/// 届くだけの余裕 実測で必要なのは 2 倍程度 (union 内部 0.5 → 0.866、
+/// 薄いレンズ外部 1.193 → 1.564)
+const SURFACE_SEARCH_SLACK: f32 = 16.0;
+
+/// 検査 AABB の対角 (距離探索の下限側の上限)
+fn search_cap(config: &CheckConfig) -> f32 {
+    (config.aabb_max - config.aabb_min).length()
+}
+
 /// 「表面まで ≥ `required`」を標本点 `center` で判定し、違反 / 未決定を集約する
 ///
 /// `MinThickness` と `Stress` の共通部分 `worst` は最も負の residual、
@@ -913,7 +959,13 @@ fn pair_verdict(
 /// `NonOverlap`: 両 SDF が負（内部）の点があれば重なり
 ///
 /// 証明: 箱で `a ≥ 0` or `b ≥ 0` が一様 → その箱に重なりなし
-/// 証拠: 点で両方負 (residual = 浅い方の侵入深さ、点評価なので exact)
+/// 証拠: 点で両方負 (residual = 浅い方の侵入深さ)
+///
+/// 0.5.0 まで残差に **場の値** `max(fa, fb)` を使っていたが、場の値は距離では
+/// ない (union の内部は距離を過小申告する) ので「侵入深さ」を名乗れない
+/// 判定は符号だけを見るので健全だったが、**残差の数値と
+/// [`top_violations`] の順位が信用できなかった** 証拠の点が決まってから
+/// [`surface_distance`] で実距離に直す
 fn check_non_overlap(
     a: &SdfNode,
     b: &SdfNode,
@@ -931,7 +983,8 @@ fn check_non_overlap(
             bounds,
             &|ia, ib| ia.lo >= 0.0 || ib.lo >= 0.0,
             &|fa, fb| fa < 0.0 && fb < 0.0,
-            &|fa, fb| fa.max(fb), // 浅い方の侵入深さ (点評価なので exact)
+            // 証拠を選ぶ順位付けにだけ場の値を使う (安い) 残差は後で実距離に直す
+            &|fa, fb| fa.max(fb),
         ) {
             PairProbe::Clear => {}
             PairProbe::Witness { point, residual } => match &worst {
@@ -946,13 +999,32 @@ fn check_non_overlap(
         }
     }
 
+    // 侵入深さ = 証拠の点から「浅い方」の表面までの実距離
+    let cap = search_cap(config);
+    let worst = worst.map(|(field, point, region)| {
+        let depth = surface_distance(a, point, cap)
+            .into_iter()
+            .chain(surface_distance(b, point, cap))
+            .fold(f32::INFINITY, f32::min);
+        let residual = if depth.is_finite() {
+            -depth
+        } else {
+            field // どちらの表面も検査範囲内で見つからない時だけ場の値に戻す
+        };
+        (residual.min(-f32::EPSILON), point, region)
+    });
+
     pair_verdict(law_name, priority, worst, undecided)
 }
 
 /// Containment: inner が内部（< 0）かつ outer が外部（> 0）の点があればはみ出し
 ///
 /// 証明: 箱で `inner ≥ 0` (inner が無い) or `outer ≤ 0` (outer の中) が一様
-/// 証拠: 点で `inner < 0 && outer > 0` (residual = −outer、点評価なので exact)
+/// 証拠: 点で `inner < 0 && outer > 0` (residual = はみ出し量)
+///
+/// 0.5.0 まで残差に **場の値** `−outer` を使っていたが、intersection の外側の
+/// 場は真の距離を過小申告するので「はみ出し量」を名乗れない
+/// ([`check_non_overlap`] と同軸)
 fn check_containment(
     inner: &SdfNode,
     outer: &SdfNode,
@@ -970,7 +1042,8 @@ fn check_containment(
             bounds,
             &|ii, io| ii.lo >= 0.0 || io.hi <= 0.0,
             &|fi, fo| fi < 0.0 && fo > 0.0,
-            &|_, fo| -fo, // 負 = はみ出し量 (点評価なので exact)
+            // 証拠を選ぶ順位付けにだけ場の値を使う 残差は後で実距離に直す
+            &|_, fo| -fo,
         ) {
             PairProbe::Clear => {}
             PairProbe::Witness { point, residual } => match &worst {
@@ -984,6 +1057,13 @@ fn check_containment(
             }
         }
     }
+
+    // はみ出し量 = 証拠の点から outer の表面までの実距離
+    let cap = search_cap(config);
+    let worst = worst.map(|(field, point, region)| {
+        let residual = surface_distance(outer, point, cap).map_or(field, |d| -d);
+        (residual.min(-f32::EPSILON), point, region)
+    });
 
     pair_verdict(law_name, priority, worst, undecided)
 }
