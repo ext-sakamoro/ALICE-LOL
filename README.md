@@ -22,6 +22,22 @@ let scene = lol! {
 let glsl = alice_lol::to_glsl(&scene);
 ```
 
+## Where this sits: LOL writes the law, ALICE-SDF evaluates it
+
+This crate is a **language**. It parses to
+[ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF)'s `SdfNode` tree and hands
+it over — ALICE-SDF owns the distance functions, the compiled backends
+(scalar / SIMD / BVH / JIT), the shader transpilers and the mesh pipeline. What
+LOL adds on top is the authoring surface (text in, tree out: `lol!` macro,
+runtime parser, GBNF grammar for LLM constrained decoding) and the **law
+verifier**, whose three values (satisfied / violated / *undecided*) never
+promote "not found" to a pass.
+
+The same shape in both notations, and the one argument convention that differs
+(`SdfNode::box3d` takes **full** extents, the DSL's `box3d` takes **half**
+extents), are pinned by `alice-lol/tests/readme_parity.rs` and documented in
+[ALICE-SDF's README](https://github.com/ext-sakamoro/ALICE-SDF#two-front-ends-this-crates-api-or-the-lol-language).
+
 ## Features
 
 - **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約
