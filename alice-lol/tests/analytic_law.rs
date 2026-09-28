@@ -619,3 +619,203 @@ fn contact_margin_thinner_than_probe_resolution_is_unresolved() {
         other => panic!("unexpected reason {other:?}"),
     }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Thermal / Continuity / VolumeConservation (0.5.0 で三値化する 3 法則)
+//
+// この 3 つは 0.4.0 まで oracle が 1 本も無く、`law_tests.rs` 側にあるのは
+// **実装の出力を pin した変化検出器** だった (格子 count の proxy がどんな値を
+// 返すかを固定しているだけで、幾何として正しいかは誰も見ていない)
+//
+// ここでは「幾何が閉じた式で分かる / 独立に数えられる scene」を使い、
+// 検証器が **偽陽性 (真では満たしているのに違反と断言する)** を出さないことを
+// 見る 違反の検出が健全でも、合格の側で嘘をつけば gate としては同じく壊れる
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 格子を歩き (表面を確実に含むセル数, 内部セル数) を **実装と独立に** 数える
+///
+/// 表面の判定は 8 角の符号反転 = 中間値定理 場の値を距離として使わないので、
+/// 場が真の距離を過大 / 過小申告する node でも正しい
+fn true_surface_and_interior(
+    node: &SdfNode,
+    src: Vec3,
+    radius: f32,
+    cfg: &CheckConfig,
+) -> (usize, usize) {
+    let n = cfg.resolution;
+    #[allow(clippy::cast_precision_loss)]
+    let step = (cfg.aabb_max - cfg.aabb_min) / n as f32;
+    let (mut surface, mut interior) = (0usize, 0usize);
+    for iz in 0..n {
+        for iy in 0..n {
+            for ix in 0..n {
+                #[allow(clippy::cast_precision_loss)]
+                let lo = cfg.aabb_min + step * Vec3::new(ix as f32, iy as f32, iz as f32);
+                let center = lo + step * 0.5;
+                if center.distance(src) > radius {
+                    continue;
+                }
+                if alice_sdf::eval(node, center) < 0.0 {
+                    interior += 1;
+                }
+                let (mut pos, mut neg) = (false, false);
+                for c in 0..8u32 {
+                    let corner = lo
+                        + Vec3::new(
+                            if c & 1 == 0 { 0.0 } else { step.x },
+                            if c & 2 == 0 { 0.0 } else { step.y },
+                            if c & 4 == 0 { 0.0 } else { step.z },
+                        );
+                    if alice_sdf::eval(node, corner) >= 0.0 {
+                        pos = true;
+                    } else {
+                        neg = true;
+                    }
+                }
+                if pos && neg {
+                    surface += 1;
+                }
+            }
+        }
+    }
+    (surface, interior)
+}
+
+/// Thermal の表面帯は **場のスケールで痩せてはいけない**
+///
+/// 実装は表面近傍を `|f(center)| < step` で取るが、gyroid の場は真の距離を
+/// 約 1.7 倍に過大申告する (同 file `gyroid_sheet_is_thinner_than_its_field_claims`)
+/// ので、この帯は真の距離でいう `step / 1.7` 相当まで痩せ、**表面セルを
+/// 取りこぼして表面比を過小評価する**
+///
+/// 真の表面比は角の符号反転で独立に数え、その 95% を閾値にする
+/// 真の比が閾値を上回っている以上、**違反を出したらそれは偽陽性**
+#[test]
+fn thermal_surface_ratio_must_not_shrink_with_the_field_scale() {
+    let cfg = grid(Vec3::splat(-2.0), Vec3::splat(2.0), 20);
+    let (src, radius) = (Vec3::ZERO, 1.5_f32);
+
+    // 対照: 場 = 真の距離の球 これは現実装でも通る (原因の切り分け)
+    let ball = SdfNode::sphere(1.5);
+    let (s, i) = true_surface_and_interior(&ball, src, radius, &cfg);
+    #[allow(clippy::cast_precision_loss)]
+    let ball_thr = (s as f32 / i as f32) * 0.95;
+    let ok = check_laws(
+        &[Law::soft(
+            "ball",
+            1.0,
+            Constraint::Thermal {
+                node: ball,
+                heat_sources: vec![src],
+                search_radius: radius,
+                min_surface_ratio: ball_thr,
+            },
+        )],
+        &cfg,
+    );
+    assert!(
+        ok.violations.is_empty(),
+        "場 = 真の距離の球で偽陽性が出た (格子 count 自体の問題)\n{}",
+        alice_lol::law::format_report(&ok)
+    );
+
+    // 本題: 場が過大申告する gyroid
+    let gyroid = SdfNode::gyroid(1.0, 0.3);
+    let (s, i) = true_surface_and_interior(&gyroid, src, radius, &cfg);
+    assert!(i > 0 && s > 0, "検査対象に内部 / 表面セルが無い");
+    #[allow(clippy::cast_precision_loss)]
+    let true_ratio = s as f32 / i as f32;
+    let report = check_laws(
+        &[Law::soft(
+            "gyroid",
+            1.0,
+            Constraint::Thermal {
+                node: gyroid,
+                heat_sources: vec![src],
+                search_radius: radius,
+                min_surface_ratio: true_ratio * 0.95,
+            },
+        )],
+        &cfg,
+    );
+    assert!(
+        report.violations.is_empty(),
+        "真の表面比 {true_ratio:.4} は閾値 {:.4} を上回るのに違反と断言した \
+         (|f| < step が場のスケールで痩せ、表面セルを取りこぼしている)\n{}",
+        true_ratio * 0.95,
+        alice_lol::law::format_report(&report)
+    );
+}
+
+/// Continuity は **格子より細い接続を「分離」と断言してはいけない**
+///
+/// 半径 0.1 の首で繋いだ 2 球は連結 実装はセル中心の点標本だけで
+/// 内部 mask を作るので、首が 1 セルより細いと中心が 1 つも内部に落ちず、
+/// 首が存在しないかのように flood fill が途切れて **分離と断言する**
+///
+/// 正しくは「この解像度では決められない」= 違反ではない
+#[test]
+fn continuity_must_not_call_a_thin_neck_disconnected() {
+    let neck = SdfNode::sphere(0.8)
+        .translate(-1.0, 0.0, 0.0)
+        .union(SdfNode::sphere(0.8).translate(1.0, 0.0, 0.0))
+        .union(SdfNode::capsule(
+            Vec3::new(-1.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            0.1,
+        ));
+    // 首の中心 (原点) が内部であることを確認 = 幾何として確かに連結
+    assert!(
+        alice_sdf::eval(&neck, Vec3::ZERO) < 0.0,
+        "首の中心が内部でない — scene の作り方が誤り"
+    );
+
+    for res in [8_usize, 16, 24] {
+        let cfg = grid(Vec3::splat(-2.5), Vec3::splat(2.5), res);
+        let report = check_laws(
+            &[Law::soft(
+                "connected",
+                1.0,
+                Constraint::Continuity {
+                    node: neck.clone(),
+                    seed_point: Vec3::new(-1.0, 0.0, 0.0),
+                },
+            )],
+            &cfg,
+        );
+        assert!(
+            report.violations.is_empty(),
+            "res={res}: 半径 0.1 の首で繋がった 2 球を分離と断言した\n{}",
+            alice_lol::law::format_report(&report)
+        );
+    }
+}
+
+/// `VolumeConservation` は **平行移動を体積変化と申告してはいけない**
+///
+/// 平行移動は体積を厳密に保存する (相対差 0) 実装はセル中心が内側に落ちるか
+/// だけを数えるので、半セルずらすとどの中心が拾われるかが変わり、
+/// **変化していない体積に対して数 % 〜 12% の差を申告する**
+#[test]
+fn volume_conservation_must_not_flag_a_translation() {
+    for (res, shift) in [(8_usize, 0.25_f32), (16, 0.125), (24, 0.25)] {
+        let cfg = grid(Vec3::splat(-2.0), Vec3::splat(2.0), res);
+        let report = check_laws(
+            &[Law::soft(
+                "moved",
+                1.0,
+                Constraint::VolumeConservation {
+                    before: SdfNode::sphere(1.0),
+                    after: SdfNode::sphere(1.0).translate(shift, 0.0, 0.0),
+                    relative_tolerance: 0.02,
+                },
+            )],
+            &cfg,
+        );
+        assert!(
+            report.violations.is_empty(),
+            "res={res} shift={shift}: 平行移動 (真の体積差 0) を体積変化と申告した\n{}",
+            alice_lol::law::format_report(&report)
+        );
+    }
+}
