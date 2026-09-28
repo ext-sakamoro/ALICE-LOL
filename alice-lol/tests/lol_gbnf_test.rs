@@ -18,7 +18,7 @@
 
 use alice_lol::bridge::{lol_grammar, parse_gbnf, Fsm, Grammar, LOL_FSM_MAX_DEPTH};
 
-const LOL_GBNF: &str = include_str!("../../lol.gbnf");
+const LOL_GBNF: &str = include_str!("../lol.gbnf");
 const SWORD_EXAMPLE: &str = include_str!("../../examples/sword.lol");
 
 fn accepts(g: &Grammar, snippet: &str) -> bool {

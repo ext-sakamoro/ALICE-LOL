@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `lol.gbnf` が publish された crate に入らず、公開版が build 不能だった (2026-09-28)
+
+`pub const LOL_GBNF` は `include_str!("../../lol.gbnf")` で **package の外**
+(workspace root) を指していた。`include_str!` は compile 時に解決されるが、
+`cargo package` は package directory の外の file を `.crate` に含めないので、
+**crates.io から取得した crate は該当 file を持たず compile に失敗する**。
+
+`LOL_GBNF` は feature gate の無い `pub const` なので、影響は llm-bridge 利用者
+に限らず**全利用者**に及ぶ。実証: CI の `cargo-semver-checks` が baseline の
+**publish 済 0.3.0** の rustdoc build に失敗していた
+
+```
+error: couldn't read `.../alice-lol-0.3.0/src/bridge/../../../lol.gbnf`:
+       No such file or directory
+```
+
+- canonical を `alice-lol/lol.gbnf` に移動 (workspace root から package 内へ)。
+  `include_str!` は `"../lol.gbnf"` になり、参照先が package に収まる
+- 参照は 2 箇所のみ (`alice-lol/src/lib.rs` / `alice-lol/tests/lol_gbnf_test.rs`)。
+  下流 (alice-bamboo → text-to-print) は `alice_lol::LOL_GBNF` の re-export 経由
+  なので影響なし。grammar の単一 source 運用 (copy 廃止、2026-09-14) は維持
+- symlink は張っていない。Windows の CI job で git symlink の checkout が
+  問題になり得るため、単純な移動で解決している
+
+⚠️ この修正後も CI の `cargo-semver-checks` (informational) は失敗し続ける。
+baseline に使われる **publish 済 0.3.0 が壊れたまま**だからで、0.4.0 が
+publish されるまで解消しない。追いかけないこと。
+
 ### Changed — 残差を場の値から実距離にする (2026-09-28)
 
 `NonOverlap` / `Containment` の**判定**は符号だけを見るので 0.4.0 で健全に

@@ -32,7 +32,7 @@
 /// The grammar is deliberately stricter than [`runtime_parser`] (no `//`
 /// comments, at most one whitespace char between tokens); see the file
 /// header for why.
-pub const LOL_GBNF: &str = include_str!("../../lol.gbnf");
+pub const LOL_GBNF: &str = include_str!("../lol.gbnf");
 
 pub mod runtime_parser;
 
