@@ -26,7 +26,7 @@ fn config(half: f32, resolution: usize) -> CheckConfig {
 }
 
 fn run(constraint: Constraint, cfg: &CheckConfig) -> (usize, usize) {
-    let laws = vec![Law::hard("probe", constraint)];
+    let laws = vec![Law::hard("probe", constraint).expect("provable constraint")];
     let report = check_laws(&laws, cfg);
     (report.violations.len(), report.unresolved.len())
 }
@@ -62,7 +62,8 @@ fn an_over_reporting_field_is_caught_with_a_witness() {
             max_gradient: 1.0,
             probe: 1e-3,
         },
-    )];
+    )
+    .expect("provable constraint")];
     let report = check_laws(&laws, &cfg);
     assert_eq!(report.violations.len(), 1, "expected a witness");
     assert_eq!(report.unresolved.len(), 0);
@@ -87,7 +88,8 @@ fn a_loose_static_bound_with_no_witness_is_undecided_not_a_pass() {
             max_gradient: 1.2,
             probe: 1e-3,
         },
-    )];
+    )
+    .expect("provable constraint")];
     let report = check_laws(&laws, &cfg);
     assert_eq!(
         report.violations.len(),
@@ -171,7 +173,8 @@ fn two_disjoint_solids_are_proven_unreachable() {
             from: Vec3::new(-2.0, 0.0, 0.0),
             to: Vec3::new(2.0, 0.0, 0.0),
         },
-    )];
+    )
+    .expect("provable constraint")];
     let report = check_laws(&laws, &cfg);
     assert_eq!(report.violations.len(), 1, "separation is provable here");
     assert_eq!(report.unresolved.len(), 0);
@@ -211,7 +214,8 @@ fn a_passage_the_grid_cannot_resolve_is_undecided() {
             from: Vec3::new(-1.6, 0.0, 0.0),
             to: Vec3::new(1.6, 0.0, 0.0),
         },
-    )];
+    )
+    .expect("provable constraint")];
     let report = check_laws(&laws, &cfg);
     assert_eq!(
         report.violations.len(),

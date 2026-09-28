@@ -140,7 +140,8 @@ fn lattice_infill_min_thickness_law() {
             node,
             min_thickness: 0.08,
         },
-    )];
+    )
+    .expect("provable constraint")];
     let config = CheckConfig {
         aabb_min: Vec3::splat(-1.5),
         aabb_max: Vec3::splat(1.5),

@@ -22,10 +22,10 @@ fn main() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(0.5, 0.0, 0.0, sphere(1.0)) };
 
-    let laws = vec![Law::hard(
-        "CollisionAvoidance",
-        Constraint::NonOverlap { a, b },
-    )];
+    let laws = vec![
+        Law::hard("CollisionAvoidance", Constraint::NonOverlap { a, b })
+            .expect("provable constraint"),
+    ];
 
     let report = check_laws(&laws, &config);
     print!("{}", format_report(&report));
@@ -35,10 +35,10 @@ fn main() {
     let a = lol! { sphere(1.0) };
     let b = lol! { translate(5.0, 0.0, 0.0, sphere(1.0)) };
 
-    let laws = vec![Law::hard(
-        "CollisionAvoidance",
-        Constraint::NonOverlap { a, b },
-    )];
+    let laws = vec![
+        Law::hard("CollisionAvoidance", Constraint::NonOverlap { a, b })
+            .expect("provable constraint"),
+    ];
 
     let report = check_laws(&laws, &config);
     print!("{}", format_report(&report));
@@ -48,10 +48,10 @@ fn main() {
     let inner = lol! { translate(2.0, 0.0, 0.0, sphere(1.0)) };
     let outer = lol! { sphere(2.0) };
 
-    let laws = vec![Law::hard(
-        "FitsInCase",
-        Constraint::Containment { inner, outer },
-    )];
+    let laws = vec![
+        Law::hard("FitsInCase", Constraint::Containment { inner, outer })
+            .expect("provable constraint"),
+    ];
 
     let report = check_laws(&laws, &config);
     print!("{}", format_report(&report));
@@ -66,7 +66,8 @@ fn main() {
             node: thin_shell,
             min_thickness: 0.1,
         },
-    )];
+    )
+    .expect("provable constraint")];
 
     let report = check_laws(&laws, &config);
     print!("{}", format_report(&report));
@@ -84,21 +85,24 @@ fn main() {
                 a: part_a.clone(),
                 b: part_b.clone(),
             },
-        ),
+        )
+        .expect("provable constraint"),
         Law::hard(
             "FitsInEnclosure_A",
             Constraint::Containment {
                 inner: part_a,
                 outer: enclosure.clone(),
             },
-        ),
+        )
+        .expect("provable constraint"),
         Law::hard(
             "FitsInEnclosure_B",
             Constraint::Containment {
                 inner: part_b,
                 outer: enclosure,
             },
-        ),
+        )
+        .expect("provable constraint"),
     ];
 
     let report = check_laws(&laws, &config);
@@ -118,6 +122,7 @@ fn main() {
                 b: s2.clone(),
             },
         )
+        .expect("provable constraint")
         .soft("SoftOverlap", 0.3, Constraint::NonOverlap { a: s1, b: s2 })
         .hard(
             "MinWall",
@@ -125,7 +130,8 @@ fn main() {
                 node: thin,
                 min_thickness: 0.5,
             },
-        );
+        )
+        .expect("provable constraint");
 
     let report = set.check(&config);
     print!("{}", format_report(&report));
@@ -154,7 +160,9 @@ fn main() {
                 b: y.clone(),
             },
         )
-        .hard("x_inside_y", Constraint::Containment { inner: x, outer: y });
+        .expect("provable constraint")
+        .hard("x_inside_y", Constraint::Containment { inner: x, outer: y })
+        .expect("provable constraint");
 
     let contradictions = contradictory_set.detect_contradictions();
     if contradictions.is_empty() {
@@ -173,6 +181,7 @@ fn main() {
     let bar = lol! { box3d(2.0, 0.15, 0.15) };
     let stress_set = LawSet::new().stress(
         "bar_stress",
+        1.0,
         bar,
         vec![(Vec3::new(0.0, 0.0, 0.0), 5.0)],
         0.2,
@@ -189,8 +198,14 @@ fn main() {
     // ── Thermal: bulky sphere に熱源 ──
     println!("--- Thermal: 大きな sphere に熱源 (放熱面積不足) ---");
     let bulk = lol! { sphere(3.0) };
-    let thermal_set =
-        LawSet::new().thermal("cooling", bulk, vec![Vec3::new(0.0, 0.0, 0.0)], 1.5, 0.8);
+    let thermal_set = LawSet::new().thermal(
+        "cooling",
+        1.0,
+        bulk,
+        vec![Vec3::new(0.0, 0.0, 0.0)],
+        1.5,
+        0.8,
+    );
     print!(
         "{}",
         format_report(&thermal_set.check(&CheckConfig {
@@ -217,7 +232,7 @@ fn main() {
     // ── Continuity: disjoint 2 sphere ──
     println!("--- Continuity: 離れた 2 sphere (disjoint region 検出) ---");
     let disjoint = lol! { union(sphere(0.8), translate(4.0, 0.0, 0.0, sphere(0.8))) };
-    let continuity_set = LawSet::new().continuity("connected", disjoint, Vec3::ZERO);
+    let continuity_set = LawSet::new().continuity("connected", 1.0, disjoint, Vec3::ZERO);
     print!(
         "{}",
         format_report(&continuity_set.check(&CheckConfig {
@@ -231,7 +246,7 @@ fn main() {
     println!("--- VolumeConservation: sphere(1) → sphere(2) 体積 8 倍 (tolerance 5% 超過) ---");
     let before = lol! { sphere(1.0) };
     let after = lol! { sphere(2.0) };
-    let vc_set = LawSet::new().volume_conservation("conserved", before, after, 0.05);
+    let vc_set = LawSet::new().volume_conservation("conserved", 1.0, before, after, 0.05);
     print!(
         "{}",
         format_report(&vc_set.check(&CheckConfig {

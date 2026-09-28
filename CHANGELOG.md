@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — 証明のない法則に `Priority::Hard` を名乗らせない (2026-09-28、breaking)
+
+検証器が「違反である」と言う時の裏付けには強さの差がある。0.4.0 まで、
+**格子解像度に依存した推定が証明と同じ重み (`Priority::Hard`) で報告** されて
+いた。`Stress` / `Thermal` / `Continuity` / `VolumeConservation` の 4 つが
+これに当たり、しかも `LawSet` の convenience がその 4 つで `Hard` を
+hardcode していたため、**推定を Hard 以外で積む導線が存在しなかった**。
+
+物理 backend (`alice-physics`) を繋いでもこの区別は消えない。「モデルである」
+ことと「モデルが良い」ことは別の話なので、根拠の種類を型で持たせる。
+
+- **`Evidence` を追加** (`Proved` / `Witnessed` / `Modelled { model }`、
+  `#[non_exhaustive]`、検証器が構築し利用側は読むだけ)。`Proved` は区間演算の
+  包含による証明 (標本の取り方に依存しない)、`Witnessed` は中間値定理 / 点評価
+  で実際に見つけた反例、`Modelled` は推定。質的な差は **前 2 つと `Modelled`
+  の間だけ** で、そこが gate になる (`Evidence::is_proof`)。
+- **`Constraint::evidence_class()` / `Constraint::name()` を追加**。
+  `Reachable` = `Proved` / `NonOverlap`・`Containment`・`MinThickness`・
+  `Contact`・`GradientBound` = `Witnessed` / `Stress`・`Thermal`・`Continuity`・
+  `VolumeConservation` = `Modelled`。
+- **`Law::hard` が `Result<Self, NotProvable>` を返す** (breaking)。モデル推定
+  の制約には `NotProvable { constraint, model }` を返す。**黙って `Soft` に
+  降格させない** — 降格を検証器が決めると「証明なしの Hard 違反」が別の形で
+  復活するので、呼び出し側に選ばせる。`LawSet::hard` も同じ。
+- **`Violation::evidence` を追加** (breaking)。`evidence_class` が「その制約が
+  返せる最強の根拠」なのに対し、こちらは **その 1 件が実際に何に依ったか**。
+  同じ `Contact` でも干渉は `Witnessed`、離れすぎ (`gap_exceeds` の区間証明)
+  は `Proved` になる。
+- **`LawSet` convenience の引数と優先度が変わった** (breaking)。
+  `stress` / `thermal` / `continuity` / `volume_conservation` は `weight: f32`
+  を取り `Soft` で積む。`contact` / `gradient_bound` / `reachable` は `Hard`
+  のまま (gate を通す必要がないので内部の infallible 経路を使う)。
+- **`LawReport::proven_violations()` を追加** — `Priority` と直交する軸で、
+  モデル推定でなく証明 / 反例に裏付けられた違反だけを返す。
+- **`format_report` が `basis=proved|witnessed|modelled` を出す**。`Modelled`
+  は `model:` 行で **何を仮定したか** まで出す (読み手が重みを判断できない
+  報告にしない)。
+- `Stress` の model 文字列に、要求値 `force × min_thickness_factor` が無次元の
+  heuristic で材料 / 断面係数 / 降伏応力を持たないことを明記。`Thermal` には
+  表面帯の判定が `|f| < step` = **場の値の距離への流用** であることを明記
+  (TPMS では場が真の距離の 1.7〜7.0 倍)。
+
+移行: `Law::hard(n, c)` → 証明 / 反例つきなら `?` か `.expect(..)`、
+`Stress` 等は `Law::soft(n, weight, c)`。`LawSet::stress(n, node, ..)` →
+`LawSet::stress(n, weight, node, ..)`。
+
+### Added — 根拠 gate の機械検査 (2026-09-28)
+
+`Constraint::evidence_class` は手で書いた表なので、**実装が実際に返す
+`Violation::evidence` と食い違っても誰も気付かない**。gate が形だけ残って
+意味を失うのを防ぐため、`law::evidence_gate_tests` 5 本を追加:
+
+- `all_variants_are_classified` — variant を足したら落ちる (分類漏れの検出)
+- `hard_is_gated_by_evidence_class` — 10 variant すべてで gate の可否が
+  `evidence_class` と一致し、`NotProvable` が対処法を含む
+- `modelled_constraints_cannot_produce_hard_violations` — 実際に違反が出る
+  形で `has_hard_violations()` / `proven_violations()` が空
+- `reported_evidence_never_exceeds_the_declared_class` — 実装が返す根拠が
+  申告した class より**強く**なっていない (表が実装から遅れていないか)
+- `lawset_convenience_keeps_modelled_laws_soft` — convenience が Hard を
+  作り直していない
+- `tests/analytic_law.rs::stress_cannot_claim_hard_priority` (16 → 17 本)
+
+gate は書いた直後に壊して red を実測済: `Law::hard` の gate を外すと
+`hard_is_gated_by_evidence_class` が、convenience を `Hard` hardcode に戻すと
+`lawset_convenience_keeps_modelled_laws_soft` と
+`modelled_constraints_cannot_produce_hard_violations` が落ち、
+`Law::hard_unchecked` の `debug_assert!` が 3 層目として発火する。
+
 ### Changed — alice-sdf 4.0.0 追従 (2026-09-28)
 
 - **`alice-sdf` 要件 `3.0.0` → `4.0.0`** — 4.0.0 は計量そのものを値にする 2 node と場の主張を測る 2 API を追加し、`SdfNode` / `OpCode` を `#[non_exhaustive]` にした 外部 crate からの wildcard なし `match` は `E0004` になるので `emit::write_node_inner` に `MetricBall` / `MetricBlend` の arm と wildcard arm を追加 (未知 variant は黙って捨てず `EmitError::Unsupported` として報告する)
