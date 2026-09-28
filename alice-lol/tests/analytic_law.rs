@@ -819,3 +819,78 @@ fn volume_conservation_must_not_flag_a_translation() {
         );
     }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 残差が距離であること (0.5.0)
+//
+// `NonOverlap` / `Containment` の判定 (符号だけを見る) は 0.4.0 で健全になったが、
+// **報告される残差は場の値のまま**だった 場の値は距離ではないので、
+// `top_violations` の順位と「侵入深さ」「はみ出し量」の数値が信用できない
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// `NonOverlap` の残差は **侵入深さ** であって場の値ではない
+///
+/// A = 半径 1 の 2 球 (中心 ±0.5 on x) の union、原点の場は `min(fa, fb) = −0.5`
+/// だが union 表面までの真の距離は 0.866 (同 file
+/// `union_interior_is_thicker_than_its_field_claims` と同じ幾何)
+///
+/// B は原点から遠い大きな箱なので、侵入深さは A 側で決まって 0.866
+/// 場の値 0.5 を残差にすると **侵入を 42% 浅く報告する**
+#[test]
+fn non_overlap_residual_is_a_distance_not_a_field_value() {
+    let a = SdfNode::sphere(1.0)
+        .translate(0.5, 0.0, 0.0)
+        .union(SdfNode::sphere(1.0).translate(-0.5, 0.0, 0.0));
+    let b = SdfNode::box3d(10.0, 10.0, 10.0);
+
+    // 前提の確認: 原点は両方の内部、A の場は −0.5
+    assert!((alice_sdf::eval(&a, Vec3::ZERO) - (-0.5)).abs() < 1e-5);
+    assert!(alice_sdf::eval(&b, Vec3::ZERO) < -4.9);
+
+    let laws = vec![Law::hard("overlap", Constraint::NonOverlap { a, b })
+        .expect("provable constraint")];
+    let report = check_laws(&laws, &single_cell(Vec3::ZERO, 0.01));
+    assert!(report.has_hard_violations(), "原点は両方の内部なので重なり");
+
+    let r = report.violations[0].residual;
+    assert!(
+        (-1.05..=-0.80).contains(&r),
+        "residual {r:.4} が真の侵入深さ 0.866 の近傍にない \
+         (場の値 −0.5 をそのまま報告していないか)"
+    );
+}
+
+/// `Containment` の残差は **はみ出し量** であって場の値ではない
+///
+/// outer = 半径 1 の 2 球 (中心 0 と 1.8) の intersection = 薄いレンズ
+/// (x 半幅 0.1、y/z 半径 0.436) intersection の外側の場 `max(f1, f2)` は
+/// 真の距離を **過小** 申告する
+///
+/// p = (0.9, 0, 2.0) で場は 1.193 だが、レンズ上端 (0.9, 0, 0.436) までの
+/// 真の距離は 1.564 場の値を残差にすると **はみ出しを 24% 小さく報告する**
+#[test]
+fn containment_residual_is_a_distance_not_a_field_value() {
+    let outer = SdfNode::sphere(1.0).intersection(SdfNode::sphere(1.0).translate(1.8, 0.0, 0.0));
+    let p = Vec3::new(0.9, 0.0, 2.0);
+    let inner = SdfNode::sphere(0.2).translate(p.x, p.y, p.z);
+
+    // 前提の確認: p は inner の内部かつ outer の外部、outer の場は約 1.193
+    assert!(alice_sdf::eval(&inner, p) < 0.0);
+    let field = alice_sdf::eval(&outer, p);
+    assert!(
+        (1.15..1.25).contains(&field),
+        "outer の場 {field:.4} が想定 1.193 から外れた"
+    );
+
+    let laws = vec![Law::hard("inside", Constraint::Containment { inner, outer })
+        .expect("provable constraint")];
+    let report = check_laws(&laws, &single_cell(p, 0.01));
+    assert!(report.has_hard_violations(), "p は outer の外なのではみ出し");
+
+    let r = report.violations[0].residual;
+    assert!(
+        (-1.85..=-1.45).contains(&r),
+        "residual {r:.4} が真のはみ出し量 1.564 の近傍にない \
+         (場の値 −1.193 をそのまま報告していないか)"
+    );
+}
