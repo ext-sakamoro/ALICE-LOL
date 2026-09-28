@@ -166,7 +166,14 @@ fn thermal_field_cannot_claim_hard_priority() {
     };
     let err = Law::hard("heat", c).expect_err("ThermalField が Hard を名乗れてしまった");
     assert_eq!(err.constraint, "ThermalField");
-    assert!(err.model.contains("h = 0"), "model に境界条件の扱いが無い");
+    // 挟んでいる 2 軸 (境界条件 h と形状) が読み手に伝わること
+    for token in ["境界条件", "形状", "断熱", "等温"] {
+        assert!(
+            err.model.contains(token),
+            "model に {token} が無い = 何を挟んでいるか読み手に伝わらない ({})",
+            err.model
+        );
+    }
 }
 
 /// solver の前提を満たさない格子は **黙って通さず** 理由つきで未定にする
@@ -226,4 +233,63 @@ fn unusable_grids_are_reported_not_silently_passed() {
             report.unresolved[0].reason
         );
     }
+}
+
+/// 熱源が材料に乗らない scene は **黙って合格せず** 理由つきで未定にする
+///
+/// 0.4.0 は「形状の外の熱源は効かない」と黙って捨てていた = 熱が入らず
+/// 上界も周囲温度になり **偽の合格**になる経路だった (`Inside ∪ Undecided` で
+/// 解いていたので踏みにくかっただけで、`Inside` に絞ったことで顕在化した
+/// 元からある穴であって、修正で新しく作った穴ではない)
+#[test]
+fn a_source_outside_the_material_is_not_silently_passed() {
+    let cfg = cube_grid(9);
+    let make = |source: Vec3| {
+        check_laws(
+            &[Law::soft(
+                "heat",
+                1.0,
+                Constraint::ThermalField {
+                    node: SdfNode::sphere(0.35),
+                    sources: vec![(source, SCENE_WATTS)],
+                    material: pla_like(),
+                    metres_per_unit: SCENE_METRES_PER_UNIT,
+                    ambient_c: 20.0,
+                    // 周囲温度より少しでも上がれば違反になる厳しい上限
+                    max_temperature_c: 20.5,
+                    duration_s: SCENE_DURATION_S,
+                },
+            )],
+            &cfg,
+        )
+    };
+
+    // 球の外 (材料でない) / 検査 AABB の外
+    for (label, source) in [
+        ("球の外", Vec3::new(0.45, 0.0, 0.0)),
+        ("AABB の外", Vec3::new(5.0, 0.0, 0.0)),
+    ] {
+        let report = make(source);
+        assert!(
+            !report.all_passed(),
+            "{label}: 熱源が効いていないのに合格を名乗った"
+        );
+        assert!(
+            matches!(
+                report.unresolved[0].reason,
+                UnresolvedReason::ThermalGridUnusable { .. }
+            ),
+            "{label}: 理由が ThermalGridUnusable でない ({:?})",
+            report.unresolved[0].reason
+        );
+    }
+
+    // 対照: 中心 (材料の内部) なら解けて判定が出る
+    let ok = make(Vec3::ZERO);
+    assert!(
+        !ok.unresolved
+            .iter()
+            .any(|u| matches!(u.reason, UnresolvedReason::ThermalGridUnusable { .. })),
+        "材料の内部に置いた熱源まで unusable にしている: {ok:?}"
+    );
 }

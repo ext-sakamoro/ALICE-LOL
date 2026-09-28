@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `ThermalField` の bracket が両方向とも間違った側に寄っていた (2026-09-29)
+
+温度の bracket は対流熱伝達率 `h` を両端 (`h = 0` / `h = ∞`) で挟んでいたが、
+**形状について同じことを考えていなかった**。区間演算で内外が決まらないセルが
+あるので真の材料 `M` は `Inside ⊆ M ⊆ Inside ∪ Undecided` の範囲にあり、
+両方の run に `Inside ∪ Undecided` (真より材料が多い側) を使っていた。
+
+材料を増やした時に最高温度が動く向きは **境界条件によって逆**:
+
+| 境界条件 | 材料を増やすと | 理由 |
+|---|---|---|
+| 断熱 (`h = 0`) | **下がる** | 質量が増えて同じ熱量を吸う |
+| 等温 (`h = ∞`) | **上がる** | 周囲温度に固定される面が熱源から遠のく |
+
+したがって旧実装では **上界は真より低く、下界は真より高い** — bracket が
+両側から食われ、未定に落ちるべきものが **偽の合格 / 偽の違反**になっていた。
+誤差は未確定セルの体積比に比例するので、薄い形状ほど大きい。
+
+不等式を順に適用すると両端とも最小材料で極値を取る:
+
+```
+T(M, h_true) ≤ T_断熱(M) ≤ T_断熱(Inside)      (h / 材料 とも単調減少)
+T(M, h_true) ≥ T_等温(M) ≥ T_等温(Inside)      (h は単調減少、材料は単調増加)
+```
+
+- **両方の run を `Inside` だけで解く**。`Inside ∪ Undecided` の run は不要
+  (4 通り解いても min/max はこの 2 つに来る)。実装は単純になり、かつ
+  `max` / `min` が `(M, h)` 全域で `M = Inside` に来るので **緩くもならない**。
+- `Inside` に絞ると顕在化する経路を塞いだ:
+  - 内部と確定したセルが無い → `ThermalGridUnusable`
+  - **熱源が材料に乗らない** → 同上。0.4.0 は「形状の外の熱源は効かない」と
+    黙って捨てており、熱が入らず上界も周囲温度になる **偽の合格**の経路だった
+    (`Inside ∪ Undecided` で解いていたので踏みにくかっただけで、修正で新しく
+    作った穴ではなく元からあった穴が見えるようになったもの)
+  - **熱源のある材料が格子の都合で分断されている** → 同上。本当に分かれている
+    部品と区別するため、`Inside` の連結成分と `Inside ∪ Undecided` の連結成分を
+    比べる (後者で繋がっているのに前者で切れていれば格子の都合、閾値不要)
+- `Evidence` の model 文字列を「境界条件 h と形状を両端で挟む: 上界 = 断熱 ×
+  内部確定セルのみ、下界 = 等温 × 同」に更新。
+
+#### 追加した oracle (`law::evidence_gate_tests`)
+
+設計が材料に対する単調性 2 本に全面的に依存するので、**実装より先に**その
+2 本を書いて実測した (落ちたら設計の前提が崩れるため)。
+
+- `material_moves_the_peak_in_opposite_directions_per_boundary` — 断熱で
+  材料を増やすと下がり、等温で上がること
+- `bracket_contains_every_admissible_material_set` — `Undecided` セルを
+  0 / 25 / 50 / 75 / 100 % 採用した材料集合をすべて解き、**法則が報告した**
+  `[lo_c, hi_c]` の内側に入ること。形状 (半径) を変えるのではなく
+  `Undecided` の部分集合を直接作るのが要点で、範囲を外れた形状を混ぜると
+  「入らなくて当然」になり oracle が嘘の red を出す。また bracket は
+  solver を直接呼ばず法則の報告値から読む (直接呼ぶと法則がどの形状を
+  選んでいるかを見ないので、形状選択を戻しても落ちない test になる)
+- `a_source_outside_the_material_is_not_silently_passed` (`tests/analytic_thermal.rs`)
+
+破壊試験: `check_thermal_field` の形状を `Inside ∪ Undecided` に戻すと
+`bracket_contains_every_admissible_material_set` **だけ**が落ちる (他 6 本は
+green のまま = 落ちるべきものだけが落ちる)。落ち方は「bracket の中点なのに
+合格になった」で、偽の合格そのものが再現する。
+
+
 ### Added — `Thermal` を実温度場にする `ThermalField` (`physics` feature、2026-09-29)
 
 `Thermal` は「熱源近傍の 表面セル数 / 内部セル数 比」という**幾何 proxy**
