@@ -201,9 +201,9 @@ Continuity(node, seed_point)                        # 単一連結領域 (BFS fl
 VolumeConservation(before, after, relative_tolerance)  # morph 前後の体積保存
 ```
 
-距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性) Physics dep 追加なし、精密 physics-backed 評価は Milestone A.2.1 で `alice-physics` API 経由に置換予定
+距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性) 既定では Physics dep なし `physics` feature を有効にすると `Constraint::ThermalField` が増え、放熱面積比の幾何 proxy (`Thermal`) の代わりに `alice-physics` の 3D 熱伝導 solver で実温度場を解いて「最高温度 ≤ 上限」を判定する 対流熱伝達率 `h` は設計時に決まらないので `h = 0` (断熱、上界) と `h = ∞` (表面が周囲温度、下界) の両端で挟み、上限を跨いだら未定にする ⚠️ **`alice-physics` は AGPL-3.0-or-later なので、この feature を有効にすると下流にも伝播する**
 
-`LawSet` builder に convenience method 全 8 variant 分あり (`.stress()` / `.thermal()` / `.contact()` / `.continuity()` / `.volume_conservation()`)。`detect_contradictions()` で NonOverlap+Containment、Contact+NonOverlap の静的矛盾検出も追加。
+`LawSet` builder に convenience method あり (`.stress()` / `.thermal()` / `.contact()` / `.continuity()` / `.volume_conservation()` / `.gradient_bound()` / `.reachable()`、`physics` feature 時は `.thermal_field()`)。モデル推定にとどまる法則は `Priority::Hard` を名乗れないので `weight` を取る soft 版になっている。`detect_contradictions()` で NonOverlap+Containment、Contact+NonOverlap の静的矛盾検出も追加。
 
 ### Intent (Milestone B.1、2026-08-06、Phase 3 IR skeleton)
 
@@ -274,7 +274,7 @@ let node = lol! { sphere({r * 2.0}) };     // 算術式
 | `glsl` | Yes | GLSL トランスパイル出力 |
 | `wgsl` | No | WGSL (WebGPU) 出力 |
 | `hlsl` | No | HLSL (DirectX) 出力 |
-| `physics` | No | ALICE-Physics bridge (SdfField trait impl + sim_modifier chain、Milestone A.1.0 2026-08-06 復帰) |
+| `physics` | No | ALICE-Physics bridge + `Constraint::ThermalField` (実温度場の法則、`alice-physics` **AGPL-3.0-or-later propagation 注意**) |
 | `roblox` | No | Roblox OBJ/FBX (MeshPart / accessory) |
 | `llm-bridge` | No | GBNF constrained decoding + think-prefix 2 段生成 (alice-llm `grammar` + `simd` + `parallel`、AGPL-3.0 propagation 注意) |
 
