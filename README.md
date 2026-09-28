@@ -38,6 +38,27 @@ The same shape in both notations, and the one argument convention that differs
 extents), are pinned by `alice-lol/tests/readme_parity.rs` and documented in
 [ALICE-SDF's README](https://github.com/ext-sakamoro/ALICE-SDF#two-front-ends-this-crates-api-or-the-lol-language).
 
+## How the core crates lock together
+
+These four are built as one mechanism rather than as a bundle. Each owns exactly
+one thing, and the seams between them are the point:
+
+| Crate | Owns | The joint |
+|-------|------|-----------|
+| [ALICE-LOL](https://github.com/ext-sakamoro/ALICE-LOL) | the language and the law verifier | parses to ALICE-SDF's `SdfNode`; verdicts are three-valued (satisfied / violated / *undecided*) and *undecided* is never promoted to a pass |
+| [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) | the distance functions and every backend (scalar / SIMD / BVH / JIT / shader transpilers / mesh) | evaluates the tree LOL writes, and supplies colliders to ALICE-Physics |
+| [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) | 128-bit fixed-point rigid bodies, CCD, XPBD | collides against the same field that is rendered, instead of a second approximation of it |
+| [ALICE-DetMath](https://github.com/ext-sakamoro/ALICE-DetMath) | `sin` / `cos` / `atan2` … under a bit-exact contract | the joint itself — ALICE-SDF and ALICE-Physics both call it instead of platform libm |
+
+The coupling exists for one property: **the same input has to produce the same
+bits on every platform.** A field that disagrees with itself across machines
+cannot be printed to spec, verified by a law, or replayed in lockstep, so the
+transcendentals are shared rather than reimplemented per crate.
+
+> Keep `alice-det-math` unified across the resolved graph. Two versions in one
+> dependency tree means two implementations of the same function, and the
+> guarantee is gone. Check with `cargo tree -i alice-det-math`.
+
 ## Features
 
 - **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約

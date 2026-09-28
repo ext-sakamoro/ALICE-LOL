@@ -36,6 +36,25 @@ DSL の `box3d` は**半幅**) は `alice-lol/tests/readme_parity.rs` が固定�
 [ALICE-SDF の README](https://github.com/ext-sakamoro/ALICE-SDF#2-つの入口-本-crate-の-api-と-lol-言語)
 に説明があります
 
+## コア crate の噛み合い方
+
+この 4 つは詰め合わせではなく 1 つの機構として作っている それぞれが担うものは 1 つだけで、
+境目の設計がそのまま価値になっている
+
+| Crate | 担うもの | 接点 |
+|-------|---------|------|
+| [ALICE-LOL](https://github.com/ext-sakamoro/ALICE-LOL) | 言語と法則検証器 | ALICE-SDF の `SdfNode` に parse する 判定は三値 (合格 / 違反 / **未定**) で、未定を合格に昇格させない |
+| [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) | 距離関数と全 backend (scalar / SIMD / BVH / JIT / shader transpiler / mesh) | LOL が書いた木を評価し、ALICE-Physics に collider を渡す |
+| [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) | 128-bit 固定小数点の剛体 / CCD / XPBD | 描画しているのと同じ場に衝突する (別の近似を持たない) |
+| [ALICE-DetMath](https://github.com/ext-sakamoro/ALICE-DetMath) | `sin` / `cos` / `atan2` 等を bit 単位で規定 | 接点そのもの ALICE-SDF と ALICE-Physics が platform libm でなくこれを呼ぶ |
+
+噛み合わせている理由は 1 つ、**同じ入力がどの platform でも同じ bit を返すこと** 機械ごとに
+食い違う場は、寸法どおり印刷することも、法則で検証することも、lockstep で再生することも
+できない だから超越関数は crate ごとに再実装せず共有している
+
+> `alice-det-math` は解決後の依存グラフで version を揃えること 1 つの木に 2 version 入ると
+> 同じ関数の実装が 2 つ存在することになり、保証が消える 確認は `cargo tree -i alice-det-math`
+
 ## 特徴
 
 - **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約
