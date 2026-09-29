@@ -415,6 +415,11 @@ struct Row {
     violated: usize,
     undecided: usize,
     decided: f32,
+    /// 未決定になった construct の (名前, 静的 Lipschitz 上界)
+    ///
+    /// 解像度を上げても減らない構造を特定するために名前まで残す
+    /// (WM-19b、`NonOverlap` の 21 件が res 4 / 8 で 1 件も動かない事実の追跡)
+    undecided_names: Vec<(String, f32)>,
 }
 
 type ConstraintBuilder = Box<dyn Fn(&SdfNode) -> Option<Constraint>>;
@@ -511,8 +516,9 @@ fn measure_row(
         aabb_max: Vec3::splat(AABB),
         resolution: res,
     };
-    let (mut passed, mut violated, mut undecided, mut skipped) = (0usize, 0, 0, 0);
-    for (_name, node) in corpus {
+    let (mut passed, mut violated, mut skipped) = (0usize, 0, 0);
+    let mut undecided_names = Vec::new();
+    for (name, node) in corpus {
         let Some(constraint) = build(node) else {
             skipped += 1;
             continue;
@@ -520,10 +526,13 @@ fn measure_row(
         let laws = vec![Law::hard(label, constraint).expect("provable constraint")];
         match verdict(&check_laws(&laws, &config)) {
             "violation" => violated += 1,
-            "unresolved" => undecided += 1,
+            "unresolved" => {
+                undecided_names.push((name.clone(), alice_sdf::interval::eval_lipschitz(node)));
+            }
             _ => passed += 1,
         }
     }
+    let undecided = undecided_names.len();
     let total = passed + violated + undecided;
     Row {
         res,
@@ -533,6 +542,7 @@ fn measure_row(
         violated,
         undecided,
         decided: (total - undecided) as f32 / total as f32,
+        undecided_names,
     }
 }
 
@@ -590,6 +600,35 @@ fn unresolved_rate_by_constraint() {
             "解像度では減らない = 法則側"
         };
         eprintln!("  {label:<28} → res 4→8 の決着率 {delta:+.1} pt ({verdict_text})");
+
+        // WM-19b: 解像度に反応しない構造を名指しする
+        // 「res 4 の未決定集合 ⊇ res 8 の未決定集合」かどうかで、減った分が
+        // どれかも見える 集合が完全一致なら解像度が一切効いていない
+        if rows[1].undecided > 0 {
+            let lo: Vec<&str> = rows[0]
+                .undecided_names
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .collect();
+            let same = rows[1]
+                .undecided_names
+                .iter()
+                .all(|(n, _)| lo.contains(&n.as_str()))
+                && rows[0].undecided == rows[1].undecided;
+            eprintln!(
+                "  {label:<28}   res 8 未決定 {} 件 (res 4 と同一集合: {})",
+                rows[1].undecided,
+                if same { "yes" } else { "no" }
+            );
+            for (n, lip) in &rows[1].undecided_names {
+                let lip_text = if lip.is_finite() {
+                    format!("L={lip:.3}")
+                } else {
+                    "L=非有限".to_string()
+                };
+                eprintln!("  {label:<28}     - {n} ({lip_text})");
+            }
+        }
 
         let floor = decided_floor(label);
         for r in &rows {
