@@ -652,3 +652,107 @@ fn unresolved_rate_by_constraint() {
         "表全体で合格 {passed_all} / 違反 {violated_all} — 片側しか出ていないなら scene が何も問うていない"
     );
 }
+
+/// probe 依存 constraint の builder (半径だけを振る)
+fn probe_builder(kind: &str, radius: f32) -> ConstraintBuilder {
+    let probe = parse_lol(&format!("sphere({radius})")).expect("probe snippet parses");
+    match kind {
+        "NonOverlap" => Box::new(move |n: &SdfNode| {
+            Some(Constraint::NonOverlap {
+                a: n.clone(),
+                b: probe.clone(),
+            })
+        }),
+        "Contact" => Box::new(move |n: &SdfNode| {
+            Some(Constraint::Contact {
+                a: n.clone(),
+                b: probe.clone(),
+                min_distance: 0.0,
+                max_distance: 0.5,
+            })
+        }),
+        other => panic!("probe 依存でない constraint {other} が渡された"),
+    }
+}
+
+/// probe を 3 種類に振り、未決定集合が probe に支配されていないかを見る
+///
+/// 2026-09-30 実測: probe `sphere(0.5)` は corpus 既定の `box3d(0.5, 0.5, 0.5)` の
+/// **内接球半径と厳密に一致**するため、切り欠きと probe が接する配置になる
+/// 接触点では距離が厳密に 0 なので外側丸めで区間が 0 をまたぎ、**細分しても
+/// 接点は消えない** 結果 `NonOverlap` の未決定が 21 件になり、probe を 0.37 に
+/// すると 10 件に減った `Contact` に至っては res 4→8 の傾きの符号判定が反転した
+///
+/// ⇒ **単一 probe の測定値は判定器の性能でなく probe と corpus の相性を測る**
+///
+/// 本 test は「**どの probe でも未決定**」= 真の核 を pin し、probe 間のばらつき
+/// (和集合 − 核 = probe 依存分) を出力して、測定が probe に支配されている時に
+/// 気付けるようにする
+#[test]
+fn undecided_set_is_not_probe_dominated() {
+    // きりの良い値は corpus 側の定数と一致しやすいので意図的にずらした 3 点
+    const RADII: [f32; 3] = [0.37, 0.5, 0.61];
+    const RES: usize = 8;
+    let corpus = nodes();
+
+    for kind in ["NonOverlap", "Contact"] {
+        let mut sets: Vec<(f32, f32, Vec<String>)> = Vec::new();
+        for r in RADII {
+            let row = measure_row(kind, &probe_builder(kind, r), &corpus, RES);
+            eprintln!(
+                "  {kind:<11} probe r={r:.2} res {RES}: 未決定 {:>3} 件 / 合格 {:>3} / 違反 {:>3} (決着率 {:.1}%)",
+                row.undecided,
+                row.passed,
+                row.violated,
+                row.decided * 100.0
+            );
+            sets.push((
+                r,
+                row.decided,
+                row.undecided_names.iter().map(|(n, _)| n.clone()).collect(),
+            ));
+        }
+
+        let core: Vec<&String> = sets[0]
+            .2
+            .iter()
+            .filter(|n| sets[1..].iter().all(|(_, _, s)| s.iter().any(|x| x == *n)))
+            .collect();
+        let union: std::collections::BTreeSet<&String> =
+            sets.iter().flat_map(|(_, _, s)| s.iter()).collect();
+        eprintln!(
+            "  {kind:<11} 真の核 (全 probe で未決定) {} 件 / 和集合 {} 件 → **probe 依存 {} 件**",
+            core.len(),
+            union.len(),
+            union.len() - core.len()
+        );
+        for n in &core {
+            eprintln!("  {kind:<11}   核: {n}");
+        }
+
+        // 2026-09-30 実測を pin — **核が増えたら退行** (probe 依存分は probe の
+        // 選び方で動くので pin しない、出力で見る)
+        //   NonOverlap 核 9 件 (r=0.37/0.61 で 10、r=0.50 で 21)
+        //   Contact    核 11 件 (r=0.37 で 20、r=0.50 で 34、r=0.61 で 12)
+        // ⚠️ r=0.50 だけが突出するのは corpus 既定 `box3d(0.5,0.5,0.5)` の
+        //    内接球半径と一致して接する配置になるため
+        let (core_max, decided_floor) = match kind {
+            "NonOverlap" => (9usize, 0.88f32),
+            "Contact" => (11usize, 0.83f32),
+            other => panic!("未知の constraint {other} — pin を決めてから足す"),
+        };
+        assert!(
+            core.len() <= core_max,
+            "{kind}: probe に依らない未決定 (真の核) が {} 件に増えた (pin {core_max})",
+            core.len()
+        );
+        for (r, decided, _) in &sets {
+            assert!(
+                *decided > decided_floor,
+                "{kind} probe r={r:.2}: 決着率 {:.1}% が下限 {:.0}% を割った",
+                decided * 100.0,
+                decided_floor * 100.0
+            );
+        }
+    }
+}
