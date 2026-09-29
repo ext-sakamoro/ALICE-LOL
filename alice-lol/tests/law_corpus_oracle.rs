@@ -405,3 +405,211 @@ fn proven_unreachability_is_never_refuted_by_a_point_path() {
     }
     println!("reachability: {violations} constructs judged unreachable");
 }
+
+/// [`unresolved_rate_by_constraint`] の 1 行分 (constraint × resolution)
+struct Row {
+    res: usize,
+    total: usize,
+    skipped: usize,
+    passed: usize,
+    violated: usize,
+    undecided: usize,
+    decided: f32,
+}
+
+type ConstraintBuilder = Box<dyn Fn(&SdfNode) -> Option<Constraint>>;
+
+/// `Law::hard` を名乗れる 6 constraint を corpus の各 node に当てる builder 群
+///
+/// `Stress` / `Thermal` / `Continuity` / `VolumeConservation` / `ThermalField`
+/// は `evidence_class()` が `Modelled` を返すので `Law::hard` が構造的に弾く
+/// (推定は Hard を名乗れない) ので対象外
+///
+/// 第 2 node を要するもの (`NonOverlap` / `Containment` / `Contact`) は固定の
+/// probe と突き合わせる 率は probe の選び方に依存するので、**絶対値でなく
+/// resolution 間の差**を読むこと
+fn constraint_builders() -> Vec<(&'static str, ConstraintBuilder)> {
+    let probe = parse_lol("sphere(0.5)").expect("probe snippet parses");
+    let outer = parse_lol("sphere(4.0)").expect("outer snippet parses");
+    let pts = grid_points();
+    let probe_for_contact = probe.clone();
+
+    vec![
+        (
+            "MinThickness(0.2)",
+            Box::new(|n: &SdfNode| {
+                Some(Constraint::MinThickness {
+                    node: n.clone(),
+                    min_thickness: 0.2,
+                })
+            }),
+        ),
+        (
+            "NonOverlap(sphere 0.5)",
+            Box::new(move |n: &SdfNode| {
+                Some(Constraint::NonOverlap {
+                    a: n.clone(),
+                    b: probe.clone(),
+                })
+            }),
+        ),
+        (
+            "Containment(in sphere 4.0)",
+            Box::new(move |n: &SdfNode| {
+                Some(Constraint::Containment {
+                    inner: n.clone(),
+                    outer: outer.clone(),
+                })
+            }),
+        ),
+        (
+            "Contact(0.0..0.5)",
+            Box::new(move |n: &SdfNode| {
+                Some(Constraint::Contact {
+                    a: n.clone(),
+                    b: probe_for_contact.clone(),
+                    min_distance: 0.0,
+                    max_distance: 0.5,
+                })
+            }),
+        ),
+        (
+            "GradientBound(static+1e-3)",
+            Box::new(|n: &SdfNode| {
+                let claimed = alice_sdf::interval::eval_lipschitz(n);
+                claimed.is_finite().then(|| Constraint::GradientBound {
+                    node: n.clone(),
+                    max_gradient: claimed * (1.0 + 1e-3),
+                    probe: 1e-3,
+                })
+            }),
+        ),
+        (
+            "Reachable(inside..inside)",
+            Box::new(move |n: &SdfNode| {
+                // 内部点を 2 つ持つ construct だけが対象
+                let inside: Vec<Vec3> = pts.iter().copied().filter(|p| eval(n, *p) < 0.0).collect();
+                (inside.len() >= 2).then(|| Constraint::Reachable {
+                    node: n.clone(),
+                    from: inside[0],
+                    to: inside[inside.len() - 1],
+                })
+            }),
+        ),
+    ]
+}
+
+/// 1 (constraint, resolution) 分を corpus 全件に当てて内訳を数える
+fn measure_row(
+    label: &str,
+    build: &ConstraintBuilder,
+    corpus: &[(String, SdfNode)],
+    res: usize,
+) -> Row {
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-AABB),
+        aabb_max: Vec3::splat(AABB),
+        resolution: res,
+    };
+    let (mut passed, mut violated, mut undecided, mut skipped) = (0usize, 0, 0, 0);
+    for (_name, node) in corpus {
+        let Some(constraint) = build(node) else {
+            skipped += 1;
+            continue;
+        };
+        let laws = vec![Law::hard(label, constraint).expect("provable constraint")];
+        match verdict(&check_laws(&laws, &config)) {
+            "violation" => violated += 1,
+            "unresolved" => undecided += 1,
+            _ => passed += 1,
+        }
+    }
+    let total = passed + violated + undecided;
+    Row {
+        res,
+        total,
+        skipped,
+        passed,
+        violated,
+        undecided,
+        decided: (total - undecided) as f32 / total as f32,
+    }
+}
+
+/// 決着率の下限 — 2026-09-29 の実測を pin する値 (目標値ではない)
+///
+/// 下回ったら区間が緩んだか探索が浅い **上限は置かない** (改善して決着率が
+/// 上がるのは歓迎)
+fn decided_floor(label: &str) -> f32 {
+    match label {
+        "NonOverlap(sphere 0.5)" => 0.85,
+        "Containment(in sphere 4.0)" | "GradientBound(static+1e-3)" => 0.95,
+        // 実測 87.7% (res 4) / 92.2% (res 8) と 85.7% / 86.1%
+        "MinThickness(0.2)" | "Contact(0.0..0.5)" => 0.80,
+        // 実測 17.4% (res 4) / 25.4% (res 8) — 未決定の 7 割強がここに集中する
+        "Reachable(inside..inside)" => 0.15,
+        other => panic!("未知の constraint ラベル {other} — 下限を決めてから足す"),
+    }
+}
+
+/// 判定器が **constraint ごとに** どれだけ証明できるかを実測する
+///
+/// [`unresolved_rate_is_measured_and_bounded`] は `MinThickness` 1 種だけを見る
+/// 本 test が足すのは `Law::hard` を名乗れる 6 constraint 全部の内訳で、狙いは
+/// 「未決定を減らすのは **法則側** か **解像度側** か」の切り分け:
+///
+/// - resolution を上げると減る = 区間の粗さが原因 (探索深さで解決する)
+/// - resolution を上げても残る = **法則そのものが足りていない** (別の法則を
+///   足すか、判定の定式化を変えないと減らない)
+#[test]
+fn unresolved_rate_by_constraint() {
+    let corpus = nodes();
+    let builders = constraint_builders();
+
+    eprintln!("constraint 別 未決定率 — 対象 {} construct", corpus.len());
+    eprintln!("  (res 4 → 8 で減る = 解像度で解決 / 減らない = 法則側が足りない)");
+
+    let mut table = Vec::new();
+    for (label, build) in &builders {
+        let rows: Vec<Row> = [4usize, 8]
+            .into_iter()
+            .map(|res| measure_row(label, build, &corpus, res))
+            .collect();
+        for r in &rows {
+            eprintln!(
+                "  {label:<28} res {:>2}: {:>3} 件 (対象外 {:>3}) → 合格 {:>3} / 違反 {:>3} / 未決定 {:>3} (決着率 {:.1}%)",
+                r.res, r.total, r.skipped, r.passed, r.violated, r.undecided, r.decided * 100.0
+            );
+        }
+        let delta = (rows[1].decided - rows[0].decided) * 100.0;
+        let verdict_text = if delta >= 1.0 {
+            "解像度で減る"
+        } else if rows[1].undecided == 0 {
+            "未決定なし"
+        } else {
+            "解像度では減らない = 法則側"
+        };
+        eprintln!("  {label:<28} → res 4→8 の決着率 {delta:+.1} pt ({verdict_text})");
+
+        let floor = decided_floor(label);
+        for r in &rows {
+            assert!(
+                r.decided > floor,
+                "{label} res {}: 決着率が {:.1}% で下限 {:.0}% を割った",
+                r.res,
+                r.decided * 100.0,
+                floor * 100.0
+            );
+        }
+        table.extend(rows);
+    }
+
+    // 空振り (vacuous) 検査 — 表全体で合格と違反の両方が出ていなければ、
+    // 判定器でなく scene 側が何も問うていない (未決定率を測る意味が消える)
+    let passed_all: usize = table.iter().map(|r| r.passed).sum();
+    let violated_all: usize = table.iter().map(|r| r.violated).sum();
+    assert!(
+        passed_all > 0 && violated_all > 0,
+        "表全体で合格 {passed_all} / 違反 {violated_all} — 片側しか出ていないなら scene が何も問うていない"
+    );
+}
