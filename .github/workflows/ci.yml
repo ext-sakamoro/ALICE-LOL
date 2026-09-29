@@ -267,7 +267,7 @@ jobs:
       # 偽 MSRV は clippy を黙らせる: feedback_false_msrv_silences_clippy)
       # 宣言値と同じ toolchain を pin し、全 feature で check が通ることを確認
       # 宣言を上げる時はここも上げる (alice-sdf 3.0.0 は 1.85、本 crate は const fn の f32::round が 1.90 を要求)
-      - uses: dtolnay/rust-toolchain@1.90
+      - uses: dtolnay/rust-toolchain@1.120
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ALICE-LOL
