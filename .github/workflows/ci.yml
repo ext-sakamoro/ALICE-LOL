@@ -33,6 +33,15 @@ jobs:
           - os: ubuntu-latest
             features: "--features glsl,wgsl,hlsl"
             label: " backend-parity"
+          # Ubuntu: exercise the physics feature so tests/analytic_thermal.rs
+          # (`#![cfg(feature = "physics")]`, 5 tests + the thermal analytic
+          # oracle) is actually executed. clippy / msrv already pass
+          # `--all-features`, but those only *compile* the test target — until
+          # this entry existed the file ran 0 tests in CI. alice-physics is the
+          # optional path dep resolved by the sibling checkout below.
+          - os: ubuntu-latest
+            features: "--features physics"
+            label: " physics"
     steps:
       - uses: actions/checkout@v5
         with:
