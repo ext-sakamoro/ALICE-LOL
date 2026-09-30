@@ -10,6 +10,11 @@
 # (2026-09-27 に `contact_upper_bound.*replace > with ==` と書いて 5 件すり抜けた)
 #
 # 最終実測: 2026-09-27 run 36325718354 (4 shard、核 136 mutant)
+# 追加実測: 2026-09-30 run 36667642110 (4 shard、核 124 mutant = 31/shard)
+#   ⚠️ この run は `quality-deep.yml` に `push` trigger を足した **初回発火**で、
+#   生存 5 件が出た いずれも 2026-09-27 以降に `law.rs` を触った 9 commit
+#   (うち `86b6fdb` が該当 2 関数そのもの) 由来で、**trigger 不在 × main 直 push
+#   のため 3 日間不可視だった** 5 件の判定は下の各 entry の理由欄に書いた
 
 exclude_re = [
     # === 等価 (変異させても結果が変わらない) ===
@@ -30,6 +35,12 @@ exclude_re = [
     "replace \\|\\| with && in contact_upper_bound",
     "replace > with == in contact_upper_bound",
     "replace > with >= in contact_upper_bound",
+    # 一様に反対符号の箱は **表面を含まない** ので、この arm の bisect は
+    # 「centre は外・箱の最近点は内 ⇒ 線分が必ず表面を横切る」という **近道**
+    # でしかない guard を潰すと近道が消えて箱が捨てられるだけで、真の最近交点は
+    # 混合符号の箱 (`None` arm で細分され leaf で点評価する経路) が返すため
+    # `best` の最小値は不変 差が出るのは探索順と枝刈り効率だけ (2026-09-30)
+    "replace match guard sign == outside with true in probe_ball",
 
     # === 未達成 (等価ではない、殺し方が分かっていない) ===
 
@@ -39,6 +50,21 @@ exclude_re = [
     "replace < with (==|>) in probe_ball",
     # 残差が (-EPSILON, 0) に入る scene を決定論的に作れていない
     "delete - in probe_pair",
+    # 上と **同じ idiom・同じ理由** (`residual.min(-f32::EPSILON)` の clamp)
+    # 差が出るのは `|residual| < f32::EPSILON` の時だけで、⚠️ **単位スケールの
+    # f32 分解能は約 1.19e-7 = `f32::EPSILON` 自身**なので `0 < depth < EPSILON`
+    # は 2 値の差として表現できない (極小スケールなら表現可能だが、grid sampler
+    # が sub-EPSILON の重なりを引く配置の構成が別途要る) 2026-09-30 run
+    # 36667642110 で `86b6fdb`「残差を場の値から実距離にする」由来として出た
+    "delete - in check_(non_overlap|containment)",
+    # `sdf_interval(a, e).lo > 0.0` の境界 `lo == 0.0` を厳密に作れていない
+    # ⚠️ `sdf_interval` は **外側丸め**なので `lo` は真値以下へ丸められ、厳密 0.0
+    # は構造的に残らない (同型の事案: `a02ab82` で alice-sdf 4.0 の外側丸めにより
+    # `interval_sign` の test が測れなくなった)
+    # ⚠️ 方針は現状の `>` を維持する = `lo == 0.0` の箱を刈らず細分する保守側
+    # (2026-09-30 user 判断) 刈る側 (`>=`) も `interval_sign` の「`d = 0` は
+    # 外側 or 表面 側」契約と整合しうるが、**証明を緩める方向**なので採らない
+    "replace > with >= in gap_exceeds",
     # 上界は八分木降下 + 二分探索の **緩い** 上界 (真の gap 1.0 の scene で
     # 1.1056 を返す、2026-09-27 実測) なので `ub == min_distance` を構成しても
     # 探索順の人工物にしかならない 意味論は

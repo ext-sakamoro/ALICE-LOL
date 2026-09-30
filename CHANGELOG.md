@@ -41,6 +41,24 @@ accessor を追加した。`HardVerdict::is_proven()` は `Proven` だけを `tr
 - 同 file の `verdict()` helper を `hard_verdict()` の `match` に単一源化
   (本 file の law は全て `Law::hard` なので結果は不変)
 
+#### `push` trigger 初回発火で出た生存変異 5 件の判定 (2026-09-30、run 36667642110)
+
+trigger を足した初回発火で **生存変異 5 件**が出た。⚠️ **いずれも同 commit で `--re` に足した
+`hard_verdict` / `is_proven` のものではなく、既存関数**だった。2026-09-27 の前回 green 以降に
+`law.rs` を触った commit は 9 本あり、うち `86b6fdb`「NonOverlap / Containment の残差を場の値から
+実距離にする」が該当 2 関数そのもの。**trigger 不在 × main 直 push のため 3 日間不可視**だった。
+
+`.cargo/mutants.toml` の規約 (等価 / 未達成 の区別 + 理由 + 実測日 + run id) に沿って判定した:
+
+| 変異 | 判定 | 理由 |
+|---|---|---|
+| `delete - in check_non_overlap` / `check_containment` | **未達成** | `residual.min(-f32::EPSILON)` の clamp。差が出るのは `\|residual\| < f32::EPSILON` の時だけで、⚠️ **単位スケールの f32 分解能は約 1.19e-7 = `f32::EPSILON` 自身**なので `0 < depth < EPSILON` は 2 値の差として表現できない。既存の `delete - in probe_pair` と同じ idiom・同じ理由 |
+| `replace > with >= in gap_exceeds` (2 件) | **未達成** | `lo == 0.0` を厳密に作れない。⚠️ `sdf_interval` は**外側丸め**なので `lo` は真値以下へ丸められ、厳密 0.0 が構造的に残らない (同型: `a02ab82` で alice-sdf 4.0 の外側丸めにより `interval_sign` の test が測れなくなった)。**方針は現状の `>` を維持** = `lo == 0.0` の箱を刈らず細分する保守側 |
+| `replace match guard sign == outside with true in probe_ball` | **等価** | 一様に反対符号の箱は**表面を含まない**ので、この arm の bisect は「centre は外・箱の最近点は内 ⇒ 線分が必ず表面を横切る」という**近道**でしかない。guard を潰すと近道が消えるだけで、真の最近交点は混合符号の箱 (`None` arm) が返すため `best` の最小値は不変。差は探索順と枝刈り効率だけ |
+
+除外の自己検査も実施: 追加した 4 regex が実 mutant 名に当たること (`--list` で 5 件が消える) と、
+**`hard_verdict` / `is_proven` の 4 mutant が測定対象に残っていること** (除外しすぎていない) を確認した。
+
 #### `quality-deep.yml` に `push` trigger を追加 (2026-09-30)
 
 それまでは `pull_request` / `schedule` / `workflow_dispatch` だけで、**main 直 push を
