@@ -33,7 +33,7 @@
 
 mod common;
 
-use alice_lol::law::{check_laws, CheckConfig, Constraint, Law, LawReport};
+use alice_lol::law::{check_laws, CheckConfig, Constraint, HardVerdict, Law, LawReport};
 use alice_lol::runtime_parser::parse_lol;
 use alice_lol::{eval, SdfNode};
 use common::corpus::{fixtures, grammar_corpus};
@@ -137,13 +137,17 @@ fn non_overlap(a: SdfNode, b: SdfNode) -> Vec<Law> {
     vec![Law::hard("no_overlap", Constraint::NonOverlap { a, b }).expect("provable constraint")]
 }
 
+/// 3 値の導出を `LawReport::hard_verdict` に単一源化する
+///
+/// 本 file の law は全て `Law::hard` なので、旧実装 (`has_hard_violations` →
+/// `has_unresolved` の 2 段) と結果は一致する 差が出るのは Soft を混ぜた時
+/// だけで、その時は **Soft の未決定で "unresolved" と報告していた旧実装が
+/// Hard の主張としては過剰**だった
 fn verdict(report: &LawReport) -> &'static str {
-    if report.has_hard_violations() {
-        "violation"
-    } else if report.has_unresolved() {
-        "unresolved"
-    } else {
-        "passed"
+    match report.hard_verdict() {
+        HardVerdict::Violated => "violation",
+        HardVerdict::Undecided => "unresolved",
+        HardVerdict::Proven => "passed",
     }
 }
 
@@ -306,9 +310,14 @@ fn gradient_bound_never_contradicts_the_static_claim() {
         )
         .expect("provable constraint")];
         let report = check_laws(&laws, &cfg);
+        // ⚠️ `!has_hard_violations()` でなく `is_proven()` で見る — 前者は
+        // **未決定を合格側に倒す**ので「反例が見つからなかった」と「上界が
+        // 証明された」を区別できない (本 test の合格が空振りかどうかが
+        // 分からない状態だった)
         assert!(
-            !report.has_hard_violations(),
-            "{name}: sampling found a quotient above the claimed bound {claimed}"
+            report.hard_verdict().is_proven(),
+            "{name}: {:?} — sampling found a quotient above the claimed bound {claimed}, or the bound could not be proven",
+            report.hard_verdict()
         );
     }
     assert!(checked > 50, "only {checked} constructs claimed a bound");

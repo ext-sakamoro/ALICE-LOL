@@ -27,6 +27,30 @@ accessor を追加した。`HardVerdict::is_proven()` は `Proven` だけを `tr
 違反と判定不能が同時にある時は `Violated` を返す (反例のある側が証拠として
 強いので、そちらを捨てない)。
 
+#### 呼び出し側の棚卸し (2026-09-30、同日追加)
+
+既存の `!has_hard_violations()` 9 箇所を読んで分類した。**締めるべきは 1 箇所だけ**で、
+残り 8 箇所は「Modelled な法則が `Priority::Hard` を名乗っていない」ことや
+「違反の部分集合を選ぶ」ための正当な用法だった (一括で置換すると、違反が出ることを
+期待している assertion を壊す)。
+
+- `tests/law_corpus_oracle.rs` の `gradient_bound_never_contradicts_the_static_claim`
+  を `hard_verdict().is_proven()` に変更。**締めても green** で、この test の合格が
+  「判定不能を合格に倒したもの」ではなく **証明された合格**であることが確定した
+  (`GradientBound` の空振りは別軸 = 渡している静的上界が緩いこと)
+- 同 file の `verdict()` helper を `hard_verdict()` の `match` に単一源化
+  (本 file の law は全て `Law::hard` なので結果は不変)
+
+#### `quality-deep.yml` に `push` trigger を追加 (2026-09-30)
+
+それまでは `pull_request` / `schedule` / `workflow_dispatch` だけで、**main 直 push を
+既定運用とするこの repo では `pull_request` が事実上発火せず、実効 gate が週次 cron
+だけ**になっていた。実測として、`hard_verdict` を足して `--re` にも登録した commit
+(`7faf75b`) が mutants の測定を 1 度も通らずに main に載った。
+
+`paths` は `pull_request` 側と同一内容 (判定器と判定器 test に限定) にしてある。
+片方だけに足すと「PR では測るのに直 push では測らない」が残る。
+
 `tests/law_tests.rs` に 6 本追加 (3 分岐 + Soft 判定不能の独立性 + 違反優先 +
 既存 `has_hard_violations` の契約を記録する 1 本)。3 分岐それぞれに変異を入れて
 red になることを実測済み。`quality-deep.yml` の `--re` に `hard_verdict` と
