@@ -29,7 +29,11 @@
 //! (`rules/analytic-oracle-tests.md`「精度 parameter を振って不変を assert」)
 
 // grid index ⇄ 座標の変換のみ (ビン数は高々 1440、f64 の仮数に収まる)
-#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use alice_lol::laser_pattern::{
     crosshatch, dither, guilloche, halftone, hatch, lissajous, phyllotaxis, rose, Bounds,
@@ -137,9 +141,7 @@ fn lobe_count(points: &[(f64, f64)], threshold: f64) -> usize {
     if hot.iter().all(|&h| h) {
         return 1;
     }
-    (0..n)
-        .filter(|&i| hot[i] && !hot[(i + n - 1) % n])
-        .count()
+    (0..n).filter(|&i| hot[i] && !hot[(i + n - 1) % n]).count()
 }
 
 fn card() -> Bounds {
@@ -216,7 +218,11 @@ fn rose_tip_directions_lie_on_multiples_of_pi_over_k() {
     let k = 3.0_f64;
     let points = polyline_about(&rose(k, amplitude, 20_000, &bounds), bounds.center());
     // 先端に極めて近い点はすべて mπ/k 方向 (±1°) を向く
-    for p in points.iter().copied().filter(|&p| radius(p) > amplitude * 0.999) {
+    for p in points
+        .iter()
+        .copied()
+        .filter(|&p| radius(p) > amplitude * 0.999)
+    {
         let theta = p.1.atan2(p.0).rem_euclid(PI / k);
         let off = theta.min(PI / k - theta).to_degrees();
         assert!(
@@ -250,7 +256,9 @@ fn phyllotaxis_turns_by_the_golden_angle_each_step() {
         if radius(a) < 1e-6 || radius(b) < 1e-6 {
             continue; // 中心の 1 点は角が定まらない
         }
-        let delta = (b.1.atan2(b.0) - a.1.atan2(a.0)).rem_euclid(TAU).to_degrees();
+        let delta = (b.1.atan2(b.0) - a.1.atan2(a.0))
+            .rem_euclid(TAU)
+            .to_degrees();
         assert!(
             (delta - GOLDEN_ANGLE_DEG).abs() < 0.01,
             "隣接点の角度差 {delta}° が黄金角 {GOLDEN_ANGLE_DEG}° から外れた"
@@ -266,7 +274,11 @@ fn phyllotaxis_radius_follows_the_square_root_law() {
     let points = dots(&phyllotaxis(400, scale, &bounds));
     let center = bounds.center();
     // clip されていないことを前提に i と 1:1 対応させる (wide() は十分広い)
-    assert_eq!(points.len(), 400, "wide() の中では 1 点も clip されない想定");
+    assert_eq!(
+        points.len(),
+        400,
+        "wide() の中では 1 点も clip されない想定"
+    );
     for (i, &p) in points.iter().enumerate() {
         let got = radius((p.0 - center.0, p.1 - center.1));
         let want = scale * (i as f64).sqrt();
@@ -430,7 +442,10 @@ fn hatch_line_spacing_is_exact_at_every_angle() {
     let spacing = 2.0;
     for angle in [0.0_f64, 17.0, 30.0, 45.0, 73.0, 90.0, 123.0] {
         let segs = segments(&hatch(angle, spacing, &bounds));
-        assert!(segs.len() >= 3, "angle={angle} で線が 3 本未満しか出ていない");
+        assert!(
+            segs.len() >= 3,
+            "angle={angle} で線が 3 本未満しか出ていない"
+        );
         let mut offsets: Vec<f64> = segs.iter().map(|&s| normal_offset(s, angle)).collect();
         offsets.sort_by(f64::total_cmp);
         for pair in offsets.windows(2) {
@@ -480,7 +495,10 @@ fn hatch_covers_the_whole_rectangle() {
         .map(|&(x, y)| (-a.sin()).mul_add(x, a.cos() * y))
         .collect();
     let lo = projections.iter().copied().fold(f64::INFINITY, f64::min);
-    let hi = projections.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let hi = projections
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
     let offsets: Vec<f64> = segs.iter().map(|&s| normal_offset(s, angle)).collect();
     let first = offsets.iter().copied().fold(f64::INFINITY, f64::min);
     let last = offsets.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -589,7 +607,10 @@ fn halftone_dot_radius_is_linear_in_ink() {
     let max_radius = 0.5;
     for brightness in [0.0_f64, 0.25, 0.5, 0.75] {
         let found = circles(&halftone(25.4, max_radius, &bounds, &|_, _| brightness));
-        assert!(!found.is_empty(), "brightness={brightness} でドットが出ない");
+        assert!(
+            !found.is_empty(),
+            "brightness={brightness} でドットが出ない"
+        );
         let want = max_radius * (1.0 - brightness);
         for (_, _, r) in found {
             assert!(
@@ -639,8 +660,8 @@ fn halftone_tone_response_is_radius_linear_not_area_linear() {
     let ink = 0.5_f64; // 50% 濃度 (brightness = 0.5)
     let found = circles(&halftone(12.7, max_radius, &bounds, &|_, _| 1.0 - ink));
     let cell = 25.4 / 12.7;
-    let covered: f64 = found.iter().map(|&(_, _, r)| PI * r * r).sum::<f64>()
-        / (found.len() as f64 * cell * cell);
+    let covered: f64 =
+        found.iter().map(|&(_, _, r)| PI * r * r).sum::<f64>() / (found.len() as f64 * cell * cell);
     let radius_linear = PI * (max_radius * ink).powi(2) / (cell * cell);
     let area_linear = PI * max_radius.powi(2) * ink / (cell * cell);
     assert!(
@@ -711,6 +732,73 @@ fn error_diffusion_preserves_mean_tone() {
                  (誤差拡散核の重み和が divisor と一致していない可能性)"
             );
         }
+    }
+}
+
+/// oracle: 一様輝度 `b = (m+0.5)/16` でドットが出るのは、閾値行列の値が m より
+/// 大きいセルだけ ⇒ **ドットの出る位置が閾値行列の配置そのもの**として決まる
+///
+/// 密度だけを見ると閾値行列の 2 要素を入れ替えても (順列のままなので) 気付けない
+/// Bayer の要件は閾値が空間的に分散していることなので、配置まで固定する
+#[test]
+fn bayer_dot_positions_follow_the_threshold_matrix_layout() {
+    let dpi = 4.0;
+    let cell = 25.4 / dpi;
+    let bounds = Bounds::new(0.0, 0.0, cell * 8.0, cell * 8.0);
+    for m in 0..16_u32 {
+        let brightness = (f64::from(m) + 0.5) / 16.0;
+        let found = dots(&dither(DitherAlgorithm::Bayer4x4, dpi, &bounds, &|_, _| {
+            brightness
+        }));
+        let mut got: Vec<(usize, usize)> = found
+            .iter()
+            .map(|&(x, y)| {
+                let col = ((x - bounds.x) / cell - 0.5).round() as usize;
+                let row = ((y - bounds.y) / cell - 0.5).round() as usize;
+                (row % 4, col % 4)
+            })
+            .collect();
+        got.sort_unstable();
+        got.dedup();
+        let want: Vec<(usize, usize)> = (0..4_usize)
+            .flat_map(|r| (0..4_usize).map(move |c| (r, c)))
+            .filter(|&(r, c)| BAYER4_ORDER[r * 4 + c] > m)
+            .collect();
+        assert_eq!(
+            got, want,
+            "b=(m+0.5)/16 (m={m}): ドットが出るセルの配置が Bayer 閾値行列と一致しない"
+        );
+    }
+}
+
+/// oracle: 重み和が divisor に一致する核は、**格子を細かくすると階調誤差が 0 に
+/// 収束する** (捨てられるのは境界の分だけで、面積比 O(1/N) で減る)
+///
+/// 重みが 1 つでも足りない核は毎セルで誤差を取りこぼすので、細かくしても
+/// 系統誤差が残って下げ止まる 一様輝度 0.5 は対称で差が消えるため、階調の
+/// 端 (0.1) で測る
+#[test]
+fn error_diffusion_tone_error_vanishes_as_the_grid_refines() {
+    let bounds = Bounds::new(0.0, 0.0, 100.0, 100.0);
+    let brightness = 0.1_f64;
+    for algorithm in [
+        DitherAlgorithm::FloydSteinberg,
+        DitherAlgorithm::Stucki,
+        DitherAlgorithm::Jarvis,
+    ] {
+        // dpi 10.16 → 2.5 mm セル (40×40) / dpi 50.8 → 0.5 mm セル (200×200)
+        let coarse =
+            (dot_density(algorithm, brightness, 10.16, &bounds) - (1.0 - brightness)).abs();
+        let fine = (dot_density(algorithm, brightness, 50.8, &bounds) - (1.0 - brightness)).abs();
+        assert!(
+            fine < 0.005,
+            "{algorithm:?}: 200×200 でも階調誤差が {fine} 残る (核の重み和が divisor と違う)"
+        );
+        assert!(
+            fine * 3.0 < coarse,
+            "{algorithm:?}: 階調誤差が 40×40 の {coarse} から 200×200 の {fine} へ収束していない \
+             (境界で捨てる分なら面積比で減るはず)"
+        );
     }
 }
 

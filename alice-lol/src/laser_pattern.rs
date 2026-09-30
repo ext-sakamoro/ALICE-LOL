@@ -812,18 +812,20 @@ const fn usize_f64(i: usize) -> f64 {
 }
 
 /// 浮動小数の近似GCD（スピログラフの完全周期計算用）
+///
+/// 剰余が 0 になった時点の除数を返す 旧実装は `small < eps` で break する前に
+/// 除数の繰り上げを通らず、最後の商を落としていた (`gcd(10,5)` が 10、
+/// `gcd(10,7)` が 3) ハイポトロコイドの周期 `2π·r/gcd(R,r)` が短くなり、
+/// 曲線が閉じないまま途中で切れる
 #[allow(clippy::while_float)] // Euclid 互除法の float 版、終了条件は eps
 fn gcd_f64(lhs: f64, rhs: f64) -> f64 {
     let mut big = lhs.abs();
     let mut small = rhs.abs();
     let eps = 1e-9;
     while small > eps {
-        let prev = small;
-        small = big % small;
-        if small < eps {
-            break;
-        }
-        big = prev;
+        let remainder = big % small;
+        big = small;
+        small = remainder;
     }
     big
 }
