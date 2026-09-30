@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Lipschitz 包囲の算術を mutants の測定集合内で固定した (2026-10-01)
+
+第 2 の証明経路を入れた commit は、その経路を叩く test を `tests/law_corpus_oracle.rs`
+にしか持っていなかった。mutants は `--lib --test analytic_law --test law_tests` で
+回すので、この file は測定集合の外にある。結果として CI の test job と local の
+preflight は両方 green なのに、`Quality Deep` の mutants gate だけが生存変異 19 件で
+落ちた (4 shard のうち 1/4 と 3/4)。
+
+`law.rs` の `core_probe_tests` (= `--lib` に載る) に閉形式 test 5 本を足して、
+`lipschitz_enclosure` の算術 6 箇所と `refine_with_lipschitz` の境界判定を固定した。
+
+- 辺長 `(2, 2, 1)` の箱は半対角が `0.5·√(4+4+1) = 1.5` で f32 厳密になるので、
+  `L = 2` / `f(c) = 10` の包囲 `[7, 13]` を厳密な期待値として使える
+- 箱の 3 区間はすべて非対称に取る。対称区間だと `hi - lo` を `hi / lo` に変えても
+  `-1` になり、二乗で符号が消えて辺長の二乗が変わらないため変異が見えない
+- `if lo > hi` は 1 点交差と空交差の 2 本で挟む。`>=` は決着できる cell を未決定に
+  落とし、`==` は空交差を矛盾として扱わず `lo > hi` の壊れた区間を下流に流すので、
+  向きが逆の 2 つの誤りになる
+- 境界を測る test の区間は `Interval::new` の外側丸めを避けて struct literal で組む
+
 ### Added — 法則検証器に第 2 の証明経路 (Lipschitz 包囲) を入れた (2026-09-30)
 
 距離依存の法則は区間演算だけで「箱に表面なし」を証明していたが、区間は健全でも
