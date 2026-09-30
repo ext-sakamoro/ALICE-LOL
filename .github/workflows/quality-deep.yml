@@ -24,14 +24,33 @@
 # continue-on-error は使わない measurement の exit code (2 = missed、3 =
 # timeout) は受けてから中身で判定する
 #
-# 1 mutant ≈ 6 s build + 55 s test なので push 毎には回さない: law.rs と
-# 判定器 test を触った PR / 週次 / 手動 4 shard 並列で 1 shard 30-40 分
+# 1 mutant ≈ 6 s build + 55 s test なので **全 push では回さない**: 判定器
+# (law.rs と判定器 test) を触った push / 同 PR / 週次 / 手動 4 shard 並列で
+# 1 shard 30-40 分
+#
+# 2026-09-30: `push` を追加した それまでは `pull_request` / `schedule` /
+# `workflow_dispatch` だけだったが、**本 repo の既定運用は main 直 push なので
+# `pull_request` が事実上発火せず、実効 gate が週次 cron だけ**になっていた
+# 実測: `law.rs` に判定経路 (`hard_verdict`) を足して `--re` にも登録した
+# commit (`7faf75b`) が、mutants の測定を 1 度も通らずに main に載った
+# `paths` が判定器に限定されているので、doc や無関係な src の push では発火しない
 name: Quality Deep
 
 on:
   schedule:
     - cron: '0 18 * * 0' # 日曜 03:00 JST
   workflow_dispatch:
+  # ⚠️ push と pull_request の paths は必ず同じ内容にする (片方だけに足すと
+  # 「PR では測るのに直 push では測らない」= 元の穴が片側に残る)
+  push:
+    branches: [main]
+    paths:
+      - 'alice-lol/src/law.rs'
+      - 'alice-lol/tests/analytic_law.rs'
+      - 'alice-lol/tests/law_tests.rs'
+      - 'alice-lol/tests/law_corpus_oracle.rs'
+      - '.cargo/mutants.toml'
+      - '.github/workflows/quality-deep.yml'
   pull_request:
     branches: [main]
     paths:
