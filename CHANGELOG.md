@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `LawReport::hard_verdict()` と `HardVerdict` (2026-09-30)
+
+`Priority::Hard` 制約の判定を 3 値 (`Proven` / `Violated` / `Undecided`) で返す
+accessor を追加した。`HardVerdict::is_proven()` は `Proven` だけを `true` にする。
+
+追加した理由は、**「Hard 制約が証明付きで満たされた」を表す述語が無かった**こと。
+既存の 2 つはどちらも gate に使えない:
+
+| 述語 | Hard が判定不能の時 | 問題 |
+|---|---|---|
+| `!has_hard_violations()` | `true` | 判定できなかった標本が合格側へ倒れる |
+| `all_passed()` | `false` | `Priority::Soft` の判定不能でも `false` になり、Hard 制約だけの主張には過剰 |
+
+中間が無いため呼び出し側は前者を選び、解像度不足で決まらなかった標本が
+合格として通っていた。`has_hard_violations()` は doc 契約どおり
+「証明か反例のある違反」だけを見る関数なので意味は変えていない。
+
+違反と判定不能が同時にある時は `Violated` を返す (反例のある側が証拠として
+強いので、そちらを捨てない)。
+
+`tests/law_tests.rs` に 6 本追加 (3 分岐 + Soft 判定不能の独立性 + 違反優先 +
+既存 `has_hard_violations` の契約を記録する 1 本)。3 分岐それぞれに変異を入れて
+red になることを実測済み。`quality-deep.yml` の `--re` に `hard_verdict` と
+`is_proven` を追加した。
+
 ### Fixed — `ThermalField` の bracket が両方向とも間違った側に寄っていた (2026-09-29)
 
 温度の bracket は対流熱伝達率 `h` を両端 (`h = 0` / `h = ∞`) で挟んでいたが、

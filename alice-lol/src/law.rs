@@ -605,6 +605,33 @@ pub struct Unresolved {
     pub reason: UnresolvedReason,
 }
 
+/// [`Priority::Hard`] 制約の 3 値判定 ([`LawReport::hard_verdict`] の結果)
+///
+/// doctrine「不確かさが嘘をつけない」の実体化 — **`Undecided` は合格ではない**
+/// 合否 1 bit だけが欲しい caller は [`Self::is_proven`] を使う
+/// ([`LawReport::has_hard_violations`] を `!` で否定すると、判定できなかった
+/// 標本が合格側へ倒れる)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HardVerdict {
+    /// Hard 制約に違反も判定不能も無い (証明付きの合格)
+    Proven,
+    /// Hard 制約に証明か反例のある違反がある
+    Violated,
+    /// Hard 制約に違反は無いが、判定できなかった標本がある
+    ///
+    /// 検証器の解像度 / 区間演算の包含精度が足りなかった状態
+    /// **合格扱いにしてはいけない**
+    Undecided,
+}
+
+impl HardVerdict {
+    /// 証明付きで合格したか (`Proven` だけが `true`)
+    #[must_use]
+    pub const fn is_proven(self) -> bool {
+        matches!(self, Self::Proven)
+    }
+}
+
 /// 法則検証の結果
 #[derive(Debug, Clone)]
 pub struct LawReport {
@@ -650,6 +677,30 @@ impl LawReport {
     #[must_use]
     pub const fn has_unresolved(&self) -> bool {
         !self.unresolved.is_empty()
+    }
+
+    /// [`Priority::Hard`] 制約の 3 値判定 — **判定不能を合格にしない**
+    ///
+    /// gate (「先へ進んでよいか」) にはこちらを使う
+    /// [`Self::has_hard_violations`] は `violations` だけを見るので、
+    /// `!has_hard_violations()` を合格の判定に使うと **Hard が判定不能の時に
+    /// 合格へ倒れる**
+    ///
+    /// [`Self::all_passed`] との違いは対象範囲 — `all_passed` は
+    /// [`Priority::Soft`] の判定不能でも `false` になるので、Hard 制約だけの
+    /// 主張には過剰
+    ///
+    /// 違反と判定不能が同時にある時は [`HardVerdict::Violated`]
+    /// (反例のある側が証拠として強いので、そちらを捨てない)
+    #[must_use]
+    pub fn hard_verdict(&self) -> HardVerdict {
+        if self.has_hard_violations() {
+            HardVerdict::Violated
+        } else if self.unresolved.iter().any(|u| u.priority == Priority::Hard) {
+            HardVerdict::Undecided
+        } else {
+            HardVerdict::Proven
+        }
     }
 }
 
