@@ -116,7 +116,7 @@ jobs:
           cargo mutants --in-place --shard ${{ matrix.shard }}/4 \
             --timeout 300 --build-timeout 240 \
             --file alice-lol/src/law.rs \
-            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact' \
+            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven' \
             -- --lib --test analytic_law --test law_tests
           rc=$?
           set -e

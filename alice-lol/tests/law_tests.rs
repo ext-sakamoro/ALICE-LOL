@@ -793,3 +793,168 @@ fn contradiction_contact_nonoverlap_conflict() {
     assert!(!contradictions.is_empty(), "矛盾検出されるべき");
     assert!(contradictions[0].reason.contains("Contact"));
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Hard 制約の 3 値判定 (`LawReport::hard_verdict`)
+//
+// doctrine「不確かさが嘘をつけない」= **undecided は不合格側に倒す** を、
+// Hard 制約の gate として API に実体化したもの oracle は doctrine の規定
+// そのもの (実装出力から書いていない)
+//
+// ⚠️ `has_hard_violations()` は doc どおり「証明か反例のある違反」だけを見る
+// 関数で、これ自体は誤りではない 塞ぐべきは **「Hard が proven で満たされた」
+// を表す述語が無かったこと** — 無いので caller が `!has_hard_violations()` を
+// 合格として使い、Hard が undecided の時に合格へ倒れていた
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Hard 1 件が未決定、違反なしの `LawReport`
+fn report_hard_unresolved() -> alice_lol::law::LawReport {
+    use alice_lol::law::{LawReport, Unresolved};
+    LawReport {
+        total_laws: 1,
+        passed: 0,
+        violations: vec![],
+        unresolved: vec![Unresolved {
+            law_name: "min_thickness".to_string(),
+            priority: Priority::Hard,
+            point: Vec3::ZERO,
+            region: unit_region(),
+            reason: UnresolvedReason::SignUndecided,
+        }],
+    }
+}
+
+fn unit_region() -> alice_lol::Vec3Interval {
+    use alice_lol::{Interval, Vec3Interval};
+    Vec3Interval {
+        x: Interval::new(0.0, 1.0),
+        y: Interval::new(0.0, 1.0),
+        z: Interval::new(0.0, 1.0),
+    }
+}
+
+fn hard_violation() -> alice_lol::law::Violation {
+    use alice_lol::law::{Evidence, Violation};
+    Violation {
+        law_name: "no_overlap".to_string(),
+        priority: Priority::Hard,
+        residual: -0.25,
+        point: Vec3::ZERO,
+        region: unit_region(),
+        evidence: Evidence::Witnessed,
+    }
+}
+
+/// 抜け道の実在を pin する — Hard が未決定でも `has_hard_violations()` は
+/// `false` を返す (= `!has_hard_violations()` を合格に使うと undecided が
+/// 合格へ倒れる) この test は **現状の挙動を記録する**もので、
+/// `has_hard_violations` の意味を変えないことの宣言でもある
+#[test]
+fn hard_unresolved_is_invisible_to_has_hard_violations() {
+    let report = report_hard_unresolved();
+    assert!(
+        !report.has_hard_violations(),
+        "has_hard_violations は violations だけを見る (doc 契約)"
+    );
+    assert!(report.has_unresolved(), "未決定は unresolved 側に載る");
+    assert!(
+        !report.all_passed(),
+        "all_passed は未決定を合格にしない (Soft 込みで厳しすぎるので Hard gate には使えない)"
+    );
+}
+
+/// Hard に違反があれば `Violated`
+#[test]
+fn hard_verdict_violated_when_hard_violation() {
+    use alice_lol::law::{HardVerdict, LawReport};
+    let report = LawReport {
+        total_laws: 1,
+        passed: 0,
+        violations: vec![hard_violation()],
+        unresolved: vec![],
+    };
+    assert_eq!(report.hard_verdict(), HardVerdict::Violated);
+    assert!(!report.hard_verdict().is_proven());
+}
+
+/// ⚠️ 本命 — Hard が未決定なら `Undecided` (合格ではない)
+#[test]
+fn hard_verdict_undecided_when_hard_unresolved() {
+    use alice_lol::law::HardVerdict;
+    let report = report_hard_unresolved();
+    assert_eq!(
+        report.hard_verdict(),
+        HardVerdict::Undecided,
+        "doctrine: undecided は不合格側"
+    );
+    assert!(
+        !report.hard_verdict().is_proven(),
+        "未決定を合格に倒してはいけない"
+    );
+}
+
+/// 違反も未決定も無ければ `Proven`
+#[test]
+fn hard_verdict_proven_when_clean() {
+    use alice_lol::law::{HardVerdict, LawReport};
+    let report = LawReport {
+        total_laws: 2,
+        passed: 2,
+        violations: vec![],
+        unresolved: vec![],
+    };
+    assert_eq!(report.hard_verdict(), HardVerdict::Proven);
+    assert!(report.hard_verdict().is_proven());
+}
+
+/// Soft の未決定は Hard の判定に影響しない (`all_passed()` との違いを pin)
+///
+/// これが無いと「Hard gate」を名乗りながら Soft の解像度不足で止まる実装に
+/// なりうる (過剰な不合格は嘘ではないが、Hard の主張としては別物)
+#[test]
+fn hard_verdict_ignores_soft_unresolved() {
+    use alice_lol::law::{HardVerdict, LawReport, Unresolved};
+    let report = LawReport {
+        total_laws: 1,
+        passed: 0,
+        violations: vec![],
+        unresolved: vec![Unresolved {
+            law_name: "smoothness".to_string(),
+            priority: Priority::Soft(1.0),
+            point: Vec3::ZERO,
+            region: unit_region(),
+            reason: UnresolvedReason::SignUndecided,
+        }],
+    };
+    assert_eq!(
+        report.hard_verdict(),
+        HardVerdict::Proven,
+        "Soft の未決定で Hard の verdict を落とさない"
+    );
+    assert!(
+        !report.all_passed(),
+        "all_passed は Soft の未決定でも false (両者は別の述語)"
+    );
+}
+
+/// 違反と未決定が同時にあれば違反が優先 (`Violated`)
+///
+/// 逆順 (`Undecided` を先に見る) だと「反例があるのに分からない」と報告して
+/// しまい、証拠の強い側を捨てる
+#[test]
+fn hard_verdict_violation_takes_precedence_over_unresolved() {
+    use alice_lol::law::{HardVerdict, LawReport, Unresolved};
+    let report = LawReport {
+        total_laws: 2,
+        passed: 0,
+        violations: vec![hard_violation()],
+        unresolved: vec![Unresolved {
+            law_name: "min_thickness".to_string(),
+            priority: Priority::Hard,
+            point: Vec3::ZERO,
+            region: unit_region(),
+            reason: UnresolvedReason::SignUndecided,
+        }],
+    };
+    assert_eq!(report.hard_verdict(), HardVerdict::Violated);
+}

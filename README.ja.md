@@ -194,7 +194,7 @@ Continuity(node, seed_point)                        # 単一連結領域 (BFS fl
 VolumeConservation(before, after, relative_tolerance)  # morph 前後の体積保存
 ```
 
-距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性)
+距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 `Priority::Hard` だけを gate したい時は **`hard_verdict()`** が 3 値 (`Proven` / `Violated` / `Undecided`) を返す (`!has_hard_violations()` は判定不能を合格側へ倒すので gate に使わない、`all_passed()` は Soft の判定不能でも落ちるので Hard の主張には過剰) 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性)
 
 ### 変数キャプチャ
 
