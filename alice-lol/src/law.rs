@@ -3880,6 +3880,189 @@ mod core_probe_tests {
             format_report(&report2)
         );
     }
+
+    /// 半対角と余裕の算術を厳密な数値で固定する
+    ///
+    /// oracle: 辺長 `(2, 2, 1)` の箱の半対角は `0.5·√(4+4+1) = 1.5` (厳密)
+    /// `L = 2` なら余裕は `L·ρ = 3.0` なので、`f(c) = 10` の包囲は `[7, 13]`
+    ///
+    /// 辺長を `hi − lo` 以外 (`hi + lo` / `hi / lo`) にすると半対角が変わり、
+    /// `0.5 * Σ` や `dz * dz` や `L * ρ` を `+` にすると余裕が変わるので、
+    /// ⚠️ **この 1 本で `lipschitz_enclosure` の算術 6 箇所すべてが動く**
+    ///
+    /// ⚠️ `Interval::new` は外側丸めを掛けるので厳密一致では見ない
+    /// (変異は 0.5 以上ずれるので 1e-3 で十分に分離する)
+    #[test]
+    fn the_lipschitz_enclosure_uses_the_half_diagonal_and_the_product_with_l() {
+        let bx = Vec3Interval {
+            // ⚠️ 3 軸すべて **非対称** に取る — 対称区間 (`[-a, a]`) だと
+            // `hi - lo` を `hi / lo` に変えても `-1` になり、**二乗で符号が消えて
+            // 辺長の二乗が変わらない**ので変異が見えなくなる (2026-10-01 実測、
+            // `z: [-0.5, 0.5]` で `law.rs:1094:71` の `-` → `/` を殺せなかった)
+            // 辺長は (2, 2, 1) を保つので半対角は `0.5·√9 = 1.5` で f32 厳密
+            x: Interval { lo: 0.5, hi: 2.5 },
+            y: Interval { lo: 1.0, hi: 3.0 },
+            z: Interval { lo: 0.25, hi: 1.25 },
+        };
+        let e = lipschitz_enclosure(bx, 10.0, 2.0)
+            .expect("外部 (f(c) > 0) で上界も有限なので包囲が出る");
+        assert!(
+            (e.lo - 7.0).abs() < 1e-3 && (e.hi - 13.0).abs() < 1e-3,
+            "半対角 1.5 × L 2.0 = 余裕 3.0 で [7, 13] のはずが [{}, {}]",
+            e.lo,
+            e.hi
+        );
+    }
+
+    /// 契約 (外部限定 / 有限な上界) を外れた入力では何も主張しない
+    ///
+    /// oracle: `eval_lipschitz` の契約は `{f ≥ 0}` 限定なので、`f(c) < 0` の箱で
+    /// 包囲を作ってはいけない `L` が非有限 / 非正の時も同じ
+    ///
+    /// ⚠️ `rho.is_finite()` の `!` を消すと **有限な ρ で `None` を返す**ように
+    /// なるので、上の test が `expect` で落ちてこの分岐の変異も殺される
+    #[test]
+    fn the_lipschitz_enclosure_refuses_interior_boxes_and_useless_bounds() {
+        let bx = Vec3Interval {
+            // ⚠️ 3 軸すべて **非対称** に取る — 対称区間 (`[-a, a]`) だと
+            // `hi - lo` を `hi / lo` に変えても `-1` になり、**二乗で符号が消えて
+            // 辺長の二乗が変わらない**ので変異が見えなくなる (2026-10-01 実測、
+            // `z: [-0.5, 0.5]` で `law.rs:1094:71` の `-` → `/` を殺せなかった)
+            // 辺長は (2, 2, 1) を保つので半対角は `0.5·√9 = 1.5` で f32 厳密
+            x: Interval { lo: 0.5, hi: 2.5 },
+            y: Interval { lo: 1.0, hi: 3.0 },
+            z: Interval { lo: 0.25, hi: 1.25 },
+        };
+        // 内部点 (契約外)
+        assert!(
+            lipschitz_enclosure(bx, -0.1, 2.0).is_none(),
+            "f(c) < 0 で主張した"
+        );
+        // 上界が非正 / 非有限
+        assert!(
+            lipschitz_enclosure(bx, 10.0, 0.0).is_none(),
+            "L = 0 で主張した"
+        );
+        assert!(
+            lipschitz_enclosure(bx, 10.0, -1.0).is_none(),
+            "L < 0 で主張した"
+        );
+        assert!(
+            lipschitz_enclosure(bx, 10.0, f32::INFINITY).is_none(),
+            "L が非有限で主張した"
+        );
+        // f(c) が非有限
+        assert!(
+            lipschitz_enclosure(bx, f32::NAN, 2.0).is_none(),
+            "f(c) が NaN で主張した"
+        );
+        // 表面ちょうど (f(c) = 0) は契約内なので主張してよい
+        assert!(
+            lipschitz_enclosure(bx, 0.0, 2.0).is_some(),
+            "f(c) = 0 は契約内 (`f < 0` で弾く) なのに主張しなかった"
+        );
+    }
+
+    /// 交差が 1 点に潰れるのは矛盾ではない
+    ///
+    /// oracle: 2 つの健全な包囲が 1 点で接する時、その点は両方に含まれるので
+    /// **`f(box)` はその値しか取れない**という最も締まった情報になる
+    /// 空 (`lo > hi`) とは意味が違う
+    ///
+    /// ⚠️ `if lo > hi` を `>=` に変えるとこの 1 点が [`Refined::Contradiction`] に
+    /// 化け、**決着できる cell を未決定に落とす** (健全だが決着率が下がる向き)
+    /// `==` に変えると下の空交差が矛盾として扱われず、⚠️ **健全でない包囲を
+    /// 信じて進む**ので向きが逆に危ない
+    ///
+    /// ⚠️ 区間側は外側丸めを避けるため struct literal で組む (1 点交差を作るため)
+    #[test]
+    fn a_single_point_intersection_is_the_tightest_enclosure_not_a_contradiction() {
+        let bx = Vec3Interval {
+            // ⚠️ 3 軸すべて **非対称** に取る — 対称区間 (`[-a, a]`) だと
+            // `hi - lo` を `hi / lo` に変えても `-1` になり、**二乗で符号が消えて
+            // 辺長の二乗が変わらない**ので変異が見えなくなる (2026-10-01 実測、
+            // `z: [-0.5, 0.5]` で `law.rs:1094:71` の `-` → `/` を殺せなかった)
+            // 辺長は (2, 2, 1) を保つので半対角は `0.5·√9 = 1.5` で f32 厳密
+            x: Interval { lo: 0.5, hi: 2.5 },
+            y: Interval { lo: 1.0, hi: 3.0 },
+            z: Interval { lo: 0.25, hi: 1.25 },
+        };
+        // Lipschitz 包囲は [7, 13] (外側丸めで両端が 1 ulp 広がる)
+        // 区間側を [10, 10] にすると交差は 1 点 10 になる
+        let iv = Interval { lo: 10.0, hi: 10.0 };
+        match refine_with_lipschitz(bx, iv, 10.0, 2.0) {
+            Refined::Enclosure(r) => assert!(
+                (r.lo - 10.0).abs() < 1e-3 && (r.hi - 10.0).abs() < 1e-3,
+                "1 点交差が [{}, {}] になった",
+                r.lo,
+                r.hi
+            ),
+            Refined::Contradiction => panic!("1 点で接する交差を矛盾として扱った"),
+        }
+    }
+
+    /// 交差が空なら矛盾として報告する (どちらも信じない)
+    ///
+    /// oracle: `[100, 200]` と Lipschitz 包囲 `[7, 13]` は重ならない
+    /// 健全な包囲同士なら同じ `f(box)` を両方が含むので空にならないので、
+    /// 空になった時点でどちらかが健全でない
+    ///
+    /// ⚠️ `lo > hi` を `==` に変えるとここが [`Refined::Enclosure`] になり、
+    /// **`lo > hi` の壊れた区間を下流に渡す**
+    #[test]
+    fn an_empty_intersection_is_reported_as_a_contradiction() {
+        let bx = Vec3Interval {
+            // ⚠️ 3 軸すべて **非対称** に取る — 対称区間 (`[-a, a]`) だと
+            // `hi - lo` を `hi / lo` に変えても `-1` になり、**二乗で符号が消えて
+            // 辺長の二乗が変わらない**ので変異が見えなくなる (2026-10-01 実測、
+            // `z: [-0.5, 0.5]` で `law.rs:1094:71` の `-` → `/` を殺せなかった)
+            // 辺長は (2, 2, 1) を保つので半対角は `0.5·√9 = 1.5` で f32 厳密
+            x: Interval { lo: 0.5, hi: 2.5 },
+            y: Interval { lo: 1.0, hi: 3.0 },
+            z: Interval { lo: 0.25, hi: 1.25 },
+        };
+        let iv = Interval {
+            lo: 100.0,
+            hi: 200.0,
+        };
+        assert!(
+            matches!(
+                refine_with_lipschitz(bx, iv, 10.0, 2.0),
+                Refined::Contradiction
+            ),
+            "重ならない 2 包囲を矛盾として扱わなかった"
+        );
+    }
+
+    /// Lipschitz を主張できない形では区間をそのまま返す
+    ///
+    /// oracle: 契約外 (`f(c) < 0`) では包囲が出ないので、締める材料が無い
+    /// ⚠️ ここで区間を捨てると第 1 の経路の決着も失う
+    #[test]
+    fn without_a_lipschitz_bound_the_interval_passes_through_unchanged() {
+        let bx = Vec3Interval {
+            // ⚠️ 3 軸すべて **非対称** に取る — 対称区間 (`[-a, a]`) だと
+            // `hi - lo` を `hi / lo` に変えても `-1` になり、**二乗で符号が消えて
+            // 辺長の二乗が変わらない**ので変異が見えなくなる (2026-10-01 実測、
+            // `z: [-0.5, 0.5]` で `law.rs:1094:71` の `-` → `/` を殺せなかった)
+            // 辺長は (2, 2, 1) を保つので半対角は `0.5·√9 = 1.5` で f32 厳密
+            x: Interval { lo: 0.5, hi: 2.5 },
+            y: Interval { lo: 1.0, hi: 3.0 },
+            z: Interval { lo: 0.25, hi: 1.25 },
+        };
+        let iv = Interval { lo: -5.0, hi: 5.0 };
+        match refine_with_lipschitz(bx, iv, -0.1, 2.0) {
+            Refined::Enclosure(r) => {
+                assert!(
+                    (r.lo - iv.lo).abs() < 1e-6 && (r.hi - iv.hi).abs() < 1e-6,
+                    "契約外なのに区間が変わった [{}, {}]",
+                    r.lo,
+                    r.hi
+                );
+            }
+            Refined::Contradiction => panic!("締める材料が無い時に矛盾を報告した"),
+        }
+    }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
