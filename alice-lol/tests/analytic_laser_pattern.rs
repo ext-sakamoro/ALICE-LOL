@@ -36,8 +36,8 @@
 )]
 
 use alice_lol::laser_pattern::{
-    crosshatch, dither, guilloche, halftone, hatch, lissajous, phyllotaxis, rose, Bounds,
-    DitherAlgorithm, LaserElement,
+    crosshatch, density_hatch, dither, guilloche, halftone, hatch, lissajous, phyllotaxis, rose,
+    turing, Bounds, DitherAlgorithm, LaserElement,
 };
 use std::f64::consts::{PI, TAU};
 
@@ -508,6 +508,82 @@ fn hatch_covers_the_whole_rectangle() {
     );
 }
 
+/// oracle: 密度が一定 c なら線間隔は `max − (max−min)·c` の等間隔になる
+/// (実装が宣言している内挿式そのもの)
+#[test]
+fn density_hatch_with_uniform_density_uses_the_interpolated_spacing() {
+    let bounds = card();
+    let (min_spacing, max_spacing) = (1.0_f64, 4.0);
+    let angle = 20.0_f64;
+    for density in [0.0_f64, 0.25, 0.5, 1.0] {
+        let segs = segments(&density_hatch(
+            min_spacing,
+            max_spacing,
+            angle,
+            &bounds,
+            &|_, _| density,
+        ));
+        assert!(segs.len() >= 3, "density={density} で線が 3 本未満");
+        let want = (max_spacing - min_spacing).mul_add(-density, max_spacing);
+        let mut offsets: Vec<f64> = segs.iter().map(|&s| normal_offset(s, angle)).collect();
+        offsets.sort_by(f64::total_cmp);
+        for pair in offsets.windows(2) {
+            let gap = pair[1] - pair[0];
+            assert!(
+                (gap - want).abs() < 1e-9,
+                "density={density}: 間隔 {gap} が max−(max−min)·density = {want} と違う"
+            );
+        }
+    }
+}
+
+/// oracle: どんな密度関数でも、隣接線の間隔は `[min_spacing, max_spacing]` を出ない
+/// (密度は `clamp(0,1)` されるので内挿の外へは行けない)
+#[test]
+fn density_hatch_spacing_stays_within_its_bounds() {
+    let bounds = card();
+    let (min_spacing, max_spacing) = (1.0_f64, 5.0);
+    let angle = 0.0_f64;
+    // clamp の外まで振る密度関数 (−3 〜 +3)
+    let segs = segments(&density_hatch(
+        min_spacing,
+        max_spacing,
+        angle,
+        &bounds,
+        &|x, y| 3.0 * ((x * 0.3).sin() + (y * 0.2).cos()),
+    ));
+    let mut offsets: Vec<f64> = segs.iter().map(|&s| normal_offset(s, angle)).collect();
+    offsets.sort_by(f64::total_cmp);
+    for pair in offsets.windows(2) {
+        let gap = pair[1] - pair[0];
+        assert!(
+            gap >= min_spacing - 1e-9 && gap <= max_spacing + 1e-9,
+            "間隔 {gap} が [{min_spacing}, {max_spacing}] の外に出た"
+        );
+    }
+}
+
+/// oracle: 密度が高い側ほど線が密になる (密度→間隔が単調減少なので)
+#[test]
+fn density_hatch_is_denser_where_the_density_is_higher() {
+    let bounds = Bounds::new(0.0, 0.0, 40.0, 40.0);
+    let mid = bounds.y + bounds.h * 0.5;
+    // 下半分だけ最密、上半分は最疎 (angle=0 なので法線は y 方向)
+    let segs = segments(&density_hatch(1.0, 5.0, 0.0, &bounds, &|_, y| {
+        if y < mid {
+            1.0
+        } else {
+            0.0
+        }
+    }));
+    let lower = segs.iter().filter(|s| s.1 < mid).count();
+    let upper = segs.iter().filter(|s| s.1 >= mid).count();
+    assert!(
+        lower > upper,
+        "最密側の線数 {lower} が最疎側 {upper} を上回らない"
+    );
+}
+
 /// oracle: crosshatch は直交する 2 族の合併
 #[test]
 fn crosshatch_is_two_orthogonal_families() {
@@ -812,6 +888,88 @@ fn atkinson_loses_tone_because_it_diffuses_only_three_quarters() {
     assert!(
         (got - (1.0 - brightness)).abs() > 0.05,
         "Atkinson が階調を保存してしまった (密度 {got}) — 6/8 拡散の設計と合わない"
+    );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  turing (Gray-Scott 反応拡散)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 定常パターンが出る標準的な Gray-Scott parameter
+const GS_FEED: f64 = 0.055;
+const GS_KILL: f64 = 0.062;
+
+fn turing_dots(resolution: u32, iterations: u32, threshold: f64) -> usize {
+    let bounds = Bounds::new(0.0, 0.0, 50.0, 50.0);
+    dots(&turing(
+        GS_FEED, GS_KILL, resolution, iterations, &bounds, threshold,
+    ))
+    .len()
+}
+
+/// oracle: 閾値を上げるとドット集合は単調に縮む (同じ場に対する上側集合なので
+/// 包含関係が保たれる) — 場の計算が閾値に依存していないことの確認でもある
+#[test]
+fn turing_dot_count_is_monotone_in_threshold() {
+    let mut previous = usize::MAX;
+    for threshold in [0.05_f64, 0.1, 0.2, 0.3, 0.5] {
+        let count = turing_dots(48, 200, threshold);
+        assert!(
+            count <= previous,
+            "threshold={threshold} でドット数が {previous} → {count} と増えた \
+             (上側集合は閾値に対して単調でなければならない)"
+        );
+        previous = count;
+    }
+}
+
+/// oracle: 反応拡散は決定論的な差分方程式なので、同じ入力は同じ出力になる
+#[test]
+fn turing_is_deterministic() {
+    let bounds = Bounds::new(0.0, 0.0, 50.0, 50.0);
+    let run = || dots(&turing(GS_FEED, GS_KILL, 32, 120, &bounds, 0.15));
+    assert_eq!(run(), run(), "同じ入力で出力が変わった");
+}
+
+/// oracle: `iterations = 0` なら場は初期条件のまま — v はシード領域で 0.25、
+/// それ以外は 0 なので、閾値 0.25 を挟んでドットの有無が切り替わる
+#[test]
+fn turing_without_iterations_only_shows_the_seed_amplitude() {
+    assert!(
+        turing_dots(40, 0, 0.2) > 0,
+        "閾値 0.2 (シード 0.25 未満) でドットが 1 つも出ない"
+    );
+    assert_eq!(
+        turing_dots(40, 0, 0.3),
+        0,
+        "閾値 0.3 (シード 0.25 超) でドットが出た"
+    );
+}
+
+/// oracle: Gray-Scott の v は 1 を超えない (u,v は割合なので有界)
+/// 閾値を 1 より上に置けば、どれだけ回してもドットは出ない
+#[test]
+fn turing_concentration_stays_below_one() {
+    assert_eq!(
+        turing_dots(32, 300, 1.0001),
+        0,
+        "v が 1 を超えたセルがある (Gray-Scott の有界性に反する)"
+    );
+}
+
+/// oracle: 格子が 4 未満ではラプラシアンの近傍が自分自身に折り返すので計算しない
+#[test]
+fn turing_below_minimum_resolution_is_empty() {
+    for resolution in 0..4_u32 {
+        assert_eq!(
+            turing_dots(resolution, 10, 0.1),
+            0,
+            "resolution={resolution} で出力が出た"
+        );
+    }
+    assert!(
+        turing_dots(4, 10, 0.05) > 0,
+        "resolution=4 は計算される下限のはず"
     );
 }
 
