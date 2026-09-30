@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `laser_pattern::gcd_f64` が最後の商を落としていた (2026-09-30)
+
+Euclid 互除法の更新順が誤っており、剰余が eps 未満になって `break` する時点で
+除数の繰り上げを通らないため、1 手前の値を返していた。測った 8 ケースすべてで
+誤りで、`gcd(10,5)` が 10、`gcd(10,7)` が 3、`gcd(100,35)` が 30 になる。
+
+影響は `guilloche` (ハイポトロコイド) の描画範囲。周期 `2π·r/gcd(R,r)` が短く
+出るため曲線が全体の 16.7〜50% しか描かれず、始点に戻らないまま途中で切れて
+いた。既存 test は返る点数しか見ていなかったので green のままだった。
+
+### Added — `laser_pattern` と `alice-lol-humanoid` の閉形式 oracle (2026-09-30)
+
+どちらも数式が閉じているのに、検証が「出力が空でない」「要素が 1 個ある」と
+いった構造の確認に留まっていた。`laser_pattern` に変異を 10 種入れたところ
+**9 種が既存 30 test を全 green で通過**する (捕まるのは halftone の符号反転
+1 件だけ) 状態だったので、教科書の式と直接突き合わせる oracle を置いた。
+
+- `alice-lol/tests/analytic_laser_pattern.rs` (27 本) — ロドネア曲線の花弁数
+  (k 奇数 → k / 偶数 → 2k)、Vogel 螺旋の黄金角と面積一様性、ハイポトロコイドの
+  極半径・周期・尖点数、hatch の法線方向間隔が角度に依らず `spacing` である
+  こと、`δ=π/2` の lissajous が厳密な円であること、halftone の階調特性、
+  誤差拡散の階調保存 (格子を細かくすると誤差が収束する) と Bayer 閾値行列の配置
+- `alice-lol-humanoid/tests/analytic_humanoid.rs` (13 本) — 骨格比率の定義式、
+  相似性、左右鏡像、BVH の単軸四元数・チャネル合成順・度単位・位置チャネルの
+  名前対応
+
+変異の捕捉率は laser_pattern が 1/10 → 14/14、humanoid が 11/11。
+
+`MorphologyParams::height` の doc は「全身高」だが、頭頂は `height/2`、足首は
+`−height·leg_ratio` なので実際の全高は `height·(0.5+leg_ratio)` になる。
+宣言頭身と見た目の頭身が一致するのは `leg_ratio = 0.5` の時だけで、`chibi`
+preset は宣言 3.0 に対し実測 2.7。現状を固定する test を置いてある。
+
 ### Added — `LawReport::hard_verdict()` と `HardVerdict` (2026-09-30)
 
 `Priority::Hard` 制約の判定を 3 値 (`Proven` / `Violated` / `Undecided`) で返す
