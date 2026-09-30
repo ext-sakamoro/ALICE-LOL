@@ -92,14 +92,18 @@ fn radius(p: (f64, f64)) -> f64 {
 }
 
 /// 教科書の Euclid 互除法 (実装側の `gcd_f64` とは独立、oracle 側の参照)
-fn gcd_reference(a: f64, b: f64) -> f64 {
-    let (mut x, mut y) = (a.abs(), b.abs());
-    while y > 1e-9 {
-        let t = x % y;
-        x = y;
-        y = t;
+///
+/// 終了条件が float 比較なのは、剰余が厳密に 0 にならない入力があるため
+/// (実装側の `gcd_f64` も同じ eps で止める)
+#[allow(clippy::while_float)]
+fn gcd_reference(lhs: f64, rhs: f64) -> f64 {
+    let (mut dividend, mut divisor) = (lhs.abs(), rhs.abs());
+    while divisor > 1e-9 {
+        let remainder = dividend % divisor;
+        dividend = divisor;
+        divisor = remainder;
     }
-    x
+    dividend
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -144,11 +148,11 @@ fn lobe_count(points: &[(f64, f64)], threshold: f64) -> usize {
     (0..n).filter(|&i| hot[i] && !hot[(i + n - 1) % n]).count()
 }
 
-fn card() -> Bounds {
+const fn card() -> Bounds {
     Bounds::new(0.0, 0.0, 86.0, 54.0)
 }
 
-fn wide() -> Bounds {
+const fn wide() -> Bounds {
     Bounds::new(-200.0, -200.0, 400.0, 400.0)
 }
 
@@ -567,7 +571,7 @@ fn density_hatch_spacing_stays_within_its_bounds() {
 #[test]
 fn density_hatch_is_denser_where_the_density_is_higher() {
     let bounds = Bounds::new(0.0, 0.0, 40.0, 40.0);
-    let mid = bounds.y + bounds.h * 0.5;
+    let mid = bounds.center().1;
     // 下半分だけ最密、上半分は最疎 (angle=0 なので法線は y 方向)
     let segs = segments(&density_hatch(1.0, 5.0, 0.0, &bounds, &|_, y| {
         if y < mid {
