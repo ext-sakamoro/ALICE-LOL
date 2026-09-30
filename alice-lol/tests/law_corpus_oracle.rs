@@ -276,9 +276,12 @@ fn unresolved_rate_is_measured_and_bounded() {
     }
 
     // 決着率の下限 — 下回ったら区間が緩んだか探索深さが足りない
+    // 実測 87.7% / 92.2% / 100.0% — ⚠️ Lipschitz 包囲を入れても **1 pt も動かない**
+    // (`decided_floor` の MinThickness の項参照、内部を問う法則なので外部限定の
+    //  契約が使えない) 0.5 → 0.85 に引き上げ
     for (res, _, _, _, _, decided) in rows {
         assert!(
-            decided > 0.5,
+            decided > 0.85,
             "resolution {res} の決着率が {:.1}% しかない (未決定は不合格側なので安全だが、判定器として実用にならない)",
             decided * 100.0
         );
@@ -561,11 +564,24 @@ fn measure_row(
 /// 上がるのは歓迎)
 fn decided_floor(label: &str) -> f32 {
     match label {
-        "NonOverlap(sphere 0.5)" => 0.85,
-        "Containment(in sphere 4.0)" | "GradientBound(static+1e-3)" => 0.95,
-        // 実測 87.7% (res 4) / 92.2% (res 8) と 85.7% / 86.1%
-        "MinThickness(0.2)" | "Contact(0.0..0.5)" => 0.80,
+        // ⚠️ 2026-09-30 に Lipschitz 包囲 (第 2 の証明経路) を入れて上がった
+        // 「経路なし」は破壊試験 (`lipschitz_enclosure` を `None` 固定) の実測
+        // - `NonOverlap`  95.5% (res 4) / 95.9% (res 8) ← 経路なしは res 8 が 91.4%
+        // - `Containment` / `GradientBound` は元から未決定 0 件 (100.0%)
+        "NonOverlap(sphere 0.5)" | "Containment(in sphere 4.0)" | "GradientBound(static+1e-3)" => {
+            0.95
+        }
+        // 実測 87.7% / 92.2% — ⚠️ **Lipschitz 経路の恩恵が完全にゼロ** (旧と同値)
+        // 最小肉厚は**実体の内部**を問うので、箱の中心が内部になり
+        // `eval_lipschitz` の外部限定 (`f ≥ 0`) 契約が使えない
+        // ⇒ ここを減らすには内部でも使える別の上界が要る
+        "MinThickness(0.2)" => 0.80,
+        // 実測 88.1% / 88.9% ← 経路なしでは 85.7% / 86.1%
+        "Contact(0.0..0.5)" => 0.88,
         // 実測 17.4% (res 4) / 25.4% (res 8) — 未決定の 7 割強がここに集中する
+        // ⚠️ **Lipschitz 経路で 1 件も動かなかった唯一の constraint** (値が完全同一)
+        // 到達性は「連結性」を問うので、箱ごとの符号を締めても決着しない
+        // = 未決定を減らすには**別の法則**が要る (探索深さでも包囲の精度でもない)
         "Reachable(inside..inside)" => 0.15,
         other => panic!("未知の constraint ラベル {other} — 下限を決めてから足す"),
     }
@@ -741,13 +757,23 @@ fn undecided_set_is_not_probe_dominated() {
 
         // 2026-09-30 実測を pin — **核が増えたら退行** (probe 依存分は probe の
         // 選び方で動くので pin しない、出力で見る)
-        //   NonOverlap 核 9 件 (r=0.37/0.61 で 10、r=0.50 で 21)
-        //   Contact    核 11 件 (r=0.37 で 20、r=0.50 で 34、r=0.61 で 12)
+        //   NonOverlap 核 0 件 (未決定 r=0.37 で 1、r=0.50 で 10、r=0.61 で 0)
+        //   Contact    核 1 件 (未決定 r=0.37 で 14、r=0.50 で 27、r=0.61 で 1)
         // ⚠️ r=0.50 だけが突出するのは corpus 既定 `box3d(0.5,0.5,0.5)` の
         //    内接球半径と一致して接する配置になるため
+        //
+        // ## 対照実験 (2026-09-30、`lipschitz_enclosure` を `None` 固定にして実測)
+        //
+        // Lipschitz 包囲 (第 2 の証明経路) を殺すと核は **9 / 11 件に戻る**:
+        //   NonOverlap 核 9 (heart / cut_sphere / link / capped_torus / death_star /
+        //                    arc_shape / segment_2d / triangle / bezier)
+        //   Contact    核 11 (上記 9 + under_desk_mount + fixture:smooth_union_scale_rotate)
+        // ⇒ 核が動いたのは corpus や probe の変化でなく **本経路の効果**
+        // 残った `fixture:smooth_union_scale_rotate` は Lipschitz でも決着しない
+        // = 別の法則が要る側 (`smooth_union` は場が距離でないので L が緩む)
         let (core_max, decided_floor) = match kind {
-            "NonOverlap" => (9usize, 0.88f32),
-            "Contact" => (11usize, 0.83f32),
+            "NonOverlap" => (0usize, 0.95f32),
+            "Contact" => (1usize, 0.88f32),
             other => panic!("未知の constraint {other} — pin を決めてから足す"),
         };
         assert!(
@@ -763,5 +789,206 @@ fn undecided_set_is_not_probe_dominated() {
                 decided_floor * 100.0
             );
         }
+    }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 第 2 の証明経路 (Lipschitz 包囲) — doctrine §5 の中核前提の実証
+//
+// doctrine §5 は「法則を足せば undecided は減る」と主張していたが、**足して
+// proven に動いた実例は 2026-09-30 まで 0 件**だった 本 section はその 1 件目
+//
+// ## 未決定の正体 (2026-09-30 実測、3 段の診断で確定)
+//
+// 真の核 5 件 (`heart` / `cut_sphere` / `link` / `capped_torus` / `death_star`) の
+// 未決定領域を総当たりで測ると、**区間 `[-5.5, +6.53]` に対し真の範囲は
+// `[+1.58, +1.62]`** だった 区間は健全 (真値を含む) だが依存性問題で
+// **セル幅の約 300 倍**に膨らんでおり、⚠️ **解像度を上げても幅は縮まらない**
+// (= 未決定が「解像度に無反応」だった正体)
+//
+// 一方 `|f(centre)| = 1.60` / `L = 1.0` / `L·ρ = 0.027` なので、Lipschitz 包囲
+// `[f(c) − L·ρ, f(c) + L·ρ]` は **59 倍の余裕で符号を確定させる**
+// ⇒ 未決定は「決定不能」ではなく **「区間が緩い」** だった
+//
+// ## ⚠️ 効く範囲は **外部 (`f ≥ 0`) を問う法則だけ**
+//
+// `eval_lipschitz` の契約は外部限定 (`lipschitz_enclosure` の doc 参照) なので、
+// **箱の中心が実体の内部に来る判定では 1 件も動かない**
+//
+// | constraint | 何を問うか | 決着率 (res 4 / 8) | 経路なし | 効果 |
+// |---|---|---|---|---|
+// | `NonOverlap` | 箱が**外部**にあるか | 95.5% / 95.9% | - / 91.4% | **真の核 9 → 0** |
+// | `Contact`    | gap が**外部**で範囲内か | 88.1% / 88.9% | 85.7% / 86.1% | **真の核 11 → 1** |
+// | `MinThickness` | **内部**の肉厚 | 87.7% / 92.2% | 87.7% / 92.2% | ⚠️ **±0** |
+// | `Reachable`  | **連結性** | 17.4% / 25.4% | 17.4% / 25.4% | ⚠️ **±0** |
+// | `Containment` / `GradientBound` | - | 100% | 100% | 元から未決定 0 |
+//
+// ⚠️ **`MinThickness` と `Reachable` は 1 pt も動かない** 前者は内部を問うので
+// 外部限定の契約が使えず、後者は連結性なので箱ごとの符号を締めても決着しない
+// ⇒ **残りの未決定を減らすには「内部でも使える上界」と「連結性の法則」が要る**
+// (どちらも解像度でも包囲の精度でも埋まらない、法則側の欠落)
+//
+// 対照実験は `undecided_set_is_not_probe_dominated` 内の § を参照
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 真の核のうち「薄い / 穴あき / 減算」5 件
+///
+/// 低次元 4 件 (`arc_shape` / `segment_2d` / `triangle` / `bezier`) は内部が
+/// 測度ゼロなので「問わないのが正解」側、核から外して扱う
+const TRUE_CORE_NONDEGENERATE: [&str; 5] =
+    ["heart", "cut_sphere", "link", "capped_torus", "death_star"];
+
+/// **第 2 の証明経路が真の核を決着させることの実証** (doctrine §5 の 1 件目)
+///
+/// 対照実験 (`alice-lol/src/law.rs` の `lipschitz_enclosure` を `None` 固定) では
+/// この 5 件は **3 つの probe 半径すべてで未決定** (= 決着 0/3) だった
+/// 経路を入れると **3 つすべてで `Proven`** (2026-09-30 実測、下の表が出力される)
+/// ⇒ undecided → proven が文字どおり起きた 1 件目
+#[test]
+fn the_lipschitz_path_decides_the_former_true_core() {
+    const RADII: [f32; 3] = [0.37, 0.5, 0.61];
+    const RES: usize = 8;
+    let config = CheckConfig {
+        aabb_min: Vec3::splat(-AABB),
+        aabb_max: Vec3::splat(AABB),
+        resolution: RES,
+    };
+    let corpus = nodes();
+
+    let mut seen = 0usize;
+    for target in TRUE_CORE_NONDEGENERATE {
+        let Some((_, node)) = corpus.iter().find(|(n, _)| n == target) else {
+            panic!("corpus に {target} が居ない — 対象の選び方が古い");
+        };
+        seen += 1;
+        let mut decided = 0usize;
+        let mut row = Vec::new();
+        for r in RADII {
+            let probe = parse_lol(&format!("sphere({r})")).expect("probe parses");
+            let laws = vec![Law::hard(
+                "no_overlap",
+                Constraint::NonOverlap {
+                    a: node.clone(),
+                    b: probe,
+                },
+            )
+            .expect("provable constraint")];
+            let v = check_laws(&laws, &config).hard_verdict();
+            if v == HardVerdict::Proven {
+                decided += 1;
+            }
+            row.push(format!("r={r:.2}:{v:?}"));
+        }
+        eprintln!("  {target:<14} {}", row.join("  "));
+        assert_eq!(
+            decided,
+            RADII.len(),
+            "{target}: {} (Lipschitz 経路が効いていれば 3 probe すべて Proven、\
+             経路を殺すと 3 つすべて Undecided)",
+            row.join(" ")
+        );
+    }
+    assert_eq!(seen, TRUE_CORE_NONDEGENERATE.len(), "対象の取り落とし");
+}
+
+/// ⚠️ **区間包囲が総当たりの真値を含むか** — 健全性そのものの検査
+///
+/// `eval_interval` は健全 (真値を包囲する) ことが前提で、`NonOverlap` の決着は
+/// `ia.lo >= 0.0` を見る ⇒ **下界が真の最小値より高いと偽の `proven` になる**
+///
+/// 本 test は corpus 全 construct × 24 箱 × 5³ 点で包囲の破れを探す
+/// 検出経路は Lipschitz 包囲との共通部分が空になったこと (健全な包囲同士の
+/// 交差は空にならないので、**空になること自体が不健全の機械的な証拠**)
+///
+/// # 既知の破れ (ALICE-SDF 側、未修正)
+///
+/// `rounded_cone` の 1 件のみ 外れ量 0.35 `interval.rs:585` が外接球半径に
+/// `(2h).hypot(max(r1,r2))` を渡しているが、丸め錐のキャップは球なので真の
+/// 外接半径は `h + max(r1,r2)` `hypot(2h,r) < h+r ⟺ 3h < 2r` なので
+/// **`max(r1,r2) > 1.5·half_height` の丸め錐で外接球が実体より小さくなる**
+/// (corpus は `rounded_cone(3.0, 2.0, 1.0)` = `r=3.0` / `h=0.5` で該当)
+///
+/// 判定器側は包囲の矛盾を検出した cell を **未決定**にするので、この破れが
+/// `proven` に化けることはない (`law.rs` の `Refined::Contradiction`)
+#[test]
+fn interval_enclosure_contains_the_brute_force_truth() {
+    use alice_sdf::interval::{eval_interval, Vec3Interval};
+
+    /// ALICE-SDF 側の未修正分 ⚠️ **修正されたらこの test が red になる**
+    /// (「まだ破れている」ことも pin しているので、直したらここから削る)
+    const KNOWN_UNSOUND: [&str; 1] = ["rounded_cone"];
+    /// 包囲の破れとみなす下限 (f32 の丸め分は見ない)
+    const SLACK: f32 = 1.0e-3;
+    /// 標本の箱の幅 = 判定器の八分木深さ 4 での cell 幅 (4 / 2^4)
+    const W: f32 = 0.25;
+
+    let mut seed = 0x2545_F491_4F6C_DD1D_u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        #[allow(clippy::cast_precision_loss)]
+        let u = (seed >> 11) as f32 / (1u64 << 53) as f32;
+        u
+    };
+
+    // 箱が検査 AABB に収まる範囲で中心を撒く
+    let span = 2.0f32.mul_add(AABB, -W);
+    let mut offenders: Vec<(String, f32)> = Vec::new();
+    let (mut checked, mut boxes) = (0usize, 0usize);
+    for (name, node) in nodes() {
+        checked += 1;
+        let mut worst = 0.0_f32;
+        for _ in 0..24 {
+            let base = Vec3::new(
+                span.mul_add(next(), -AABB),
+                span.mul_add(next(), -AABB),
+                span.mul_add(next(), -AABB),
+            );
+            let bx = Vec3Interval::from_bounds(base, base + Vec3::splat(W));
+            let iv = eval_interval(&node, bx);
+            if !iv.lo.is_finite() || !iv.hi.is_finite() {
+                continue; // 包囲を主張していない形は対象外
+            }
+            boxes += 1;
+            for i in 0..5 {
+                for j in 0..5 {
+                    for k in 0..5 {
+                        let t = |q: usize| (q as f32) / 4.0 * W;
+                        let v = eval(&node, base + Vec3::new(t(i), t(j), t(k)));
+                        if v.is_finite() {
+                            worst = worst.max(iv.lo - v).max(v - iv.hi);
+                        }
+                    }
+                }
+            }
+        }
+        if worst > SLACK {
+            offenders.push((name, worst));
+        }
+    }
+    offenders.sort_by(|a, b| b.1.total_cmp(&a.1));
+
+    // 空振り検査 — 箱が 1 つも finite でなければ何も測っていない
+    assert!(checked > 200, "corpus が小さすぎる: {checked} construct");
+    assert!(boxes > 2_000, "finite な包囲が {boxes} 箱しかない (空振り)");
+
+    for (name, w) in &offenders {
+        eprintln!("  包囲の破れ {name}: {w:.5}");
+    }
+    let unexpected: Vec<&(String, f32)> = offenders
+        .iter()
+        .filter(|(n, _)| !KNOWN_UNSOUND.contains(&n.as_str()))
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "既知でない construct で区間包囲が真値を外した (偽の proven を生む向き): {unexpected:?}"
+    );
+    for known in KNOWN_UNSOUND {
+        assert!(
+            offenders.iter().any(|(n, _)| n == known),
+            "{known} の包囲の破れが再現しない — ALICE-SDF 側が修正された可能性 \
+             KNOWN_UNSOUND から削って決着率の pin を締め直す"
+        );
     }
 }

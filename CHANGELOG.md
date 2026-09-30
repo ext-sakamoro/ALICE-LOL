@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 法則検証器に第 2 の証明経路 (Lipschitz 包囲) を入れた (2026-09-30)
+
+距離依存の法則は区間演算だけで「箱に表面なし」を証明していたが、区間は健全でも
+依存性問題で膨らむ。真の核 5 件 (`heart` / `cut_sphere` / `link` / `capped_torus` /
+`death_star`) の未決定領域を総当たりで測ると、区間 `[-5.5, +6.53]` に対し真の範囲は
+`[+1.58, +1.62]` で、セル幅の約 300 倍に広がっていた。解像度を上げても幅は縮まらない。
+
+そこで距離場が `L`-Lipschitz であることを使い、箱の中心 `c` と半対角 `ρ` から
+`[f(c) − L·ρ, f(c) + L·ρ]` を第 2 の包囲として作り、区間との共通部分で締めるように
+した。上記 5 件では `|f(c)| = 1.60` / `L = 1.0` / `L·ρ = 0.027` なので 59 倍の余裕で
+符号が確定する。
+
+判定が区間に依存する 3 箇所 (`probe_pair` / `gap_exceeds` / `probe_ball`) すべてに
+配線した。`probe_pair` だけに入れた時点では `Contact` の判定が 1 件も動かなかった
+(下界は `gap_exceeds` の別ループが出しているため)。
+
+`eval_lipschitz` の契約は外部 (`f ≥ 0`) 限定なので、箱の中心が実体の内部にある時は
+包囲を主張しない。この gate を省いた実装は `tests/analytic_law.rs` の
+`undecidable_node_is_reported_not_passed` が捕らえた。
+
+2 つの包囲の共通部分が空になった箱は、どちらも信用できないので未決定として扱う
+(証明も反証もしない)。
+
+効果 (corpus 244 scene、決着率は resolution 4 / 8):
+
+| constraint | 何を問うか | 変更後 | 変更前 |
+|---|---|---|---|
+| `NonOverlap` | 箱が外部にあるか | 95.5% / 95.9% | - / 91.4% |
+| `Contact` | gap が範囲内か | 88.1% / 88.9% | 85.7% / 86.1% |
+| `MinThickness` | 内部の肉厚 | 87.7% / 92.2% | 87.7% / 92.2% |
+| `Reachable` | 連結性 | 17.4% / 25.4% | 17.4% / 25.4% |
+
+probe 3 半径すべてで未決定に残る構造 (真の核) は `NonOverlap` が 9 件から 0 件、
+`Contact` が 11 件から 1 件になった。`MinThickness` と `Reachable` は内部と連結性を
+問うため、外部限定の契約では減らない。
+
+### Added — 区間包囲の健全性を corpus 全件で検査する oracle (2026-09-30)
+
+`tests/law_corpus_oracle.rs::interval_enclosure_contains_the_brute_force_truth` を
+追加した。corpus 全 construct について、箱ごとの区間包囲が総当たりの点評価を含むか
+を突き合わせる。`NonOverlap` の決着は区間の下界を見るので、下界が真の最小値より
+高いと誤った合格になる。
+
+`alice-sdf` 側で `rounded_cone` の 1 件が外れる (外れ量 0.35)。外接球半径に
+`(2h).hypot(max(r1,r2))` を渡しているが、丸め錐のキャップは球なので真の外接半径は
+`h + max(r1,r2)` で、`max(r1,r2) > 1.5·half_height` のとき外接球が実体より小さくなる。
+判定器は包囲の矛盾を検出した箱を未決定にするため、この差が合格に化けることはない。
+
 ### Fixed — `laser_pattern::gcd_f64` が最後の商を落としていた (2026-09-30)
 
 Euclid 互除法の更新順が誤っており、剰余が eps 未満になって `break` する時点で

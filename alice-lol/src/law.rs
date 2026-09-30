@@ -30,7 +30,7 @@
 //! 深さ上限 ([`BALL_PROBE_DEPTH`]) で未決定の葉が残れば **unresolved**
 //! 違反の検出は健全 (偽陽性なし)、合格は標本点ごとの証明 (格子解像度に依存)
 
-use alice_sdf::interval::{Interval, Vec3Interval};
+use alice_sdf::interval::{eval_lipschitz, Interval, Vec3Interval};
 use alice_sdf::SdfNode;
 use glam::Vec3;
 
@@ -867,6 +867,8 @@ fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
 
     let mut best: Option<f32> = None;
     let mut undecided: Option<Vec3Interval> = None;
+    // Lipschitz 定数は node ごとに定まるので八分木を降りる前に 1 度だけ求める
+    let l = eval_lipschitz(node);
     // (箱, 深さ) の明示 stack — centre に近い順に処理するため子は遠い順に push
     let mut stack: Vec<(Vec3Interval, u32)> = vec![(cube(centre, radius), 0)];
 
@@ -880,7 +882,14 @@ fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
             continue; // これより近い交点は出ない
         }
 
-        match interval_sign(sdf_interval(node, bx)) {
+        // 区間で符号が決まらない箱は Lipschitz 包囲で締め直してもう一度見る
+        // (第 2 の証明経路、[`refine`]) ⚠️ 包囲が矛盾した箱では符号を主張しない
+        let iv = sdf_interval(node, bx);
+        let sign = interval_sign(iv).or_else(|| match refine(node, bx, iv, l) {
+            Refined::Enclosure(tight) => interval_sign(tight),
+            Refined::Contradiction => None,
+        });
+        match sign {
             // 一様に同符号: 表面なし
             Some(sign) if sign == outside => {}
             // 一様に反対符号: 箱の最近点が反対符号 → 交点は centre–near 線分上
@@ -1038,6 +1047,108 @@ enum PairProbe {
     Undecided { region: Vec3Interval },
 }
 
+/// **Lipschitz 包囲** — 区間演算と並列の第 2 の証明経路 (2026-09-30、doctrine §5)
+///
+/// 真の距離場は `L`-Lipschitz なので、箱の中心 `c` とその半対角 `ρ` に対して
+/// `f` は `[f(c) − L·ρ, f(c) + L·ρ]` に収まる これは区間演算と**独立に健全な
+/// 包囲**なので、両者の共通部分を取ればより締まる
+///
+/// # なぜ必要か (実測、2026-09-30)
+///
+/// ⚠️ 区間演算は**健全だが依存性問題でセル幅の 300 倍に膨らむ** 真の核 5 件
+/// (`heart` / `cut_sphere` / `link` / `capped_torus` / `death_star`) では
+/// **区間 `[-5.5, +6.53]` に対し真の範囲が `[+1.58, +1.62]`** で、
+/// 解像度をいくら上げても区間幅は縮まらない (= 未決定が「解像度に無反応」の正体)
+///
+/// 一方 Lipschitz 側は `|f(c)| = 1.60` / `L = 1.0` / `L·ρ = 0.027` で
+/// **59 倍の余裕で符号が確定する** ⇒ **「決定不能」ではなく「区間が緩い」** だった
+///
+/// # 健全性の前提 — ⚠️ **外部 (`f ≥ 0`) 限定**
+///
+/// [`alice_sdf::interval::eval_lipschitz`] の契約は
+/// **`f(p) ≥ 0` または `f(q) ≥ 0` である対に限って** `|f(p) − f(q)| ≤ L·|p − q|`
+/// (場は実体の**内部で不連続でもよい** — IQ の楕円体は中心で跳ぶ)
+///
+/// ⇒ **箱の中心の場が `f(c) ≥ 0` の時だけ包囲を主張できる** 中心を対の片端に
+/// 取れば契約が満たされるので、箱の任意の点 `q` に対して
+/// `|f(q) − f(c)| ≤ L·|q − c| ≤ L·ρ` が言える
+/// ⚠️ **`f(c) < 0` では契約が何も言わない** (内部同士の対は無制約) ので `None`
+///
+/// この gate を省くと **実体の深い内部で偽の包囲**を作る 実測 (2026-09-30):
+/// `tests/analytic_law.rs::undecidable_node_is_reported_not_passed` が
+/// `InfiniteCone` の内部点 `(0, −10, 0)` (区間は `Interval::EVERYTHING` = 包含を
+/// 諦める node) を**決着させてしまい red になった** = oracle が gate 漏れを捉えた
+///
+/// `L` が非有限 (上界を主張できない形) の時も `None` を返して使わない
+///
+/// 誤った `proven` は総当たり反証器
+/// (`tests/law_corpus_oracle.rs::judge_never_proves_a_pass_the_brute_force_refutes`)
+/// が独立に検出する前提で運用する 加えて [`refine_with_lipschitz`] が
+/// **2 つの包囲の矛盾**を機械的に捕らえる (下記)
+fn lipschitz_enclosure(bx: Vec3Interval, f_centre: f32, l: f32) -> Option<Interval> {
+    // ⚠️ 外部限定の契約 — 内部 (`f(c) < 0`) では何も主張できない
+    if !l.is_finite() || l <= 0.0 || !f_centre.is_finite() || f_centre < 0.0 {
+        return None;
+    }
+    // 半対角 ρ
+    let (dx, dy, dz) = (bx.x.hi - bx.x.lo, bx.y.hi - bx.y.lo, bx.z.hi - bx.z.lo);
+    let rho = 0.5 * dx.mul_add(dx, dy.mul_add(dy, dz * dz)).sqrt();
+    if !rho.is_finite() {
+        return None;
+    }
+    let slack = l * rho;
+    Some(Interval::new(f_centre - slack, f_centre + slack))
+}
+
+/// [`refine_with_lipschitz`] の結果
+#[derive(Debug, Clone, Copy)]
+enum Refined {
+    /// 使える範囲で最も締まった包囲 (Lipschitz を主張できない形では区間そのまま)
+    Enclosure(Interval),
+    /// ⚠️ **2 つの包囲が矛盾した** = どちらかが健全でない この cell は何も証明しない
+    Contradiction,
+}
+
+/// 区間包囲を Lipschitz 包囲との共通部分で締める
+///
+/// どちらも同じ `f(box)` の包囲なので、健全なら共通部分も健全で、より締まる
+///
+/// # ⚠️ 共通部分が空になった時
+///
+/// 健全な包囲同士は **同じ `f(box)` を両方が含む**ので交差は空にならない
+/// 空になったなら **どちらかが健全でない**ので、[`Refined::Contradiction`] を返して
+/// 呼び手にその cell を未決定として扱わせる (証明も反証もしない)
+/// ⚠️ **どちらを信じても根拠が無い**ので、片方を採って続けてはいけない
+///
+/// これは決着率のための機構だが、**第 1 の経路の健全性の検査器**にもなっている
+/// 実測 (2026-09-30): corpus 237 construct のうち `rounded_cone` の 1 件で空交差が出て、
+/// 総当たりの真値と突き合わせた結果 **`alice_sdf::interval::eval_interval` 側が
+/// 真の最小値を包囲から外していた** (`ia_bsphere` に渡す外接半径が球キャップ分
+/// 足りない) `NonOverlap` の決着条件は `ia.lo >= 0.0` を見るので、これは
+/// **偽の `proven` を生む向き**の誤り 詳細は ALICE-SDF 側の Backlog
+fn refine_with_lipschitz(bx: Vec3Interval, iv: Interval, f_centre: f32, l: f32) -> Refined {
+    let Some(e) = lipschitz_enclosure(bx, f_centre, l) else {
+        return Refined::Enclosure(iv);
+    };
+    let (lo, hi) = (iv.lo.max(e.lo), iv.hi.min(e.hi));
+    if lo > hi {
+        return Refined::Contradiction;
+    }
+    Refined::Enclosure(Interval::new(lo, hi))
+}
+
+/// 既に求めた区間 `iv` を Lipschitz 包囲で締め直す ([`refine_with_lipschitz`] の
+/// 中心評価込みの版)
+///
+/// ⚠️ **区間だけで決着した箱では呼ばない** 中心の点評価 1 回が増えるので、
+/// 「区間で決まらなかった箱」に限って払う (八分木の葉だけが対象になる)
+fn refine(node: &SdfNode, bx: Vec3Interval, iv: Interval, l: f32) -> Refined {
+    if !l.is_finite() || l <= 0.0 {
+        return Refined::Enclosure(iv);
+    }
+    refine_with_lipschitz(bx, iv, sdf_eval(node, box_center(bx)), l)
+}
+
 fn probe_pair(
     a: &SdfNode,
     b: &SdfNode,
@@ -1049,6 +1160,8 @@ fn probe_pair(
     let mut worst: Option<(f32, Vec3)> = None;
     let mut undecided: Option<Vec3Interval> = None;
     let mut stack: Vec<(Vec3Interval, u32)> = vec![(cell, 0)];
+    // Lipschitz 定数は node ごとに定まるので八分木を降りる前に 1 度だけ求める
+    let (l_a, l_b) = (eval_lipschitz(a), eval_lipschitz(b));
 
     while let Some((bx, depth)) = stack.pop() {
         let ia = sdf_interval(a, bx);
@@ -1063,6 +1176,23 @@ fn probe_pair(
             if worst.is_none_or(|(w, _)| r < w) {
                 worst = Some((r, c));
             }
+        }
+        // ⚠️ 第 2 の証明経路 — 区間が緩くて決まらない箱を Lipschitz 包囲で締める
+        // (区間演算と独立に健全なので共通部分を取れる、[`refine_with_lipschitz`])
+        if let (Refined::Enclosure(ta), Refined::Enclosure(tb)) = (
+            refine_with_lipschitz(bx, ia, fa, l_a),
+            refine_with_lipschitz(bx, ib, fb, l_b),
+        ) {
+            if decided_ok(ta, tb) {
+                continue;
+            }
+        } else {
+            // ⚠️ 包囲が矛盾した cell は掘らずに未決定にする
+            // (どちらの包囲も信用できないので証明も反証もしない)
+            if undecided.is_none() {
+                undecided = Some(bx);
+            }
+            continue;
         }
         if depth >= BALL_PROBE_DEPTH {
             if undecided.is_none() {
@@ -1304,11 +1434,23 @@ fn check_stress(
 /// 正なら、そのセルにそんな p は無い 全セルで示せれば gap > m
 fn gap_exceeds(a: &SdfNode, b: &SdfNode, m: f32, config: &CheckConfig) -> bool {
     let half = m * 0.5;
+    // Lipschitz 定数は node ごとに定まるので走査の前に 1 度だけ求める
+    let (l_a, l_b) = (eval_lipschitz(a), eval_lipschitz(b));
+    // 「膨張した箱が完全に外側」を証明できるか 区間で足りなければ Lipschitz 包囲で
+    // 締め直して再判定する (第 2 の証明経路、[`refine`])
+    // ⚠️ 刈る = その箱に中点が無いことを**証明する**ので、包囲が矛盾した箱は刈らない
+    let provably_outside = |node: &SdfNode, e: Vec3Interval, l: f32| {
+        let iv = sdf_interval(node, e);
+        if iv.lo > 0.0 {
+            return true;
+        }
+        matches!(refine(node, e, iv, l), Refined::Enclosure(tight) if tight.lo > 0.0)
+    };
     for (_, cell) in GridSampler::new(config) {
         let mut stack: Vec<(Vec3Interval, u32)> = vec![(cell, 0)];
         while let Some((bx, depth)) = stack.pop() {
             let e = box_expand(bx, half);
-            if sdf_interval(a, e).lo > 0.0 || sdf_interval(b, e).lo > 0.0 {
+            if provably_outside(a, e, l_a) || provably_outside(b, e, l_b) {
                 continue;
             }
             if depth >= BALL_PROBE_DEPTH {
