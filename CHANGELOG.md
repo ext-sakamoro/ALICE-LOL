@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 包囲が矛盾した箱の扱いを 3 つの呼び出し元すべてで契約どおりにした (2026-10-01)
+
+`probe_ball` / `probe_pair` / `gap_exceeds` の doc はいずれも「包囲が矛盾した箱では
+主張しない」と書いていたが、実装は **区間だけで決まった箱では矛盾を見ていなかった**。
+矛盾は 2 つの包囲のどちらかが健全でないことなので、区間側の主張も信用できない。
+実測で `alice_sdf` の `eval_interval` が真の最小値を包囲から外す case (`rounded_cone`)
+があり、それは偽の `proven` を生む向きの誤りなので、刈らずに未決定へ倒す。
+
+- `gap_exceeds`: `iv.lo > 0.0` の早期 return を外し、`refine` を単一の判断点にした
+- `probe_ball`: `interval_sign` が先に決まった箱でも `refine` を通す。締めた区間を
+  優先しつつ区間側へ戻せる形にして、`Interval::new` の外側丸めで `iv.lo` が厳密に 0 の
+  箱の符号が `None` に倒れる退行を避けた
+- `probe_pair`: 矛盾判定を `decided_ok` の手前へ移した。`witness` の評価位置は変えて
+  いないので、報告される残差は従来と同じ
+
+決着力の退行は無い (`tests/law_corpus_oracle.rs` 9 本が green、真の核 5 件 × probe
+3 半径はすべて `Proven` のまま)。この不整合は mutants の生存変異
+`replace > with == in gap_exceeds` が指していた。
+
 ### Fixed — Lipschitz 包囲の算術を mutants の測定集合内で固定した (2026-10-01)
 
 第 2 の証明経路を入れた commit は、その経路を叩く test を `tests/law_corpus_oracle.rs`
