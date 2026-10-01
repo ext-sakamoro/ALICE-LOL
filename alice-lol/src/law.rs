@@ -884,11 +884,21 @@ fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
 
         // 区間で符号が決まらない箱は Lipschitz 包囲で締め直してもう一度見る
         // (第 2 の証明経路、[`refine`]) ⚠️ 包囲が矛盾した箱では符号を主張しない
+        //
+        // ⚠️ **矛盾の検査は無条件に通す** — 以前は `interval_sign(iv)` が先に
+        // 決まった箱では `refine` を呼ばず、**区間だけで決まった箱の矛盾を
+        // 見ていなかった** 矛盾は 2 包囲のどちらかが健全でないことなので、
+        // 区間側の符号主張も信用できない (詳細は [`gap_exceeds`] の同じ修正)
+        //
+        // ⚠️ 締めた区間を**優先しつつ区間側へ戻せる**形にする —
+        // `refine_with_lipschitz` は `Interval::new` の外側丸めを通すので、
+        // `iv.lo` が厳密に 0 の箱では `tight.lo` が 0 のわずか下に出て
+        // `interval_sign` が `None` に倒れることがある (決着力の退行)
         let iv = sdf_interval(node, bx);
-        let sign = interval_sign(iv).or_else(|| match refine(node, bx, iv, l) {
-            Refined::Enclosure(tight) => interval_sign(tight),
+        let sign = match refine(node, bx, iv, l) {
+            Refined::Enclosure(tight) => interval_sign(tight).or_else(|| interval_sign(iv)),
             Refined::Contradiction => None,
-        });
+        };
         match sign {
             // 一様に同符号: 表面なし
             Some(sign) if sign == outside => {}
@@ -1166,32 +1176,36 @@ fn probe_pair(
     while let Some((bx, depth)) = stack.pop() {
         let ia = sdf_interval(a, bx);
         let ib = sdf_interval(b, bx);
+        let c = box_center(bx);
+        let (fa, fb) = (sdf_eval(a, c), sdf_eval(b, c));
+        // ⚠️ **矛盾の検査を無条件に通す** — 以前は `decided_ok(ia, ib)` の早期
+        // return がここより手前にあり、**区間だけで決まった cell の矛盾を見て
+        // いなかった** 矛盾は 2 包囲のどちらかが健全でないことなので、区間側の
+        // 「問題なし」も信用できない (詳細は [`gap_exceeds`] の同じ修正)
+        //
+        // ⚠️ 包囲が矛盾した cell は掘らずに未決定にする
+        // (どちらの包囲も信用できないので証明も反証もしない)
+        let (Refined::Enclosure(ta), Refined::Enclosure(tb)) = (
+            refine_with_lipschitz(bx, ia, fa, l_a),
+            refine_with_lipschitz(bx, ib, fb, l_b),
+        ) else {
+            if undecided.is_none() {
+                undecided = Some(bx);
+            }
+            continue;
+        };
         if decided_ok(ia, ib) {
             continue;
         }
-        let c = box_center(bx);
-        let (fa, fb) = (sdf_eval(a, c), sdf_eval(b, c));
         if witness(fa, fb) {
             let r = residual(fa, fb).min(-f32::EPSILON);
             if worst.is_none_or(|(w, _)| r < w) {
                 worst = Some((r, c));
             }
         }
-        // ⚠️ 第 2 の証明経路 — 区間が緩くて決まらない箱を Lipschitz 包囲で締める
+        // ⚠️ 第 2 の証明経路 — 区間が緩くて決まらない cell を Lipschitz 包囲で締める
         // (区間演算と独立に健全なので共通部分を取れる、[`refine_with_lipschitz`])
-        if let (Refined::Enclosure(ta), Refined::Enclosure(tb)) = (
-            refine_with_lipschitz(bx, ia, fa, l_a),
-            refine_with_lipschitz(bx, ib, fb, l_b),
-        ) {
-            if decided_ok(ta, tb) {
-                continue;
-            }
-        } else {
-            // ⚠️ 包囲が矛盾した cell は掘らずに未決定にする
-            // (どちらの包囲も信用できないので証明も反証もしない)
-            if undecided.is_none() {
-                undecided = Some(bx);
-            }
+        if decided_ok(ta, tb) {
             continue;
         }
         if depth >= BALL_PROBE_DEPTH {
@@ -1438,12 +1452,21 @@ fn gap_exceeds(a: &SdfNode, b: &SdfNode, m: f32, config: &CheckConfig) -> bool {
     let (l_a, l_b) = (eval_lipschitz(a), eval_lipschitz(b));
     // 「膨張した箱が完全に外側」を証明できるか 区間で足りなければ Lipschitz 包囲で
     // 締め直して再判定する (第 2 の証明経路、[`refine`])
+    //
     // ⚠️ 刈る = その箱に中点が無いことを**証明する**ので、包囲が矛盾した箱は刈らない
+    // ⚠️ **矛盾の検査は無条件に通す** — 以前は `iv.lo > 0.0` の早期 return が
+    // `refine` より手前にあり、**区間だけで決まった箱では矛盾を見ていなかった**
+    // (= 上の契約を実装が破っていた) 矛盾は「2 つの包囲のどちらかが健全でない」
+    // ことなので、⚠️ **区間側の主張も信用できない** 実測で `alice_sdf` の
+    // `eval_interval` が真の最小値を包囲から外す case (`rounded_cone`) があり、
+    // それは偽の `proven` を生む向きの誤りなので、刈らずに未決定へ倒す
+    // (2026-10-01、mutants の生存変異 `replace > with == in gap_exceeds` が
+    // この不整合を指していた)
+    //
+    // `refine` は Lipschitz 上界が無い形では区間をそのまま返すので、
+    // 第 1 の経路だけで決まる箱の決着力は落ちない
     let provably_outside = |node: &SdfNode, e: Vec3Interval, l: f32| {
         let iv = sdf_interval(node, e);
-        if iv.lo > 0.0 {
-            return true;
-        }
         matches!(refine(node, e, iv, l), Refined::Enclosure(tight) if tight.lo > 0.0)
     };
     for (_, cell) in GridSampler::new(config) {
