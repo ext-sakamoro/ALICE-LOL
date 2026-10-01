@@ -174,9 +174,47 @@ impl MetricSize {
     /// assert_eq!(MetricSize::from_f32_snap(4.5), MetricSize::M4); // 4.5 → M4 (最近接)
     /// assert_eq!(MetricSize::from_f32_snap(7.0), MetricSize::M6); // 7.0 → M6 (M8 より近い)
     /// assert_eq!(MetricSize::from_f32_snap(100.0), MetricSize::M8); // 上限 clamp
+    /// // ⚠️ 非有限は最小サイズに倒す (判定材料が無いので「最も害が小さい」側)
+    /// assert_eq!(MetricSize::from_f32_snap(f32::NAN), MetricSize::M2);
+    /// // ⚠️ 桁落ちしても上限 clamp は効く (旧実装は 1e9 で M2 を返していた)
+    /// assert_eq!(MetricSize::from_f32_snap(1e9), MetricSize::M8);
     /// ```
+    ///
+    /// # ⚠️ 非規格値 / 非有限を許容したくない場合
+    ///
+    /// 呼び出し側で弾けるよう [`MetricSize::try_from_f32`] を使うこと
+    /// `runtime_parser` は 2026-10-01 からそちらを通している
     #[must_use]
     pub fn from_f32_snap(nominal: f32) -> Self {
+        Self::try_from_f32(nominal).unwrap_or(Self::M2)
+    }
+
+    /// 呼び径 \[mm\] → 規格サイズ (非有限は `None`)
+    ///
+    /// # ⚠️ なぜ `from_f32_snap` と分けるか
+    ///
+    /// `from_f32_snap` は `Self` を返すので**判定できない入力でも何かを返すしかない**
+    /// `runtime_parser` 経由で LLM が生成した値がそのまま入るため、
+    /// 境界で弾けるよう `Option` を返す版を用意する (`None` = 入力が不正)
+    ///
+    /// # ⚠️ 旧実装の誤り (2026-09-30 実測)
+    ///
+    /// 最近傍探索を `best_dist = f32::INFINITY` + `if d < best_dist` で書いていたため、
+    /// 2 系統の誤りがあった:
+    /// 1. **非有限**: `NaN` は比較が常に false、`±Inf` は `d = inf` が番兵と同値に
+    ///    なるので、どちらも 1 度も更新されず**初期値 `M4` が返っていた**
+    /// 2. ⚠️ **大きな有限値**: `(nom − x).abs()` を f32 で計算すると候補間の差
+    ///    (最大 6mm) が仮数に吸収されて `d` が全候補で同値になり、狭義比較で
+    ///    2 番目以降が更新されず**先頭の最小サイズが勝っていた**
+    ///    実測 `1e2`〜`2e7` → M8 (正) / `5e7` → M6 / `1e8` → M5 /
+    ///    `1e9`・`f32::MAX` → **M2 (最遠)** doc は「上限 clamp」と書いていた
+    ///
+    /// ⇒ 比較を `f64` で行い、同値時は**より大きい候補**を採る (clamp の意味を保つ)
+    #[must_use]
+    pub fn try_from_f32(nominal: f32) -> Option<Self> {
+        if !nominal.is_finite() {
+            return None;
+        }
         let candidates = [
             (2.0_f32, Self::M2),
             (2.5, Self::M2_5),
@@ -186,16 +224,32 @@ impl MetricSize {
             (6.0, Self::M6),
             (8.0, Self::M8),
         ];
-        let mut best = Self::M4;
-        let mut best_dist = f32::INFINITY;
+        // ⚠️ **範囲外は距離計算に任せず明示的に clamp する**
+        //
+        // 距離で argmin を取ると、入力が大きいほど候補間の差 (最大 6mm) が
+        // 仮数に吸収されて全候補が同値になり、first-wins で**最遠の最小サイズ**が
+        // 勝ってしまう ⚠️ f64 に上げても `f32::MAX` では相対 1.8e-38 ≪ 2.2e-16 で
+        // 同じことが起きるので、**精度を上げる方向では直らない**
+        // doc が宣言している「上限 clamp」をそのまま実装するのが正しい形
+        let (min_nom, min_size) = candidates[0];
+        if nominal <= min_nom {
+            return Some(min_size);
+        }
+        let (max_nom, max_size) = candidates[candidates.len() - 1];
+        if nominal >= max_nom {
+            return Some(max_size);
+        }
+        // ここまで来れば `min_nom < nominal < max_nom` なので、距離は
+        // 候補間隔の範囲に収まり f32 でも候補を区別できる
+        // ⚠️ 同値は first-wins (`<`) — `4.5` は M4 / M5 が等距離で M4 を採る規約
+        let mut best: Option<(f32, Self)> = None;
         for (nom, size) in candidates {
             let d = (nom - nominal).abs();
-            if d < best_dist {
-                best_dist = d;
-                best = size;
+            if best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, size));
             }
         }
-        best
+        best.map(|(_, size)| size)
     }
 }
 
@@ -311,8 +365,13 @@ pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
 #[must_use]
 pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let head_dia = size.head_diameter_countersunk();
-    // 90° 皿頭 → cone 高さ = head_dia / 2 (テーパー半角 45°、tan(45°)=1)
-    let cone_h = head_dia * 0.5;
+    // 皿頭の円錐高さは**テーパー角から導く** — `h = (dia/2) / tan(全角/2)`
+    // ⚠️ 以前は `head_dia * 0.5` を直書きしており、`COUNTERSUNK_TAPER_ANGLE_DEG` は
+    // pub 宣言されているだけで**一度も読まれていなかった** (定数を 82° に変えても
+    // 形状が変わらない = 下流から見える宣言が実装と繋がっていない状態)
+    // 90° では `tan(45°) = 1` なので値は従来と厳密に一致する
+    let half_angle = (COUNTERSUNK_TAPER_ANGLE_DEG * 0.5).to_radians();
+    let cone_h = head_dia * 0.5 / half_angle.tan();
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
     // [[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);
