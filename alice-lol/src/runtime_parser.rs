@@ -297,6 +297,25 @@ impl<'a> Parser<'a> {
     }
 
     /// f32 値 3 個
+    /// 呼び径 \[mm\] → 規格サイズ (⚠️ 境界で弾く)
+    ///
+    /// `MetricSize::from_f32_snap` は `Self` を返すので**判定できない入力でも
+    /// 何かを返すしかない** LLM が生成した LOL テキストの値がそのまま入る経路
+    /// なので、ここで `NaN` / `±Inf` を parse error にする
+    /// (旧実装は非有限で既定の M4 を silent に返しており、⚠️ **不正な入力から
+    /// 黙って M4 のねじ穴が出力される**状態だった、2026-09-30 実測)
+    fn metric_size(
+        &self,
+        m_size: f32,
+    ) -> Result<crate::stdlib::hardsurface::fastener::MetricSize, ParseError> {
+        crate::stdlib::hardsurface::fastener::MetricSize::try_from_f32(m_size).ok_or_else(|| {
+            ParseError {
+                message: format!("ねじ呼び径が有限の数値でない: {m_size}"),
+                position: self.lexer.pos,
+            }
+        })
+    }
+
     fn parse_3f(&mut self) -> Result<(f32, f32, f32), ParseError> {
         let a = self.expect_number()?;
         self.expect_comma()?;
@@ -2588,7 +2607,7 @@ impl<'a> Parser<'a> {
             "vesa_mount" => {
                 // vesa_mount(size, plate_t, m_size) 3 param、bore_kind default 1 (counterbore)
                 let (size, plate_t, m_size) = self.parse_3f()?;
-                let hole = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let hole = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::VesaMountSpec {
                     vesa_size: size,
                     plate_thickness: plate_t,
@@ -2602,7 +2621,7 @@ impl<'a> Parser<'a> {
             "l_bracket" => {
                 // l_bracket(w, h, plate_t, m_size, holes_per_arm) 5 param、bore_kind default 0 (through)
                 let (w, h, plate_t, m_size, holes) = self.parse_5f()?;
-                let hole = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let hole = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::LBracketSpec {
                     arm_width: w,
                     arm_height: h,
@@ -2645,7 +2664,7 @@ impl<'a> Parser<'a> {
             "heat_set_array" => {
                 // heat_set_array(rows, cols, m_size, pitch, base_t) 5 param
                 let (rows, cols, m_size, pitch, base_t) = self.parse_5f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::HeatSetArraySpec {
                     rows: lol_u32(rows.round().max(1.0)),
                     cols: lol_u32(cols.round().max(1.0)),
@@ -2661,7 +2680,7 @@ impl<'a> Parser<'a> {
             "flange_mount" => {
                 // flange_mount(od, m_size, hole_count) 3 param、thickness default 6
                 let (od, m_size, count) = self.parse_3f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::FlangeMountSpec {
                     outer_dia: od,
                     bolt_size: m,
@@ -2715,7 +2734,7 @@ impl<'a> Parser<'a> {
             "boss_array" => {
                 // boss_array(rows, cols, m_size, height, pitch, base_t) 6 param
                 let (rows, cols, m_size, height, pitch, base_t) = self.parse_6f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::BossArraySpec {
                     rows: lol_u32(rows.round().max(1.0)),
                     cols: lol_u32(cols.round().max(1.0)),
@@ -2732,13 +2751,13 @@ impl<'a> Parser<'a> {
             "screw_hole" => {
                 // screw_hole(m_size, depth) 2 param、H2D +0.2mm clearance
                 let (m_size, depth) = self.parse_2f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::screw_hole(m, depth))
             }
             "tap_hole" => {
                 // tap_hole(m_size, depth) 2 param、accuracy default 0.1
                 let (m_size, depth) = self.parse_2f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::tap_hole(
                     m,
                     depth,
@@ -2748,7 +2767,7 @@ impl<'a> Parser<'a> {
             "counterbore" => {
                 // counterbore(m_size, plate_thickness) 2 param
                 let (m_size, plate_t) = self.parse_2f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::counterbore(
                     m, plate_t,
                 ))
@@ -2756,7 +2775,7 @@ impl<'a> Parser<'a> {
             "countersink" => {
                 // countersink(m_size, plate_thickness) 2 param
                 let (m_size, plate_t) = self.parse_2f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::countersink(
                     m, plate_t,
                 ))
@@ -2764,7 +2783,7 @@ impl<'a> Parser<'a> {
             "heat_set_hole" => {
                 // heat_set_hole(m_size) 1 param、McMaster/Voxel8 spec
                 let m_size = self.parse_1f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::heat_set_insert_hole(
                     m,
                 ))
@@ -2772,7 +2791,7 @@ impl<'a> Parser<'a> {
             "bolt" => {
                 // bolt(m_size, shank_length) 2 param、可視化用 (頭 + 軸 Union)
                 let (m_size, shank) = self.parse_2f()?;
-                let m = crate::stdlib::hardsurface::fastener::MetricSize::from_f32_snap(m_size);
+                let m = self.metric_size(m_size)?;
                 Ok(crate::stdlib::hardsurface::fastener::bolt(m, shank))
             }
 

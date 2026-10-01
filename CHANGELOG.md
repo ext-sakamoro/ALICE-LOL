@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 3D プリント出力の水密性と安全法則の緩み 4 件を直した (2026-10-01)
+
+**`print_export` の修復が水密な mesh を壊していた**
+
+`MeshRepair::repair_all(&mesh, 5e-3)` を無条件に掛けていたため、生の
+`sdf_to_mesh` が res 32〜256 すべてで水密 (境界 edge 0 / `χ = 2`) だったのに、
+既定 config (res 128) で境界 edge 741 + 非多様体 285 + `χ = −86` になっていた。
+測った全 case で「修復が変えたなら必ず悪化」で、改善した case は 0 件。
+
+- 水密な mesh には破壊的操作 (退化除去 / 頂点マージ / 重複面除去) を掛けない
+- 掛けた結果が悪化したら採らない (非回帰)
+- 頂点マージ許容量を cell 幅相対にした (旧 `5e-3` は res 128 で cell の 16%、
+  破れ始める閾値は約 8%)
+- 水密性の判定から退化三角形を外した。零面積 sliver を欠陥に数えると、水密な
+  mesh でも破壊的修復に入って境界 edge 216 枚を作る
+- 向きは符号付き体積で大域的に決める。facet ごとに勾配で判定すると隣接 facet と
+  winding が食い違い、幾何的に閉じた mesh に境界 edge が 288 枚現れる
+
+**`SafetyLaw` が doc で宣言した検査を一部持っていなかった**
+
+- `Throw::force` を Overforce の対象に加えた。module doc と `max_force` の doc は
+  当初から対象と書いていたが、実装は `Throw` 腕で force を捨てていた
+- 速度 / 力 / 角度を大きさで判定するようにした。符号なし比較では `-5000` が
+  素通りし、`Rotate` だけが `abs` を取っていて同 file 内で契約が不統一だった
+- `NaN` 座標を `OutOfWorkspace` にした。6 つの比較すべてが false になるため
+  「範囲内」と判定されていた。違反 0 件が安全ではなく比較が成立していない状態
+
+**`MetricSize::from_f32_snap` が非有限と大きな有限値で誤った値を返していた**
+
+- 範囲外は距離計算に任せず明示的に clamp する。距離で argmin を取ると入力が
+  大きいほど候補間の差 (最大 6mm) が仮数に吸収され、`1e9` 以上で最遠の M2 が
+  返っていた (doc は「上限 clamp」と記載)。f64 に上げても `f32::MAX` では
+  相対 1.8e-38 で潰れるので、精度を上げる方向では直らない
+- 非有限を弾く `MetricSize::try_from_f32` を追加し、`runtime_parser` の 11 箇所を
+  そちらに通した。LLM が生成した値が非有限でも M4 のねじ穴が出ていた経路を閉じた
+- `COUNTERSUNK_TAPER_ANGLE_DEG` を `countersink` が実際に読むようにした。
+  pub 宣言されているだけで一度も参照されておらず、定数を変えても形状が
+  変わらなかった (90° では `tan(45°) = 1` なので値は従来と厳密に一致)
+
+### Added — 3 層に閉形式 oracle 90 本 (2026-10-01)
+
+- `alice-lol/tests/analytic_print_export.rs` 21 本 — 発散定理による体積と球 /
+  直方体 / トーラスの閉形式、解像度収束、水密性 (境界 edge / 非多様体 edge /
+  Euler 標数)、STL binary layout (`84 + 50n`)、3MF の mm 宣言、`scale_mm` の
+  3 乗則、DC 経路の同一 invariant。変異捕捉 0/10 → 9/10
+- `alice-lol/tests/analytic_hardsurface.rs` 40 本 — ISO 4762 の `k = d` (7 サイズ)、
+  ISO 10642 の `dk = 2·d` (M2.5 のみ規格範囲外として逸脱を明示 pin)、面一の
+  代数恒等式、90° テーパーの円錐からの復元、すきま嵌めの径差、押出スタジアムの
+  厳密距離、片持ち梁のスケーリング指数。変異捕捉 2/12 → 12/12
+- `alice-lol-robot/tests/analytic_robot_law.rs` 29 本 — 閉 AABB membership の
+  全件突合 (7³ 点 × 4 verb)、閾値ちょうど pass / 1 ulp 上 fail、角度の偶関数性、
+  単調性、`LatentIntent` のピタゴラス数と斉次性、合成の連結則
+
 ### Fixed — 包囲が矛盾した箱の扱いを 3 つの呼び出し元すべてで契約どおりにした (2026-10-01)
 
 `probe_ball` / `probe_pair` / `gap_exceeds` の doc はいずれも「包囲が矛盾した箱では

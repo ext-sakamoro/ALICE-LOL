@@ -92,7 +92,10 @@ impl SafetyLaw {
     fn walk_intent(&self, intent: &IntentNode, violations: &mut Vec<SafetyViolation>) {
         match intent {
             IntentNode::Walk { destination, speed } => {
-                if *speed > self.max_linear_velocity {
+                // ⚠️ **大きさで見る** — 符号なし比較だと負の速度が素通りする
+                // (実測 2026-09-30: `-5000` が違反にならなかった、`Rotate` は
+                // 当初から `abs` を取っていたので同 file 内で契約が不統一だった)
+                if !magnitude_within(*speed, self.max_linear_velocity) {
                     violations.push(SafetyViolation {
                         rule: "Overspeed",
                         detail: format!(
@@ -103,13 +106,19 @@ impl SafetyLaw {
                 }
                 self.check_workspace("Walk::destination", *destination, violations);
             }
-            IntentNode::Point { target, .. }
-            | IntentNode::Throw { target, .. }
-            | IntentNode::Gaze { target, .. } => {
+            IntentNode::Point { target, .. } | IntentNode::Gaze { target, .. } => {
                 self.check_workspace(intent_verb_label(intent), *target, violations);
             }
+            // ⚠️ `Throw` は **到達域と印加力の両方**を検査する
+            // (module doc と `max_force` の doc は当初から `Throw` を Overforce の
+            // 対象と書いていたが、実装はこの腕で `force` を捨てていた —
+            // doc が宣言した検査が存在しない = 安全側に倒れない不整合だった)
+            IntentNode::Throw { target, force, .. } => {
+                self.check_workspace(intent_verb_label(intent), *target, violations);
+                self.check_force(intent, *force, violations);
+            }
             IntentNode::Rotate { angle_rad, .. } => {
-                if angle_rad.abs() > self.max_angular_step {
+                if !magnitude_within(*angle_rad, self.max_angular_step) {
                     violations.push(SafetyViolation {
                         rule: "Overspeed",
                         detail: format!(
@@ -123,16 +132,7 @@ impl SafetyLaw {
             IntentNode::Grasp { force, .. }
             | IntentNode::Push { force, .. }
             | IntentNode::Pull { force, .. } => {
-                if *force > self.max_force {
-                    violations.push(SafetyViolation {
-                        rule: "Overforce",
-                        detail: format!(
-                            "{verb}::force {force:.1} N > max {:.1} N",
-                            self.max_force,
-                            verb = intent_verb_label(intent)
-                        ),
-                    });
-                }
+                self.check_force(intent, *force, violations);
             }
             IntentNode::Sequence(children) | IntentNode::Parallel(children) => {
                 for child in children {
@@ -188,13 +188,34 @@ impl SafetyLaw {
         }
     }
 
+    /// 印加力の検査 (`Grasp` / `Push` / `Pull` / `Throw` 共通)
+    ///
+    /// ⚠️ 大きさで見るので負値も `-Inf` も `NaN` も違反として報告する
+    fn check_force(&self, intent: &IntentNode, force: f32, violations: &mut Vec<SafetyViolation>) {
+        if !magnitude_within(force, self.max_force) {
+            violations.push(SafetyViolation {
+                rule: "Overforce",
+                detail: format!(
+                    "{verb}::force {force:.1} N > max {:.1} N",
+                    self.max_force,
+                    verb = intent_verb_label(intent)
+                ),
+            });
+        }
+    }
+
     fn check_workspace(
         &self,
         label: &'static str,
         target: Vec3,
         violations: &mut Vec<SafetyViolation>,
     ) {
-        let out_of_bounds = target.x < self.workspace_min.x
+        // ⚠️ **非有限を先に弾く** — NaN は 6 つの比較すべてが false になるので、
+        // `||` の連鎖では「範囲内」と判定されてしまう (2026-09-30 実測)
+        // 「違反 0 件」が「安全」ではなく「比較が成立しなかった」になる形で、
+        // `check_latent` だけが `is_finite` 検査を持っていたのが契約の不統一だった
+        let out_of_bounds = !target.is_finite()
+            || target.x < self.workspace_min.x
             || target.x > self.workspace_max.x
             || target.y < self.workspace_min.y
             || target.y > self.workspace_max.y
@@ -243,6 +264,21 @@ pub struct SafetyViolation {
     pub rule: &'static str,
     /// 詳細メッセージ
     pub detail: String,
+}
+
+/// 大きさが上限以内か (⚠️ 非有限は違反として扱う)
+///
+/// # ⚠️ なぜ `value > limit` ではないか
+///
+/// 符号なしの比較は **(a) 負値** と **(b) `NaN`** を素通りさせる
+/// 実測 (2026-09-30): `Walk::speed = -5000` / `Grasp::force = -500` / `speed = -Inf` が
+/// いずれも違反 0 件で通り、`NaN` も比較が全部 false になるので通っていた
+/// ⚠️ **「違反 0 件」が「安全」ではなく「比較が成立しなかった」になる形**
+///
+/// 安全法則なので、⚠️ **判定できない入力は違反側に倒す** (`NaN` は `abs()` も
+/// `NaN` なので `<=` が false になり、この関数は `false` = 違反を返す)
+fn magnitude_within(value: f32, limit: f32) -> bool {
+    value.abs() <= limit
 }
 
 /// verb → label 変換 (violation メッセージ用)
