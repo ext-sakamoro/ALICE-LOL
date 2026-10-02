@@ -77,6 +77,12 @@ step "ci.yml / test: Build [features=--features physics]"
 step "ci.yml / test: Build examples [features=--features physics]"
 ( export CARGO_TERM_COLOR="always"; cargo build --examples --features physics )
 
+step "ci.yml / test: Build [features=--features roblox]"
+( export CARGO_TERM_COLOR="always"; cargo build --features roblox )
+
+step "ci.yml / test: Build examples [features=--features roblox]"
+( export CARGO_TERM_COLOR="always"; cargo build --examples --features roblox )
+
 step "ci.yml / clippy: Clippy"
 relint
 ( export CARGO_TERM_COLOR="always"; cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery )
@@ -205,6 +211,12 @@ step "ci.yml / test: Test [features=--features glsl,wgsl,hlsl]"
 
 step "ci.yml / test: Test [features=--features physics]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features physics )
+
+step "ci.yml / test: Test [features=--features roblox]"
+( export CARGO_TERM_COLOR="always"; cargo test --features roblox )
+
+step "ci.yml / test: Test (roblox oracle, named)"
+( export CARGO_TERM_COLOR="always"; cargo test --features roblox --test analytic_roblox_export )
 
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
