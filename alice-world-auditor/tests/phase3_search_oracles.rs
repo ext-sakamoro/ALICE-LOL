@@ -132,7 +132,7 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     // 整数格子では到達可能な位置が 1 刻みの全整数 (granularity 1) なので、
     // 最小 frame 数は「position(r) が target AABB の **下端以上**になる最小 r」
     // で決まる (この scene は下端側から接近するので) 下端を `d - 0.5 = 99.5`
-    // に取ると実測 536 になる (`d*a*dt² = 72000` に対し窓は `x_lo ∈
+    // に取ると実測 536 になる (位置格子単位 `D = d/(a*dt²) = 72000` に対し窓は `x_lo ∈
     // (99.755556, 100.127778]` の時のみ 537、検算: `verify_bangbang_lattice.py`)
     // ⇒ 下端を安全な窓の内側 (`99.9`) に取る
     let t_star = 2.0 * (d / a).sqrt();
