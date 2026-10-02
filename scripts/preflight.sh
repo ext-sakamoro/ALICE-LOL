@@ -84,6 +84,10 @@ relint
 step "ci.yml / fmt: Check formatting"
 ( export CARGO_TERM_COLOR="always"; cargo fmt -- --check )
 
+step "ci.yml / wiring-guard: oracle + 新規の未配線 / 理由の無い dead_code が無い"
+python3 scripts/test_wiring_guard.py
+python3 scripts/wiring_guard.py
+
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 

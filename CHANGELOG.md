@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 配線ガード (`scripts/wiring_guard.py`) を導入 (2026-10-02)
+
+実装したが production から呼ばれていない `pub` / `pub(crate)` item と、理由の無い
+`#[allow(dead_code)]` の新規追加を CI で止める検査器を ALICE-Physics から移植した
+Cargo workspace の全 member (`alice-lol` / `-ui` / `-humanoid` / `-robot` / `-datagen` / `-macro`) が対象
+
+- `scripts/test_wiring_guard.py`: 検査器自身の oracle 79 本
+- `scripts/wiring-baseline.txt`: 既存の違反 (unwired 171 件 / dead_code 3 件) を記録するラチェット 既存分は解消しておらず、新規の違反だけが fail する
+- CI: `wiring-guard` job (ubuntu / macOS / Windows) と `scripts/preflight.sh` の step を追加
+
 ### Fixed — 3D プリント出力の水密性と安全法則の緩み 4 件を直した (2026-10-01)
 
 **`print_export` の修復が水密な mesh を壊していた**
