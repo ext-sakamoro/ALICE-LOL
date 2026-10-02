@@ -1,0 +1,25 @@
+[package]
+name = "alice-world-auditor-types"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "ALICE World Auditor vocabulary types (Goal / Verdict) — no proof, no search, just the shared language law checkers and planners agree on"
+license = "MIT OR Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-world-auditor-types"
+readme = "README.md"
+keywords = ["world-model", "planning", "verification", "deterministic"]
+categories = ["mathematics", "game-development"]
+
+[dependencies]
+glam = "0.29"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = "deny"
+nursery = "deny"
