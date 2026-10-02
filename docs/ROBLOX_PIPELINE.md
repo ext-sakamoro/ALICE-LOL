@@ -77,7 +77,8 @@ Roblox ゲーム内アクセサリー
 
 ```rust
 pub struct RobloxConfig {
-    /// メッシュ解像度 (Marching Cubes グリッド数)
+    /// メッシュ解像度 (Marching Cubes グリッド数) の上限
+    /// 実際の解像度は max_triangles を守れる最大値まで自動で下がる (下限 16)
     pub resolution: usize,            // default: 128
 
     /// SDF バウンディングボックス
@@ -98,11 +99,11 @@ pub struct RobloxConfig {
 
 **プリセット**:
 
-| プリセット | resolution | max_triangles | 用途 |
+| プリセット | resolution (上限) | max_triangles | 用途 |
 |-----------|-----------|---------------|------|
 | `accessory()` | 128 | 4,000 | UGC アクセサリー |
 | `meshpart()` | 192 | 10,000 | 汎用 MeshPart |
-| `preview()` | 64 | 4,000 | 高速プレビュー |
+| `preview()` | 32 | 4,000 | 高速プレビュー (accessory より粗い) |
 
 ### バリデーション
 
@@ -170,14 +171,16 @@ pub struct RobloxExportStats {
 ALICE-SDF の Marching Cubes は解像度に応じて三角形を生成する。
 Roblox の上限 (4,000 / 10,000) に収めるため:
 
-1. **解像度調整**: resolution を下げることで三角形数を概算制御
-   - 64³ → ~数千三角形
-   - 128³ → ~数万三角形
-   - 目標三角形数に応じて resolution を自動計算
+1. **解像度調整**: 三角形数は解像度のほぼ 2 乗に比例する
+   - 粗い解像度 (32) で試して三角形数を見積もり、`max_triangles` に収まる最大の解像度へ進む
+   - 超えていれば解像度を単調に下げる (下限 16) 球の実測 (accessory 3,632 / meshpart 9,512 三角形)
+   - 形状ごとに三角形数が違うので、解像度から経験則で決めず**実測の三角形数**で守る
 
 2. **MeshRepair**: Marching Cubes のアーティファクト除去
    - デジェネレート面除去
-   - 重複頂点マージ (epsilon = 5e-3)
+   - 重複頂点マージ (許容量は cell 幅比 0.04、水密な mesh には破壊的操作を掛けない)
+     `print_export::node_to_mesh` と同じ経路 固定の `5e-3` は cell 幅の 7〜11% になり、
+     水密な mesh に穴を開けていた (2026-10-02 実測、境界エッジ 39〜90)
 
 3. **将来**: QEM (Quadric Error Metrics) デシメーション追加
    - 形状精度を保ちながら三角形数を指定値に削減

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `roblox_export` の 3 プリセットが水密でなく三角形上限を守れなかった (2026-10-02)
+
+`roblox_export` は test が 1 本も無く、CI の test matrix にも feature `roblox` を有効にする entry が無かった
+閉形式の oracle (`tests/analytic_roblox_export.rs`、17 本) を足して `sphere(1.0)` を測ったところ 3 件の欠陥が見つかった
+
+- **水密でない**: `MeshRepair::repair_all(&mesh, 5e-3)` を固定の絶対値で呼んでいた (cell 幅の 7〜11% で、`print_export` が
+  2026-09-30 に直したのと同型) 境界エッジ 39 / 90 / 39  `print_export::node_to_mesh` (許容量は cell 幅比、水密な mesh には
+  破壊的操作を掛けない) に任せる形にした
+- **三角形上限を守れない**: `estimate_resolution` の経験則 (res 128 で約 2 万三角形) が実測 (約 3.5 万) と合わず、
+  accessory 7183 (上限 4000) / meshpart 17962 (上限 10000)  経験則をやめ、粗い試し (32) で三角形数を見積もって
+  上限に収まる最大の解像度へ進み、超えていれば解像度を単調に下げる (下限 16) 実測は accessory 3632 / meshpart 9512
+- **preview が accessory と同一**: preview の解像度 64 が自動推定 57 に潰されて accessory と同じ mesh だった
+  preview の解像度上限を 32 にした (2312 三角形)  `RobloxConfig::resolution` は上限として扱う
+- doc の「制約違反時に警告をログ出力」は実装に無かったので、実態 (`RobloxExportStats::validation` に載る) に直した
+- CI: `--features roblox` の test matrix entry と preflight の step を追加した (これまでこのモジュールの test は CI で 0 件実行)
+- 既知の限界 (未対応): 既定 bounds (±2) より大きい形状は黙って切られ、開いた mesh になる (doc の使用例の帽子も該当)
+
 ### Added — 配線ガード (`scripts/wiring_guard.py`) を導入 (2026-10-02)
 
 実装したが production から呼ばれていない `pub` / `pub(crate)` item と、理由の無い
