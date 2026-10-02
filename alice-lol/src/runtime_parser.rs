@@ -28,6 +28,24 @@ const fn lol_u32(v: f32) -> u32 {
     v as u32
 }
 
+/// stdlib 生成器に渡す個数 (rows / cols / count) の上限
+///
+/// 生成器の線形 fold は balanced fold に直してあり、この個数でも木の深さは log2 で済む
+/// 既存の実用範囲 (Gridfinity の数 unit、整理トレイの数十穴、綿棒の本数 80) を大きく超える
+pub const MAX_STDLIB_COUNT: f32 = 1024.0;
+
+/// SKADIS 板の一辺の上限 \[mm\] (標準は 300、穴は (size / 40)² 個)
+pub const MAX_SKADIS_PANEL_MM: f32 = 2000.0;
+
+/// `smooth_union` を 1 個ずつ重ねる生成器 (`clamp_rack`) の個数の上限
+///
+/// smooth union は結合則が成り立たず balanced fold にできないので、木の深さ (個数の 2 倍) を
+/// debug build のテスト thread (2 MiB) でも安全な範囲に収める
+pub const MAX_STDLIB_SMOOTH_FOLD_COUNT: f32 = 24.0;
+
+/// rows × cols の格子に置ける要素数の上限
+pub const MAX_STDLIB_GRID_CELLS: f32 = 4096.0;
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // エラー型
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -280,6 +298,7 @@ impl<'a> Parser<'a> {
             return Ok((DEFAULT_SIZE, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
         }
         let size = self.expect_number()?;
+        let size = self.skadis_size(size)?;
         if self.at_rparen()? {
             self.expect_rparen()?;
             return Ok((size, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
@@ -1482,6 +1501,8 @@ impl<'a> Parser<'a> {
             }
             "stairs_prim" => {
                 let (sw, sh, n, d) = self.parse_4f()?;
+                // 評価器は段数だけ箱を走査する (O(n)) ので、段数も個数の上限を掛ける
+                let n = self.bounded_count(n)?;
                 Ok(SdfNode::Stairs {
                     step_width: sw,
                     step_height: sh,
@@ -1673,9 +1694,9 @@ impl<'a> Parser<'a> {
             "gridfinity_bin" => {
                 let (ux, uy, hu) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::GridfinitySpec {
-                    units_x: lol_u32(ux),
-                    units_y: lol_u32(uy),
-                    height_u: lol_u32(hu),
+                    units_x: self.count_trunc(ux)?,
+                    units_y: self.count_trunc(uy)?,
+                    height_u: self.count_trunc(hu)?,
                     dividers: None,
                     wall_thickness: 1.2,
                     floor_thickness: 1.5,
@@ -1690,16 +1711,16 @@ impl<'a> Parser<'a> {
                 // wall <= 0 → default 1.2、floor <= 0 → default 1.5
                 let (ux, uy, hu, div_x, div_y, wall, floor) = self.parse_7f()?;
                 let dividers = if div_x >= 1.0 && div_y >= 1.0 {
-                    Some((lol_u32(div_x), lol_u32(div_y)))
+                    Some((self.count_trunc(div_x)?, self.count_trunc(div_y)?))
                 } else {
                     None
                 };
                 let wall_thickness = if wall > 0.0 { wall } else { 1.2 };
                 let floor_thickness = if floor > 0.0 { floor } else { 1.5 };
                 let spec = crate::stdlib::hardsurface::pattern_sdf::GridfinitySpec {
-                    units_x: lol_u32(ux),
-                    units_y: lol_u32(uy),
-                    height_u: lol_u32(hu),
+                    units_x: self.count_trunc(ux)?,
+                    units_y: self.count_trunc(uy)?,
+                    height_u: self.count_trunc(hu)?,
                     dividers,
                     wall_thickness,
                     floor_thickness,
@@ -1933,7 +1954,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::TokenWellSpec {
                     well_diameter: dia,
                     well_depth: depth,
-                    well_count: lol_u32(count.round().max(1.0)),
+                    well_count: self.count(count, 1.0)?,
                     well_clearance: 1.0,
                     wall_thickness: 2.0,
                     floor_thickness: 1.5,
@@ -1948,7 +1969,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::WrenchHolderSpec {
                     min_size_mm: min_mm,
                     max_size_mm: max_mm,
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     slot_depth: 22.0,
                     slot_clearance: 0.6,
                     thickness_ratio: 0.5,
@@ -1965,7 +1986,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SocketRailSpec {
                     post_diameter: dia,
                     post_height: height,
-                    post_count: lol_u32(count.round().max(1.0)),
+                    post_count: self.count(count, 1.0)?,
                     post_spacing: 6.0,
                     base_thickness: 4.0,
                     base_margin: 3.0,
@@ -1976,8 +1997,8 @@ impl<'a> Parser<'a> {
                 // hex_bit_holder(rows, cols, spacing) 3 param、hex size + depth は default 固定
                 let (rows, cols, spacing) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::HexBitHolderSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     spacing,
                     wall_thickness: 2.0,
                     floor_thickness: 2.0,
@@ -2027,7 +2048,7 @@ impl<'a> Parser<'a> {
                 // battery_18650_holder(count, wall_thickness, floor_thickness) 3 param
                 let (count, wall, floor) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::Battery18650HolderSpec {
-                    cell_count: lol_u32(count.round().max(1.0)),
+                    cell_count: self.count(count, 1.0)?,
                     wall_thickness: wall,
                     floor_thickness: floor,
                 };
@@ -2039,7 +2060,7 @@ impl<'a> Parser<'a> {
                 // toothbrush_holder(count, hole_diameter, height) 3 param、他 default
                 let (count, dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::ToothbrushHolderSpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     hole_diameter: dia,
                     hole_depth: height,
                     wall_thickness: 6.0,
@@ -2055,7 +2076,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::DrillBitHolderSpec {
                     min_size_mm: min_mm,
                     max_size_mm: max_mm,
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     hole_depth: 22.0,
                     hole_clearance: 0.25,
                     wall_thickness: 3.0,
@@ -2069,7 +2090,7 @@ impl<'a> Parser<'a> {
                 // pliers_rack(slot_count, slot_width, slot_depth) 3 param、他 default
                 let (count, width, depth) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::PliersRackSpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_width: width,
                     slot_depth: depth,
                     slot_height: 35.0,
@@ -2084,7 +2105,7 @@ impl<'a> Parser<'a> {
                 // spice_rack(count, jar_diameter, jar_height) 3 param、他 default
                 let (count, dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SpiceRackSpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     jar_diameter: dia,
                     jar_height: height,
                     recess_depth: 5.0,
@@ -2100,8 +2121,8 @@ impl<'a> Parser<'a> {
                 // egg_tray(rows, cols, cup_depth) 3 param、pitch は default 50mm 固定
                 let (rows, cols, cup_depth) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::EggTraySpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     cup_depth,
                     pitch: 50.0,
                     wall_thickness: 3.0,
@@ -2113,7 +2134,7 @@ impl<'a> Parser<'a> {
                 // utensil_caddy(count, compartment_dia, height) 3 param、他 default
                 let (count, dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::UtensilCaddySpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     compartment_diameter: dia,
                     height,
                     wall_thickness: 5.0,
@@ -2143,7 +2164,7 @@ impl<'a> Parser<'a> {
                 // nozzle_holder(count, hole_diameter, depth) 3 param、他 default
                 let (count, dia, depth) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::NozzleHolderSpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     hole_diameter: dia,
                     hole_depth: depth,
                     wall_thickness: 4.0,
@@ -2157,7 +2178,7 @@ impl<'a> Parser<'a> {
                 // build_plate_rack(slot_count, slot_spacing, height) 3 param、他 default
                 let (count, spacing, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::BuildPlateRackSpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_spacing: spacing,
                     height,
                     slot_width: 5.5,
@@ -2175,7 +2196,7 @@ impl<'a> Parser<'a> {
                 // cutlery_tray(slot_count, slot_width, slot_length) 3 param、他 default
                 let (count, width, length) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::CutleryTraySpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_width: width,
                     slot_length: length,
                     slot_depth: 40.0,
@@ -2188,8 +2209,8 @@ impl<'a> Parser<'a> {
                 // pill_organizer(rows, cols, cell_size) 3 param、他 default
                 let (rows, cols, cell) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::PillOrganizerSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     cell_size: cell,
                     cell_depth: 15.0,
                     wall_thickness: 1.5,
@@ -2203,7 +2224,7 @@ impl<'a> Parser<'a> {
                 // magnetic_strip(magnet_count, magnet_diameter, spacing) 3 param、他 default
                 let (count, dia, spacing) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::MagneticStripSpec {
-                    magnet_count: lol_u32(count.round().max(1.0)),
+                    magnet_count: self.count(count, 1.0)?,
                     magnet_diameter: dia,
                     magnet_spacing: spacing,
                     magnet_depth: 2.0,
@@ -2235,8 +2256,8 @@ impl<'a> Parser<'a> {
                 // kcup_holder(rows, cols, capsule_diameter) 3 param、depth は default 40mm
                 let (rows, cols, dia) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::KcupHolderSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     capsule_diameter: dia,
                     capsule_depth: 40.0,
                     capsule_clearance: 3.5,
@@ -2249,7 +2270,7 @@ impl<'a> Parser<'a> {
                 // hex_key_holder(count, min_key_mm, max_key_mm) 3 param、他 default
                 let (count, min_mm, max_mm) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::HexKeyHolderSpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     min_key_mm: min_mm,
                     max_key_mm: max_mm,
                     hole_depth: 18.0,
@@ -2279,7 +2300,7 @@ impl<'a> Parser<'a> {
                 // sock_divider(cell_count, cell_width, height) 3 param
                 let (count, width, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SockDividerSpec {
-                    cell_count: lol_u32(count.round().max(1.0)),
+                    cell_count: self.count(count, 1.0)?,
                     cell_width: width,
                     height,
                     cell_depth: 100.0,
@@ -2294,7 +2315,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SoapTraySpec {
                     tray_length: length,
                     tray_width: width,
-                    drain_slot_count: lol_u32(count.round().max(1.0)),
+                    drain_slot_count: self.count(count, 1.0)?,
                     tray_depth: 12.0,
                     drain_slot_width: 3.0,
                     wall_thickness: 2.5,
@@ -2322,7 +2343,7 @@ impl<'a> Parser<'a> {
                 // chopstick_holder(pair_count, slot_width, slot_length) 3 param
                 let (count, width, length) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::ChopstickHolderSpec {
-                    pair_count: lol_u32(count.round().max(1.0)),
+                    pair_count: self.count(count, 1.0)?,
                     slot_width: width,
                     slot_length: length,
                     slot_depth: 15.0,
@@ -2337,8 +2358,8 @@ impl<'a> Parser<'a> {
                 // swatch_holder(rows, cols, swatch_width) 3 param、他 default
                 let (rows, cols, width) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SwatchHolderSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     swatch_width: width,
                     swatch_height: 70.0,
                     swatch_thickness: 4.5,
@@ -2363,8 +2384,8 @@ impl<'a> Parser<'a> {
                 // sd_card_holder(rows, cols, card_width) 3 param、他 default
                 let (rows, cols, width) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SdCardHolderSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     card_width: width,
                     card_height: 32.0,
                     card_thickness: 2.5,
@@ -2379,7 +2400,7 @@ impl<'a> Parser<'a> {
                 // driver_rack(slot_count, slot_diameter, height) 3 param
                 let (count, dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::DriverRackSpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_diameter: dia,
                     height,
                 };
@@ -2389,7 +2410,7 @@ impl<'a> Parser<'a> {
                 // cotton_dispenser(count, inner_diameter, height) 3 param、他 default
                 let (count, inner_dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::CottonDispenserSpec {
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     inner_diameter: inner_dia,
                     height,
                     wall_thickness: 2.5,
@@ -2405,7 +2426,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::SinkCaddySpec {
                     tray_length: length,
                     tray_width: width,
-                    drain_hole_count: lol_u32(count.round().max(1.0)),
+                    drain_hole_count: self.count(count, 1.0)?,
                     tray_depth: 30.0,
                     drain_hole_diameter: 6.0,
                     wall_thickness: 2.5,
@@ -2417,7 +2438,7 @@ impl<'a> Parser<'a> {
                 // clamp_rack(hook_count, hook_width, height) 3 param、他 default
                 let (count, width, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::ClampRackSpec {
-                    hook_count: lol_u32(count.round().max(1.0)),
+                    hook_count: self.count_smooth_folded(count, 1.0)?,
                     hook_width: width,
                     height,
                     hook_depth: 25.0,
@@ -2430,8 +2451,8 @@ impl<'a> Parser<'a> {
                 // dry_box(rows, cols, filament_diameter) 3 param、他 default
                 let (rows, cols, dia) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::DryBoxSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     filament_diameter: dia,
                     spool_width: 70.0,
                     wall_thickness: 3.0,
@@ -2459,7 +2480,7 @@ impl<'a> Parser<'a> {
                 // jewelry_stand(tier_count, bottom_tier_dia, height) 3 param、他 default
                 let (count, dia, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::JewelryStandSpec {
-                    tier_count: lol_u32(count.round().max(1.0)),
+                    tier_count: self.count(count, 1.0)?,
                     bottom_tier_diameter: dia,
                     height,
                     tier_thickness: 5.0,
@@ -2488,7 +2509,7 @@ impl<'a> Parser<'a> {
                 // cutting_board_rack(slot_count, slot_width, height) 3 param、他 default
                 let (count, width, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::CuttingBoardRackSpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_width: width,
                     height,
                     slot_depth: 200.0,
@@ -2517,7 +2538,7 @@ impl<'a> Parser<'a> {
                 // shower_caddy(tier_count, tier_length, tier_depth) 3 param、他 default
                 let (count, length, depth) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::ShowerCaddySpec {
-                    tier_count: lol_u32(count.round().max(1.0)),
+                    tier_count: self.count(count, 1.0)?,
                     tier_length: length,
                     tier_depth: depth,
                     tier_height: 40.0,
@@ -2536,7 +2557,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::CaliperHolderSpec {
                     jaw_length: jaw,
                     throat_depth: throat,
-                    count: lol_u32(count.round().max(1.0)),
+                    count: self.count(count, 1.0)?,
                     slot_width: 15.0,
                     wall_thickness: 5.0,
                     mount_hole_diameter: 4.5,
@@ -2549,7 +2570,7 @@ impl<'a> Parser<'a> {
                 // bag_clip_org(slot_count, slot_width, height) 3 param、他 default
                 let (count, width, height) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::BagClipOrgSpec {
-                    slot_count: lol_u32(count.round().max(1.0)),
+                    slot_count: self.count(count, 1.0)?,
                     slot_width: width,
                     height,
                     wall_thickness: 2.5,
@@ -2562,7 +2583,7 @@ impl<'a> Parser<'a> {
                 // can_rack(rows, can_diameter, tilt_angle_deg) 3 param、他 default
                 let (rows, dia, tilt) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::CanRackSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
                     can_diameter: dia,
                     tilt_angle_deg: tilt,
                     cans_per_row: 6,
@@ -2591,8 +2612,8 @@ impl<'a> Parser<'a> {
                 // makeup_organizer(rows, cols, cell_size) 3 param、他 default
                 let (rows, cols, size) = self.parse_3f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::MakeupOrganizerSpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     cell_size: size,
                     cell_depth: 40.0,
                     wall_thickness: 2.0,
@@ -2629,7 +2650,7 @@ impl<'a> Parser<'a> {
                     depth: 40.0,
                     fillet_radius: 3.0,
                     hole_size: hole,
-                    holes_per_arm: lol_u32(holes.round().max(1.0)),
+                    holes_per_arm: self.count(holes, 1.0)?,
                     bore_kind: 0,
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::l_bracket(&spec))
@@ -2651,8 +2672,8 @@ impl<'a> Parser<'a> {
                 // raspi_mount_plate(model, extra_m4_holes) 2 param
                 let (model, extras) = self.parse_2f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::RaspiMountPlateSpec {
-                    model: lol_u32(model.round().max(0.0)),
-                    extra_m4_holes: lol_u32(extras.round().max(0.0)),
+                    model: self.count(model, 0.0)?,
+                    extra_m4_holes: self.count(extras, 0.0)?,
                     plate_thickness: 4.0,
                     plate_margin: 15.0,
                     m25_hole_dia: 2.8,
@@ -2666,8 +2687,8 @@ impl<'a> Parser<'a> {
                 let (rows, cols, m_size, pitch, base_t) = self.parse_5f()?;
                 let m = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::HeatSetArraySpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     insert_size: m,
                     pitch,
                     base_thickness: base_t,
@@ -2684,7 +2705,7 @@ impl<'a> Parser<'a> {
                 let spec = crate::stdlib::hardsurface::pattern_sdf::FlangeMountSpec {
                     outer_dia: od,
                     bolt_size: m,
-                    hole_count: lol_u32(count.round().max(1.0)),
+                    hole_count: self.count(count, 1.0)?,
                     thickness: 6.0,
                     bcd_ratio: 0.7,
                     center_bore_dia: 0.0,
@@ -2711,7 +2732,7 @@ impl<'a> Parser<'a> {
                 // profile_extrusion(kind, length) 2 param、kind: 20=2020 / 30=3030
                 let (kind, length) = self.parse_2f()?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::ProfileExtrusionSpec {
-                    kind: lol_u32(kind.round().max(20.0)),
+                    kind: self.count(kind, 20.0)?,
                     length,
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::profile_extrusion(
@@ -2736,8 +2757,8 @@ impl<'a> Parser<'a> {
                 let (rows, cols, m_size, height, pitch, base_t) = self.parse_6f()?;
                 let m = self.metric_size(m_size)?;
                 let spec = crate::stdlib::hardsurface::pattern_sdf::BossArraySpec {
-                    rows: lol_u32(rows.round().max(1.0)),
-                    cols: lol_u32(cols.round().max(1.0)),
+                    rows: self.count(rows, 1.0)?,
+                    cols: self.count_grid(rows, cols)?,
                     screw_size: m,
                     boss_height: height,
                     pitch,
@@ -2811,7 +2832,7 @@ impl<'a> Parser<'a> {
                     cb,
                     thick,
                     pcd,
-                    lol_u32(count.round().max(1.0)),
+                    self.count(count, 1.0)?,
                     bolt_dia,
                 ))
             }
@@ -2898,7 +2919,7 @@ impl<'a> Parser<'a> {
                     width,
                     pitch,
                     dia,
-                    lol_u32(count.round().max(0.0)),
+                    self.count(count, 0.0)?,
                 ))
             }
 
@@ -2957,7 +2978,7 @@ impl<'a> Parser<'a> {
                     board,
                     plate_thickness: 4.0,
                     plate_margin: 10.0,
-                    extra_m4_holes: lol_u32(extras.round().max(0.0)),
+                    extra_m4_holes: self.count(extras, 0.0)?,
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::arduino_mount_plate(&spec))
             }
@@ -2994,9 +3015,9 @@ impl<'a> Parser<'a> {
             "jst_ph_slot" => {
                 // jst_ph_slot(pins) 1 param、2/3/4/5 pin 対応、raw Y-up Box3d
                 let pins = self.parse_1f()?;
-                Ok(crate::stdlib::hardsurface::joint::jst_ph_slot(lol_u32(
-                    pins.round().max(2.0),
-                )))
+                Ok(crate::stdlib::hardsurface::joint::jst_ph_slot(
+                    self.count(pins, 2.0)?,
+                ))
             }
 
             other => Err(ParseError {
@@ -3089,6 +3110,73 @@ impl Parser<'_> {
         // 範囲は直前で検証済 (0 ..= 2^24)
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(v as u32)
+    }
+
+    /// 個数を取る引数 (rows / cols / count 等) を 1 以上 `MAX_STDLIB_COUNT` 以下の整数にする
+    ///
+    /// 個数は stdlib の生成器が `SdfNode` の個数・木の深さに直結する 旧実装は `as u32` で
+    /// 上限なしに通していたので、`pill_organizer(1e6, 2, 3)` は stack overflow で abort
+    /// (`catch_unwind` でも拾えない)、`1e5` は数分かけて確保し続けた LLM が生成した値が
+    /// そのまま入る経路なので、境界で `ParseError` にする 非有限値も弾く
+    fn count(&self, v: f32, min: f32) -> Result<u32, ParseError> {
+        let v = self.bounded_count(v)?;
+        Ok(lol_u32(v.round().max(min)))
+    }
+
+    /// 個数を取るが、生成器が `smooth_union` を 1 個ずつ重ねる (非結合なので balanced fold に
+    /// できない) 引数 木の深さが個数の 2 倍になるので、上限は `MAX_STDLIB_SMOOTH_FOLD_COUNT`
+    fn count_smooth_folded(&self, v: f32, min: f32) -> Result<u32, ParseError> {
+        if v > MAX_STDLIB_SMOOTH_FOLD_COUNT {
+            return Err(ParseError {
+                message: format!(
+                    "個数が上限 {MAX_STDLIB_SMOOTH_FOLD_COUNT} を超える (smooth union を線形に重ねる形状): {v}"
+                ),
+                position: self.lexer.pos,
+            });
+        }
+        self.count(v, min)
+    }
+
+    /// 格子の列数 `cols` を取る `rows × cols` が `MAX_STDLIB_GRID_CELLS` 以下であることも検証する
+    fn count_grid(&self, rows: f32, cols: f32) -> Result<u32, ParseError> {
+        let c = self.count(cols, 1.0)?;
+        let r = self.count(rows, 1.0)?;
+        if f64::from(r) * f64::from(c) > f64::from(MAX_STDLIB_GRID_CELLS) {
+            return Err(ParseError {
+                message: format!("格子の要素数 {r} x {c} が上限 {MAX_STDLIB_GRID_CELLS} を超える"),
+                position: self.lexer.pos,
+            });
+        }
+        Ok(c)
+    }
+
+    /// `count` と同じ上限で、小数部は切り捨てる (旧 `lol_u32` と同じ丸め)
+    fn count_trunc(&self, v: f32) -> Result<u32, ParseError> {
+        Ok(lol_u32(self.bounded_count(v)?))
+    }
+
+    /// SKADIS 板の一辺 \[mm\] を `MAX_SKADIS_PANEL_MM` 以下の有限値にする
+    ///
+    /// 穴は (size / 40)² 個を生成する 旧実装は上限なしで、`skadis_panel(1e30, ..)` は数 GB 確保し、
+    /// `inf` は `loop { if pos >= size break }` が終わらなかった
+    fn skadis_size(&self, size: f32) -> Result<f32, ParseError> {
+        if !size.is_finite() || size > MAX_SKADIS_PANEL_MM {
+            return Err(ParseError {
+                message: format!("SKADIS 板の一辺は有限で {MAX_SKADIS_PANEL_MM} mm 以下でなければならない: {size}"),
+                position: self.lexer.pos,
+            });
+        }
+        Ok(size)
+    }
+
+    fn bounded_count(&self, v: f32) -> Result<f32, ParseError> {
+        if !v.is_finite() || v > MAX_STDLIB_COUNT {
+            return Err(ParseError {
+                message: format!("個数は有限で {MAX_STDLIB_COUNT} 以下でなければならない: {v}"),
+                position: self.lexer.pos,
+            });
+        }
+        Ok(v)
     }
 
     /// 0-255 の整数 (music packet byte)

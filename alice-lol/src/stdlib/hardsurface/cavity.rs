@@ -207,6 +207,31 @@ pub fn subtract_blind_pocket(
     x: f32,
     z: f32,
 ) -> SdfNode {
+    SdfNode::Subtraction {
+        a: Arc::new(plate),
+        b: Arc::new(blind_pocket_cutter(
+            hole_dia,
+            plate_thickness,
+            pocket_depth,
+            x,
+            z,
+        )),
+    }
+}
+
+/// `subtract_blind_pocket` が板から引く円柱 (配置済)
+///
+/// 多数の pocket を 1 枚の板に開ける呼び出し側は、これを集めて balanced fold で 1 回だけ引く
+/// (pocket ごとに `subtract_blind_pocket` を重ねると `Subtraction` の左入れ子が個数分の深さになり、
+/// 数十個で eval / drop が stack overflow する)
+#[must_use]
+pub fn blind_pocket_cutter(
+    hole_dia: f32,
+    plate_thickness: f32,
+    pocket_depth: f32,
+    x: f32,
+    z: f32,
+) -> SdfNode {
     let outer_hy = plate_thickness * 0.5;
     let cyl_len = pocket_depth + CAVITY_PUNCH_MARGIN;
     let hole = SdfNode::Cylinder {
@@ -216,13 +241,9 @@ pub fn subtract_blind_pocket(
     // center Y = outer_hy + (punch_margin - pocket_depth) / 2
     // → cylinder extends Y = [outer_hy - pocket_depth, outer_hy + punch_margin]
     let y_offset = (CAVITY_PUNCH_MARGIN - pocket_depth).mul_add(0.5, outer_hy);
-    let hole_placed = SdfNode::Translate {
+    SdfNode::Translate {
         child: Arc::new(hole),
         offset: Vec3::new(x, y_offset, z),
-    };
-    SdfNode::Subtraction {
-        a: Arc::new(plate),
-        b: Arc::new(hole_placed),
     }
 }
 
@@ -243,6 +264,7 @@ pub fn subtract_blind_pocket(
 /// let plate = SdfNode::Box3d { half_extents: Vec3::new(30.0, 3.0, 30.0) };
 /// let result = subtract_blind_heat_set(plate, MetricSize::M3, 6.0, 20.0, 20.0);
 /// ```
+// ALLOW-UNWIRED: 公開 API の単発版 (heat_set_array は cutter を集めて 1 回引く形に直した)
 #[must_use]
 pub fn subtract_blind_heat_set(
     plate: SdfNode,
@@ -251,9 +273,18 @@ pub fn subtract_blind_heat_set(
     x: f32,
     z: f32,
 ) -> SdfNode {
+    SdfNode::Subtraction {
+        a: Arc::new(plate),
+        b: Arc::new(blind_heat_set_cutter(m, plate_thickness, x, z)),
+    }
+}
+
+/// `subtract_blind_heat_set` が板から引く円柱 (配置済、`blind_pocket_cutter` の heat-set 版)
+#[must_use]
+pub fn blind_heat_set_cutter(m: MetricSize, plate_thickness: f32, x: f32, z: f32) -> SdfNode {
     let insert_dia = m.heat_set_insert_diameter() + CLEARANCE_H2D_FDM;
     let pocket_depth = m.heat_set_insert_depth() + HEAT_SET_SINK_MARGIN;
-    subtract_blind_pocket(plate, insert_dia, plate_thickness, pocket_depth, x, z)
+    blind_pocket_cutter(insert_dia, plate_thickness, pocket_depth, x, z)
 }
 
 /// Fastener hole の生 `screw_hole` を経由せず、直接 cavity margin 込みの cylinder を返す
