@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `hardsurface::{mount, skadis_sdf}` の出来上がりの形の欠陥 11 件 (2026-10-02)
+
+`cavity` / `mount` / `skadis_sdf` に閉形式 / 文書の寸法と突き合わせる oracle 35 本を足し、`eval` の符号変化の二分法で出来上がりの形を測ったところ、
+`cavity` は全項目が正しく (穴の半径・位置・±5mm の余裕・blind の底・皿の 90 度円錐)、`mount` / `skadis_sdf` に欠陥が見つかった 既存の単体 test には
+修正前の誤った値をそのまま固定したもの (`skadis_peg_dimensions_match_bamboo_spec` の内側寸法、`bracket_l` の `k == R`) があったので、出来上がりの形を測る形に直した
+
+**`mount`**
+- `rack_shelf`: ALICE-SDF の `RepeatFinite` は「`count` 個のセルを `±count/2` にクランプ」するので `notch_count` をそのまま渡すと
+  完全な穴 3 個 + 位置のずれた半端な穴 2 個 (n=3) になっていた `2 * notch_count` を渡して `2n + 1` 個にした
+- `skadis_peg_compat(5.0)`: 実寸 9.8 x 20 x 10 を 4.8 x 15 x 5 に (`RoundedBox` の外寸は `half_extents + round_radius`、角丸は最小の半寸法で頭打ち)
+- `bracket_l` の fillet: `SmoothUnion` の `k` に R を渡していて、角から対角線上の面までの距離が円弧の 85% だった `k = (4 - 2√2)·R` に直した
+- `profile_2020` / `profile_3030`: 断面が 4 つの連結成分 (バラバラの角ブロック) に分かれ (2020)、T スロットの首が設計の半分だった
+  スロットの寸法を供給元の寸法表に合わせ (開口 6.0、首 1.8、全深さ 6.1、空洞幅 11)、空洞を 45 度の斜壁で底へ狭まる台形にして対角にリブを残し、
+  開口を表面に一致させた (`PROFILE_SLOT_*` を追加)  旧定数 `T_SLOT_2020_*` (首 5 + 空洞 6 = 11mm) は 20 mm 角に収まらなかった
+  `joint::t_slot_2020` は変更していない
+
+**`skadis_sdf`**
+- `skadis_panel_sdf`: X / Z の外寸が `size + 2R` (±155) だったのを `size` (±150) に (mount の peg と同じ `RoundedBox` の誤解)
+- peg 穴の千鳥格子: 端の余白 (`SKADIS_EDGE_MARGIN` 20mm) の内側に出る穴 (x または z が +140 の 13 個) と、穴の格子が左右非対称な点を、
+  使用可能範囲 `|中心| <= size/2 - 余白` に入る添字だけを並べて直した
+- `skadis_container_sdf`: 底厚 1.1mm (仕様 1.6mm) を直し、背面ペグを 1 個から 2 個 (x = ±20) にして、背面の裏側へ板厚 5mm 突き出すよう向きを直した
+  (peg は X 方向に伸びるのに背面は Z 方向で、回転が無く 2.5mm しか出なかった)
+- `skadis_shelf_sdf`: 背面ペグの向きを同様に直した (2.4mm → 板厚 5mm 突き出す)
+- `capsule_polyline_sdf` (hook L / J / S と elastic cord): 3D の `Capsule` 管 (断面が直径 2R の円、`hook_width` は管より狭くしか効かず幅 8 の hook が直径 7 の管)
+  から、Z 軸の円柱を edge の向きに `Elongate` した平らな帯 (面内 2R x Z 方向 `hook_width`、端は面内で丸い) に直した
+  (Bamboo の `LineString.buffer(R)` + 押出に相当)
+- 変異 47 種 (cavity / mount / skadis の既存実装 31 種と、修正側 16 種) が red になることを実測した
+
 ### Fixed — `roblox_export` の 3 プリセットが水密でなく三角形上限を守れなかった (2026-10-02)
 
 `roblox_export` は test が 1 本も無く、CI の test matrix にも feature `roblox` を有効にする entry が無かった
