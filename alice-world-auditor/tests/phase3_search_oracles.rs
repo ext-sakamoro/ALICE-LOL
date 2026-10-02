@@ -126,6 +126,15 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     // 真の最適 (bang-bang): t* = 2*sqrt(d/a) = 2*sqrt(20) = 8.94427191
     // → /dt(1/60) = 536.656... → ceil 537 (a_closed_form_minimal_step_count
     // と同じ scene・同じ値 — ここでは heuristic でなく plan 自体の答えを問う)
+    //
+    // ⚠️ **537 は AABB の下端 (`target.min.x`) が特定の窓にある時だけ正しい**
+    // (`ys-ba` 2026-10-03 検算、[[reference_bangbang_integer_lattice_closed_form]])
+    // 整数格子では到達可能な位置が 1 刻みの全整数 (granularity 1) なので、
+    // 最小 frame 数は「position(r) が target AABB の **下端以上**になる最小 r」
+    // で決まる (この scene は下端側から接近するので) 下端を `d - 0.5 = 99.5`
+    // に取ると実測 536 になる (`d*a*dt² = 72000` に対し窓は `x_lo ∈
+    // (99.755556, 100.127778]` の時のみ 537、検算: `verify_bangbang_lattice.py`)
+    // ⇒ 下端を安全な窓の内側 (`99.9`) に取る
     let t_star = 2.0 * (d / a).sqrt();
     let optimal_frames = (t_star / dt).ceil() as u32;
     assert_eq!(
@@ -141,8 +150,8 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
 
     let goal = Goal::PositionWithinAndAtRest {
         target: Aabb {
-            min: glam::Vec3::new(d - 0.5, -0.5, -0.5),
-            max: glam::Vec3::new(d + 0.5, 0.5, 0.5),
+            min: glam::Vec3::new(d - 0.1, -0.5, -0.5),
+            max: glam::Vec3::new(d + 0.1, 0.5, 0.5),
         },
     };
     let params = Params::new(a, dt, 1_000_000);
