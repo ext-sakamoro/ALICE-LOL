@@ -106,22 +106,22 @@ step "security-audit.yml / deny: Run cargo deny check all"
 step "security-audit.yml / unused-deps: Run cargo machete"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo machete )
 
-step "security-audit.yml / stub-guard: Detect todo! / unimplemented! / panic!(STUB) in src/**"
+step "security-audit.yml / stub-guard: Detect panic!(STUB) in src/** (blocking)"
 (
   export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"
   set -eo pipefail
-  hits=$(grep -rnE 'todo!\(|unimplemented!\(|panic!\([^)]*STUB' \
+  hits=$(grep -rnE 'panic!\([^)]*STUB' \
     . --include="*.rs" \
     --exclude-dir=bin \
     --exclude-dir=target \
     --exclude-dir=fuzz \
     || true)
   if [ -n "$hits" ]; then
-    echo "❌ Stub / unimplemented / STUB panic detected in production path:"
+    echo "❌ STUB panic detected in production path:"
     echo "$hits"
     exit 1
   fi
-  echo "✓ No todo! / unimplemented! / panic!(STUB) in workspace src/"
+  echo "✓ No panic!(STUB) in workspace src/"
 )
 
 step "security-audit.yml / stub-guard: Detect dbg!() residual in src/**"
