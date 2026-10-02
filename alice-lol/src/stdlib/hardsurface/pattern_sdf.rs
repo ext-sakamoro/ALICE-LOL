@@ -1801,10 +1801,14 @@ pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, 0.0));
-        result = subtract(result, well);
+        cutters.push(well);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -1887,6 +1891,7 @@ pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let t = if count == 1 {
             0.0
@@ -1901,7 +1906,10 @@ pub fn wrench_holder(spec: &WrenchHolderSpec) -> SdfNode {
             box3d(slot_w * 0.5, slot_hy, slot_thick * 0.5),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -1975,10 +1983,14 @@ pub fn socket_rail(spec: &SocketRailSpec) -> SdfNode {
 
     let base = rounded_box(base_hx, base_hy, base_hz, spec.base_margin);
     let mut result = base;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let post = translate(cylinder(post_r, post_hy), Vec3::new(x, post_offset_y, 0.0));
-        result = union(result, post);
+        cutters.push(post);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = union(result, all);
     }
 
     to_z_up(result)
@@ -2061,6 +2073,7 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
 
     let outer = box3d(outer_hx, outer_hy, outer_hz);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(spec.spacing, x_start);
@@ -2072,8 +2085,11 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
                 },
                 Vec3::new(x, y, hex_offset_z),
             );
-            result = subtract(result, hex);
+            cutters.push(hex);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     result
@@ -2366,10 +2382,14 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let cavity = translate(cylinder(cell_r, cell_hy), Vec3::new(x, 0.0, 0.0));
-        result = subtract(result, cavity);
+        cutters.push(cavity);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2441,10 +2461,14 @@ pub fn toothbrush_holder(spec: &ToothbrushHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2522,6 +2546,7 @@ pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let t = if count == 1 {
             0.0
@@ -2532,7 +2557,10 @@ pub fn drill_bit_holder(spec: &DrillBitHolderSpec) -> SdfNode {
         let hole_r = 2.0f32.mul_add(spec.hole_clearance, size) * 0.5;
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2605,13 +2633,17 @@ pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2718,13 +2750,17 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     let recess_hy = f32::midpoint(spec.recess_depth, 0.5);
     let recess_offset_y = -outer_hy + spec.base_thickness - recess_hy + 0.25;
     let x_start = -(count_f - 1.0) * pitch * 0.5;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let recess = translate(
             cylinder(recess_r, recess_hy),
             Vec3::new(x, recess_offset_y, 0.0),
         );
-        result = subtract(result, recess);
+        cutters.push(recess);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2804,13 +2840,17 @@ pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(spec.pitch, x_start);
             let z = (n_f32(r)).mul_add(spec.pitch, z_start);
             let cup = translate(cylinder(cup_r, cup_hy), Vec3::new(x, cup_offset_y, z));
-            result = subtract(result, cup);
+            cutters.push(cup);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -2882,10 +2922,14 @@ pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let compartment = translate(cylinder(comp_r, comp_hy), Vec3::new(x, comp_offset_y, 0.0));
-        result = subtract(result, compartment);
+        cutters.push(compartment);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3030,10 +3074,14 @@ pub fn nozzle_holder(spec: &NozzleHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3108,13 +3156,17 @@ pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(spec.slot_spacing, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, outer_hz + 1.0),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3190,13 +3242,17 @@ pub fn cutlery_tray(spec: &CutleryTraySpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3274,6 +3330,7 @@ pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch, x_start);
@@ -3282,8 +3339,11 @@ pub fn pill_organizer(spec: &PillOrganizerSpec) -> SdfNode {
                 box3d(cell_h, cell_hy, cell_h),
                 Vec3::new(x, cell_offset_y, z),
             );
-            result = subtract(result, cell);
+            cutters.push(cell);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3361,13 +3421,17 @@ pub fn magnetic_strip(spec: &MagneticStripSpec) -> SdfNode {
 
     let bar = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = bar;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(spec.magnet_spacing, x_start);
         let hole = translate(
             cylinder(magnet_r, magnet_hy),
             Vec3::new(x, magnet_offset_y, 0.0),
         );
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3516,13 +3580,17 @@ pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch, x_start);
             let z = (n_f32(r)).mul_add(pitch, z_start);
             let well = translate(cylinder(well_r, well_hy), Vec3::new(x, well_offset_y, z));
-            result = subtract(result, well);
+            cutters.push(well);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3602,6 +3670,7 @@ pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let t = if count == 1 {
             0.0
@@ -3612,7 +3681,10 @@ pub fn hex_key_holder(spec: &HexKeyHolderSpec) -> SdfNode {
         let hole_r = 2.0f32.mul_add(spec.hole_clearance, size) * 0.5;
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -3784,6 +3856,7 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let wall_hz = spec.cell_depth * 0.5;
     let wall_offset_y = spec.floor_thickness + wall_hy;
     let x_left = -inner_x * 0.5;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 1..count {
         let wall_center_x = spec.wall_thickness.mul_add(
             -0.5,
@@ -3793,7 +3866,10 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
             box3d(spec.wall_thickness * 0.5, wall_hy, wall_hz),
             Vec3::new(wall_center_x, wall_offset_y - outer_hy, 0.0),
         );
-        result = union(result, wall);
+        cutters.push(wall);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = union(result, all);
     }
 
     to_z_up(result)
@@ -3883,13 +3959,17 @@ pub fn soap_tray(spec: &SoapTraySpec) -> SdfNode {
     let slot_hy = f32::midpoint(spec.floor_thickness, 10.0);
     let slot_hz = spec.tray_width * 0.5;
     let slot_offset_y = -outer_hy + slot_hy - 0.5;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (-spec.tray_length).mul_add(0.5, slot_pitch * (n_f32(i) + 1.0));
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4060,13 +4140,17 @@ pub fn chopstick_holder(spec: &ChopstickHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(spec.slot_width * 0.5, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4152,6 +4236,7 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch_x, x_start);
@@ -4160,8 +4245,11 @@ pub fn swatch_holder(spec: &SwatchHolderSpec) -> SdfNode {
                 box3d(slot_hx, slot_hy, slot_hz),
                 Vec3::new(x, slot_offset_y, z),
             );
-            result = subtract(result, slot);
+            cutters.push(slot);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4323,6 +4411,7 @@ pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch_x, x_start);
@@ -4331,8 +4420,11 @@ pub fn sd_card_holder(spec: &SdCardHolderSpec) -> SdfNode {
                 box3d(slot_hx, slot_hy, slot_hz),
                 Vec3::new(x, slot_offset_y, z),
             );
-            result = subtract(result, slot);
+            cutters.push(slot);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4400,10 +4492,14 @@ pub fn driver_rack(spec: &DriverRackSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4554,10 +4650,14 @@ pub fn sink_caddy(spec: &SinkCaddySpec) -> SdfNode {
     let hole_hy = f32::midpoint(spec.floor_thickness, 10.0);
     let hole_offset_y = -outer_hy + hole_hy - 0.5;
     let hole_pitch = spec.tray_length / (count_f + 1.0);
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (-spec.tray_length).mul_add(0.5, hole_pitch * (n_f32(i) + 1.0));
         let hole = translate(cylinder(hole_r, hole_hy), Vec3::new(x, hole_offset_y, 0.0));
-        result = subtract(result, hole);
+        cutters.push(hole);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4747,6 +4847,7 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch, x_start);
@@ -4755,8 +4856,11 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
                 cylinder(cavity_r, cavity_hy),
                 Vec3::new(x, cavity_offset_y, z),
             );
-            result = subtract(result, cavity);
+            cutters.push(cavity);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -4939,13 +5043,17 @@ pub fn jewelry_stand(spec: &JewelryStandSpec) -> SdfNode {
     let mut result = pillar;
     let tier_spacing = spec.height / count_f;
     let tier_hz = spec.tier_thickness * 0.5;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let tier_r = spec.bottom_tier_diameter
             * 0.5
             * spec.tier_ratio.powi(i32::try_from(i).unwrap_or(i32::MAX));
         let tier_z = tier_spacing * (n_f32(i) + 1.0) - tier_hz;
         let tier = translate(cylinder_z(tier_r, tier_hz), Vec3::new(0.0, 0.0, tier_z));
-        result = union(result, tier);
+        cutters.push(tier);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = union(result, all);
     }
 
     result
@@ -5115,13 +5223,17 @@ pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -5334,6 +5446,7 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let drains = spec.drains_per_tier.max(1);
     let drain_pitch = spec.tier_length / (n_f32(drains) + 1.0);
 
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let tier_y = (n_f32(i)).mul_add(
             spec.tier_spacing,
@@ -5356,7 +5469,10 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
             tier = subtract(tier, drain);
         }
         let tier_placed = translate(tier, Vec3::new(0.0, tier_y, tier_z));
-        result = union(result, tier_placed);
+        cutters.push(tier_placed);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = union(result, all);
     }
 
     // Mount holes (M4 × 2、backplate 上端左右)
@@ -5451,13 +5567,17 @@ pub fn caliper_holder(spec: &CaliperHolderSpec) -> SdfNode {
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
     let mut result = backplate;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     // Mount holes (M4 × 4、backplate 4 隅)
@@ -5547,13 +5667,17 @@ pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
         let x = (n_f32(i)).mul_add(pitch, x_start);
         let slot = translate(
             box3d(slot_hx, slot_hy, slot_hz),
             Vec3::new(x, slot_offset_y, 0.0),
         );
-        result = subtract(result, slot);
+        cutters.push(slot);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -5665,6 +5789,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let shelf_hz = shelf_depth * 0.5;
     let lip_hy = spec.front_lip_height * 0.5;
     let lip_hz = spec.wall_thickness * 0.5;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..rows {
         // Shelf Y offset (bottom → top、+X 軸傾斜で back → front 下がる)
         let tier_y = -outer_hy + spec.wall_thickness + tier_spacing * (n_f32(i)) + shelf_hy;
@@ -5684,8 +5809,11 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
             Vec3::new(0.0, lip_offset_y, lip_offset_z),
         );
 
-        result = union(result, shelf);
-        result = union(result, lip);
+        cutters.push(shelf);
+        cutters.push(lip);
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = union(result, all);
     }
 
     to_z_up(result)
@@ -5870,6 +5998,7 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
 
     let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
     let mut result = outer;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let x = (n_f32(c)).mul_add(pitch, x_start);
@@ -5878,8 +6007,11 @@ pub fn makeup_organizer(spec: &MakeupOrganizerSpec) -> SdfNode {
                 box3d(cell_h_side, cell_hy, cell_h_side),
                 Vec3::new(x, cell_offset_y, z),
             );
-            result = subtract(result, cell);
+            cutters.push(cell);
         }
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
@@ -6367,8 +6499,6 @@ impl HeatSetArraySpec {
 /// ```
 #[must_use]
 pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
-    use crate::stdlib::hardsurface::cavity::subtract_blind_heat_set;
-
     let rows = spec.rows.max(1);
     let cols = spec.cols.max(1);
     let rows_f = n_f32(rows);
@@ -6387,14 +6517,24 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
 
     // McMaster/Voxel8 spec + cavity margin rule (5mm 上方 punch) は helper intrinsic
-    let mut result = plate;
+    // 線形に重ねると深さが rows × cols になるので、cutter を集めて balanced fold で 1 回引く
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let cx = (n_f32(c)).mul_add(spec.pitch, start_x);
             let cz = (n_f32(r)).mul_add(spec.pitch, start_z);
-            result = subtract_blind_heat_set(result, spec.insert_size, spec.base_thickness, cx, cz);
+            cutters.push(super::cavity::blind_heat_set_cutter(
+                spec.insert_size,
+                spec.base_thickness,
+                cx,
+                cz,
+            ));
         }
     }
+    let result = match super::balanced_union_fold(cutters) {
+        Some(all) => subtract(plate, all),
+        None => plate,
+    };
 
     to_z_up(result)
 }
@@ -6733,17 +6873,20 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
 
-    let mut result = plate;
+    // 線形に重ねると深さが rows × cols になる (しかも毎回 `result.clone()` する) ので、
+    // boss を集めて balanced fold で 1 回足す
+    let mut bosses: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
         for c in 0..cols {
             let cx = (n_f32(c)).mul_add(spec.pitch, start_x);
             let cz = (n_f32(r)).mul_add(spec.pitch, start_z);
-            result = union(
-                result.clone(),
-                translate(boss_template.clone(), Vec3::new(cx, boss_y, cz)),
-            );
+            bosses.push(translate(boss_template.clone(), Vec3::new(cx, boss_y, cz)));
         }
     }
+    let result = match super::balanced_union_fold(bosses) {
+        Some(all) => union(plate, all),
+        None => plate,
+    };
 
     to_z_up(result)
 }
@@ -7143,8 +7286,12 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     // 組立: wall_plate + arm + cradle body、subtract wall screw holes + subtract cradle hole
     let assembly = union(union(wall_plate, arm), cradle_placed);
     let mut result = assembly;
+    let mut cutters: Vec<SdfNode> = Vec::new();
     for pos in bore_positions {
-        result = subtract(result, translate(bore_rotated.clone(), pos));
+        cutters.push(translate(bore_rotated.clone(), pos));
+    }
+    if let Some(all) = super::balanced_union_fold(cutters) {
+        result = subtract(result, all);
     }
     result = subtract(result, hole_placed);
 
