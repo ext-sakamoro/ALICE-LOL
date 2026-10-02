@@ -95,6 +95,12 @@ name = "alice_coaster"
 name = "roblox_accessory"
 required-features = ["roblox"]
 
+# roblox_export の閉形式 oracle (feature `roblox` が有効なときだけ build する)
+# CI の test matrix に `--features roblox` の entry を置いて実行する
+[[test]]
+name = "analytic_roblox_export"
+required-features = ["roblox"]
+
 # Phase X.8 B-8: end-to-end LLM → LOL DSL → SdfNode → optional STL demo
 # via alice_lol::bridge::generate_sdf_from_prompt.
 [[example]]

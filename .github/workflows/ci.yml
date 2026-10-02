@@ -42,6 +42,13 @@ jobs:
           - os: ubuntu-latest
             features: "--features physics"
             label: " physics"
+          # Ubuntu: exercise the roblox feature so tests/analytic_roblox_export.rs
+          # (`required-features = ["roblox"]`) is actually executed. clippy / msrv
+          # compile `--all-features` but never ran a test, so `roblox_export` had
+          # no test at all and a non-watertight / over-limit mesh went unnoticed.
+          - os: ubuntu-latest
+            features: "--features roblox"
+            label: " roblox"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -87,6 +94,13 @@ jobs:
       - name: Test
         working-directory: ALICE-LOL
         run: cargo test ${{ matrix.features }}
+
+      # `required-features` 付きの test target は feature が無いと黙ってスキップされるので、
+      # roblox の entry では名指しで走らせる (target が消える / 登録が外れるとここで fail する)
+      - name: Test (roblox oracle, named)
+        if: matrix.label == ' roblox'
+        working-directory: ALICE-LOL
+        run: cargo test ${{ matrix.features }} --test analytic_roblox_export
 
       # Phase X.8 B-8: catch example bit-rot. `required-features` on
       # llm-bridge-only examples auto-skips them on the macos default
