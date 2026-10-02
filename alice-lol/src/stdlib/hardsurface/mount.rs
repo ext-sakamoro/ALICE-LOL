@@ -56,6 +56,25 @@ pub const PROFILE_2020_CENTER_BORE: f32 = 5.2;
 /// 3030 プロファイル中央穴径 (M6 通し、mm)
 pub const PROFILE_3030_CENTER_BORE: f32 = 6.2;
 
+/// プロファイルの T スロット開口幅 (mm、20 シリーズの供給元の寸法表は 6.0〜6.2)
+pub const PROFILE_SLOT_OPENING_WIDTH: f32 = 6.0;
+
+/// プロファイルの T スロットの首 (lip) の厚み (mm、供給元の寸法表は 1.5〜1.8)
+pub const PROFILE_SLOT_NECK_DEPTH: f32 = 1.8;
+
+/// プロファイルの T スロットの全深さ (mm、表面から底まで、供給元の寸法表は 5.5〜6.1)
+pub const PROFILE_SLOT_DEPTH: f32 = 6.1;
+
+/// プロファイルの T スロットの空洞の最大幅 (mm、首の直下、45 度の斜壁で底へ向かって狭まる)
+pub const PROFILE_SLOT_CAVITY_WIDTH: f32 = 11.0;
+
+/// `SmoothUnion` の `k` を円弧の fillet 半径 R に対応づける係数 (`4 - 2√2` = 1.1716)
+///
+/// 直角の内角の 2 面を 2 次多項式の smooth min (`min - h²k/4`) でつなぐと、角から対角線上の
+/// 面までの距離は `k√2/4`  半径 R の円弧なら `R(√2 - 1)`  両者を等しくする `k = (4 - 2√2)·R`
+/// (形は厳密な円弧ではないが、角の埋まり方は R の円弧に一致する)
+const SMOOTH_UNION_K_PER_FILLET_RADIUS: f32 = 4.0 - 2.0 * std::f32::consts::SQRT_2;
+
 // ────────────────────────────────────────────────────────
 // 1. L 字 bracket
 // ────────────────────────────────────────────────────────
@@ -65,6 +84,7 @@ pub const PROFILE_3030_CENTER_BORE: f32 = 6.2;
 /// 構造: 水平板 (`horizontal_length` × `thickness` × `depth`) を Y=0 に配置、
 /// 垂直板 (`thickness` × `vertical_height` × `depth`) を水平板の -X 端に立てて
 /// `SdfNode::SmoothUnion` で内角 R = `fillet_radius` を付ける
+/// (`k = (4 - 2√2)·R` で、角から対角線上の面までの距離が半径 R の円弧と一致する)
 ///
 /// # 引数
 ///
@@ -109,7 +129,7 @@ pub fn bracket_l(
         SdfNode::SmoothUnion {
             a: Arc::new(horizontal),
             b: Arc::new(vertical),
-            k: fillet_radius,
+            k: fillet_radius * SMOOTH_UNION_K_PER_FILLET_RADIUS,
         }
     } else {
         SdfNode::Union {
@@ -198,8 +218,12 @@ pub fn flange_circular(
 /// 棚受けレール (板に等間隔 notch 穴列を持つ長物)
 ///
 /// 構造: 板 (`length` × `thickness` × `width`) から notch 穴 (`notch_dia` 径、Y 軸 cylinder)
-/// を `notch_pitch` 間隔で `notch_count` 個 (`2*count+1` 個) `RepeatFinite` で subtract
-/// notch は板長辺 (X 軸) に沿って中央配置
+/// を `notch_pitch` 間隔で `2*notch_count+1` 個 `RepeatFinite` で subtract
+/// notch は板長辺 (X 軸) に沿って中央配置 (中心 `k * notch_pitch`、`k = -notch_count..=notch_count`)
+///
+/// ⚠️ ALICE-SDF の `RepeatFinite` は「`count` 個のセルを `±count/2` にクランプ」する
+/// (`count` が偶数なら `count + 1` 個、奇数なら端に位置のずれた半端な穴が出る) ので、
+/// `2 * notch_count` を渡して `2n + 1` 個の穴にする
 ///
 /// # 引数
 ///
@@ -236,7 +260,7 @@ pub fn rack_shelf(
     };
     let notch_row = SdfNode::RepeatFinite {
         child: Arc::new(notch),
-        count: [notch_count, 0, 0],
+        count: [notch_count.saturating_mul(2), 0, 0],
         spacing: Vec3::new(notch_pitch, 1.0, 1.0),
     };
     SdfNode::Subtraction {
@@ -271,9 +295,14 @@ pub fn rack_shelf(
 #[must_use]
 pub fn skadis_peg_compat(board_thickness: f32) -> SdfNode {
     let peg_w = SKADIS_PEG_W - FDM_CLEARANCE;
+    let half = Vec3::new(peg_w * 0.5, SKADIS_PEG_H * 0.5, board_thickness * 0.5);
+    // `RoundedBox` の外寸は `half_extents + round_radius` (全方向に R が足される) ので、
+    // 外寸 `half` を得るには内側の寸法 `half - R` を渡す  R は最小の半寸法を超えられない
+    // (幅 4.8 の半寸法 2.4 は `SKADIS_PEG_R` 2.5 より小さい)
+    let r = SKADIS_PEG_R.min(half.min_element()).max(0.0);
     SdfNode::RoundedBox {
-        half_extents: Vec3::new(peg_w * 0.5, SKADIS_PEG_H * 0.5, board_thickness * 0.5),
-        round_radius: SKADIS_PEG_R,
+        half_extents: half - Vec3::splat(r),
+        round_radius: r,
     }
 }
 
@@ -281,16 +310,62 @@ pub fn skadis_peg_compat(board_thickness: f32) -> SdfNode {
 // 5-6. アルミプロファイル 2020 / 3030
 // ────────────────────────────────────────────────────────
 
+/// プロファイルの T スロット 1 本 (局所座標: 原点 = 表面の開口の中心、+X = 外向き、Y = 長手)
+///
+/// 首 (幅 6、厚み 1.8) と、その奥の空洞 (首の直下で幅 11、45 度の斜壁で底 6.1 まで狭まる)
+/// 空洞を矩形にすると、隣り合う面の空洞が対角で重なって中心のコアが孤立する
+/// (実際のプロファイルも斜壁で対角にリブを残す)  外側へ 5mm 延ばした刃で開口を確実に貫く
+fn profile_t_slot(length: f32) -> SdfNode {
+    let half_len = length.mul_add(0.5, 5.0);
+    let neck = PROFILE_SLOT_NECK_DEPTH;
+    let depth = PROFILE_SLOT_DEPTH;
+    let open_half = PROFILE_SLOT_OPENING_WIDTH * 0.5;
+    let cavity_half = PROFILE_SLOT_CAVITY_WIDTH * 0.5;
+    let boxed = |x_center: f32, half_x: f32, half_z: f32| SdfNode::Translate {
+        child: Arc::new(SdfNode::Box3d {
+            half_extents: Vec3::new(half_x, half_len, half_z),
+        }),
+        offset: Vec3::new(x_center, 0.0, 0.0),
+    };
+    let neck_box = boxed(-neck * 0.5, neck * 0.5, open_half);
+    let punch = boxed(2.5, 2.5, open_half);
+    // 空洞: 首の直下 (x = -neck) の半幅 cavity_half から 1:1 で狭まる台形
+    let cavity_box = boxed(-(neck + depth) * 0.5, (depth - neck) * 0.5, cavity_half);
+    // 許す範囲 |z| <= cavity_half + neck + x  ⇔  (±z - x)/√2 <= (cavity_half + neck)/√2
+    let inv_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
+    let limit = (cavity_half + neck) * inv_sqrt2;
+    let plane_pos = SdfNode::Plane {
+        normal: Vec3::new(-inv_sqrt2, 0.0, inv_sqrt2),
+        distance: limit,
+    };
+    let plane_neg = SdfNode::Plane {
+        normal: Vec3::new(-inv_sqrt2, 0.0, -inv_sqrt2),
+        distance: limit,
+    };
+    let cavity = SdfNode::Intersection {
+        a: Arc::new(SdfNode::Intersection {
+            a: Arc::new(cavity_box),
+            b: Arc::new(plane_pos),
+        }),
+        b: Arc::new(plane_neg),
+    };
+    SdfNode::Union {
+        a: Arc::new(SdfNode::Union {
+            a: Arc::new(neck_box),
+            b: Arc::new(punch),
+        }),
+        b: Arc::new(cavity),
+    }
+}
+
 fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
     // 外形 Box (size × size × length、Y 軸 = 長手方向)
     let outer = SdfNode::Box3d {
         half_extents: Vec3::new(size * 0.5, length * 0.5, size * 0.5),
     };
-    // 4 面 T スロット (Phase A.2 t_slot_2020 を回転コピー)
-    // t_slot_2020 は開口面 = +X、深さ拡大 = -X
-    // 4 面適用: X+ / Z+ / X- / Z- に順次回転させて subtract
-    let t_slot = crate::stdlib::hardsurface::joint::t_slot_2020(length);
-    // face_offset = size/2 - opening_depth/2 (開口面が profile 表面と一致するよう配置)
+    // 4 面 T スロット: 局所座標の +X (開口の向き) を Y 軸まわりに回して X+ / Z+ / X- / Z- に向け、
+    // 表面の開口の中心 (size/2 だけ外側) に置く
+    let t_slot = profile_t_slot(length);
     let face_offset = size * 0.5;
     let mut with_slots = outer;
     for i in 0..4_u8 {
@@ -327,7 +402,7 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
 
 /// 20×20mm アルミプロファイル外形 (4 面 T スロット + 中央 M5 通し穴、MISUMI / `OpenBuilds` 準拠)
 ///
-/// 構造: `Box3d` 外形 - 4 rotate/translate T-slot (Phase A.2 `t_slot_2020`) - 中央 Cylinder (M5)
+/// 構造: `Box3d` 外形 - 4 rotate/translate T-slot (`profile_t_slot`、首 + 斜壁の空洞) - 中央 Cylinder (M5)
 /// 長手方向 = Y 軸
 ///
 /// # 使用例
@@ -345,7 +420,7 @@ pub fn profile_2020(length: f32) -> SdfNode {
 /// 30×30mm アルミプロファイル外形 (4 面 T スロット + 中央 M6 通し穴)
 ///
 /// 構造: `profile_2020` と同型、寸法 30×30 + 中央 Φ6.2 に置換
-/// T スロット spec は 2020 と同じ 6/11/5/6 (`t_slot_2020` 流用、3030 用の広口版は未実装)
+/// T スロットは 2020 と同じ寸法 (開口 6、首 1.8、全深さ 6.1、空洞幅 11) 3030 用の広口版は未実装
 ///
 /// # 使用例
 ///
@@ -375,7 +450,9 @@ mod tests {
     #[test]
     fn bracket_l_with_fillet_returns_smooth_union() {
         let b = bracket_l(60.0, 40.0, 4.0, 40.0, 3.0);
-        assert!(matches!(b, SdfNode::SmoothUnion { k, .. } if approx_eq(k, 3.0)));
+        // k = (4 - 2√2)·R (角から対角線上の面までの距離を半径 R の円弧に合わせる)
+        let want = 3.0 * 2.0_f32.mul_add(-std::f32::consts::SQRT_2, 4.0);
+        assert!(matches!(b, SdfNode::SmoothUnion { k, .. } if approx_eq(k, want)));
     }
 
     #[test]
@@ -421,19 +498,35 @@ mod tests {
     #[test]
     fn skadis_peg_dimensions_match_bamboo_spec() {
         // Bamboo skadis peg (PEG_W=5.0 - FDM_CLEARANCE=0.2 = 4.8mm 幅、PEG_H=15mm 高)
+        // `RoundedBox` の外寸は half_extents + round_radius なので、出来上がった形 (外寸) で測る
         let p = skadis_peg_compat(5.0);
-        match p {
-            SdfNode::RoundedBox {
-                half_extents,
-                round_radius,
-            } => {
-                assert!(approx_eq(half_extents.x, 2.4)); // 4.8 / 2
-                assert!(approx_eq(half_extents.y, 7.5)); // 15 / 2
-                assert!(approx_eq(half_extents.z, 2.5)); // 5 / 2
-                assert!(approx_eq(round_radius, SKADIS_PEG_R));
+        let extent = |dir: Vec3| {
+            let (mut lo, mut hi) = (0.0_f32, 30.0_f32);
+            for _ in 0..60 {
+                let mid = f32::midpoint(lo, hi);
+                if eval(&p, dir * mid) <= 0.0 {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
             }
-            _ => panic!("expected RoundedBox"),
-        }
+            lo * 2.0
+        };
+        assert!(
+            (extent(Vec3::X) - 4.8).abs() < 1e-3,
+            "幅 {}",
+            extent(Vec3::X)
+        );
+        assert!(
+            (extent(Vec3::Y) - 15.0).abs() < 1e-3,
+            "高さ {}",
+            extent(Vec3::Y)
+        );
+        assert!(
+            (extent(Vec3::Z) - 5.0).abs() < 1e-3,
+            "厚さ {}",
+            extent(Vec3::Z)
+        );
     }
 
     #[test]

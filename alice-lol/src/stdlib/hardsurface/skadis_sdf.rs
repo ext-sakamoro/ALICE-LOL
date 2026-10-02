@@ -105,23 +105,33 @@ pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
     }
 }
 
+/// 背面 (-Z 側) を取付面とする accessory 用の peg + shoulder
+///
+/// [`skadis_peg_and_shoulder`] は X 軸方向 (X = -`BOARD_T` .. 0) に伸びるので、Y 軸まわりに
+/// -90 度回して -Z 方向へ向ける (blade が Z = -`BOARD_T` .. 0、shoulder がその奥) 原点は
+/// 取付面 (背面の外面) の peg 中心に置く container / shelf のように取付面が Z 方向の
+/// accessory で使う (hook 3 種と cord は取付面が X 方向なので回さない)
+fn peg_facing_back(hook_width: f32) -> SdfNode {
+    SdfNode::Rotate {
+        child: Arc::new(skadis_peg_and_shoulder(hook_width)),
+        rotation: glam::Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+    }
+}
+
 // ────────────────────────────────────────────────────────
-// helper — 2D polyline を Capsule 連結で SDF 化
+// helper — 2D polyline を平らな帯 (flat strip) で SDF 化
 // ────────────────────────────────────────────────────────
 
-/// 2D polyline `pts` を radius = `tube_radius` の連続 `Capsule` で SDF 表現
+/// 2D polyline `pts` を、面内の半径 `tube_radius`・厚み (Z) `hook_width` の平らな帯で SDF 表現
 ///
-/// Bamboo Python `LineString.buffer(R, cap_style='round')` の SDF 相当
-/// 各連続 edge `(pts[i], pts[i+1])` を `Capsule` (端点 2 個 + radius) にし、
-/// 全て `Union` で結合 (端が丸まる = round cap)
+/// Bamboo Python `LineString.buffer(R, cap_style='round')` + `extrude_polygon` の SDF 相当:
+/// 断面は面内で 2R、Z 方向に `hook_width` の長方形で、端は面内で丸い (stadium の押出)
+/// 各 edge `(pts[i], pts[i+1])` を、Z 軸の円柱 (半径 R、高さ `hook_width`) を edge の向きに
+/// `Elongate` した stadium 押出にし、全て `Union` で結合する (円柱は厳密な距離場で、
+/// elongate は厳密性を保つので、各 edge の場も厳密)
 ///
-/// hook 幅方向 (Z 軸) は `hook_width`、hook curve は X-Y 平面上
-///
-/// # 引数
-///
-/// - `pts`: 2D 座標列 (X-Y 平面)
-/// - `tube_radius`: Capsule 半径 (mm)
-/// - `hook_width`: hook 幅 (Z 方向、Bamboo Python `extrude_polygon` の depth と同)
+/// 旧実装は 3D の `Capsule` 連結で、断面が直径 2R の丸い管になり、`hook_width` は管より
+/// 狭くしか効かなかった (幅 8 の hook が直径 7 の管になった)
 ///
 /// # Panics
 ///
@@ -131,34 +141,39 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
     if pts.len() < 2 {
         return SdfNode::Sphere { radius: 0.0 };
     }
-    // 各 edge を Capsule (端点 2、radius)、Z 方向は hook_width の板として扱う
-    // Bamboo Python は 2D で LineString.buffer → extrude、SDF では 3D Capsule
-    //   Capsule endpoint: (x, y, ±hook_width/2)... しかし Capsule は円柱端球なので 3D
-    //   代替: 2D curve を Z 軸方向に押出せるため、Capsule 各端点 Z=0 (原点中心)、
-    //   Capsule 3D 幅は radius = tube_radius (X-Y 平面での半径)、Z 方向は radius 分の幅
-    //   実際は capsule = circle sweep の tube、hook 幅は Y 方向でなく X-Y curve の radius
-    //   よって Z 方向厚は Box3d(hook_width) で separately clip 相当だが、
-    //   単純化のため各 Capsule は 3D で curve に沿った tube (Z 方向 hook_width で clip なし)
-    //   User 側で Intersection with Box3d(hook_width) して幅制限可
     // 2026-08-07 fix: 線形左入れ子 fold → balanced fold で eval recursion 削減
-    // (14 point の polyline 程度なら overflow せずとも、grid 系との対称性で統一)
-    let capsules: Vec<SdfNode> = pts
+    let strips: Vec<SdfNode> = pts
         .windows(2)
-        .map(|pair| SdfNode::Capsule {
-            point_a: Vec3::new(pair[0].x, pair[0].y, 0.0),
-            point_b: Vec3::new(pair[1].x, pair[1].y, 0.0),
-            radius: tube_radius,
+        .map(|pair| {
+            let (a, b) = (pair[0], pair[1]);
+            let edge = b - a;
+            let len = edge.length();
+            // Z 軸の円柱 (Y 軸の円柱を X 軸まわりに 90 度回す)
+            let puck = SdfNode::Rotate {
+                child: Arc::new(SdfNode::Cylinder {
+                    radius: tube_radius,
+                    half_height: hook_width * 0.5,
+                }),
+                rotation: glam::Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            };
+            // edge の向き (局所 X) に len/2 だけ elongate → stadium の押出
+            let elongated = SdfNode::Elongate {
+                child: Arc::new(puck),
+                amount: Vec3::new(len * 0.5, 0.0, 0.0),
+            };
+            let angle = edge.y.atan2(edge.x);
+            let rotated = SdfNode::Rotate {
+                child: Arc::new(elongated),
+                rotation: glam::Quat::from_rotation_z(angle),
+            };
+            let mid = (a + b) * 0.5;
+            SdfNode::Translate {
+                child: Arc::new(rotated),
+                offset: Vec3::new(mid.x, mid.y, 0.0),
+            }
         })
         .collect();
-    let curve = super::balanced_union_fold(capsules).unwrap_or(SdfNode::Sphere { radius: 0.0 });
-    // Z 方向を hook_width に clip (Intersection with Box3d)
-    let z_clip = SdfNode::Box3d {
-        half_extents: Vec3::new(1000.0, 1000.0, hook_width * 0.5),
-    };
-    SdfNode::Intersection {
-        a: Arc::new(curve),
-        b: Arc::new(z_clip),
-    }
+    super::balanced_union_fold(strips).unwrap_or(SdfNode::Sphere { radius: 0.0 })
 }
 
 // ────────────────────────────────────────────────────────
@@ -366,15 +381,23 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 素朴に使うと Y 方向にも corner_radius が加算されて板厚が (thickness + 2*corner_radius)
     // になる (例: thickness=5, corner_radius=6 で Y=17mm、Bamboo production 5mm と 3.4x 齟齬)
     // 対策: Y 方向のみ Box3d で cut して真の thickness に強制 (X/Z の 4 corner fillet は保持)
+    // `RoundedBox` の外寸は `half_extents + round_radius` なので、X/Z は内側の寸法
+    // `size/2 - R` を渡して外寸をちょうど `size` にする (旧実装は `size/2` を渡して一辺が
+    // `size + 2R` になっていた)  Y は下の cutter で `thickness` に切り戻す
+    let r = corner_radius.clamp(0.0, size * 0.5);
     let panel_infl = SdfNode::RoundedBox {
-        half_extents: Vec3::new(size * 0.5, thickness * 0.5, size * 0.5),
-        round_radius: corner_radius,
+        half_extents: Vec3::new(
+            size.mul_add(0.5, -r),
+            thickness * 0.5,
+            size.mul_add(0.5, -r),
+        ),
+        round_radius: r,
     };
     let y_cutter = SdfNode::Box3d {
         half_extents: Vec3::new(
-            size.mul_add(0.5, corner_radius) + 1.0, // X/Z は panel_infl 全体を包含 (fillet 保持)
-            thickness * 0.5,                        // Y は正確に thickness に制限
-            size.mul_add(0.5, corner_radius) + 1.0,
+            size.mul_add(0.5, 1.0), // X/Z は panel_infl 全体を包含 (fillet 保持)
+            thickness * 0.5,        // Y は正確に thickness に制限
+            size.mul_add(0.5, 1.0),
         ),
     };
     let panel = SdfNode::Intersection {
@@ -410,11 +433,17 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         b: Arc::new(peg_end_bot),
     };
 
-    // grid count: 原点中心で ±count 個 (実出力 2*count+1) を pitch で並べる
-    // 使用可能範囲 = size - 2 * EDGE_MARGIN、その範囲を pitch で割った half を count に
-    let usable = 2.0f32.mul_add(-SKADIS_EDGE_MARGIN, size);
+    // 穴の中心は使用可能範囲 |c| <= (size - 2 * EDGE_MARGIN) / 2 に収める
+    // base 格子 (原点中心) と stagger 格子 (base を GRID_OFFSET ずらす) のそれぞれで、
+    // 範囲に入る添字だけを並べる (旧実装は両方とも ix ∈ [-3, 3] で、stagger の +140 が余白に
+    // 入り、-140 は無い左右非対称だった)
+    let usable_half = size.mul_add(0.5, -SKADIS_EDGE_MARGIN);
     #[allow(clippy::cast_possible_truncation)]
-    let count = ((usable * 0.5) / SKADIS_GRID_PITCH).floor() as i32;
+    let index_range = |offset: f32| {
+        let lo = ((-usable_half - offset) / SKADIS_GRID_PITCH).ceil() as i32;
+        let hi = ((usable_half - offset) / SKADIS_GRID_PITCH).floor() as i32;
+        lo..=hi
+    };
 
     // 2026-08-07 fix: RepeatFinite → 明示 Union へ置換 (Phase 5.8 gridfinity 同 pattern)
     // 理由: RepeatFinite の distance field は要素間 bound-only 保証で exact metric ではない
@@ -425,8 +454,8 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // (98-deep 線形 fold は test thread 2 MB stack を超過して stack overflow の実測 CI 事故)
     let mut hole_list: Vec<SdfNode> = Vec::new();
     for (grid_x, grid_z) in [(0.0, 0.0), (SKADIS_GRID_OFFSET, SKADIS_GRID_OFFSET)] {
-        for ix in -count..=count {
-            for iz in -count..=count {
+        for ix in index_range(grid_x) {
+            for iz in index_range(grid_z) {
                 #[allow(clippy::cast_precision_loss)]
                 let cx = (ix as f32).mul_add(SKADIS_GRID_PITCH, grid_x);
                 #[allow(clippy::cast_precision_loss)]
@@ -570,18 +599,17 @@ pub fn skadis_container_sdf() -> SdfNode {
         half_extents: Vec3::new(outer_w * 0.5, total_h * 0.5, outer_d * 0.5),
     };
     // 内部 (刳り抜き、底より上、上面は開口 = Y=+total_h/2 + margin)
+    // 空洞は床 (Y = -total_h/2 + 底厚) から上面の外 (+1mm の punch margin) まで
+    let inner_half_h = f32::midpoint(CONTAINER_H, 1.0);
     let inner = SdfNode::Box3d {
-        half_extents: Vec3::new(
-            CONTAINER_W * 0.5,
-            f32::midpoint(CONTAINER_H, 1.0), // 上面 open
-            CONTAINER_D * 0.5,
-        ),
+        half_extents: Vec3::new(CONTAINER_W * 0.5, inner_half_h, CONTAINER_D * 0.5),
     };
     let inner_placed = SdfNode::Translate {
         child: Arc::new(inner),
+        // 中心 y = 床の高さ + 半高 (旧実装は半高に H/2 を使い、底が 0.5mm 薄くなっていた)
         offset: Vec3::new(
             0.0,
-            total_h.mul_add(-0.5, CONTAINER_H.mul_add(0.5, CONTAINER_BOTTOM_T)),
+            total_h.mul_add(-0.5, CONTAINER_BOTTOM_T) + inner_half_h,
             0.0,
         ),
     };
@@ -590,20 +618,20 @@ pub fn skadis_container_sdf() -> SdfNode {
         b: Arc::new(inner_placed),
     };
 
-    // 背面ペグ (Z = -outer_d/2 の壁面、Y = 上部 60%)
-    let peg = skadis_peg_and_shoulder(PEG_BLADE_W);
-    // peg は X 軸に伸びる (X = -BOARD_T .. 0)、これを背面に配置するには rotate 不要
-    // (peg 座標系: X = -BOARD_T .. 0、Z = ±hook_width/2)
-    // container の背面 (Z = -outer_d/2 - BOARD_T .. -outer_d/2) に配置するには
-    // peg を translate: Z += -outer_d/2、Y += 上部位置
-    let peg_placed = SdfNode::Translate {
-        child: Arc::new(peg),
-        offset: Vec3::new(0.0, total_h * 0.35, -outer_d * 0.5),
+    // 背面ペグ 2 個 (Z = -outer_d/2 の壁面の裏側へ BOARD_T 突き出す、Y = 上部 35%)
+    // 2 個の間隔は SKADIS の格子 (GRID_PITCH = 40) = X = ±20
+    let peg_at = |x: f32| SdfNode::Translate {
+        child: Arc::new(peg_facing_back(PEG_BLADE_W)),
+        offset: Vec3::new(x, total_h * 0.35, -outer_d * 0.5),
+    };
+    let pegs = SdfNode::Union {
+        a: Arc::new(peg_at(-SKADIS_GRID_PITCH * 0.5)),
+        b: Arc::new(peg_at(SKADIS_GRID_PITCH * 0.5)),
     };
 
     SdfNode::Union {
         a: Arc::new(hollow),
-        b: Arc::new(peg_placed),
+        b: Arc::new(pegs),
     }
 }
 
@@ -719,7 +747,7 @@ pub fn skadis_shelf_sdf() -> SdfNode {
         offset: Vec3::new(0.0, SHELF_LIP_H * 0.5, SHELF_D.mul_add(0.5, -0.8)),
     };
     // 2 ペグ (両端、SHELF_PEG_SPACING 離間)
-    let peg = skadis_peg_and_shoulder(PEG_BLADE_W);
+    let peg = peg_facing_back(PEG_BLADE_W);
     let peg_l = SdfNode::Translate {
         child: Arc::new(peg.clone()),
         offset: Vec3::new(-SHELF_PEG_SPACING * 0.5, SHELF_BACK_H * 0.7, -SHELF_D * 0.5),
