@@ -40,6 +40,10 @@ const TWO: &[TwoParam] = &[
     ),
 ];
 
+// `sd_card_holder` は外してある: parser では (rows, cols, card_width) で、幅 / 奥行 / 高さ (mm) を渡すと
+// 70 x 70 個の格子になり、個数の上限で `ParseError` になる (caption の意味も合っていなかった)
+// `soap_tray` (3 番目は排水溝の個数) と `toothbrush_holder` (1 番目は本数) も同じ食い違いがあり、
+// 上限内なので通っているが caption と合っていない (Backlog)
 const THREE: &[(&str, &str, &str)] = &[
     ("phone_stand", "phone stand", "スマホスタンド"),
     ("business_card_holder", "business card holder", "名刺立て"),
@@ -49,7 +53,6 @@ const THREE: &[(&str, &str, &str)] = &[
     ("headphone_holder", "headphone holder", "ヘッドホンホルダー"),
     ("tissue_box_cover", "tissue box cover", "ティッシュ箱カバー"),
     ("soap_tray", "soap tray", "石鹸トレイ"),
-    ("sd_card_holder", "SD card holder", "SD カードホルダー"),
     ("toothbrush_holder", "toothbrush holder", "歯ブラシ立て"),
 ];
 
