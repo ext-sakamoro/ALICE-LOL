@@ -16,10 +16,9 @@
 //! println!("{stats}");
 //! ```
 
-use crate::print_export::{ExportError, MarchingCubesConfig, Mesh, MeshRepair};
+use crate::print_export::{node_to_mesh, ExportError, Mesh, PrintConfig};
 use crate::SdfNode;
 use alice_sdf::io::{export_fbx, export_obj, FbxConfig, FbxUpAxis, ObjConfig};
-use alice_sdf::mesh::sdf_to_mesh;
 use glam::Vec3;
 use std::path::Path;
 
@@ -37,12 +36,21 @@ const ROBLOX_DEFAULT_MAX_SIZE: Vec3 = Vec3::new(10.0, 10.0, 10.0);
 /// デジェネレート面判定 epsilon
 const DEGENERATE_EPSILON: f32 = 1e-8;
 
+/// 三角形上限を守るために下げてよい解像度の下限
+const MIN_RESOLUTION: usize = 16;
+
+/// 三角形数を見積もるための試し解像度 (粗いので速い)
+const PROBE_RESOLUTION: usize = 32;
+
 // ── 設定 ──
 
 /// Roblox エクスポート設定
 #[derive(Debug, Clone)]
 pub struct RobloxConfig {
-    /// メッシュ解像度 (Marching Cubes グリッド数)
+    /// メッシュ解像度 (Marching Cubes グリッド数) の **上限**
+    ///
+    /// 実際の解像度は `max_triangles` を守れる最大値まで自動で下がる
+    /// (下限 [`MIN_RESOLUTION`]) 単純な形状はこの値まで細かくなる
     pub resolution: usize,
 
     /// SDF バウンディングボックス最小点
@@ -54,7 +62,8 @@ pub struct RobloxConfig {
     /// SDF 単位 → stud 変換スケール (1.0 SDF unit = `scale_studs` studs)
     pub scale_studs: f32,
 
-    /// 三角形数上限
+    /// 三角形数上限 (解像度を下げて守る、下限解像度でも超える形状は
+    /// [`RobloxValidation::is_within_triangle_limit`] が偽になる)
     pub max_triangles: usize,
 
     /// バウンディングボックス上限 (studs)
@@ -101,11 +110,11 @@ impl RobloxConfig {
         }
     }
 
-    /// 高速プレビュー向けプリセット
+    /// 高速プレビュー向けプリセット (解像度上限 32、accessory より粗い)
     #[must_use]
     pub const fn preview() -> Self {
         Self {
-            resolution: 64,
+            resolution: 32,
             bounds_min: Vec3::splat(-2.0),
             bounds_max: Vec3::splat(2.0),
             scale_studs: 2.0,
@@ -255,48 +264,62 @@ fn check_degenerate_faces(mesh: &Mesh) -> bool {
 // ── メッシュ生成 ──
 
 /// `SdfNode` → Roblox 用メッシュ生成 (スケーリング + 修復済み)
+///
+/// 水密性を保つ修復とスケーリングは [`crate::print_export::node_to_mesh`] に任せる
+/// (許容量は cell 幅比、水密な mesh には破壊的操作を掛けない) 解像度は
+/// `config.resolution` を上限に、`config.max_triangles` を守れる最大値を実測で選ぶ
 #[must_use]
 pub fn node_to_mesh_roblox(node: &SdfNode, config: &RobloxConfig) -> Mesh {
-    // 目標三角形数から解像度を推定
-    // Marching Cubes は resolution³ の ~2% 程度が三角形数になる経験則
-    let resolution = estimate_resolution(config.resolution, config.max_triangles);
-
-    let mc_config = MarchingCubesConfig {
-        resolution,
-        compute_normals: true,
-        ..MarchingCubesConfig::default()
+    let mesh_at = |resolution: usize| {
+        node_to_mesh(
+            node,
+            &PrintConfig {
+                resolution,
+                bounds_min: config.bounds_min,
+                bounds_max: config.bounds_max,
+                // `PrintConfig::scale_mm` は「ワールド座標 → 出力単位」の倍率 (ここでは stud)
+                scale_mm: config.scale_studs,
+            },
+        )
     };
-    let mesh = sdf_to_mesh(node, config.bounds_min, config.bounds_max, &mc_config);
+    let cap = config.resolution.max(MIN_RESOLUTION);
 
-    // 修復
-    let mut mesh = MeshRepair::repair_all(&mesh, 5e-3);
-
-    // SDF 座標 → stud スケーリング
-    if (config.scale_studs - 1.0).abs() > f32::EPSILON {
-        for v in &mut mesh.vertices {
-            v.position *= config.scale_studs;
-        }
+    // 表面の三角形数は解像度の 2 乗にほぼ比例する 粗い試し (32) で見積もった解像度へ進む
+    let mut resolution = cap.min(PROBE_RESOLUTION);
+    let mut mesh = mesh_at(resolution);
+    let tris = mesh.indices.len() / 3;
+    if tris == 0 {
+        return mesh;
+    }
+    resolution =
+        refine_resolution(resolution, tris, config.max_triangles).clamp(MIN_RESOLUTION, cap);
+    if resolution != cap.min(PROBE_RESOLUTION) {
+        mesh = mesh_at(resolution);
     }
 
+    // 超えていれば解像度を単調に下げる (厳密に減るので必ず止まる)
+    // 保証: 三角形数が上限以内、または下限解像度に達している
+    while mesh.indices.len() / 3 > config.max_triangles && resolution > MIN_RESOLUTION {
+        let next = refine_resolution(resolution, mesh.indices.len() / 3, config.max_triangles);
+        resolution = next.clamp(MIN_RESOLUTION, resolution - 1);
+        mesh = mesh_at(resolution);
+    }
     mesh
 }
 
-/// 三角形上限から適切な解像度を推定
+/// 三角形数が解像度の 2 乗に比例するとして、`max_triangles` に収まる解像度を見積もる
 ///
-/// Marching Cubes の三角形数は resolution に対して O(resolution²) に比例。
-/// ユーザー指定 resolution を上限として、三角形数が超過しそうなら下げる。
-fn estimate_resolution(user_resolution: usize, max_triangles: usize) -> usize {
-    // 経験則: resolution=128 → ~20,000 tri (球体の場合)
-    // resolution=64 → ~5,000 tri
-    // resolution=48 → ~2,500 tri
-    // 最終的に解像度はユーザー指定を尊重し、上限でクランプ
-    let estimated_tris_at_128: u16 = 20_000;
+/// 見積もりの誤差を吸収するため 3% 手前に寄せる (超えた場合は呼び出し側が下げ直す)
+fn refine_resolution(resolution: usize, triangles: usize, max_triangles: usize) -> usize {
     #[allow(clippy::cast_precision_loss)]
-    let ratio = max_triangles as f32 / f32::from(estimated_tris_at_128);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let auto_res = (128.0_f32 * ratio.sqrt()).round() as usize;
-    // ユーザー指定と自動推定の小さい方を採用
-    user_resolution.min(auto_res).max(16)
+    let ratio = (max_triangles as f32 / triangles.max(1) as f32).sqrt();
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
+    let next = (resolution as f32 * ratio * 0.97) as usize;
+    next
 }
 
 // ── エクスポート関数 ──
@@ -336,8 +359,8 @@ impl std::fmt::Display for RobloxExportStats {
 ///
 /// # Errors
 ///
-/// メッシュが空の場合 `EmptyMesh`、ファイル書き込み失敗時 `Io`、
-/// Roblox 制約違反時に警告をログ出力 (エラーにはしない)。
+/// メッシュが空の場合 `EmptyMesh`、ファイル書き込み失敗時 `Io`
+/// Roblox 制約違反はエラーにもログにもせず、戻り値の [`RobloxExportStats::validation`] に載せる
 pub fn node_to_obj_roblox(
     node: &SdfNode,
     path: impl AsRef<Path>,
