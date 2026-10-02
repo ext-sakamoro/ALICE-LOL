@@ -1,13 +1,19 @@
 //! Phase 3 search oracles (`project_alice_world_model_mvp_plan` §3 Phase 3)
 //! — written and pinned **before** the search body exists (Phase 4).
 //!
-//! Scenes (a)/(b) call the real public entry point [`lower_bound_frames`]
-//! and are `#[ignore = "src gap: ..."]` because its body is `todo!()`
-//! (oracle-first discipline: pin the expected answer now, implement later,
-//! remove `#[ignore]` when the `src gap:` closes). Scene (c) is a pure
-//! closed-form demonstration that does **not** call the stub — it is the
-//! documented reason dominance pruning by kinetic energy is not planned,
-//! and runs (green) today.
+//! All three scenes call a real public entry point ([`lower_bound_frames`]
+//! for (a)/(b), [`plan`] for (c)) and are `#[ignore = "src gap: ..."]`
+//! because the body each calls is `todo!()` (oracle-first discipline: pin
+//! the expected answer now, implement later, remove `#[ignore]` when the
+//! `src gap:` closes).
+//!
+//! ⚠️ **(c) used to compute its closed-form expectation and stop there,
+//! never calling `plan`** — that tested nothing about this crate (an
+//! "入口が内側" oracle, `ys-1f` 2026-10-02 review): a `plan` that
+//! implements naive kinetic-energy dominance pruning could ship and this
+//! test would stay green forever. It now calls `plan` and is red for the
+//! same `todo!()` reason as (a)/(b); the closed-form derivation stays as
+//! the comment explaining *why* the expected value is what it is.
 //!
 //! `ceil()` results here are always non-negative and small (well under
 //! `u32::MAX`, these are frame counts in the hundreds), so the `as u32`
@@ -93,56 +99,67 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
     );
 }
 
-/// (c) 運動エネルギーでの naive dominance pruning が落ちる反例
+/// (c) `plan` は運動エネルギーでの naive dominance pruning に落ちない
 ///
 /// 「2 つの完了済み経路を比べて運動エネルギー (= ピーク速度) の低い方を
-/// 優先する」は bang-bang 最適制御では不健全 本 test は **閉形式のみ**で
-/// 反例を示す (`lower_bound_frames` / `plan` を呼ばない — これは実装の
-/// 正しさでなく力学の事実、dominance pruning を実装しない根拠として pin
-/// する)
+/// 優先する」は bang-bang 最適制御では不健全 この scene (`d=100, a=5`) の
+/// bang-bang 最適経路はピーク速度が**比較的高い** (`v_peak = sqrt(d*a)
+/// ≈ 22.36`) — naive な KE dominance を実装した `plan` は、この高速な
+/// 最適経路をより低速な (= KE が低い、しかし所要時間が長い) 経路に劣後
+/// すると誤判定して枝刈りし、**非最適な frame 数を返す**
 ///
-/// 反例の構成: 同じ 1-D rest-to-rest 距離 `d=100` を、2 通りの最大加速度
-/// で対称 bang-bang (加速 t*/2 + 減速 t*/2) で走る
-/// - 経路 A (`a = 5`、速い): ピーク速度 `v_peak(a) = sqrt(d*a)` が**大きい**が
-///   所要時間 `t*(a) = 2*sqrt(d/a)` は**小さい**
-/// - 経路 B (`a = 1`、遅い): ピーク速度が A より**小さい**が所要時間は A より
-///   **大きい** (`v_peak` は `a` の増加関数、`t*` は `a` の減少関数、同じ
-///   bang-bang 閉形式から従う代数的事実)
-///
-/// ⇒ 「ピーク速度 (運動エネルギー) が低い方を優先する」dominance は、所要
-/// 時間で劣る B を A より好ましいと判定してしまう (KE が低い方が時間で
-/// 劣る反例、両者とも同じ bang-bang 戦略なので「制御則が違うから」という
-/// 反論も成立しない)
+/// ⚠️ **閉形式だけで判定すると「入口が内側」になる** (`ys-1f` 2026-10-02
+/// review) — `plan` を実際に呼び、返ってきた `frames` を閉形式の真の最適
+/// 値と比較することで初めて oracle になる 閉形式の導出 (`t* = 2*sqrt(d/a)`)
+/// はコメントとして残す (期待値 537 の出所)
+#[cfg(feature = "physics")]
 #[test]
-fn c_naive_kinetic_energy_dominance_is_unsound_for_bang_bang() {
+#[ignore = "src gap: plan body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.2)"]
+fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
+    use alice_physics::{Fix128, PhysicsConfig, PhysicsWorld, RigidBody, Vec3Fix};
+    use alice_world_auditor::{Aabb, Goal};
+
     let d = 100.0_f32;
+    let a = 5.0_f32;
+    let dt = 1.0 / 60.0_f32;
 
-    let bang_bang_peak_velocity = |a: f32| (d * a).sqrt();
-    let bang_bang_time = |a: f32| 2.0 * (d / a).sqrt();
-
-    let a_fast = 5.0_f32;
-    let a_slow = 1.0_f32;
-
-    let v_peak_fast = bang_bang_peak_velocity(a_fast);
-    let v_peak_slow = bang_bang_peak_velocity(a_slow);
-    let time_fast = bang_bang_time(a_fast);
-    let time_slow = bang_bang_time(a_slow);
-
-    assert!(
-        v_peak_slow < v_peak_fast,
-        "反例の前提: 経路 B (slow) のピーク速度が経路 A (fast) 未満でなければならない"
-    );
-    assert!(
-        time_slow > time_fast,
-        "反例の前提: 経路 B (slow) の所要時間が経路 A (fast) より長くなければならない \
-         (= KE の低い B を優先する dominance が、より優れた A を誤って枝刈りする反例が成立しない)"
+    // 真の最適 (bang-bang): t* = 2*sqrt(d/a) = 2*sqrt(20) = 8.94427191
+    // → /dt(1/60) = 536.656... → ceil 537 (a_closed_form_minimal_step_count
+    // と同じ scene・同じ値 — ここでは heuristic でなく plan 自体の答えを問う)
+    let t_star = 2.0 * (d / a).sqrt();
+    let optimal_frames = (t_star / dt).ceil() as u32;
+    assert_eq!(
+        optimal_frames, 537,
+        "closed form 自体の計算が狂っている (oracle の空振り確認)"
     );
 
-    // 空振り防止: a_fast と a_slow を入れ替えると不等式が両方逆転するはず
-    // (= 反例が「a が違えば答えも違う」という非自明な性質に依存していることの確認、
-    // 恒等式 (常に成立する式) を oracle にしていないことの pin)
-    assert!(
-        v_peak_fast > v_peak_slow && time_fast < time_slow,
-        "a_fast / a_slow を入れ替えた不等式が成立しない — 反例が a の値に依存しない恒等式になっている"
+    let mut world = PhysicsWorld::new(PhysicsConfig {
+        gravity: Vec3Fix::ZERO,
+        ..PhysicsConfig::default()
+    });
+    world.add_body(RigidBody::new_dynamic(Vec3Fix::ZERO, Fix128::ONE));
+
+    let goal = Goal::PositionWithinAndAtRest {
+        target: Aabb {
+            min: glam::Vec3::new(d - 0.5, -0.5, -0.5),
+            max: glam::Vec3::new(d + 0.5, 0.5, 0.5),
+        },
+    };
+    let params = Params::new(a, dt, 1_000_000);
+
+    let result = alice_world_auditor::plan(&mut world, &goal, &params);
+    let frames = match result {
+        Ok(optimal) => optimal.frames,
+        Err(best) => panic!(
+            "budget exhausted before finding the optimal plan (best so far: {} frames) — \
+             a dominance rule that prunes the high-velocity optimal branch would show up \
+             exactly like this",
+            best.frames
+        ),
+    };
+    assert_eq!(
+        frames, optimal_frames,
+        "plan が bang-bang 最適 ({optimal_frames} frame) と異なる値を返した — \
+         naive kinetic-energy dominance がこの高速な最適経路を誤って枝刈りしている可能性"
     );
 }
