@@ -15,8 +15,13 @@ categories = ["mathematics", "game-development"]
 
 [dependencies]
 alice-world-auditor-types = { path = "../alice-world-auditor-types", version = "0.1.0" }
-alice-sdf = { path = "../../ALICE-SDF", version = "4.0.0", default-features = false, features = ["glsl"] }
 glam = "0.29"
+# ⚠️ alice-sdf is NOT a dependency yet — nothing in Phase 2/3 touches SDF
+# geometry (the MVP goal is a plain AABB, plan §1). The obstacle-avoidance
+# scene (plan §3 Phase 3 scene E) that would need it is explicitly not
+# pinned for the MVP ("MVP では pin しない"); add it back when that scene
+# is implemented, not before (cargo-machete correctly flagged an earlier,
+# unused declaration here).
 # Optional; only pulled in when `physics` is enabled. NOTE: alice-physics is
 # AGPL-3.0-or-later OR LicenseRef-Commercial — enabling `physics` keeps the
 # same license family this crate already carries (unlike alice-lol, which is

@@ -81,3 +81,9 @@ allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
 [[licenses.exceptions]]
 name = "alice-llm"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
+
+# alice-world-auditor is an in-workspace member (not a sibling path dep),
+# same dual license as alice-physics (AGPL-3.0-or-later OR LicenseRef-Commercial)
+[[licenses.exceptions]]
+name = "alice-world-auditor"
+allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]

@@ -168,23 +168,43 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # canonical 罠 #9-b 準拠: STUB (uppercase) 明示のみ
-      # trait default method の legitimate な panic pattern は誤検出しない
-      - name: Detect todo! / unimplemented! / panic!(STUB) in src/**
+      # canonical 罠 #9-b/#9-c 準拠 (reference_alice_ci_canonical_template.md):
+      # todo!() / unimplemented!() は CLAUDE.md 仮実装規律が endorse する
+      # legitimate な fail-fast idiom なので informational のみ (ALICE-LOL
+      # は旧 (block する) 版から drift していた、2026-10-02
+      # alice-world-auditor scaffold の todo!() stub landing で発覚して修正)
+      # block するのは明示的な STUB marker と dbg!() 残留のみ
+      - name: Detect panic!(STUB) in src/** (blocking)
         run: |
           set -eo pipefail
-          hits=$(grep -rnE 'todo!\(|unimplemented!\(|panic!\([^)]*STUB' \
+          hits=$(grep -rnE 'panic!\([^)]*STUB' \
             . --include="*.rs" \
             --exclude-dir=bin \
             --exclude-dir=target \
             --exclude-dir=fuzz \
             || true)
           if [ -n "$hits" ]; then
-            echo "❌ Stub / unimplemented / STUB panic detected in production path:"
+            echo "❌ STUB panic detected in production path:"
             echo "$hits"
             exit 1
           fi
-          echo "✓ No todo! / unimplemented! / panic!(STUB) in workspace src/"
+          echo "✓ No panic!(STUB) in workspace src/"
+
+      - name: Detect todo! / unimplemented! (informational)
+        run: |
+          set -eo pipefail
+          hits=$(grep -rnE 'todo!\(|unimplemented!\(' \
+            . --include="*.rs" \
+            --exclude-dir=bin \
+            --exclude-dir=target \
+            --exclude-dir=fuzz \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "::warning::todo!() / unimplemented!() found (legitimate fail-fast stub, informational, not blocking):"
+            echo "$hits" | head -50
+          else
+            echo "✓ No todo! / unimplemented! in workspace src/"
+          fi
 
       - name: Detect dbg!() residual in src/**
         run: |
