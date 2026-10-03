@@ -2,9 +2,14 @@
 //! covers the `physics` feature path) — see `project_alice_world_model_mvp_plan`
 //! §1 for the rest-to-rest goal this exercises.
 //!
-//! ⚠️ Running this panics (`todo!()`, Phase 4 not implemented yet). It
-//! exists to be *built*, not run — `cargo build --examples --features
-//! physics` is the CI step that wires it.
+//! `cargo run --example plan_rest_to_rest --features physics` prints both
+//! `lower_bound_frames`' estimate and `plan`'s actual result. ⚠️ The two
+//! calls below use different distances on purpose (`axis_state`'s point
+//! distance `10.0` vs. `goal.target`'s near edge `9.0`) — they are two
+//! independent illustrations of the two entry points, not a
+//! consistency check (`lower_bound_frames` only ever sees the scalar
+//! `AxisState` the caller resolved, never `goal.target`'s bounds, per its
+//! own doc comment).
 
 use alice_physics::{Fix128, PhysicsConfig, PhysicsWorld, RigidBody, Vec3Fix};
 use alice_world_auditor::{AxisState, Goal, Params};

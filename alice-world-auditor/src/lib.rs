@@ -8,14 +8,23 @@
 //! (public entry points + oracle tests, search body not yet written — see
 //! `plan` / `lower_bound_frames`).
 //!
-//! ⚠️ **Phase 4 (IDA\* body) is not implemented.** `plan` and
-//! `lower_bound_frames` fail fast with `todo!()`. The oracle tests in
-//! `tests/` are `#[ignore = "src gap: ..."]` for exactly that reason — they
-//! pin the expected closed-form answers now, before the search exists, per
-//! this workspace's oracle-first discipline.
+//! Phase 4 (`project_alice_world_model_phase4_design_confirmed`,
+//! `~/claude-config/memory/`) implements the search as an exact-integer
+//! IDA\* over a 1-D bang-bang lattice: `lower_bound_frames` and `plan`
+//! convert the caller's `f32` state into integer lattice units
+//! (`S` = velocity in units of `a*dt`, `D` = distance in units of `a*dt²`)
+//! and reason about `AtRest` as "lattice `S == 0`", **not** by re-querying
+//! `alice-physics`' derived (XPBD, position-diff-based) velocity for exact
+//! equality to zero — the engine's `update_velocities` re-derives velocity
+//! from a position delta every substep, which drifts by a few dozen ulp per
+//! frame even with `Fix128` and zero damping (confirmed by driving the
+//! witness trajectory through a real `PhysicsWorld`: `v == Fix128::ZERO` is
+//! `false`). The design decision and its rationale are recorded in
+//! `project_alice_world_model_phase4_design_confirmed` §(4).
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+#![allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
 
 pub use alice_world_auditor_types::{Aabb, Goal, Verdict};
 
@@ -110,6 +119,86 @@ pub struct BestSoFar {
     pub actions: Vec<Action>,
 }
 
+/// Converts a real-valued axis distance/velocity into integer lattice units
+/// (`D` = `a*dt²`, `S` = `a*dt`), per
+/// `reference_bangbang_integer_lattice_closed_form` §0. Rounds to the
+/// nearest integer; exact for the MVP's own oracle scenes (`a*dt²` divides
+/// the distances used there), approximate otherwise (documented limitation,
+/// `project_alice_world_model_phase4_design_confirmed` §3).
+#[allow(clippy::cast_possible_truncation)]
+fn to_lattice(distance: f32, velocity: f32, a_max_axis: f32, dt: f32) -> (i64, i64) {
+    let unit_v = a_max_axis * dt;
+    let unit_p = a_max_axis * dt * dt;
+    let s = (velocity / unit_v).round() as i64;
+    let d = (distance / unit_p).round() as i64;
+    (s, d)
+}
+
+/// `M(s, r)`: the maximum position-index reachable in `r` frames starting
+/// at velocity-index `s` and ending at velocity-index `0`, per
+/// `reference_bangbang_integer_lattice_closed_form` §1. Requires `r >= |s|`;
+/// the caller is responsible for that (checked via `debug_assert!`, not
+/// re-validated here on every call since this runs inside the search's hot
+/// loop).
+#[allow(clippy::suspicious_operation_groupings)] // p*p / hold*p sharing `p` is the actual formula, not a typo
+fn m_reachable(s: i64, r: i64) -> i64 {
+    debug_assert!(r >= s.abs(), "M(s, r) requires r >= |s| (r={r}, s={s})");
+    let p = (r + s).div_euclid(2);
+    let hold = (r + s) - 2 * p;
+    let decel_offset = s * (s + 1) / 2;
+    p * p + hold * p - decel_offset
+}
+
+/// Exact minimal frame count to go from velocity-index `s` to rest (`0`)
+/// while covering at least `d_lo` position-index, via monotone search over
+/// `m_reachable`. `reference_bangbang_integer_lattice_closed_form` §2: `M`
+/// is monotone non-decreasing in `r`, so the first `r` with `M(s, r)` at
+/// least `d_lo` is the exact answer — not merely an admissible bound.
+fn exact_rest_to_rest_h(s: i64, d_lo: i64) -> u32 {
+    let mut r = s.abs();
+    while m_reachable(s, r) < d_lo {
+        r += 1;
+    }
+    u32::try_from(r).unwrap_or(u32::MAX)
+}
+
+/// Exact minimal frame count to cover at least `d_lo` position-index from
+/// velocity-index `s`, with **no** rest requirement at arrival. Optimal is
+/// to accelerate every frame (`u = +1`): there is never a reason to brake
+/// when arrival velocity is unconstrained, so position after `r` frames of
+/// pure acceleration is `s*r + r*(r+1)/2` — solved for the minimal integer
+/// `r`, this is exact (not merely admissible), matching
+/// `tests/phase3_search_oracles.rs` scene B's closed form (`t =
+/// sqrt(2*distance/a_total)`, the `C = sqrt(2)` case).
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::suboptimal_flops
+)]
+fn exact_position_only_h(s: i64, d_lo: i64) -> u32 {
+    if d_lo <= 0 {
+        return 0;
+    }
+    // r^2 + (1 + 2s) r - 2*d_lo >= 0, solve via the quadratic formula then
+    // nudge to the exact minimal integer root (float sqrt is a starting
+    // guess only, not the oracle — `reference_bangbang_integer_lattice_closed_form`
+    // §3's "closed form off by one near non-integer windows" caution, and
+    // `mul_add` is deliberately not used here per
+    // `feedback_mul_add_breaks_bit_exactness` even though this value is only
+    // a seed for the exact integer search below, not itself load-bearing;
+    // `s`/`d_lo` stay well inside f64's exact-integer range for all MVP
+    // scenes, so the precision-loss lint is a non-issue here).
+    let b = 1.0 + 2.0 * s as f64;
+    let c = -2.0 * d_lo as f64;
+    let discriminant = b * b - 4.0 * c;
+    let r0 = f64::midpoint(-b, discriminant.sqrt()).ceil() as i64;
+    let mut r = (r0 - 2).max(0);
+    while s * r + r * (r + 1) / 2 < d_lo {
+        r += 1;
+    }
+    u32::try_from(r).unwrap_or(u32::MAX)
+}
+
 /// L∞ admissible lower bound on the number of frames needed to reach the
 /// goal from `state`, given `params`.
 ///
@@ -118,47 +207,234 @@ pub struct BestSoFar {
 /// `goal`'s variant — not its `target` bounds, which the caller has already
 /// folded into `state.distance_to_goal` — selects which closed form applies:
 /// `Goal::PositionWithinAndAtRest` requires decelerating to zero velocity on
-/// arrival (`t* = 2 * sqrt(distance / a)`, symmetric bang-bang), while
-/// `Goal::PositionWithin` only requires reaching the position (the body may
-/// arrive at any velocity, a strictly cheaper bound). A single formula
-/// cannot be admissible for both (`feedback_world_auditor_phase3_oracle_contradictions`,
-/// `ys-3a` 2026-10-03: no constant `C` in `ceil(C*sqrt(d/a)/dt)` satisfies
-/// both oracle scenes simultaneously).
+/// arrival (symmetric bang-bang), while `Goal::PositionWithin` only requires
+/// reaching the position (the body may arrive at any velocity, a strictly
+/// cheaper bound). A single formula cannot be admissible for both
+/// (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
+/// 2026-10-03: no constant `C` in `ceil(C*sqrt(d/a)/dt)` satisfies both
+/// oracle scenes simultaneously).
 ///
-/// # Admissibility
+/// # Exactness
 ///
-/// Must never exceed the true minimal frame count, or IDA\* built on top of
-/// it is unsound. `params.a_max_axis` must already include any
-/// assisting/opposing acceleration (e.g. gravity) the caller wants
-/// accounted for — see `tests/phase3_search_oracles.rs` scene B for the
-/// admissible/inadmissible pair this enables.
+/// Returns the **exact** minimal frame count (not merely an admissible
+/// lower bound) for both variants — `reference_bangbang_integer_lattice_closed_form`
+/// §2/§3. `params.a_max_axis` must already include any assisting/opposing
+/// acceleration (e.g. gravity) the caller wants accounted for — see
+/// `tests/phase3_search_oracles.rs` scene B for the admissible/inadmissible
+/// pair this enables.
 ///
 /// # Panics
 ///
-/// Always, currently: `todo!()` — Phase 4 (plan §3) has not been
-/// implemented. This function's *signature* and the oracle tests calling
-/// it are the Phase 2/3 deliverable; the body is Phase 4.
+/// If `goal` is a future `#[non_exhaustive]` variant this crate's version
+/// predates (fail-fast: no closed form has been derived for it yet).
 #[must_use]
-pub fn lower_bound_frames(_state: AxisState, _goal: &Goal, _params: &Params) -> u32 {
-    todo!("STUB: Phase 4 (project_alice_world_model_mvp_plan §3 Phase 4.1) — L∞ bang-bang lower bound not yet implemented")
+pub fn lower_bound_frames(state: AxisState, goal: &Goal, params: &Params) -> u32 {
+    let (s, d) = to_lattice(
+        state.distance_to_goal,
+        state.velocity,
+        params.a_max_axis,
+        params.dt,
+    );
+    match goal {
+        Goal::PositionWithinAndAtRest { .. } => exact_rest_to_rest_h(s, d),
+        Goal::PositionWithin { .. } => exact_position_only_h(s, d),
+        _ => panic!(
+            "lower_bound_frames: no closed form derived yet for this Goal variant \
+             (project_alice_world_model_phase4_design_confirmed §(2))"
+        ),
+    }
+}
+
+/// IDA\* bookkeeping shared across the recursion (keeps `search_step`'s
+/// argument count sane — `clippy::too_many_arguments` otherwise).
+#[cfg(feature = "physics")]
+struct SearchContext {
+    rest_required: bool,
+    d_lo: i64,
+    d_hi: i64,
+    node_budget: u64,
+    nodes_expanded: u64,
+}
+
+#[cfg(feature = "physics")]
+impl SearchContext {
+    fn admissible_h(&self, s: i64, remaining: i64) -> u32 {
+        if self.rest_required {
+            exact_rest_to_rest_h(s, remaining)
+        } else {
+            exact_position_only_h(s, remaining)
+        }
+    }
+}
+
+/// Outcome of one depth-first probe at a fixed `f`-bound.
+#[cfg(feature = "physics")]
+enum Probe {
+    Found,
+    /// No child stayed within `bound`; carries the smallest `f` seen among
+    /// the children tried (the next outer-loop bound).
+    Exceeded(u32),
+    BudgetExhausted,
+}
+
+/// Recursive IDA\* step over the frame-granularity (`k = 1`,
+/// `project_alice_world_model_phase4_design_confirmed` §(1)) action space.
+/// Action-index order `{+1 (Accelerate), 0 (Coast), -1 (Decelerate)}` is the
+/// MVP's fixed tie-break (plan §1.2's "行動 index 辞書順"); `ctx.admissible_h`
+/// being **exact** (not merely admissible) means at most one child per node
+/// stays within `bound`, so this explores a single path with zero
+/// backtracking for the MVP's oracle scenes
+/// (`reference_bangbang_integer_lattice_closed_form` §2, 実測6) — the
+/// recursive structure is kept general (not hand-collapsed into a greedy
+/// walk) so it stays correct if `admissible_h` is ever weakened to
+/// merely-admissible for a future, harder goal predicate.
+#[cfg(feature = "physics")]
+fn search_step(
+    ctx: &mut SearchContext,
+    s: i64,
+    p: i64,
+    depth: u32,
+    bound: u32,
+    actions: &mut Vec<Action>,
+) -> Probe {
+    let at_goal = (!ctx.rest_required || s == 0) && p >= ctx.d_lo && p <= ctx.d_hi;
+    if at_goal {
+        return Probe::Found;
+    }
+    let h = ctx.admissible_h(s, ctx.d_lo - p);
+    let f = depth + h;
+    if f > bound {
+        return Probe::Exceeded(f);
+    }
+    let mut min_exceeded = u32::MAX;
+    for u in [1_i64, 0, -1] {
+        ctx.nodes_expanded += 1;
+        if ctx.nodes_expanded > ctx.node_budget {
+            return Probe::BudgetExhausted;
+        }
+        let new_s = s + u;
+        let new_p = p + new_s;
+        actions.push(match u {
+            1 => Action::Accelerate,
+            0 => Action::Coast,
+            _ => Action::Decelerate,
+        });
+        match search_step(ctx, new_s, new_p, depth + 1, bound, actions) {
+            Probe::Found => return Probe::Found,
+            Probe::BudgetExhausted => return Probe::BudgetExhausted,
+            Probe::Exceeded(next) => {
+                actions.pop();
+                min_exceeded = min_exceeded.min(next);
+            }
+        }
+    }
+    Probe::Exceeded(min_exceeded)
+}
+
+/// Drives `world`'s single body (plan §1.1: MVP scope is one rigid body)
+/// along the goal axis by injecting a frame-head velocity impulse per
+/// `action` then stepping — the same injection point validated against a
+/// real `PhysicsWorld` for the witness trajectory
+/// (`feedback_world_auditor_phase3_oracle_contradictions` §5: `x =
+/// 100.00001` after 537 frames with `damping: ONE, substeps: 1`).
+#[cfg(feature = "physics")]
+fn drive_world(
+    world: &mut alice_physics::PhysicsWorld,
+    actions: &[Action],
+    dir: f32,
+    params: &Params,
+) {
+    use alice_physics::Fix128;
+    let dt_fix = Fix128::from_f32(params.dt);
+    let delta_v = Fix128::from_f32(params.a_max_axis * params.dt * dir);
+    for action in actions {
+        let signed_delta = match action {
+            Action::Accelerate => delta_v,
+            Action::Decelerate => -delta_v,
+            Action::Coast => Fix128::ZERO,
+        };
+        world.bodies[0].velocity.x = world.bodies[0].velocity.x + signed_delta;
+        world.step(dt_fix);
+    }
 }
 
 /// Search for a frame-minimal action sequence from `world`'s current state
-/// to `goal`.
+/// to `goal`, then execute it against `world`.
+///
+/// # Scope (MVP)
+///
+/// Single rigid body (`world.bodies[0]`), goal axis fixed to `x` (plan §1.3:
+/// "1 軸"). Direction is inferred from which side of `goal`'s `target` the
+/// body starts on, so targets reached by moving in `-x` work too.
 ///
 /// # Errors
 ///
 /// Returns `Err(BestSoFar)` if the node budget is exhausted before an
-/// optimal plan is found or proven unreachable.
+/// optimal plan is found. `world` is left unmodified in that case — the
+/// trajectory is only executed once a fully optimal plan is in hand, so a
+/// caller retrying with a larger budget doesn't see a partially-driven body.
 ///
 /// # Panics
 ///
-/// Always, currently: `todo!()` — see [`lower_bound_frames`].
+/// If `goal` is a future `#[non_exhaustive]` variant this crate's version
+/// predates — see [`lower_bound_frames`].
 #[cfg(feature = "physics")]
 pub fn plan(
-    _world: &mut alice_physics::PhysicsWorld,
-    _goal: &Goal,
-    _params: &Params,
+    world: &mut alice_physics::PhysicsWorld,
+    goal: &Goal,
+    params: &Params,
 ) -> Result<Optimal, BestSoFar> {
-    todo!("STUB: Phase 4 (project_alice_world_model_mvp_plan §3 Phase 4.2) — IDA* search not yet implemented")
+    let (target, rest_required) = match goal {
+        Goal::PositionWithinAndAtRest { target } => (target, true),
+        Goal::PositionWithin { target } => (target, false),
+        _ => panic!(
+            "plan: no search strategy derived yet for this Goal variant \
+             (project_alice_world_model_phase4_design_confirmed §(2))"
+        ),
+    };
+
+    let pos_x = world.bodies[0].position.x.to_f32();
+    let vel_x = world.bodies[0].velocity.x.to_f32();
+    let center_x = f32::midpoint(target.min.x, target.max.x);
+    let dir: f32 = if center_x >= pos_x { 1.0 } else { -1.0 };
+    let (near_dist, far_dist) = if dir > 0.0 {
+        (target.min.x - pos_x, target.max.x - pos_x)
+    } else {
+        (pos_x - target.max.x, pos_x - target.min.x)
+    };
+    let forward_vel = vel_x * dir;
+
+    let (s, d_lo) = to_lattice(near_dist, forward_vel, params.a_max_axis, params.dt);
+    let (_, d_hi) = to_lattice(far_dist, forward_vel, params.a_max_axis, params.dt);
+
+    let mut ctx = SearchContext {
+        rest_required,
+        d_lo,
+        d_hi,
+        node_budget: params.node_budget,
+        nodes_expanded: 0,
+    };
+    let mut bound = ctx.admissible_h(s, d_lo);
+
+    loop {
+        let mut actions = Vec::new();
+        match search_step(&mut ctx, s, 0, 0, bound, &mut actions) {
+            Probe::Found => {
+                let frames = u32::try_from(actions.len()).unwrap_or(u32::MAX);
+                drive_world(world, &actions, dir, params);
+                return Ok(Optimal { frames, actions });
+            }
+            Probe::BudgetExhausted => {
+                let frames = u32::try_from(actions.len()).unwrap_or(u32::MAX);
+                return Err(BestSoFar { frames, actions });
+            }
+            Probe::Exceeded(next_bound) => {
+                assert!(
+                    next_bound > bound,
+                    "IDA* bound did not increase (bug): bound={bound}, next={next_bound}"
+                );
+                bound = next_bound;
+            }
+        }
+    }
 }
