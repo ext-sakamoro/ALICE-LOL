@@ -20,11 +20,19 @@
 //! truncating casts are intentional.
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-use alice_world_auditor::{lower_bound_frames, AxisState, Params};
+use alice_world_auditor::{lower_bound_frames, Aabb, AxisState, Goal, Params};
 
 /// (a) Closed-form minimal step count for 1-D rest-to-rest.
 ///
 /// `t* = 2*sqrt(d/a)`, minimal integer frame count = `ceil(t*/dt)`.
+///
+/// ⚠️ **`goal` here is `PositionWithinAndAtRest`** — this is what selects
+/// the rest-to-rest closed form (`lib.rs::lower_bound_frames` doc). The
+/// `target` bounds are a placeholder (the heuristic reads `state`'s
+/// already-resolved `distance_to_goal`, not `target`, for the distance);
+/// reused from (c)'s safe window for consistency, not because it matters
+/// here (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
+/// 2026-10-03).
 #[test]
 #[ignore = "src gap: lower_bound_frames body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.1)"]
 fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
@@ -46,8 +54,14 @@ fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
         distance_to_goal: d,
         velocity: 0.0,
     };
+    let goal = Goal::PositionWithinAndAtRest {
+        target: Aabb {
+            min: glam::Vec3::new(d - 0.1, -0.5, -0.5),
+            max: glam::Vec3::new(d + 0.1, 0.5, 0.5),
+        },
+    };
     let params = Params::new(a, dt, 100_000);
-    let frames = lower_bound_frames(state, &params);
+    let frames = lower_bound_frames(state, &goal, &params);
     assert_eq!(
         frames, expected_frames,
         "lower_bound_frames が 1-D rest-to-rest の最小 step 数と一致しない"
@@ -59,6 +73,13 @@ fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
 /// `a_input` 単独版は加勢を見落として true cost を**上回る**見積りを返す
 /// (= inadmissible、red) `a_input + |g|` 版は true cost と一致する
 /// (admissible、green) 両方を 1 test に収めて「対」であることを明示する
+///
+/// ⚠️ **`goal` here is `PositionWithin`** (position-only, no `AtRest`) — the
+/// scene's documented intent. Mixing this with (a)'s `PositionWithinAndAtRest`
+/// value under a goal-blind `lower_bound_frames` was unsatisfiable: no
+/// constant `C` in `ceil(C*sqrt(d/a)/dt)` passes both scenes simultaneously
+/// (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
+/// 2026-10-03). `target` is a placeholder for the same reason as (a)'s.
 #[test]
 #[ignore = "src gap: lower_bound_frames body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.1)"]
 fn b_admissibility_pair_scene_gravity_assisted_position_only() {
@@ -71,8 +92,10 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
     // t = sqrt(2h / a_total)
     let true_time = (2.0 * drop_height / (a_input + g)).sqrt();
     let true_frames = (true_time / dt).ceil() as u32;
+    // 2026-10-03 ys-3a 実測: 旧値 49 は sqrt(2*20/12)=1.8257s → 110 frame の計算を
+    // 誤っていた (closed form コード自体は正しい、assert の pin 値が狂っていた)
     assert_eq!(
-        true_frames, 49,
+        true_frames, 110,
         "closed form 自体の計算が狂っている (oracle の空振り確認)"
     );
 
@@ -80,10 +103,16 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
         distance_to_goal: drop_height,
         velocity: 0.0,
     };
+    let goal = Goal::PositionWithin {
+        target: Aabb {
+            min: glam::Vec3::new(drop_height - 0.1, -0.5, -0.5),
+            max: glam::Vec3::new(drop_height + 0.1, 0.5, 0.5),
+        },
+    };
 
     // red 版: 重力加勢を見落とす (a_max_axis = a_input のみ)
     let params_without_gravity = Params::new(a_input, dt, 100_000);
-    let h_without_gravity = lower_bound_frames(state, &params_without_gravity);
+    let h_without_gravity = lower_bound_frames(state, &goal, &params_without_gravity);
     assert!(
         h_without_gravity > true_frames,
         "a_input だけの heuristic が true cost を超えない (= この scene では加勢の見落としが \
@@ -92,7 +121,7 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
 
     // green 版: 重力加勢を含める (a_max_axis = a_input + |g|)
     let params_with_gravity = Params::new(a_input + g, dt, 100_000);
-    let h_with_gravity = lower_bound_frames(state, &params_with_gravity);
+    let h_with_gravity = lower_bound_frames(state, &goal, &params_with_gravity);
     assert!(
         h_with_gravity <= true_frames,
         "a_input + |g| の heuristic が admissible でない (true cost を超えている)"
@@ -117,7 +146,6 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
 #[ignore = "src gap: plan body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.2)"]
 fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     use alice_physics::{Fix128, PhysicsConfig, PhysicsWorld, RigidBody, Vec3Fix};
-    use alice_world_auditor::{Aabb, Goal};
 
     let d = 100.0_f32;
     let a = 5.0_f32;
@@ -142,8 +170,23 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
         "closed form 自体の計算が狂っている (oracle の空振り確認)"
     );
 
+    // ⚠️ **既定 config (`substeps: 8` / `damping: 0.99`) では 537 frame に
+    // 物理的に到達できない** (`ys-3a` 2026-10-03 実測、
+    // `feedback_world_auditor_phase3_oracle_contradictions`) — frame 毎の
+    // 0.99 速度減衰は終端速度を `a*dt/(1-0.99) ≈ 8.3 m/s` に抑え、bang-bang
+    // 最適が要求する peak `sqrt(d*a) ≈ 22.36 m/s` の 4 割弱しか出せない
+    // (全力加速だけでも 99.9 m に 819〜822 frame 要する、537 の 1.53 倍)
+    // `damping: ONE` で消し、`substeps: 1` で §6 の整数格子モデル
+    // (`v += a*dt` が厳密 / `x += v*dt`) と一致させる (`substeps` は damping
+    // と違い frame 頭の速度 impulse 注入で吸収できない位置格子単位のズレを
+    // 生むため、1 に揺らす必要がある) — この scene の目的は「理想 bang-bang
+    // 模型と `plan` の出力を比較する解析解突合」であって「既定の使われ方」
+    // ではないため、[[feedback_physics_analytic_oracle_rule_2026_09_15]] の
+    // 「既定 config で書く」規律の対象外として扱う
     let mut world = PhysicsWorld::new(PhysicsConfig {
         gravity: Vec3Fix::ZERO,
+        damping: Fix128::ONE,
+        substeps: 1,
         ..PhysicsConfig::default()
     });
     world.add_body(RigidBody::new_dynamic(Vec3Fix::ZERO, Fix128::ONE));

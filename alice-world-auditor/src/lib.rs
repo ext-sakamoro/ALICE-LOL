@@ -113,12 +113,23 @@ pub struct BestSoFar {
 /// L∞ admissible lower bound on the number of frames needed to reach the
 /// goal from `state`, given `params`.
 ///
+/// # Goal dependence
+///
+/// `goal`'s variant — not its `target` bounds, which the caller has already
+/// folded into `state.distance_to_goal` — selects which closed form applies:
+/// `Goal::PositionWithinAndAtRest` requires decelerating to zero velocity on
+/// arrival (`t* = 2 * sqrt(distance / a)`, symmetric bang-bang), while
+/// `Goal::PositionWithin` only requires reaching the position (the body may
+/// arrive at any velocity, a strictly cheaper bound). A single formula
+/// cannot be admissible for both (`feedback_world_auditor_phase3_oracle_contradictions`,
+/// `ys-3a` 2026-10-03: no constant `C` in `ceil(C*sqrt(d/a)/dt)` satisfies
+/// both oracle scenes simultaneously).
+///
 /// # Admissibility
 ///
 /// Must never exceed the true minimal frame count, or IDA\* built on top of
-/// it is unsound. The MVP's bang-bang closed form is
-/// `t* = 2 * sqrt(distance / a)`; `params.a_max_axis` must already include
-/// any assisting/opposing acceleration (e.g. gravity) the caller wants
+/// it is unsound. `params.a_max_axis` must already include any
+/// assisting/opposing acceleration (e.g. gravity) the caller wants
 /// accounted for — see `tests/phase3_search_oracles.rs` scene B for the
 /// admissible/inadmissible pair this enables.
 ///
@@ -128,7 +139,7 @@ pub struct BestSoFar {
 /// implemented. This function's *signature* and the oracle tests calling
 /// it are the Phase 2/3 deliverable; the body is Phase 4.
 #[must_use]
-pub fn lower_bound_frames(_state: AxisState, _params: &Params) -> u32 {
+pub fn lower_bound_frames(_state: AxisState, _goal: &Goal, _params: &Params) -> u32 {
     todo!("STUB: Phase 4 (project_alice_world_model_mvp_plan §3 Phase 4.1) — L∞ bang-bang lower bound not yet implemented")
 }
 
