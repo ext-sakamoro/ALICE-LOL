@@ -5,11 +5,13 @@ frame-minimal action sequence toward a
 [`Goal`](../alice-world-auditor-types), returning a 3-valued
 (`Proven` / `Violated` / `Undecided`) [`Verdict`](../alice-world-auditor-types).
 
-⚠️ **Status: Phase 2 (scaffold).** `plan` and `lower_bound_frames` are
-public entry points with `todo!()` bodies — the IDA\* search itself
-(Phase 4) is not implemented yet. The oracle tests in `tests/` are
-`#[ignore = "src gap: ..."]` for exactly that reason: they pin the
-expected closed-form answers now, ahead of the implementation.
+**Status: Phase 4 (search implemented, 2026-10-03).** `lower_bound_frames`
+and `plan` search an exact-integer 1-D bang-bang lattice via IDA\*
+(`k = 1` frame-granularity actions) — see
+`project_alice_world_model_phase4_design_confirmed`
+(`~/claude-config/memory/`) for the design. All three Phase 3 oracle
+scenes in `tests/` are green with `#[ignore]` removed. MVP scope: single
+rigid body, goal axis fixed to `x`.
 
 ## Features
 

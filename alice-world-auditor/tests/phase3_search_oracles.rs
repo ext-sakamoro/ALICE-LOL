@@ -1,19 +1,21 @@
 //! Phase 3 search oracles (`project_alice_world_model_mvp_plan` §3 Phase 3)
-//! — written and pinned **before** the search body exists (Phase 4).
+//! — written and pinned **before** the search body existed (Phase 4), per
+//! this workspace's oracle-first discipline. Phase 4 (IDA\* over an exact
+//! integer lattice, `project_alice_world_model_phase4_design_confirmed`) is
+//! now implemented and all three scenes are green; `#[ignore]` has been
+//! removed (2026-10-03, `ys-3c`).
 //!
 //! All three scenes call a real public entry point ([`lower_bound_frames`]
-//! for (a)/(b), [`plan`] for (c)) and are `#[ignore = "src gap: ..."]`
-//! because the body each calls is `todo!()` (oracle-first discipline: pin
-//! the expected answer now, implement later, remove `#[ignore]` when the
-//! `src gap:` closes).
+//! for (a)/(b), [`plan`] for (c)).
 //!
 //! ⚠️ **(c) used to compute its closed-form expectation and stop there,
 //! never calling `plan`** — that tested nothing about this crate (an
 //! "入口が内側" oracle, `ys-1f` 2026-10-02 review): a `plan` that
 //! implements naive kinetic-energy dominance pruning could ship and this
-//! test would stay green forever. It now calls `plan` and is red for the
-//! same `todo!()` reason as (a)/(b); the closed-form derivation stays as
-//! the comment explaining *why* the expected value is what it is.
+//! test would stay green forever. It now calls `plan` and compares the
+//! returned `frames` against the closed-form optimum; the closed-form
+//! derivation stays as the comment explaining *why* the expected value is
+//! what it is.
 //!
 //! `ceil()` results here are always non-negative and small (well under
 //! `u32::MAX`, these are frame counts in the hundreds), so the `as u32`
@@ -34,7 +36,6 @@ use alice_world_auditor::{lower_bound_frames, Aabb, AxisState, Goal, Params};
 /// here (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
 /// 2026-10-03).
 #[test]
-#[ignore = "src gap: lower_bound_frames body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.1)"]
 fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
     let d = 100.0_f32;
     let a = 5.0_f32;
@@ -81,7 +82,6 @@ fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
 /// (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
 /// 2026-10-03). `target` is a placeholder for the same reason as (a)'s.
 #[test]
-#[ignore = "src gap: lower_bound_frames body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.1)"]
 fn b_admissibility_pair_scene_gravity_assisted_position_only() {
     let drop_height = 20.0_f32;
     let g = 10.0_f32;
@@ -143,7 +143,6 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
 /// はコメントとして残す (期待値 537 の出所)
 #[cfg(feature = "physics")]
 #[test]
-#[ignore = "src gap: plan body is todo!() (Phase 4, project_alice_world_model_mvp_plan §3 Phase 4.2)"]
 fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     use alice_physics::{Fix128, PhysicsConfig, PhysicsWorld, RigidBody, Vec3Fix};
 

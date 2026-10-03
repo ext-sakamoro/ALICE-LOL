@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `alice-world-auditor`: Phase 4 探索実装 (IDA\* over 整数格子、2026-10-03)
+
+`lower_bound_frames` / `plan` の `todo!()` 本体を実装 1-D bang-bang 制御を厳密整数格子 (`S` = 速度 index, `D` = 位置 index) に変換し、frame 粒度
+(`k = 1`) の IDA\* で探索する `AtRest` の判定は lattice 内部の整数 `S == 0` で行い、実 `alice-physics` world の XPBD 再導出速度を `== Fix128::ZERO`
+で比較しない (engine は位置差分 × 逆数で毎 substep 速度を再導出するため、`Fix128` でも厳密 0 にならないことを実測で確認済み、設計根拠は
+`project_alice_world_model_phase4_design_confirmed` 参照)
+
+Phase 3 oracle 3 本 (`tests/phase3_search_oracles.rs`) の `#[ignore]` を全て解除、green 確認済み 実装前に発覚した oracle 側の矛盾 3 件
+(`lower_bound_frames` の signature に `Goal` が無く (a)(b) が両立不能 / (b) の自己検算 assert が誤り (49→110) / (c) の期待値が既定 `PhysicsConfig`
+の damping で到達不能) も同時に解消 (`feedback_world_auditor_phase3_oracle_contradictions` 参照)
+
 ### Fixed — `hardsurface::{mount, skadis_sdf}` の出来上がりの形の欠陥 11 件 (2026-10-02)
 
 `cavity` / `mount` / `skadis_sdf` に閉形式 / 文書の寸法と突き合わせる oracle 35 本を足し、`eval` の符号変化の二分法で出来上がりの形を測ったところ、
