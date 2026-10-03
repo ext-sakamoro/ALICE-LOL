@@ -29,7 +29,7 @@ fn main() {
         distance_to_goal: 10.0,
         velocity: 0.0,
     };
-    let h = alice_world_auditor::lower_bound_frames(axis_state, &params);
+    let h = alice_world_auditor::lower_bound_frames(axis_state, &goal, &params);
     println!("lower bound: {h} frames");
 
     match alice_world_auditor::plan(&mut world, &goal, &params) {
