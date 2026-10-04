@@ -17,9 +17,8 @@ categories = ["mathematics", "game-development"]
 alice-world-auditor-types = { path = "../alice-world-auditor-types", version = "0.1.0" }
 glam = "0.29"
 # ⚠️ alice-sdf is NOT a dependency yet — nothing in Phase 2/3 touches SDF
-# geometry (the MVP goal is a plain AABB, plan §1). The obstacle-avoidance
-# scene (plan §3 Phase 3 scene E) that would need it is explicitly not
-# pinned for the MVP ("MVP では pin しない"); add it back when that scene
+# geometry (the MVP goal is a plain AABB). The obstacle-avoidance scene
+# that would need it is not part of the MVP; add it back when that scene
 # is implemented, not before (cargo-machete correctly flagged an earlier,
 # unused declaration here).
 # Optional; only pulled in when `physics` is enabled. NOTE: alice-physics is
@@ -28,7 +27,7 @@ glam = "0.29"
 # MIT/Apache-2.0 and must leave this feature off to stay permissive).
 # Both ALICE-SDF and ALICE-Physics are already checked out by ALICE-LOL's
 # existing CI (alice-lol itself has identical path deps to these siblings),
-# so no new CI checkout step is needed (feedback_ci_workspace_transitive_path_dep).
+# so no new CI checkout step is needed.
 alice-physics = { path = "../../ALICE-Physics", version = "1.0", default-features = false, features = ["std"], optional = true }
 
 [features]

@@ -1,8 +1,7 @@
 //! Confirms `#[non_exhaustive]` on `Goal` / `Verdict` does not block
-//! downstream construction (`feedback_non_exhaustive_without_constructor`
-//! — the trap applies to structs with pub fields, not to enums with
+//! downstream construction (the trap applies to structs with pub fields, not to enums with
 //! struct-like variants; this test pins that this crate is on the safe
-//! side rather than asserting it from memory).
+//! side rather than assuming it).
 
 use alice_world_auditor_types::{Aabb, Goal, Verdict};
 use glam::Vec3;

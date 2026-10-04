@@ -5,8 +5,8 @@
 //! It proves nothing and searches nothing — see `alice-world-auditor` for
 //! that. Kept as a separate, permissively-licensed crate so that consuming
 //! `alice-lol`'s MIT/Apache-2.0 terms never pulls in the AGPL-3.0-or-later
-//! dual license carried by the planner (`project_world_auditor_crate_split_plan`
-//! §1, dependency inversion: `alice-lol → alice-world-auditor-types`, the
+//! dual license carried by the planner (dependency inversion:
+//! `alice-lol → alice-world-auditor-types`, the
 //! planner also depends on this crate but `alice-lol` never depends on the
 //! planner).
 
@@ -39,21 +39,20 @@ impl Aabb {
 
 /// A goal predicate.
 ///
-/// The MVP (`project_alice_world_model_mvp_plan` §1) has exactly one body
+/// The MVP has exactly one body
 /// reach a target region, optionally at rest (velocity exactly zero).
 ///
 /// ⚠️ **`#[non_exhaustive]` here only blocks exhaustive `match` from outside
 /// this crate** — existing variants with public fields remain constructible
 /// from downstream (unlike `#[non_exhaustive]` on a struct, which blocks
-/// struct-literal construction entirely, see
-/// `feedback_non_exhaustive_without_constructor`). No separate constructor
+/// struct-literal construction entirely). No separate constructor
 /// function is needed; `tests/cross_crate_construction.rs` pins this.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Goal {
     /// Position within `target`, velocity irrelevant.
     ///
-    /// Used for the gravity-assisted admissibility scene (plan §3 Phase 3
+    /// Used for the gravity-assisted admissibility scene (`alice-world-auditor`'s Phase 3
     /// scene B) — rest is deliberately not required there because a body
     /// falling under gravity cannot, in general, reach exactly zero
     /// velocity at an arbitrary target without an additional control axis.
@@ -63,7 +62,7 @@ pub enum Goal {
     },
     /// Position within `target` AND velocity exactly zero (rest-to-rest).
     ///
-    /// This is the MVP's primary goal (plan §1): "位置のみ" alone makes the
+    /// This is the MVP's primary goal: "position only" alone makes the
     /// search trivial (always accelerate toward the target), so requiring
     /// rest forces a genuine accel/decel switch point for the planner to
     /// find.

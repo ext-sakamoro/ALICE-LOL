@@ -59,7 +59,7 @@ pub use alice_world_auditor_types::{Aabb, Goal, Verdict};
 
 /// 1-D kinematic state along the goal-relevant axis (position, velocity).
 ///
-/// The MVP action space (`project_alice_world_model_mvp_plan` §3 Phase 1.3)
+/// The MVP action space
 /// is 1 axis × `{+a_max, -a_max, 0}`, so the heuristic only ever needs a
 /// 1-D projection of the body's state — not a full 3-D `PhysicsWorld`
 /// snapshot. This keeps [`lower_bound_frames`] usable without the
@@ -75,7 +75,7 @@ pub struct AxisState {
 /// Search parameters.
 ///
 /// `a_max_axis` is supplied by the caller, not computed here — this is
-/// what lets the admissibility oracle (plan §3 Phase 3 scene B) pass the
+/// what lets the admissibility oracle (`tests/phase3_search_oracles.rs` scene B) pass the
 /// same [`lower_bound_frames`] two different values (`a_input` alone vs.
 /// `a_input + |g_axis|`) and observe one admissible, one not.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -95,8 +95,7 @@ impl Params {
     ///
     /// ⚠️ **Required because of `#[non_exhaustive]`** — unlike an enum, a
     /// `#[non_exhaustive]` struct with public fields cannot be built via
-    /// struct-literal syntax from outside this crate (`E0639`,
-    /// `feedback_non_exhaustive_without_constructor`); `Params` is a
+    /// struct-literal syntax from outside this crate (`E0639`); `Params` is a
     /// caller-constructed input type, so it needs this constructor (as
     /// opposed to `Optimal` / `BestSoFar`, which this crate creates and
     /// downstream only reads).
@@ -110,7 +109,7 @@ impl Params {
     }
 }
 
-/// One of the three MVP actions (plan §3 Phase 1.3: `b = 3`).
+/// One of the three MVP actions (branching factor `b = 3`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Action {
@@ -126,8 +125,7 @@ pub enum Action {
 /// admissible heuristic.
 ///
 /// ⚠️ **Construct only from within this crate** — downstream reads this,
-/// it does not build one (see `feedback_non_exhaustive_without_constructor`
-/// §1's "crate が作って downstream が読む型" exemption).
+/// it does not build one, so `#[non_exhaustive]` needs no constructor here.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Optimal {
@@ -138,7 +136,7 @@ pub struct Optimal {
 }
 
 /// The best plan found before the node budget ran out — **not** claimed to
-/// be optimal (plan §0: "予算超過時に最適性を名乗らない").
+/// be optimal (optimality is never claimed once the budget is exceeded).
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct BestSoFar {
@@ -149,11 +147,11 @@ pub struct BestSoFar {
 }
 
 /// Converts a real-valued axis distance/velocity into integer lattice units
-/// (`D` = `a*dt²`, `S` = `a*dt`), per
-/// `reference_bangbang_integer_lattice_closed_form` §0. Rounds to the
+/// (`D` = `a*dt²`, `S` = `a*dt`). Rounds to the
 /// nearest integer; exact for the MVP's own oracle scenes (`a*dt²` divides
-/// the distances used there), approximate otherwise (documented limitation,
-/// `project_alice_world_model_phase4_design_confirmed` §3).
+/// the distances used there), approximate otherwise (a documented
+/// limitation; `audit` replays the plan in the engine, so the rounding cannot
+/// turn into a `Proven` the engine does not back).
 #[allow(clippy::cast_possible_truncation)]
 fn to_lattice(distance: f32, velocity: f32, a_max_axis: f32, dt: f32) -> (i64, i64) {
     let unit_v = a_max_axis * dt;
@@ -164,8 +162,9 @@ fn to_lattice(distance: f32, velocity: f32, a_max_axis: f32, dt: f32) -> (i64, i
 }
 
 /// `M(s, r)`: the maximum position-index reachable in `r` frames starting
-/// at velocity-index `s` and ending at velocity-index `0`, per
-/// `reference_bangbang_integer_lattice_closed_form` §1. Requires `r >= |s|`;
+/// at velocity-index `s` and ending at velocity-index `0` (bang-bang on the
+/// integer lattice: accelerate, hold at most one frame, brake). Requires
+/// `r >= |s|`;
 /// the caller is responsible for that (checked via `debug_assert!`, not
 /// re-validated here on every call since this runs inside the search's hot
 /// loop).
@@ -180,7 +179,7 @@ fn m_reachable(s: i64, r: i64) -> i64 {
 
 /// Exact minimal frame count to go from velocity-index `s` to rest (`0`)
 /// while covering at least `d_lo` position-index, via monotone search over
-/// `m_reachable`. `reference_bangbang_integer_lattice_closed_form` §2: `M`
+/// `m_reachable`. `M`
 /// is monotone non-decreasing in `r`, so the first `r` with `M(s, r)` at
 /// least `d_lo` is the exact answer — not merely an admissible bound.
 fn exact_rest_to_rest_h(s: i64, d_lo: i64) -> u32 {
@@ -210,10 +209,9 @@ fn exact_position_only_h(s: i64, d_lo: i64) -> u32 {
     }
     // r^2 + (1 + 2s) r - 2*d_lo >= 0, solve via the quadratic formula then
     // nudge to the exact minimal integer root (float sqrt is a starting
-    // guess only, not the oracle — `reference_bangbang_integer_lattice_closed_form`
-    // §3's "closed form off by one near non-integer windows" caution, and
-    // `mul_add` is deliberately not used here per
-    // `feedback_mul_add_breaks_bit_exactness` even though this value is only
+    // guess only, not the oracle — the closed form is off by one near
+    // non-integer windows — and `mul_add` is deliberately not used here
+    // (it changes rounding and so bit-exactness) even though this value is only
     // a seed for the exact integer search below, not itself load-bearing;
     // `s`/`d_lo` stay well inside f64's exact-integer range for all MVP
     // scenes, so the precision-loss lint is a non-issue here).
@@ -238,16 +236,14 @@ fn exact_position_only_h(s: i64, d_lo: i64) -> u32 {
 /// `Goal::PositionWithinAndAtRest` requires decelerating to zero velocity on
 /// arrival (symmetric bang-bang), while `Goal::PositionWithin` only requires
 /// reaching the position (the body may arrive at any velocity, a strictly
-/// cheaper bound). A single formula cannot be admissible for both
-/// (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
-/// 2026-10-03: no constant `C` in `ceil(C*sqrt(d/a)/dt)` satisfies both
-/// oracle scenes simultaneously).
+/// cheaper bound). A single formula cannot be admissible for both: no
+/// constant `C` in `ceil(C*sqrt(d/a)/dt)` satisfies both oracle scenes in
+/// `tests/phase3_search_oracles.rs` simultaneously.
 ///
 /// # Exactness
 ///
 /// Returns the **exact** minimal frame count (not merely an admissible
-/// lower bound) for both variants — `reference_bangbang_integer_lattice_closed_form`
-/// §2/§3. `params.a_max_axis` must already include any assisting/opposing
+/// lower bound) for both variants. `params.a_max_axis` must already include any assisting/opposing
 /// acceleration (e.g. gravity) the caller wants accounted for — see
 /// `tests/phase3_search_oracles.rs` scene B for the admissible/inadmissible
 /// pair this enables.
@@ -269,7 +265,7 @@ pub fn lower_bound_frames(state: AxisState, goal: &Goal, params: &Params) -> u32
         Goal::PositionWithin { .. } => exact_position_only_h(s, d),
         _ => panic!(
             "lower_bound_frames: no closed form derived yet for this Goal variant \
-             (project_alice_world_model_phase4_design_confirmed §(2))"
+             (only PositionWithin / PositionWithinAndAtRest are supported)"
         ),
     }
 }
@@ -306,14 +302,12 @@ enum Probe {
     BudgetExhausted,
 }
 
-/// Recursive IDA\* step over the frame-granularity (`k = 1`,
-/// `project_alice_world_model_phase4_design_confirmed` §(1)) action space.
+/// Recursive IDA\* step over the frame-granularity (`k = 1`) action space.
 /// Action-index order `{+1 (Accelerate), 0 (Coast), -1 (Decelerate)}` is the
-/// MVP's fixed tie-break (plan §1.2's "行動 index 辞書順"); `ctx.admissible_h`
+/// MVP's fixed tie-break (action index, lexicographic); `ctx.admissible_h`
 /// being **exact** (not merely admissible) means at most one child per node
 /// stays within `bound`, so this explores a single path with zero
-/// backtracking for the MVP's oracle scenes
-/// (`reference_bangbang_integer_lattice_closed_form` §2, 実測6) — the
+/// backtracking for the MVP's oracle scenes — the
 /// recursive structure is kept general (not hand-collapsed into a greedy
 /// walk) so it stays correct if `admissible_h` is ever weakened to
 /// merely-admissible for a future, harder goal predicate.
@@ -360,12 +354,11 @@ fn search_step(
     Probe::Exceeded(min_exceeded)
 }
 
-/// Drives `world`'s single body (plan §1.1: MVP scope is one rigid body)
+/// Drives `world`'s single body (MVP scope: one rigid body)
 /// along the goal axis by injecting a frame-head velocity impulse per
 /// `action` then stepping — the same injection point validated against a
-/// real `PhysicsWorld` for the witness trajectory
-/// (`feedback_world_auditor_phase3_oracle_contradictions` §5: `x =
-/// 100.00001` after 537 frames with `damping: ONE, substeps: 1`).
+/// real `PhysicsWorld` for the witness trajectory (`x = 100.00001` after
+/// 537 frames with `damping: ONE, substeps: 1`).
 #[cfg(feature = "physics")]
 fn drive_world(
     world: &mut alice_physics::PhysicsWorld,

@@ -1,16 +1,15 @@
-//! Phase 3 search oracles (`project_alice_world_model_mvp_plan` §3 Phase 3)
+//! Phase 3 search oracles
 //! — written and pinned **before** the search body existed (Phase 4), per
 //! this workspace's oracle-first discipline. Phase 4 (IDA\* over an exact
-//! integer lattice, `project_alice_world_model_phase4_design_confirmed`) is
-//! now implemented and all three scenes are green; `#[ignore]` has been
-//! removed (2026-10-03, `ys-3c`).
+//! integer lattice) is now implemented and all three scenes are green;
+//! `#[ignore]` has been removed (2026-10-03).
 //!
 //! All three scenes call a real public entry point ([`lower_bound_frames`]
 //! for (a)/(b), [`plan`] for (c)).
 //!
 //! ⚠️ **(c) used to compute its closed-form expectation and stop there,
 //! never calling `plan`** — that tested nothing about this crate (an
-//! "入口が内側" oracle, `ys-1f` 2026-10-02 review): a `plan` that
+//! "入口が内側" oracle): a `plan` that
 //! implements naive kinetic-energy dominance pruning could ship and this
 //! test would stay green forever. It now calls `plan` and compares the
 //! returned `frames` against the closed-form optimum; the closed-form
@@ -33,8 +32,7 @@ use alice_world_auditor::{lower_bound_frames, Aabb, AxisState, Goal, Params};
 /// `target` bounds are a placeholder (the heuristic reads `state`'s
 /// already-resolved `distance_to_goal`, not `target`, for the distance);
 /// reused from (c)'s safe window for consistency, not because it matters
-/// here (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
-/// 2026-10-03).
+/// here.
 #[test]
 fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
     let d = 100.0_f32;
@@ -78,9 +76,8 @@ fn a_closed_form_minimal_step_count_for_1d_rest_to_rest() {
 /// ⚠️ **`goal` here is `PositionWithin`** (position-only, no `AtRest`) — the
 /// scene's documented intent. Mixing this with (a)'s `PositionWithinAndAtRest`
 /// value under a goal-blind `lower_bound_frames` was unsatisfiable: no
-/// constant `C` in `ceil(C*sqrt(d/a)/dt)` passes both scenes simultaneously
-/// (`feedback_world_auditor_phase3_oracle_contradictions`, `ys-3a`
-/// 2026-10-03). `target` is a placeholder for the same reason as (a)'s.
+/// constant `C` in `ceil(C*sqrt(d/a)/dt)` passes both scenes
+/// simultaneously. `target` is a placeholder for the same reason as (a)'s.
 #[test]
 fn b_admissibility_pair_scene_gravity_assisted_position_only() {
     let drop_height = 20.0_f32;
@@ -92,7 +89,7 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
     // t = sqrt(2h / a_total)
     let true_time = (2.0 * drop_height / (a_input + g)).sqrt();
     let true_frames = (true_time / dt).ceil() as u32;
-    // 2026-10-03 ys-3a 実測: 旧値 49 は sqrt(2*20/12)=1.8257s → 110 frame の計算を
+    // 旧値 49 は sqrt(2*20/12)=1.8257s → 110 frame の計算を
     // 誤っていた (closed form コード自体は正しい、assert の pin 値が狂っていた)
     assert_eq!(
         true_frames, 110,
@@ -137,8 +134,7 @@ fn b_admissibility_pair_scene_gravity_assisted_position_only() {
 /// 最適経路をより低速な (= KE が低い、しかし所要時間が長い) 経路に劣後
 /// すると誤判定して枝刈りし、**非最適な frame 数を返す**
 ///
-/// ⚠️ **閉形式だけで判定すると「入口が内側」になる** (`ys-1f` 2026-10-02
-/// review) — `plan` を実際に呼び、返ってきた `frames` を閉形式の真の最適
+/// ⚠️ **閉形式だけで判定すると「入口が内側」になる** — `plan` を実際に呼び、返ってきた `frames` を閉形式の真の最適
 /// 値と比較することで初めて oracle になる 閉形式の導出 (`t* = 2*sqrt(d/a)`)
 /// はコメントとして残す (期待値 537 の出所)
 #[cfg(feature = "physics")]
@@ -155,12 +151,11 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     // と同じ scene・同じ値 — ここでは heuristic でなく plan 自体の答えを問う)
     //
     // ⚠️ **537 は AABB の下端 (`target.min.x`) が特定の窓にある時だけ正しい**
-    // (`ys-ba` 2026-10-03 検算、[[reference_bangbang_integer_lattice_closed_form]])
     // 整数格子では到達可能な位置が 1 刻みの全整数 (granularity 1) なので、
     // 最小 frame 数は「position(r) が target AABB の **下端以上**になる最小 r」
     // で決まる (この scene は下端側から接近するので) 下端を `d - 0.5 = 99.5`
     // に取ると実測 536 になる (位置格子単位 `D = d/(a*dt²) = 72000` に対し窓は `x_lo ∈
-    // (99.755556, 100.127778]` の時のみ 537、検算: `verify_bangbang_lattice.py`)
+    // (99.755556, 100.127778]` の時のみ 537)
     // ⇒ 下端を安全な窓の内側 (`99.9`) に取る
     let t_star = 2.0 * (d / a).sqrt();
     let optimal_frames = (t_star / dt).ceil() as u32;
@@ -170,18 +165,16 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     );
 
     // ⚠️ **既定 config (`substeps: 8` / `damping: 0.99`) では 537 frame に
-    // 物理的に到達できない** (`ys-3a` 2026-10-03 実測、
-    // `feedback_world_auditor_phase3_oracle_contradictions`) — frame 毎の
+    // 物理的に到達できない** — frame 毎の
     // 0.99 速度減衰は終端速度を `a*dt/(1-0.99) ≈ 8.3 m/s` に抑え、bang-bang
     // 最適が要求する peak `sqrt(d*a) ≈ 22.36 m/s` の 4 割弱しか出せない
     // (全力加速だけでも 99.9 m に 819〜822 frame 要する、537 の 1.53 倍)
-    // `damping: ONE` で消し、`substeps: 1` で §6 の整数格子モデル
+    // `damping: ONE` で消し、`substeps: 1` で整数格子モデル
     // (`v += a*dt` が厳密 / `x += v*dt`) と一致させる (`substeps` は damping
     // と違い frame 頭の速度 impulse 注入で吸収できない位置格子単位のズレを
     // 生むため、1 に揺らす必要がある) — この scene の目的は「理想 bang-bang
     // 模型と `plan` の出力を比較する解析解突合」であって「既定の使われ方」
-    // ではないため、[[feedback_physics_analytic_oracle_rule_2026_09_15]] の
-    // 「既定 config で書く」規律の対象外として扱う
+    // ではないため、「既定 config で書く」方針の対象外として扱う
     let mut world = PhysicsWorld::new(PhysicsConfig {
         gravity: Vec3Fix::ZERO,
         damping: Fix128::ONE,
