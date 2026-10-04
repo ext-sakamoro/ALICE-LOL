@@ -1,44 +1,78 @@
-//! Wires the public entry point `plan` (World Auditor wiring guard, example
-//! covers the `physics` feature path) — see `project_alice_world_model_mvp_plan`
-//! §1 for the rest-to-rest goal this exercises.
+//! Wires the public entry points `audit` and `lower_bound_frames` (the
+//! `physics` feature path) on the rest-to-rest goal.
 //!
-//! `cargo run --example plan_rest_to_rest --features physics` prints both
-//! `lower_bound_frames`' estimate and `plan`'s actual result. ⚠️ The two
-//! calls below use different distances on purpose (`axis_state`'s point
-//! distance `10.0` vs. `goal.target`'s near edge `9.0`) — they are two
-//! independent illustrations of the two entry points, not a
-//! consistency check (`lower_bound_frames` only ever sees the scalar
-//! `AxisState` the caller resolved, never `goal.target`'s bounds, per its
-//! own doc comment).
+//! `cargo run -p alice-world-auditor --example plan_rest_to_rest --features physics`
+//!
+//! The same body, goal and parameters are audited under two configs:
+//!
+//! - dyadic `a*dt` / `dt`, `damping = 1`: the lattice-optimal plan replays
+//!   exactly in the engine, so the verdict is `Proven` (640 frames, the
+//!   closed form `2*sqrt(d/a)/dt`);
+//! - the default config (`damping = 0.99`, 8 substeps): the same lattice
+//!   plan falls short in the engine, so the verdict is `Undecided`
+//!   (`ReplayMismatch`) — the lattice optimum is not presented as an engine
+//!   success.
+//!
+//! The asserts make the example fail loudly if either verdict changes.
 
-use alice_physics::{Fix128, PhysicsConfig, PhysicsWorld, RigidBody, Vec3Fix};
-use alice_world_auditor::{AxisState, Goal, Params};
+use alice_physics::{Fix128, PhysicsConfig, RigidBody, Vec3Fix};
+use alice_world_auditor::{
+    audit, lower_bound_frames, Aabb, Audit, AxisState, Goal, Params, UndecidedCause, Verdict,
+};
 
 fn main() {
-    let mut world = PhysicsWorld::new(PhysicsConfig {
-        gravity: Vec3Fix::ZERO,
-        ..PhysicsConfig::default()
-    });
-    world.add_body(RigidBody::new_dynamic(Vec3Fix::ZERO, Fix128::ONE));
-
+    let d = 100.0_f32;
+    let a = 4.0_f32;
+    let dt = 1.0 / 64.0_f32;
+    let params = Params::new(a, dt, 1_000_000);
+    let body = RigidBody::new_dynamic(Vec3Fix::ZERO, Fix128::ONE);
     let goal = Goal::PositionWithinAndAtRest {
-        target: alice_world_auditor::Aabb {
-            min: glam::Vec3::new(9.0, -1.0, -1.0),
-            max: glam::Vec3::new(11.0, 1.0, 1.0),
+        target: Aabb {
+            min: glam::Vec3::new(d - 0.1, -0.5, -0.5),
+            max: glam::Vec3::new(d + 0.1, 0.5, 0.5),
         },
     };
 
-    let params = Params::new(5.0, 1.0 / 60.0, 100_000);
+    let h = lower_bound_frames(
+        AxisState {
+            distance_to_goal: d,
+            velocity: 0.0,
+        },
+        &goal,
+        &params,
+    );
+    println!("lattice lower bound: {h} frames");
+    assert_eq!(h, 640);
 
-    let axis_state = AxisState {
-        distance_to_goal: 10.0,
-        velocity: 0.0,
+    let exact = PhysicsConfig {
+        gravity: Vec3Fix::ZERO,
+        damping: Fix128::ONE,
+        substeps: 1,
+        ..PhysicsConfig::default()
     };
-    let h = alice_world_auditor::lower_bound_frames(axis_state, &goal, &params);
-    println!("lower bound: {h} frames");
-
-    match alice_world_auditor::plan(&mut world, &goal, &params) {
-        Ok(optimal) => println!("optimal: {} frames", optimal.frames),
-        Err(best) => println!("budget exhausted, best so far: {} frames", best.frames),
+    let verdict = audit(&body, exact, &goal, &params);
+    match &verdict {
+        Audit::Proven(p) => println!("damping 1, dyadic dt: Proven in {} frames", p.frames),
+        other => println!("damping 1, dyadic dt: {other:?}"),
     }
+    assert!(matches!(&verdict, Audit::Proven(p) if p.frames == 640));
+
+    let default_damping = PhysicsConfig {
+        gravity: Vec3Fix::ZERO,
+        ..PhysicsConfig::default()
+    };
+    let verdict = audit(&body, default_damping, &goal, &params);
+    match &verdict {
+        Audit::Undecided(UndecidedCause::ReplayMismatch {
+            plan,
+            position_within,
+            at_rest,
+        }) => println!(
+            "default config: Undecided — lattice plan of {} frames replayed, \
+             position_within={position_within}, at_rest={at_rest}",
+            plan.frames
+        ),
+        other => println!("default config: {other:?}"),
+    }
+    assert_eq!(verdict.verdict(), Verdict::Undecided);
 }

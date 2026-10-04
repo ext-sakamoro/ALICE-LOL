@@ -358,43 +358,31 @@ fn drive_world(
     }
 }
 
-/// Search for a frame-minimal action sequence from `world`'s current state
-/// to `goal`, then execute it against `world`.
-///
-/// # Scope (MVP)
-///
-/// Single rigid body (`world.bodies[0]`), goal axis fixed to `x` (plan §1.3:
-/// "1 軸"). Direction is inferred from which side of `goal`'s `target` the
-/// body starts on, so targets reached by moving in `-x` work too.
-///
-/// # Errors
-///
-/// Returns `Err(BestSoFar)` if the node budget is exhausted before an
-/// optimal plan is found. `world` is left unmodified in that case — the
-/// trajectory is only executed once a fully optimal plan is in hand, so a
-/// caller retrying with a larger budget doesn't see a partially-driven body.
-///
-/// # Panics
-///
-/// If `goal` is a future `#[non_exhaustive]` variant this crate's version
-/// predates — see [`lower_bound_frames`].
+/// Result of the lattice-only search shared by [`plan`] and [`audit`].
 #[cfg(feature = "physics")]
-pub fn plan(
-    world: &mut alice_physics::PhysicsWorld,
-    goal: &Goal,
-    params: &Params,
-) -> Result<Optimal, BestSoFar> {
-    let (target, rest_required) = match goal {
-        Goal::PositionWithinAndAtRest { target } => (target, true),
-        Goal::PositionWithin { target } => (target, false),
-        _ => panic!(
-            "plan: no search strategy derived yet for this Goal variant \
-             (project_alice_world_model_phase4_design_confirmed §(2))"
-        ),
-    };
+enum LatticeSearch {
+    /// An optimal plan in lattice units, and the `x` direction (`+1.0` /
+    /// `-1.0`) it moves the body in.
+    Found(Optimal, f32),
+    /// Node budget ran out first.
+    BudgetExhausted(BestSoFar),
+    /// The IDA\* bound grew past `max_bound` (only [`audit`] sets a finite
+    /// cap; [`plan`] passes `u32::MAX` and so never sees this).
+    TooDeep,
+}
 
-    let pos_x = world.bodies[0].position.x.to_f32();
-    let vel_x = world.bodies[0].velocity.x.to_f32();
+/// Runs the frame-granularity IDA\* over the integer lattice for a body at
+/// `pos_x` / `vel_x` (no engine access — the engine is only touched by the
+/// caller afterwards).
+#[cfg(feature = "physics")]
+fn lattice_search(
+    pos_x: f32,
+    vel_x: f32,
+    target: &Aabb,
+    rest_required: bool,
+    params: &Params,
+    max_bound: u32,
+) -> LatticeSearch {
     let center_x = f32::midpoint(target.min.x, target.max.x);
     let dir: f32 = if center_x >= pos_x { 1.0 } else { -1.0 };
     let (near_dist, far_dist) = if dir > 0.0 {
@@ -417,16 +405,18 @@ pub fn plan(
     let mut bound = ctx.admissible_h(s, d_lo);
 
     loop {
+        if bound > max_bound {
+            return LatticeSearch::TooDeep;
+        }
         let mut actions = Vec::new();
         match search_step(&mut ctx, s, 0, 0, bound, &mut actions) {
             Probe::Found => {
                 let frames = u32::try_from(actions.len()).unwrap_or(u32::MAX);
-                drive_world(world, &actions, dir, params);
-                return Ok(Optimal { frames, actions });
+                return LatticeSearch::Found(Optimal { frames, actions }, dir);
             }
             Probe::BudgetExhausted => {
                 let frames = u32::try_from(actions.len()).unwrap_or(u32::MAX);
-                return Err(BestSoFar { frames, actions });
+                return LatticeSearch::BudgetExhausted(BestSoFar { frames, actions });
             }
             Probe::Exceeded(next_bound) => {
                 assert!(
@@ -436,5 +426,355 @@ pub fn plan(
                 bound = next_bound;
             }
         }
+    }
+}
+
+/// Search for a frame-minimal action sequence from `world`'s current state
+/// to `goal`, then execute it against `world`.
+///
+/// ⚠️ **`Ok(Optimal)` is a claim about the integer lattice, not about
+/// `world`.** The plan is optimal in the lattice model; whether driving
+/// `world` with it actually satisfies `goal` depends on `world`'s config
+/// (damping, substeps) and on whether `a_max_axis * dt` and `dt` are exactly
+/// representable in `Fix128`. Use [`audit`] for a verdict that is checked
+/// against the engine.
+///
+/// # Scope (MVP)
+///
+/// Single rigid body (`world.bodies[0]`), goal axis fixed to `x` (1 axis).
+/// Direction is inferred from which side of `goal`'s `target` the body
+/// starts on, so targets reached by moving in `-x` work too.
+///
+/// # Errors
+///
+/// Returns `Err(BestSoFar)` if the node budget is exhausted before an
+/// optimal plan is found. `world` is left unmodified in that case — the
+/// trajectory is only executed once a fully optimal plan is in hand, so a
+/// caller retrying with a larger budget doesn't see a partially-driven body.
+///
+/// # Panics
+///
+/// If `goal` is a future `#[non_exhaustive]` variant this crate's version
+/// predates — see [`lower_bound_frames`].
+#[cfg(feature = "physics")]
+pub fn plan(
+    world: &mut alice_physics::PhysicsWorld,
+    goal: &Goal,
+    params: &Params,
+) -> Result<Optimal, BestSoFar> {
+    let (target, rest_required) = goal_parts(goal);
+    let pos_x = world.bodies[0].position.x.to_f32();
+    let vel_x = world.bodies[0].velocity.x.to_f32();
+    match lattice_search(pos_x, vel_x, target, rest_required, params, u32::MAX) {
+        LatticeSearch::Found(optimal, dir) => {
+            drive_world(world, &optimal.actions, dir, params);
+            Ok(optimal)
+        }
+        LatticeSearch::BudgetExhausted(best) => Err(best),
+        LatticeSearch::TooDeep => unreachable!("plan passes max_bound = u32::MAX"),
+    }
+}
+
+/// Splits `goal` into its target and whether rest is required.
+///
+/// # Panics
+///
+/// If `goal` is a future `#[non_exhaustive]` variant.
+#[cfg(feature = "physics")]
+fn goal_parts(goal: &Goal) -> (&Aabb, bool) {
+    match goal {
+        Goal::PositionWithinAndAtRest { target } => (target, true),
+        Goal::PositionWithin { target } => (target, false),
+        _ => panic!(
+            "no search strategy derived yet for this Goal variant (only \
+             PositionWithin / PositionWithinAndAtRest are supported)"
+        ),
+    }
+}
+
+/// Largest IDA\* `f`-bound (= frame count) [`audit`] will search to.
+///
+/// The search recurses once per frame, so this caps the recursion depth as
+/// well as the replay length; a goal whose exact lower bound is beyond it
+/// is reported as [`UndecidedCause::OutOfSearchRange`], not searched.
+pub const MAX_AUDIT_FRAMES: u32 = 1 << 12;
+
+/// The outcome of [`audit`]: a [`Verdict`] together with its evidence or
+/// its reason.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum Audit {
+    /// The goal holds in the engine after replaying `Optimal::actions`
+    /// (the evidence). `frames` is minimal on the integer lattice.
+    Proven(Optimal),
+    /// The goal can never hold — see [`Violation`] for the only inputs
+    /// that produce this in the MVP.
+    Violated(Violation),
+    /// Neither proven nor violated — see [`UndecidedCause`].
+    Undecided(UndecidedCause),
+}
+
+impl Audit {
+    /// The 3-valued verdict this audit carries.
+    #[must_use]
+    pub const fn verdict(&self) -> Verdict {
+        match self {
+            Self::Proven(_) => Verdict::Proven,
+            Self::Violated(_) => Verdict::Violated,
+            Self::Undecided(_) => Verdict::Undecided,
+        }
+    }
+}
+
+/// Why [`audit`] returned [`Verdict::Violated`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Violation {
+    /// `target` is empty (`min > max` on some axis), so no position is
+    /// ever within it.
+    EmptyTarget,
+    /// `a_max_axis == 0`, the body's velocity is exactly zero, the
+    /// config's gravity is exactly zero and the body starts outside
+    /// `target`: with no input and no force the body never moves.
+    NoActuatorAtRestOutsideTarget,
+}
+
+/// Why [`audit`] returned [`Verdict::Undecided`].
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum UndecidedCause {
+    /// `params` or `goal` cannot be evaluated: `dt` not finite and
+    /// positive, `a_max_axis` not finite and non-negative, or a `target`
+    /// bound that is not finite or not exactly representable in `Fix128`.
+    InvalidInput,
+    /// `a_max_axis == 0` but the body is moving or gravity is non-zero, so
+    /// the body may drift; this crate does not decide that case.
+    NoActuator,
+    /// The lattice coordinates or the exact frame lower bound are beyond
+    /// what this crate searches ([`MAX_AUDIT_FRAMES`]).
+    OutOfSearchRange,
+    /// The node budget ran out before an optimal lattice plan was found.
+    BudgetExhausted(BestSoFar),
+    /// A lattice-optimal plan was found, but replaying it in the engine set
+    /// `alice-physics`' sticky `overflow_detected` flag; the final state
+    /// is not trusted, whatever it looks like.
+    Overflow(Optimal),
+    /// A lattice-optimal plan was found and replayed without overflow, but
+    /// the engine's final state does not satisfy the goal exactly.
+    ReplayMismatch {
+        /// The lattice-optimal plan that was replayed.
+        plan: Optimal,
+        /// Whether the final position was within `target`.
+        position_within: bool,
+        /// Whether the final linear velocity was exactly zero.
+        at_rest: bool,
+    },
+}
+
+/// Largest lattice coordinate magnitudes [`audit`] converts (velocity
+/// index `|S|` and position index `|D|`); beyond these the integer
+/// arithmetic of the search is not guaranteed to stay in range.
+#[cfg(feature = "physics")]
+const MAX_LATTICE_S: f64 = 1_048_576.0; // 2^20
+#[cfg(feature = "physics")]
+const MAX_LATTICE_D: f64 = 1_099_511_627_776.0; // 2^40
+
+/// `f` as an exactly-equal `Fix128`, or `None` if `f` is not finite or not
+/// exactly representable (so that a bound comparison in `Fix128` is the
+/// same comparison as in `f32`).
+#[cfg(feature = "physics")]
+fn exact_fix(f: f32) -> Option<alice_physics::Fix128> {
+    const LIMIT: f32 = 4_611_686_018_427_387_904.0; // 2^62
+    if !f.is_finite() || f.abs() >= LIMIT {
+        return None;
+    }
+    let x = alice_physics::Fix128::from_f32(f);
+    #[allow(clippy::float_cmp)] // exact round-trip is the point
+    let exact = x.to_f64() == f64::from(f);
+    exact.then_some(x)
+}
+
+/// `target` converted bound by bound with [`exact_fix`].
+#[cfg(feature = "physics")]
+struct FixAabb {
+    min: [alice_physics::Fix128; 3],
+    max: [alice_physics::Fix128; 3],
+}
+
+#[cfg(feature = "physics")]
+impl FixAabb {
+    fn new(t: &Aabb) -> Option<Self> {
+        Some(Self {
+            min: [
+                exact_fix(t.min.x)?,
+                exact_fix(t.min.y)?,
+                exact_fix(t.min.z)?,
+            ],
+            max: [
+                exact_fix(t.max.x)?,
+                exact_fix(t.max.y)?,
+                exact_fix(t.max.z)?,
+            ],
+        })
+    }
+
+    fn is_empty(&self) -> bool {
+        (0..3).any(|i| self.min[i] > self.max[i])
+    }
+
+    fn contains(&self, p: alice_physics::Vec3Fix) -> bool {
+        let p = [p.x, p.y, p.z];
+        (0..3).all(|i| p[i] >= self.min[i] && p[i] <= self.max[i])
+    }
+}
+
+/// `(position_within, at_rest)` for `body`, both exact in `Fix128`:
+/// position within `target` on all three axes, and linear velocity exactly
+/// zero.
+#[cfg(feature = "physics")]
+fn exact_state(body: &alice_physics::RigidBody, target: &FixAabb) -> (bool, bool) {
+    (
+        target.contains(body.position),
+        body.velocity == alice_physics::Vec3Fix::ZERO,
+    )
+}
+
+/// Audit `goal` for a single `body` simulated under `config`: search the
+/// integer lattice for a frame-minimal plan, replay it in a fresh
+/// `PhysicsWorld` built from `config`, and return a 3-valued verdict.
+///
+/// `Proven` is returned **only** when the replay, under exactly this
+/// `config`, ends with the goal holding exactly in `Fix128` (position
+/// within `target` on all three axes; for
+/// [`Goal::PositionWithinAndAtRest`] also linear velocity exactly zero)
+/// **and** without the engine's sticky overflow flag. The frame count is
+/// minimal on the integer lattice (the claim of this crate is
+/// "k 粒度の macro-action 空間で、整数格子上で厳密に最適", `k = 1`); it
+/// is not a claim about every engine trajectory.
+///
+/// # Sufficient conditions for `Proven`
+///
+/// For a reachable target, the replay matches the lattice exactly when
+/// `a_max_axis * dt` and `dt` are dyadic (exact in `Fix128`, e.g.
+/// `a = 4, dt = 1/64`), `config.damping == 1`, gravity is zero along the
+/// goal axis, and `target`'s `x` window contains a lattice point. When any
+/// of these fails (e.g. `dt = 1/60`, or the default damping `0.99`), the
+/// replay generally misses the goal and the answer is
+/// [`UndecidedCause::ReplayMismatch`] — never a `Proven` the engine does
+/// not back.
+///
+/// # When `Violated` is returned
+///
+/// Only for the two inputs listed in [`Violation`]: an empty `target`, or
+/// no actuator (`a_max_axis == 0`) with the body at rest, zero gravity and
+/// the body outside `target`. Proving unreachability from a law in general
+/// (obstacles, region constraints) is not attempted: with `a_max_axis > 0`
+/// every target is reachable in 1-D, so `Violated` never comes from search.
+///
+/// # Degenerate inputs
+///
+/// | input | answer |
+/// |---|---|
+/// | goal already holds (distance 0, at rest) | `Proven`, 0 frames, even with `node_budget == 0` |
+/// | `node_budget == 0`, goal not holding | `Undecided(BudgetExhausted)` |
+/// | target on the `-x` side (negative distance) | searched in the `-x` direction |
+/// | `a_max_axis == 0` | `Violated` / `Undecided(NoActuator)` / `Proven` (see above) |
+/// | `dt <= 0`, non-finite `dt` / `a_max_axis`, `a_max_axis < 0`, unrepresentable `target` bound | `Undecided(InvalidInput)` |
+/// | exact lower bound over [`MAX_AUDIT_FRAMES`] | `Undecided(OutOfSearchRange)` |
+///
+/// # Scope (MVP)
+///
+/// One rigid body, goal axis `x`, input injected as a frame-head velocity
+/// impulse of `±a_max_axis * dt`. Angular velocity is not part of `AtRest`.
+///
+/// # Panics
+///
+/// If `goal` is a future `#[non_exhaustive]` variant this crate's version
+/// predates.
+#[cfg(feature = "physics")]
+#[must_use]
+pub fn audit(
+    body: &alice_physics::RigidBody,
+    config: alice_physics::PhysicsConfig,
+    goal: &Goal,
+    params: &Params,
+) -> Audit {
+    let (target, rest_required) = goal_parts(goal);
+
+    let dt_ok = params.dt.is_finite() && params.dt > 0.0;
+    let a_ok = params.a_max_axis.is_finite() && params.a_max_axis >= 0.0;
+    if !(dt_ok && a_ok) {
+        return Audit::Undecided(UndecidedCause::InvalidInput);
+    }
+    let Some(fix_target) = FixAabb::new(target) else {
+        return Audit::Undecided(UndecidedCause::InvalidInput);
+    };
+    if fix_target.is_empty() {
+        return Audit::Violated(Violation::EmptyTarget);
+    }
+
+    let (within, at_rest) = exact_state(body, &fix_target);
+    if within && (at_rest || !rest_required) {
+        return Audit::Proven(Optimal {
+            frames: 0,
+            actions: Vec::new(),
+        });
+    }
+
+    #[allow(clippy::float_cmp)] // exactly zero means "no actuator"
+    if params.a_max_axis == 0.0 {
+        let at_rest = body.velocity == alice_physics::Vec3Fix::ZERO;
+        let no_gravity = config.gravity == alice_physics::Vec3Fix::ZERO;
+        return if at_rest && no_gravity {
+            Audit::Violated(Violation::NoActuatorAtRestOutsideTarget)
+        } else {
+            Audit::Undecided(UndecidedCause::NoActuator)
+        };
+    }
+
+    let pos_x = body.position.x.to_f32();
+    let vel_x = body.velocity.x.to_f32();
+    let unit_v = f64::from(params.a_max_axis) * f64::from(params.dt);
+    let unit_p = unit_v * f64::from(params.dt);
+    let far = f64::from(target.min.x - pos_x)
+        .abs()
+        .max(f64::from(target.max.x - pos_x).abs());
+    let s_mag = f64::from(vel_x).abs() / unit_v;
+    let d_mag = far / unit_p;
+    if !(s_mag.is_finite() && d_mag.is_finite()) || s_mag > MAX_LATTICE_S || d_mag > MAX_LATTICE_D {
+        return Audit::Undecided(UndecidedCause::OutOfSearchRange);
+    }
+
+    let found = match lattice_search(
+        pos_x,
+        vel_x,
+        target,
+        rest_required,
+        params,
+        MAX_AUDIT_FRAMES,
+    ) {
+        LatticeSearch::Found(optimal, dir) => (optimal, dir),
+        LatticeSearch::BudgetExhausted(best) => {
+            return Audit::Undecided(UndecidedCause::BudgetExhausted(best));
+        }
+        LatticeSearch::TooDeep => return Audit::Undecided(UndecidedCause::OutOfSearchRange),
+    };
+    let (optimal, dir) = found;
+
+    let mut world = alice_physics::PhysicsWorld::new(config);
+    world.add_body(*body);
+    drive_world(&mut world, &optimal.actions, dir, params);
+    if world.overflow_detected() {
+        return Audit::Undecided(UndecidedCause::Overflow(optimal));
+    }
+    let (position_within, at_rest) = exact_state(&world.bodies[0], &fix_target);
+    if position_within && (at_rest || !rest_required) {
+        Audit::Proven(optimal)
+    } else {
+        Audit::Undecided(UndecidedCause::ReplayMismatch {
+            plan: optimal,
+            position_within,
+            at_rest,
+        })
     }
 }
