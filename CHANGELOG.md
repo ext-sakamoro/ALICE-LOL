@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `alice-world-auditor`: Phase 5 3 値判定 (`audit`、2026-10-04)
+
+`audit(body, config, goal, params) -> Audit` を追加 整数格子の探索で得た行動列を、渡された `PhysicsConfig` から作った新しい world で再生し、
+位置の AABB 包含 (3 軸) と線速度の `Fix128` 厳密 0 が成立し、かつ engine の overflow flag が立っていない時だけ `Proven` (証跡 = 行動列) を返す
+それ以外は理由付きの `Undecided` (`BudgetExhausted` / `ReplayMismatch` / `Overflow` / `InvalidInput` / `OutOfSearchRange` / `NoActuator`)
+`Violated` は空の target と、入力なし (`a_max_axis == 0`)・静止・重力 0・target 外の 2 件のみ (1-D で `a_max_axis > 0` なら必ず届くため、
+法則から到達不能を一般に示すことは非目標) `Audit::verdict()` で `Verdict` に落とせる 探索の深さ上限 `MAX_AUDIT_FRAMES` (4096) を公開
+
+`Proven` になる十分条件は `a_max_axis * dt` と `dt` が dyadic (`Fix128` で厳密)、damping 1、goal 軸方向の重力 0 `a = 5, dt = 1/60` の
+537 frame の計画は engine 上で `x = 100.1000082` (target 上端 100.1 の外) / 速度 約 `-1.7e-15` で終わるので `Undecided` になる
+README (英日) と crate doc に「k 粒度の macro-action 空間で、整数格子上で厳密に最適」の主張と粒度を明記
+
+### Changed — `alice-world-auditor`: example `plan_rest_to_rest` を `audit` 経由に変更
+
+dyadic な scene (`a = 4, dt = 1/64`) で `Proven` 640 frame、既定 config (damping 0.99 / substeps 8) で `Undecided` になる両方を出力し assert する
+`plan` の挙動は変えていない (探索部を内部関数に切り出して `audit` と共有) `plan` の `Ok(Optimal)` は整数格子上の主張で、engine 上の成立は検査しない
+旨を doc に明記
+
 ### Added — `alice-world-auditor`: Phase 4 探索実装 (IDA\* over 整数格子、2026-10-03)
 
 `lower_bound_frames` / `plan` の `todo!()` 本体を実装 1-D bang-bang 制御を厳密整数格子 (`S` = 速度 index, `D` = 位置 index) に変換し、frame 粒度

@@ -1,26 +1,55 @@
-//! ALICE World Auditor — deterministic planner.
+//! ALICE World Auditor — deterministic planner with a 3-valued verdict.
 //!
-//! Searches for a sequence of actions that drives an `alice-physics` world
-//! toward a [`Goal`](alice_world_auditor_types::Goal), returning a
-//! [`Verdict`](alice_world_auditor_types::Verdict)-compatible 3-valued
-//! outcome. See `project_alice_world_model_mvp_plan` (`~/claude-config/memory/`)
-//! for the full design; this crate currently implements **Phase 2 only**
-//! (public entry points + oracle tests, search body not yet written — see
-//! `plan` / `lower_bound_frames`).
+//! Searches for a sequence of actions that drives one `alice-physics` rigid
+//! body toward a [`Goal`] and reports the
+//! result as a [`Verdict`]:
+//! `Proven` / `Violated` / `Undecided`.
 //!
-//! Phase 4 (`project_alice_world_model_phase4_design_confirmed`,
-//! `~/claude-config/memory/`) implements the search as an exact-integer
-//! IDA\* over a 1-D bang-bang lattice: `lower_bound_frames` and `plan`
-//! convert the caller's `f32` state into integer lattice units
-//! (`S` = velocity in units of `a*dt`, `D` = distance in units of `a*dt²`)
-//! and reason about `AtRest` as "lattice `S == 0`", **not** by re-querying
-//! `alice-physics`' derived (XPBD, position-diff-based) velocity for exact
-//! equality to zero — the engine's `update_velocities` re-derives velocity
-//! from a position delta every substep, which drifts by a few dozen ulp per
-//! frame even with `Fix128` and zero damping (confirmed by driving the
-//! witness trajectory through a real `PhysicsWorld`: `v == Fix128::ZERO` is
-//! `false`). The design decision and its rationale are recorded in
-//! `project_alice_world_model_phase4_design_confirmed` §(4).
+//! # The claim, and its granularity
+//!
+//! > **k 粒度の macro-action 空間で、整数格子上で厳密に最適**
+//! > (exactly optimal on the integer lattice, over the k-granular
+//! > macro-action space; this crate uses `k = 1`, one action per frame)
+//!
+//! - "Optimal" is never claimed on its own: the frame count is minimal on
+//!   the integer lattice model (`S` = velocity in units of `a*dt`, `D` =
+//!   distance in units of `a*dt²`), not over every engine trajectory.
+//! - The tolerance ε of the engine's continuum solvers is internal to the
+//!   solver and does not enter the search layer.
+//! - When the node budget runs out the result is
+//!   [`BestSoFar`] / [`UndecidedCause::BudgetExhausted`], and optimality is
+//!   not claimed.
+//!
+//! # Entry points
+//!
+//! - `audit` (feature `physics`): search, then **replay the plan in the
+//!   engine** under the caller's `PhysicsConfig`; `Proven` only when the
+//!   goal then holds exactly in `Fix128` and the engine's overflow flag is
+//!   not set. Sufficient conditions for `Proven` on a reachable target:
+//!   `a_max_axis * dt` and `dt` dyadic (exact in `Fix128`), damping `1`,
+//!   zero gravity along the goal axis. Otherwise the answer is
+//!   `Undecided`, with the reason.
+//! - `plan` (feature `physics`): the lattice search followed by driving
+//!   the caller's world. Its `Ok(Optimal)` is a lattice claim only and is
+//!   not checked against the engine.
+//! - [`lower_bound_frames`]: the exact lattice frame count from a 1-D
+//!   state, without the engine.
+//!
+//! # What `Violated` means here
+//!
+//! In 1-D with `a_max_axis > 0` every target is reachable in finite time,
+//! so `Violated` is never the result of search. It is returned only for an
+//! empty target, or for a body with no actuator (`a_max_axis == 0`) at rest
+//! under zero gravity outside the target (see [`Violation`]). Proving
+//! unreachability from the law in general (obstacles, region constraints)
+//! is a non-goal of this crate.
+//!
+//! # `AtRest` in the search vs. in the engine
+//!
+//! The search decides `AtRest` as "lattice `S == 0`". The engine re-derives
+//! velocity from a position delta every substep, so for a non-dyadic
+//! `a*dt` / `dt` its velocity after the same plan is a few ulp away from
+//! zero; `audit` reports that as `Undecided` rather than hiding it.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -358,7 +387,7 @@ fn drive_world(
     }
 }
 
-/// Result of the lattice-only search shared by [`plan`] and [`audit`].
+/// Result of the lattice-only search shared by `plan` and `audit`.
 #[cfg(feature = "physics")]
 enum LatticeSearch {
     /// An optimal plan in lattice units, and the `x` direction (`+1.0` /
@@ -366,8 +395,8 @@ enum LatticeSearch {
     Found(Optimal, f32),
     /// Node budget ran out first.
     BudgetExhausted(BestSoFar),
-    /// The IDA\* bound grew past `max_bound` (only [`audit`] sets a finite
-    /// cap; [`plan`] passes `u32::MAX` and so never sees this).
+    /// The IDA\* bound grew past `max_bound` (only `audit` sets a finite
+    /// cap; `plan` passes `u32::MAX` and so never sees this).
     TooDeep,
 }
 
@@ -436,7 +465,7 @@ fn lattice_search(
 /// `world`.** The plan is optimal in the lattice model; whether driving
 /// `world` with it actually satisfies `goal` depends on `world`'s config
 /// (damping, substeps) and on whether `a_max_axis * dt` and `dt` are exactly
-/// representable in `Fix128`. Use [`audit`] for a verdict that is checked
+/// representable in `Fix128`. Use `audit` for a verdict that is checked
 /// against the engine.
 ///
 /// # Scope (MVP)
@@ -492,14 +521,14 @@ fn goal_parts(goal: &Goal) -> (&Aabb, bool) {
     }
 }
 
-/// Largest IDA\* `f`-bound (= frame count) [`audit`] will search to.
+/// Largest IDA\* `f`-bound (= frame count) `audit` will search to.
 ///
 /// The search recurses once per frame, so this caps the recursion depth as
 /// well as the replay length; a goal whose exact lower bound is beyond it
 /// is reported as [`UndecidedCause::OutOfSearchRange`], not searched.
 pub const MAX_AUDIT_FRAMES: u32 = 1 << 12;
 
-/// The outcome of [`audit`]: a [`Verdict`] together with its evidence or
+/// The outcome of `audit`: a [`Verdict`] together with its evidence or
 /// its reason.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -526,7 +555,7 @@ impl Audit {
     }
 }
 
-/// Why [`audit`] returned [`Verdict::Violated`].
+/// Why `audit` returned [`Verdict::Violated`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Violation {
@@ -539,7 +568,7 @@ pub enum Violation {
     NoActuatorAtRestOutsideTarget,
 }
 
-/// Why [`audit`] returned [`Verdict::Undecided`].
+/// Why `audit` returned [`Verdict::Undecided`].
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum UndecidedCause {
@@ -571,7 +600,7 @@ pub enum UndecidedCause {
     },
 }
 
-/// Largest lattice coordinate magnitudes [`audit`] converts (velocity
+/// Largest lattice coordinate magnitudes `audit` converts (velocity
 /// index `|S|` and position index `|D|`); beyond these the integer
 /// arithmetic of the search is not guaranteed to stay in range.
 #[cfg(feature = "physics")]
