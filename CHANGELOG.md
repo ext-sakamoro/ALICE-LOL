@@ -474,6 +474,10 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 移行: field (`x` / `y` / `z` は `wide::f32x8`) に `wide` の演算を掛ける (例 `v.length()` は `(v.x * v.x + v.y * v.y + v.z * v.z).sqrt()`)
 本 crate 内に 5.0 で変わった API の利用は無く、code の変更は無い
 
+#### `alice-zip` 0.6 へ追従
+
+`alice-lol` の `alice-zip` の要求を `0.5.1` から `0.6` に上げた (本 crate が使うのは `research_law` が再 export する `law` の型だけで、code の変更は無い)
+
 #### `alice-world-auditor`: Phase 5 の oracle を `alice-physics` の XPBD 速度の修正に追従
 
 `alice-physics` の XPBD は、拘束も接触も動かさなかった body の線速度を予測速度のまま保つようになった (位置差からの再導出をやめた)
