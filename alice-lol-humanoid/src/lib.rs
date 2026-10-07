@@ -2,7 +2,7 @@
 //!
 //! Humanoid template for `alice_lol` DSL parametric character generation
 //!
-//! `~/ALICE-LOL/docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
+//! `docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
 //! 現在 Phase = **H.4 BVH import + pose** (BVH parser + `HumanoidTemplate::with_pose` FK)
 //!
 //! # Roadmap
@@ -24,7 +24,7 @@
 //!
 //! `Joint` enum / `Bone` struct / `MuscleWidths` / bones topology は
 //! ALICE-Manga `src/skeleton.rs` + `src/skeleton3d.rs` の code copy
-//! Phase H.5 で reconciliation (併存 / wrapper 化 / 段階移行) を user 判断
+//! Phase H.5 で reconciliation (併存 / wrapper 化 / 段階移行) を決める (未決定)
 //!
 //! # Quick start
 //!

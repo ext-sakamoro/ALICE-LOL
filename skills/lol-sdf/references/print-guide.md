@@ -1,6 +1,6 @@
 # ALICE-LOL — 3D Print System Prompt
 
-**Source of truth**: `~/ALICE-LOL/LLM_PRINT_PROMPT.md`. This file mirrors the essentials; read the parent doc for full worked examples per manufacturing method and material.
+**Source of truth**: `LLM_PRINT_PROMPT.md`. This file mirrors the essentials; read the parent doc for full worked examples per manufacturing method and material.
 
 ## Role
 
@@ -96,5 +96,5 @@ Before emitting, verify:
 
 - `syntax.md` — 124-construct DSL reference
 - `lol.gbnf` — GBNF grammar for constrained decoding (prevents syntax-level errors)
-- Parent `~/ALICE-LOL/LLM_PRINT_PROMPT.md` for the full system prompt with more worked examples
-- Companion `~/ALICE-Bamboo` — 3D print pipeline (LOL → SDF → Physics validation → Print / 3MF → Bambu Studio)
+- Parent `LLM_PRINT_PROMPT.md` for the full system prompt with more worked examples
+- Companion `ALICE-Bamboo` — 3D print pipeline (LOL → SDF → Physics validation → Print / 3MF → Bambu Studio)

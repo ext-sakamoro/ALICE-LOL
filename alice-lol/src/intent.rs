@@ -7,8 +7,8 @@
 //! # 3 層 Intent 階層
 //!
 //! - **L1 Physical Intent** (本 module): 身体運動 verb、`IntentNode` 14 variant + Sequence/Parallel
-//! - **L2 Social Intent**: 未定義 (Foundry / Anima 成熟後に別 module)
-//! - **L3 Architectural Intent**: `ALICE-Cognitive` crate (別 meta-agent)
+//! - **L2 Social Intent**: 未定義 (別 module)
+//! - **L3 Architectural Intent**: 本 crate の外で扱う
 //!
 //! # 実装 scope (B.1 = skeleton のみ)
 //!

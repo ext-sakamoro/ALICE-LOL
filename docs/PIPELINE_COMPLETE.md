@@ -2,7 +2,6 @@
 
 **Status**: Phase 5.0 (仕様書) 完成、Phase 5.1-5.6 実装待ち
 **作成日**: 2026-08-06
-**関連 memory**: [[feedback_alice_polygon_extrude_data_route]] / [[feedback_alice_identity_law_not_data]]
 
 ## 1. 目的
 
@@ -171,7 +170,6 @@ Slice → G-code → Print
   - [ ] slice 時間 / filament 消費が想定範囲
   - [ ] 実プリント時の注意点 (bed 位置、support 要否、印刷向き)
 - 問題発生時の trouble shooting (非多様体エッジ / thin wall warning / build volume 超過 等)
-- `~/CLAUDE.md` § 「3Dプリント出力バリデーションフロー」への reference
 
 ## 4. 12+ 品目リスト (完全定義)
 

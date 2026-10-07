@@ -401,7 +401,7 @@ pub fn pin_hinge_knuckle(pin_diameter: f32, knuckle_length: f32, knuckle_od: f32
         half_height: knuckle_length * 0.5,
     };
     // Pin hole は barrel より 5mm each side 長く取り、preview MC で確実 punch through
-    // ([[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    // (cavity margin rule)
     let hole = SdfNode::Cylinder {
         radius: f32::midpoint(pin_diameter, HINGE_CLEARANCE),
         half_height: knuckle_length.mul_add(0.5, 5.0),

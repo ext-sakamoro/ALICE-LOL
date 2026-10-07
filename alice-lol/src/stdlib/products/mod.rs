@@ -8,8 +8,6 @@
 //! subtract + torus 組合せを展開する 3B model の semantic 分解能力に依存
 //! しない robust な生成経路
 //!
-//! 詳細: memory `feedback_llm_3b_complex_shape_hallucination` (2026-08-23 事案)
-//!
 //! ## primitive 一覧
 //!
 //! | primitive | 引数 | 用途 |

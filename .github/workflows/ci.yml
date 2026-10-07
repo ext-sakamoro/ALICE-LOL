@@ -167,7 +167,7 @@ jobs:
       - name: Clippy
         working-directory: ALICE-LOL
         # 2026-09-17: -W → -D、lib のみ → workspace 全 target 全 feature
-        # (Backlog 「clippy -D 昇格」、toolchain は rust-toolchain.toml pin)
+        # (toolchain は rust-toolchain.toml pin)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery
 
   fmt:
@@ -307,8 +307,8 @@ jobs:
         with:
           repository: ext-sakamoro/ALICE-Kinematics
           path: ALICE-Kinematics
-      # Cargo.toml `rust-version` を実証する (canonical template 罠 #27、
-      # 偽 MSRV は clippy を黙らせる: feedback_false_msrv_silences_clippy)
+      # Cargo.toml `rust-version` を実証する (宣言だけの MSRV は
+      # clippy の incompatible_msrv を黙らせる)
       # 宣言値と同じ toolchain を pin し、全 feature で check が通ることを確認
       # 宣言を上げる時はここも上げる (alice-sdf 3.0.0 は 1.85、本 crate は const fn の f32::round が 1.90 を要求)
       - uses: dtolnay/rust-toolchain@1.90

@@ -1,5 +1,5 @@
 # cargo-deny 設定 (v0.14+ schema)
-# canonical CI template: [[reference_alice_ci_canonical_template]]
+# ALICE-* 共通の CI 構成
 # ALICE-LOL は MIT OR Apache-2.0、optional sibling deps (alice-llm / alice-physics) は
 # AGPL-3.0 (実 crate)、ただし alice-stubs で CI 内は MIT OR Apache-2.0 として stub 化
 

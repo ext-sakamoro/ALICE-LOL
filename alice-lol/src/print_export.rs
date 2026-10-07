@@ -123,7 +123,7 @@ fn orient_outward(mut mesh: Mesh) -> Mesh {
 ///    (→ [`VERTEX_MERGE_CELL_RATIO`] で cell 相対にした)
 /// 2. 許容量 `1e-4` (何も融合しない) でも res ≥ 192 で破れる —
 ///    `remove_degenerate_triangles` が sliver を消して**縫い直さない**
-///    (上流 `alice_sdf::mesh::manifold` 側の課題、Backlog に起票済)
+///    (上流 `alice_sdf::mesh::manifold` 側の課題)
 ///
 /// そこで (a) **水密な mesh には破壊的操作を掛けない** (b) 掛けた結果が悪化したら
 /// **採らない** の 2 段で、`node_to_mesh` を**非回帰**にする

@@ -33,7 +33,7 @@ use std::sync::Arc;
 /// H2D 0.4mm ノズル FDM のクリアランス穴余裕 (mm)
 ///
 /// 呼び径 + 本値 = ボルトが余裕を持って通る穴径
-/// PLA / PETG / ABS 実測値 (ALICE-Bamboo `~/ALICE-Bamboo/CLAUDE.md` に記載)
+/// PLA / PETG / ABS の実測値
 pub const CLEARANCE_H2D_FDM: f32 = 0.2;
 
 /// タップ下穴公式のノズル精度余白 A (mm、default)
@@ -56,12 +56,12 @@ pub const HEAT_SET_SINK_MARGIN: f32 = 0.3;
 ///
 /// 各 method は ISO 4762 (ソケットキャップ) / ISO 10642 (皿頭) 規格値を返す
 /// M10 以上は Phase A.4 (mount) で追加予定 (2020 profile / 3030 profile の締結軸として)
-/// M2/M2.5 は Raspberry Pi / Arduino / spring hinge 等の小型基板・センサー用途で頻出
+/// M2/M2.5 は RPi / Arduino / spring hinge 等の小型基板・センサー用途で頻出
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetricSize {
     /// M2 (呼び径 2mm、小型基板 / センサー)
     M2,
-    /// M2.5 (呼び径 2.5mm、Raspberry Pi / Arduino 標準)
+    /// M2.5 (呼び径 2.5mm、RPi / Arduino 標準)
     M2_5,
     /// M3 (呼び径 3mm)
     M3,
@@ -334,7 +334,7 @@ pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let head_dia = size.head_diameter_socket();
     let bore_depth = size.head_height_socket() + 0.5;
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
-    // [[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    // cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);
     let bore = SdfNode::Cylinder {
         radius: head_dia * 0.5,
@@ -373,7 +373,7 @@ pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let half_angle = (COUNTERSUNK_TAPER_ANGLE_DEG * 0.5).to_radians();
     let cone_h = head_dia * 0.5 / half_angle.tan();
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
-    // [[success_alice_lol_cavity_margin_batch_fix_2026_08_25]] cavity margin rule)
+    // cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);
     // SdfNode::Cone は base at -half_height, tip at +half_height
     // 皿頭は tip を下 (板内部) に向けたいので X 軸周り 180° 回転
@@ -456,7 +456,7 @@ pub fn heat_set_insert_hole(size: MetricSize) -> SdfNode {
 
 /// ダウエル (dowel pin) 挿入穴 (家具 flat-pack joinery、Ø8 標準)
 ///
-/// 直径 = `dia` + 0.1mm (接着剤余裕、圧入 vs slip fit は user 判断)
+/// 直径 = `dia` + 0.1mm (接着剤余裕、圧入 vs slip fit は用途で選ぶ)
 /// 中心 = 原点、軸 = Y、全長 = `depth`
 ///
 /// 家具 flat-pack (IKEA/自作) の 8mm dowel joint、時計台の Ø6、大型棚の Ø10 等
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn m2_5_dimensions_are_pi_compliant() {
-        // Raspberry Pi 標準 M2.5: nominal 2.5
+        // RPi 標準 M2.5: nominal 2.5
         assert!((MetricSize::M2_5.nominal_diameter() - 2.5).abs() < 1e-6);
         assert!((MetricSize::M2_5.head_diameter_socket() - 4.5).abs() < 1e-6);
         assert!((MetricSize::M2_5.head_height_socket() - 2.5).abs() < 1e-6);

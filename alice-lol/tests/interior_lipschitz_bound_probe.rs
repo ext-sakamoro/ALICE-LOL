@@ -32,7 +32,7 @@
 //! (b) 厳密距離場は `|Δf| = |Δp|` で ratio が厳密 1、f32 丸めで 1+1ulp → `RATIO_TOL`
 //! (c) 「外部対照」のつもりで `q` が**内部**の pair を数えていた (内部版の鏡像で対照にならない)
 //! (d) 破れ幅を出すまで (a) に気付けなかった
-//! ⇒ **件数だけ見ず必ず margin と実例座標を出す** (CLAUDE.md § 作業前の artifact 確認 #6)
+//! ⇒ **件数だけ見ず必ず margin と実例座標を出す**
 //!
 //! # ⚠️ production を変えない
 //!
@@ -40,8 +40,8 @@
 //! 入れてよいかは、ここで健全性が確認できてから決める (合格側の主張なので、
 //! `L` が過小な construct で入れると偽 `proven` になる)
 //!
-//! 起票: 2026-09-30 `ys-09` (World Auditor 段 3 の欠けている primitive 2 本のうち
-//! 「`MinThickness` の内部距離の上界」の実現可能性調査、調停役 `ys-21` 裁定で着手)
+//! 起票: 2026-09-30 (World Auditor 段 3 の欠けている primitive 2 本のうち
+//! 「`MinThickness` の内部距離の上界」の実現可能性調査)
 
 // grid の index ⇄ 座標変換に限った許容 (値域は高々 16 で f32 の仮数に収まる)
 // ⚠️ `suboptimal_flops` は **採用しない** — clippy が勧める `mul_add` は FMA の有無で
@@ -274,7 +274,7 @@ fn measure_refutations() -> (usize, usize) {
 /// 除外しているのが効いている = 素朴な内部拡張が誤りだった、という読みになる
 ///
 /// ⚠️ **対照群を置かないと「内部だから破れた」と「そもそも L が過小」が区別できない**
-/// ([[`feedback_green_is_not_evidence_three_mechanisms`]] の「判別力の証拠を置く」形)
+/// (判別力の証拠を置く形)
 ///
 /// 数値を print するだけで合否は決めない (どちらの結果も情報であり、閾値を先に
 /// 決めていないため) ⚠️ ただし **検査件数 0 での空振りだけは red にする**
@@ -380,7 +380,7 @@ fn the_exterior_control_separates_contract_scope_from_unsound_l() {
 /// 早期判定が `MinThickness` の未決定をどれだけ潰しうるか (発火率の実測)
 ///
 /// ⚠️ 本 test は数値を **print するだけ** で合否を決めない (閾値を先に決めずに
-/// 測ると出た数字に基準を合わせることになる、[[`project_alice_physics_research_walls`]] 共通教訓 6)
+/// 測ると出た数字に基準を合わせることになる)
 /// ただし **0 件なら仮説が即座に否定される**ので、その 1 点だけ assert する
 #[test]
 fn the_interior_bound_fires_on_some_interior_points() {

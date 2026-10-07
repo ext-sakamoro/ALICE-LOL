@@ -35,8 +35,9 @@ The datagen families were designed from the benchmark's failure types, so the 20
 
 ## Evidence
 
-- `~/claude-config/evidence_b10_trie_mask/` — naive vs trie mask timings, think vs grammar-only mug runs
-- `~/claude-config/evidence_lol_bench_2026_09_14/` — full benchmark log + JSONL
-- `~/claude-config/evidence_lol_datagen_2026_09_14/` — 400-sample JSONL + run log
+The measurement logs (naive vs trie mask timings, think vs grammar-only mug
+runs, the full benchmark log and JSONL, a 400-sample datagen JSONL) are kept
+outside this repository; the numbers above are reproduced by
+`examples/llm_bench.rs` and `alice-lol-datagen`.
 
 (Evidence lives outside the repo; the numbers above are copied from those logs.)

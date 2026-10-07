@@ -17,7 +17,7 @@
 //! ```
 //!
 //! The GGUF file is not shipped; download separately. Real-model smoke
-//! runs on Mac Metal / Jetson Vulkan are covered by Phase X.8 B-9.
+//! runs on Metal / Vulkan are covered by Phase X.8 B-9.
 
 use alice_llm::gguf::GgufFile;
 use alice_lol::bridge::{generate_sdf_from_prompt, GgufTokenizer, Llama3Model};

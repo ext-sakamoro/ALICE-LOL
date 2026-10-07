@@ -1,6 +1,6 @@
 # ALICE-LOL DSL Syntax Reference (Runtime Parser, 124 Constructs)
 
-**Source of truth**: `~/ALICE-LOL/LLM_REFERENCE.md` (parent crate). This file mirrors the essentials for skill self-containment; if you need the full LLM-oriented guide (semantic anti-patterns, worked examples, coordinate-frame gotchas), read the parent doc.
+**Source of truth**: `LLM_REFERENCE.md` in the parent crate. This file mirrors the essentials for skill self-containment; if you need the full LLM-oriented guide (semantic anti-patterns, worked examples, coordinate-frame gotchas), read the parent doc.
 
 ## Syntax rules
 
@@ -153,4 +153,4 @@ Compiles to a smoothly-blended sphere + offset box. Evaluable on CPU / GPU, tran
 
 - `print-guide.md` — 3D print-specific system prompt (material presets, anti-patterns)
 - `lol.gbnf` — GBNF grammar for constrained decoding
-- Parent `~/ALICE-LOL/LLM_REFERENCE.md` for full worked examples and semantic guidance
+- Parent `LLM_REFERENCE.md` for full worked examples and semantic guidance

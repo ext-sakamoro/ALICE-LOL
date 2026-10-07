@@ -97,7 +97,7 @@ pub fn boss(screw_dia: f32, height: f32) -> SdfNode {
     let hole = SdfNode::Cylinder {
         radius: tap_r,
         // +5.0 = 5mm each side、preview MC (cell ~1mm) で確実 punch through
-        // (cavity margin rule、[[success_alice_lol_cavity_margin_batch_fix_2026_08_25]])
+        // (cavity margin rule)
         half_height: height.mul_add(0.5, 5.0),
     };
     SdfNode::Subtraction {

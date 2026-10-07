@@ -20,7 +20,7 @@
 # **sound 化した law を足したら `--re` にその関数名を足すこと** — 足さないと
 # 新しい判定経路は測定対象外のまま green に見える
 #
-# 罠 #22 (continue-on-error は compile error も green に潰す) に従い
+# continue-on-error は compile error も green に潰すので
 # continue-on-error は使わない measurement の exit code (2 = missed、3 =
 # timeout) は受けてから中身で判定する
 #
@@ -78,7 +78,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     steps:
-      # ci.yml と同じ multi-repo checkout (罠 #13 / #21: alice-lol は sibling の
+      # ci.yml と同じ multi-repo checkout (alice-lol は sibling の
       # 実 API を無条件 use するので stub では compile できない)
       - uses: actions/checkout@v5
         with:
@@ -121,14 +121,14 @@ jobs:
         uses: taiki-e/install-action@cargo-mutants
 
       # `--in-place` は multi-repo layout で必須 (tree copy すると `../../ALICE-SDF`
-      # 等の sibling path dep が切れる、ALICE-LOL/CLAUDE.md § mutants)
+      # 等の sibling path dep が切れる)
       # in-place は tree を書き換えるので並列不可 — `--jobs` と併用すると
       # cargo-mutants 自身が usage error で落ちる (2026-09-27 実測)
       # test 集合は判定器を動かすものだけ (`--lib` が law.rs 内 `core_probe_tests`)
       - name: Mutants (law core, shard ${{ matrix.shard }}/4)
         working-directory: ALICE-LOL
         run: |
-          # 罠 #44: 変異した `const fn` が rustc の const-eval を無限ループさせ、
+          # 変異した `const fn` が rustc の const-eval を無限ループさせ、
           # test timeout が効かないまま runner が OOM で死ぬ
           ulimit -v 6291456
           set +e

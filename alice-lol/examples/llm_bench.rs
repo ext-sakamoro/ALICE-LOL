@@ -7,7 +7,7 @@
 //!
 //! ```text
 //! cargo run --release --example llm_bench --features llm-bridge -- \
-//!     --model ~/ALICE-LLM/models/MiniCPM5-2B-Q4_K_M.gguf \
+//!     --model ALICE-LLM/models/MiniCPM5-2B-Q4_K_M.gguf \
 //!     [--mode grammar|think|both] [--prefix-budget 800] [--max-tokens 192] \
 //!     [--only T2] [--out results.jsonl]
 //! ```

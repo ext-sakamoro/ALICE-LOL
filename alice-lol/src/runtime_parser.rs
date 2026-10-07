@@ -1641,7 +1641,7 @@ impl<'a> Parser<'a> {
             }
             "skadis_panel" => {
                 // Variadic 0/1/2/3-arg 対応 defaults は SKADIS canonical
-                // (300×5×5、ALICE-Bamboo `~/ALICE-Bamboo/models/wall-organizer/skadis-300x300/`)
+                // (300×5×5、ALICE-Bamboo `ALICE-Bamboo/models/wall-organizer/skadis-300x300/`)
                 // LLM 側で「SKADISパネル 10✖10」等の曖昧入力を parse fail させず
                 // canonical に丸める β UX 用の forgiving 動作 (2026-09-04 追加)
                 let (size, thickness, corner_r) = self.parse_skadis_panel_args()?;
@@ -1680,7 +1680,7 @@ impl<'a> Parser<'a> {
 
             // ── Phase P.1 products primitive (stdlib::products) ──
             // 生活雑貨 canonical primitive text-to-print β の 3B LLM 複合形状
-            // hallucination 事案対応 詳細: [[feedback_llm_3b_complex_shape_hallucination]]
+            // hallucination への対応
             "mug" => {
                 let (dia, height) = self.parse_2f()?;
                 Ok(crate::stdlib::products::mug_sdf(dia, height))
@@ -5153,7 +5153,7 @@ mod tests {
 
     #[test]
     fn test_screw_hole_m2_5_pi() {
-        // Raspberry Pi M2.5 = snap to M2_5
+        // RPi M2.5 = snap to M2_5
         let node = parse_lol("screw_hole(2.5, 8)").unwrap();
         assert!(matches!(node, SdfNode::Cylinder { .. }));
     }

@@ -1,6 +1,6 @@
 name: Fuzz
 
-# canonical CI template: [[reference_alice_ci_canonical_template]]
+# ALICE-* 共通の CI 構成
 # ALICE-SDF v1.7.7 base、ALICE-LOL 4 target: parse / to_wgsl / eval / emit_parity
 
 on:
@@ -115,7 +115,7 @@ jobs:
         run: cargo install cargo-fuzz --locked
 
       # build は blocking: compile error を continue-on-error で隠さない
-      # (canonical 罠 #22: job-level continue-on-error だと fuzz target の
+      # (job-level continue-on-error だと fuzz target の
       #  compile error が green 表示で silent になる)
       - name: Build fuzz target
         run: |

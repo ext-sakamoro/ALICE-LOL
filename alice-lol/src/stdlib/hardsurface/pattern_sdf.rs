@@ -2096,10 +2096,10 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 23. raspi_case (electronics-enclosure § 1 Raspberry Pi Cases)
+// 23. raspi_case (electronics-enclosure § 1 RPi Cases)
 // ────────────────────────────────────────────────────────
 
-/// Raspberry Pi ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
+/// RPi ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RaspiCaseSpec {
     /// PCB 幅 (mm、RPi 5/4=85 / Zero 2W=65、default 85)
@@ -2146,7 +2146,7 @@ impl RaspiCaseSpec {
     }
 }
 
-/// Raspberry Pi ケース (top 開口、4 standoff peg、片側 port opening、`to_z_up` wrap)
+/// RPi ケース (top 開口、4 standoff peg、片側 port opening、`to_z_up` wrap)
 ///
 /// 構造 (electronics-enclosure § 1 準拠、Y-up 設計):
 /// - Outer: `RoundedBox` (`(pcb_w+2×(clear+wall)) × (int_h+floor) × (pcb_d+2×(clear+wall))`)
@@ -4038,8 +4038,7 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
     let outer_hz = ext_z * 0.5;
 
     // Backplate uses rounded_box radius 3 → effective plate thickness
-    // in Z becomes outer_hz + 3 (radius inflates all 6 faces per
-    // [[feedback_alice_sdf_rounded_box_six_face_inflate]]) so
+    // in Z becomes outer_hz + 3 (the radius inflates all 6 faces) so
     // slot_hz / mount_hy must include the radius to punch through
     let backplate_radius: f32 = 3.0;
     let punch_z = outer_hz + backplate_radius + 5.0;
@@ -6334,7 +6333,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
     to_z_up(result)
 }
 
-/// Raspberry Pi マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
+/// RPi マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RaspiMountPlateSpec {
     /// Pi model (4=Pi4B、5=Pi5、3=Pi3B+ = 58×49、0=Zero = 58×23)
@@ -6375,7 +6374,7 @@ impl RaspiMountPlateSpec {
     }
 }
 
-/// Raspberry Pi マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
+/// RPi マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
 ///
 /// 構造: 板 (`RoundedBox`) から Pi model 別 M2.5 穴 4 個 + optional M4 穴 4 隅を Subtraction
 /// Pi 3B+/4B/5: 58×49mm rectangular pattern

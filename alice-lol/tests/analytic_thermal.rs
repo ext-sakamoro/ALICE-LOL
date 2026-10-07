@@ -34,7 +34,7 @@ const fn pla_like() -> ThermalMaterial {
 // 最高温度の bracket = **[44.13, 307.76] °C**
 //   測定日   2026-09-29
 //   commit   cc07ac8 (= 117b089 で形状側を `Inside` に直した後)
-//   機械     MacBook Air M3 / macOS 26.3
+//   機械     arm64 / macOS 26.3
 //
 // ⚠️ **値が動いていたら、まず実装が変わったかを見ること** (再測定か回帰かの
 // 判別が付かないと直せない) `thermal_solve_is_bit_reproducible` が同一入力の

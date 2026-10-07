@@ -1,8 +1,8 @@
 //! # cavity — subtract 系 helper with cavity margin rule intrinsic (Phase C 根本 refactor、2026-09-01)
 //!
-//! `[[success_alice_lol_cavity_margin_batch_fix_2026_08_25]]` の "cavity margin +5mm each side" rule を
+//! "cavity margin +5mm each side" rule を
 //! primitive API に intrinsic 化する 各 archetype で raw `subtract(plate, screw_hole(m, plate_t + 10.0))` を
-//! 手書きすると rule 忘却で「四角」描画事故 (2026-08-27 〜 09-01 の session で 5 commit 連続発生)
+//! 手書きすると rule 忘却で「四角」描画になる (2026-08-27 〜 09-01 に 5 commit 連続で発生)
 //!
 //! 本 module の helper 経由なら rule 自動適用、raw pattern grep で新規混入も検知可
 //!

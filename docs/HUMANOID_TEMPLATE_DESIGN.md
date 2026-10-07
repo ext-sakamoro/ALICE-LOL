@@ -16,7 +16,7 @@ canonical narrative
 - VRM (Phase 1 Data、~MB) → `HumanoidTemplate` (Phase 2 Law、~KB parameter) → Intent verb (Phase 3、8 byte) の 3 段圧縮
 - 受信側は Intent + template だけで SdfNode を再構築、runtime 描画
 
-`[[feedback_alice_identity_law_not_data]]` の「データを送るな、法則を送れ」を humanoid character 領域に適用したもの
+「データを送るな、法則を送れ」を humanoid character 領域に適用したもの
 
 ## 2. Crate boundary
 
@@ -175,20 +175,19 @@ default features: なし (`vrm` は opt-in、pure な static + BVH のみで動�
 
 各 Phase に対応 example 1 個 (Roadmap §H.1-H.4 参照)、CPU rasterize で PNG 出力し `examples/output/` に配置
 
-### 5.4 karikari-review Rust 準拠
+### 5.4 Rust の品質基準
 
 - `cargo clippy -p alice-lol-humanoid --all-targets --all-features -- -W clippy::pedantic -W clippy::nursery` 0 warning
 - `cargo fmt --check` clean
 - `RUSTFLAGS='-Dwarnings'` build green
 - 仮実装 grep 罠回避 (`unwrap!` / `unimplemented!` / `todo!` / `panic!.*stub` は 0)
-- 詳細は `~/claude-config/claude-skills/karikari-review/SKILL.md` (Rust)
 
 ## 6. ALICE-Manga との関係
 
-- 現状: `~/ALICE-Manga/src/skeleton3d.rs` (937 行) が同等 logic 実装済
+- 現状: `ALICE-Manga/src/skeleton3d.rs` (937 行) が同等 logic 実装済
 - 本 crate は Phase H.0-H.4 で **code copy** で立ち上げる (依存反転しない、変更影響を最小化)
 - Phase H.5 で 3 案検討 (A 併存 / B Manga → LOL wrapper 化 / C 段階移行)
-- 決定は user 判断、当面は併存想定
+- 未決定、当面は併存想定
 
 ## 7. License
 
@@ -211,9 +210,6 @@ default features: なし (`vrm` は opt-in、pure な static + BVH のみで動�
 
 ## 9. 参考
 
-- `[[project_alice_lol_humanoid_template]]` 進捗 memory
-- `[[project_alice_lol_ir_roadmap]]` 三相原理 Milestone A-C
-- `[[project_alice_cognitive_meta_intent]]` L3 Architectural Intent 姉妹
-- `[[feedback_alice_identity_law_not_data]]` データを送るな法則を送れ
+- [HUMANOID_TEMPLATE_ROADMAP.md](HUMANOID_TEMPLATE_ROADMAP.md)
 - ALICE-Manga `src/skeleton3d.rs` (canonical Reference 実装)
 - ALICE-Manga `docs/CHARACTER_AUTHORING_PIPELINE.md` (Phase α / β empirical 実測)

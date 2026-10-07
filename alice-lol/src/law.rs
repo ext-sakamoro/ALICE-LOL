@@ -1135,7 +1135,7 @@ enum Refined {
 /// 総当たりの真値と突き合わせた結果 **`alice_sdf::interval::eval_interval` 側が
 /// 真の最小値を包囲から外していた** (`ia_bsphere` に渡す外接半径が球キャップ分
 /// 足りない) `NonOverlap` の決着条件は `ia.lo >= 0.0` を見るので、これは
-/// **偽の `proven` を生む向き**の誤り 詳細は ALICE-SDF 側の Backlog
+/// **偽の `proven` を生む向き**の誤り (ALICE-SDF 側の課題)
 fn refine_with_lipschitz(bx: Vec3Interval, iv: Interval, f_centre: f32, l: f32) -> Refined {
     let Some(e) = lipschitz_enclosure(bx, f_centre, l) else {
         return Refined::Enclosure(iv);
@@ -1981,7 +1981,7 @@ fn check_thermal(
 // test でも load-bearing でない (判定を丸ごと外しても green) (2) 「決められ
 // ない」分岐が 20 通りの scene で一度も発火しない (3) フィレット済の形状に
 // 偽陽性が残り、報告値が最悪点でない (最初の一致で返すため) の 3 点が
-// 破壊試験で出たので破棄した 再設計は Backlog
+// 破壊試験で出たので破棄した 再設計は未着手
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// 占有率を測る球面標本の数 (Fibonacci 格子、決定論)
@@ -3434,7 +3434,7 @@ pub fn format_report(report: &LawReport) -> String {
 //
 // missed のうち 61 件は sound 化対象外の 3 law (`check_continuity` 30 /
 // `check_thermal` 16 / `check_volume_conservation` 15) に集中しており、これは
-// 既知の弱点 (flood fill が格子解像度依存、Backlog 221)
+// 既知の弱点 (flood fill が格子解像度依存)
 //
 // 残りは sound 化した 5 law の核に生き残ったもので、本 module はそのうち
 // **実害のある変異** を殺す 核の関数は private なので integration test

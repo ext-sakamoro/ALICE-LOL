@@ -21,13 +21,13 @@
 
 ## Phase 一覧
 
-MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は user 判断待ち、H.6 は Milestone B との合流で別 Sprint
+MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は Milestone B との合流で別 Sprint
 
 ### H.0 Scaffolding
 
 **scope**: workspace member 追加 + crate 骨格
 
-- `~/ALICE-LOL/alice-lol-humanoid/` 新規 dir
+- `alice-lol-humanoid/` 新規 dir
 - `Cargo.toml` (name / version 0.1.0 / license MIT OR Apache-2.0 / dep: alice-lol path)
 - `src/lib.rs` (module tree + placeholder `HumanoidTemplate` struct)
 - workspace `Cargo.toml` の `members` に追加
@@ -85,7 +85,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は user 判断待ち、
 - Cargo.toml に optional dep 追加: `gltf` 1.x + `serde_json` (`vrm` feature)
 - ALICE-Manga `vrm_import.rs` の `VrmFile::extract_humanoid_bones()` 相当 logic を移植 or 抽出 (code copy first、H.5 で共通化検討)
 - `HumanoidTemplate::from_vrm(path)` method (VRM 15 bone → joint position 変換、`from_vrm_bones()` 相当)
-- Alice VRM (`~/CTW-sakamoto/*` は隔離対象なので non-secret な local test asset を選定要) 相当の integration test
+- 公開できる VRM の test asset を選んで integration test を置く
 - `examples/humanoid_from_vrm.rs` (env `VRM_PATH` で任意 VRM を読み込み PNG 出力)
 
 **成功基準**
@@ -117,7 +117,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は user 判断待ち、
 
 **scope**: Manga 側 `skeleton3d.rs` と LOL 側 `alice-lol-humanoid` の code 重複を解消するか、併存するかを決定
 
-**3 案 (要 user 判断、Sprint 前議論)**
+**3 案 (未決定、Sprint 前議論)**
 
 | 案 | 内容 | pros | cons |
 |--|--|--|--|
@@ -142,7 +142,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は user 判断待ち、
 **成功基準**
 - 8-byte Intent packet で humanoid pose 変形実証
 - 三相原理 Phase 3 Intent の 10,000× 圧縮 narrative の proof-of-concept
-- `project_alice_lol_ir_roadmap` Milestone B.4 の acceptance criteria 満たす
+- Milestone B.4 の acceptance criteria を満たす
 
 **想定工数**: 12-20 h (別 Sprint)
 
@@ -164,9 +164,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は user 判断待ち、
 | B (Intent スケルトン) | H.3-H.6 | VRM/BVH ingest → Intent verb 受け入れ、Phase 3 入口 |
 | C (統合、8-byte packet 実運用) | H.6 以降 | Kinematics との合流、実 game / metaverse で稼働 |
 
-詳細: `[[project_alice_lol_ir_roadmap]]` (~/.claude memory)
 
 ## 進捗記録
 
 - 2026-08-06 Roadmap 制定 (Q1-Q5 判断確定、H.0 未着手)
-- 進捗詳細は memory `project_alice_lol_humanoid_template.md` にトラッキング

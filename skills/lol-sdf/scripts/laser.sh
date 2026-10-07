@@ -5,7 +5,7 @@
 #   scripts/laser.sh <input.lol> --output part.lac
 #   scripts/laser.sh --help
 #
-# Note: .lac generation lives in a separate crate (`~/Project-ALICE/alice-metal-card`),
+# Note: .lac generation lives in a separate crate (`alice-metal-card`),
 # not directly in `alice-lol`. This script documents the pipeline; the actual
 # LOL 2D DSL → SVG → .lac path requires the alice-metal-card `lac_gen.rs`
 # module or equivalent.
@@ -58,8 +58,6 @@ if [[ -z "$OUTPUT" ]]; then
 fi
 
 echo "[alice-lol-sdf] .lac generation requires the alice-metal-card companion crate." >&2
-echo "[alice-lol-sdf] Reference implementation: ~/Project-ALICE/alice-metal-card/src/lac_gen.rs" >&2
-echo "[alice-lol-sdf] Bambu Suite .lac format spec: ~/.claude/projects/-Users-ys/memory/bambu-suite-lac-format.md" >&2
 echo "[alice-lol-sdf] For now, manually run the alice-metal-card pipeline against $INPUT." >&2
 echo "[alice-lol-sdf] Target output: $OUTPUT" >&2
 exit 4

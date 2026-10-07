@@ -9,7 +9,7 @@
 //! (DSL は variant の field を直接書く) README はこの差を注記しているので、
 //! 注記が実装と合っていることをここで確かめる
 //!
-//! 起票: 2026-09-28 (user 指示「SDF も入り口側で、LOL に辿り着かせたい」)
+//! 起票: 2026-09-28 (ALICE-SDF の README から LOL に辿り着けるようにする)
 
 // 厳密比較が **契約そのもの**: builder API と DSL はどちらも同じ `SdfNode` tree を
 // 作り、同じ `alice_sdf::eval` を通るので、場は bit 単位で一致しなければならない

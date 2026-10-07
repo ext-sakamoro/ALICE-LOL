@@ -2,7 +2,7 @@
 //!
 //! # golden ratio
 //!
-//! spacing / radius は φ = 1.6180339887 の冪乗を base に乗算 (`golden-ratio-design` skill 準拠)
+//! spacing / radius は φ = 1.6180339887 の冪乗を base に乗算 (黄金比のスケール)
 //! `spacing_base * φⁿ` で n-th step、視覚的に調和のとれた scale が得られる
 
 /// 黄金比 φ ≈ 1.6180339887

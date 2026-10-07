@@ -497,7 +497,7 @@ Program {
 
 **合成 (2)**: `Sequence(Vec<IntentNode>)` / `Parallel(Vec<IntentNode>)`
 
-L2 Social Intent は未定義 (Foundry / Anima 成熟後に別 module)、L3 Architectural Intent は別 crate `ALICE-Cognitive` (meta-agent)。
+L2 Social Intent と L3 Architectural Intent は未定義 (本 crate の外で扱う)。
 
 ### 9.5 Backend / consumer 拡張
 

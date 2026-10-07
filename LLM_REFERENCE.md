@@ -381,7 +381,6 @@ MakerWorld (makerworld.com) は素の3MFを拒否する。Bambu Studio互換メ�
 
 `ALICE-Bamboo/scripts/` にH2D用テンプレートを格納済み。`export_bambu_3mf()` (Python) がテンプレートを埋め込んでMakerWorld対応3MFを直接出力する。Bambu Studioでの再保存は不要。
 
-詳細: `ALICE-Bamboo/CLAUDE.md`「MakerWorld アップロード」セクション参照。
 
 ### Examples for 3D Printing
 
@@ -516,7 +515,6 @@ ZIP+JSON プロジェクトファイル（3DプリントのBambu Studio `.3mf` �
 7. **process_type は5種** — LaserLineEngrave/FillEngrave/ImageEngrave/LineCut/PrintThenCut。
    我々の用途では `LaserFillEngrave` が基本
 
-**完全仕様と JSON スキーマ**: `~/.claude/projects/-Users-ys/memory/bambu-suite-lac-format.md`
 
 #### Wood (Diode 40W)
 

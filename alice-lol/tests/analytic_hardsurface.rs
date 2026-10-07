@@ -490,7 +490,7 @@ fn counterbore_bore_top_is_flush_with_the_plate_top_face() {
 /// ⚠️ **クリアランス穴は +0.2 を足すのに、頭部沈み穴は径方向に 0 しか足していない**
 /// (深さ方向には +0.5 mm の沈み余裕がある) 非対称なので FDM では頭が入らない可能性がある
 /// 仕様判断を含むため本 oracle は現状の関係を「すきま 0」として明示 pin するに留める
-/// (Backlog 起票済、修正は別判断)
+/// (修正は別判断)
 #[test]
 fn counterbore_bore_diameter_equals_the_iso_head_diameter_with_zero_radial_clearance() {
     let plate = 8.0;

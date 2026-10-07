@@ -12,10 +12,10 @@
 
 ## 0. Pre-Verify 実測結果 + Bambu Studio 検証優先順位 (2026-08-07 rev.2 全 fix 完了)
 
-**実行**: `cd ~/ALICE-Bamboo && cargo test --test bambu_pre_verify --release -- --nocapture`
+**実行**: `cd ALICE-Bamboo && cargo test --test bambu_pre_verify --release -- --nocapture`
 
 Phase 5.6 手順書 17 items のうち **自動検証可能 9 items** を Rust integration test で
-先行実施 (`~/ALICE-Bamboo/tests/bambu_pre_verify.rs`) user は残 **8 items** (Bambu Studio
+先行実施 (`ALICE-Bamboo/tests/bambu_pre_verify.rs`) user は残 **8 items** (Bambu Studio
 目視 / slice / 実プリント) に絞れる
 
 **★ 2026-08-07 rev.2**: 発見された 5 SDF/mesh bug (skadis_container / gridfinity_bin /
@@ -77,7 +77,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 ## 1. 検証対象ファイル一覧 (17 品目)
 
-### 1.1 薄物 DC 経路 (9 品目、`~/ALICE-Bamboo/output/thin/`)
+### 1.1 薄物 DC 経路 (9 品目、`ALICE-Bamboo/output/thin/`)
 
 | No | file | LOL DSL | 実測 (Phase 5.3) | 期待 slice 時間 (PLA, 0.12mm layer) |
 |--|--|--|--|--|
@@ -91,7 +91,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 | T8 | `skadis_shelf.3mf` | `skadis_shelf()` | 87K vert / 171K tri / 1297KB | ~4-6 hours (幅 260mm) |
 | T9 | `skadis_elastic_cord.3mf` | `skadis_elastic_cord()` | 66K vert / 132K tri / 1207KB | ~1 hour |
 
-### 1.2 厚物 MC 経路 (4 品目、`~/ALICE-Bamboo/output/thick/`)
+### 1.2 厚物 MC 経路 (4 品目、`ALICE-Bamboo/output/thick/`)
 
 | No | file | Rust API 呼び出し | 実測 | 期待 slice 時間 |
 |--|--|--|--|--|
@@ -163,7 +163,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 **T2 skadis_panel_300x300 (300×300×5mm、大型薄板)**:
 - 印刷向き: **flat on bed** (Z 高さ = 5mm)
 - Bed 面積 300×300mm = H2D 単一 build volume ギリギリ (H2D 315×310mm、~ok)
-- **大面積フラット板の反り対策必須** (~/CLAUDE.md §「大面積フラット板の反り・剥がれ対策」)
+- **大面積フラット板の反り対策必須**
   - Bambu Studio でスライサー **ブリム 5-10mm 追加** 推奨
   - 千鳥ペグ穴 98 個が既に肉抜きとして機能、追加肉抜き不要
 - Layer: 0.16mm、Infill: 15% grid、Support: 不要
@@ -211,14 +211,14 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 - 250mm 幅、H2D 単一プレート OK (315mm)
 
 **K4 shelf_divider_560×250×120mm (**実プリント合格 baseline**)**:
-- 印刷向き: **逆さ印刷** (~/ALICE-Bamboo/CLAUDE.md §「印刷向き」)、天板を bed 面に
+- 印刷向き: **逆さ印刷**、天板を bed 面に
 - Bambu Studio で **auto-orient で逆さ配置**、または manual で Z 軸 180° 回転
 - **560mm 幅は H2D 単一プレート超過** (H2D 315mm) = 分割印刷要
-  - 分割方式: ラップジョイント (~/ALICE-Bamboo/CLAUDE.md §「オーバーサイズ分割印刷ルール」)
+  - 分割方式: ラップジョイント
   - Bambu Studio Cut tool で 2 分割 (280mm × 2)、ラップジョイント 5mm
 - Material: **PETG 推奨** (棚荷重、PLA 非推奨)、Nylon も可
 - Infill: 15% gyroid、Support: brim 推奨
-- 実プリント合格 30lbs (13.6kg) 荷重テスト済 (~/ALICE-Bamboo/CLAUDE.md § MakerWorld 参考モデル)
+- 実プリント合格 30lbs (13.6kg) 荷重テスト済
 
 ### 3.3 CLI 素の 3MF (C1-C4)
 
@@ -254,7 +254,6 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 
 ### 4.3 実プリントで問題
 
-- 詳細は **~/CLAUDE.md § 「3Dプリント出力バリデーションフロー」** 参照
 - 剥がれ / 反り: brim / 温度調整 / bed adhesion
 - 層間剥離: material 温度 up
 - 寸法ズレ: printer キャリブレーション
@@ -263,11 +262,11 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 
 ## 5. 検証結果 report format
 
-各品目について以下を記録 (user 判断で SNS / GitHub Issue 等に共有可):
+各品目について以下を記録 (SNS / GitHub Issue 等に共有してよい):
 
 ```
 Item: T1 shopping_cart_coin_100yen
-File: /Users/ys/ALICE-Bamboo/output/thin/shopping_cart_coin_100yen.3mf
+File: output/thin/shopping_cart_coin_100yen.3mf
 Bambu Studio version: 02.05.00.66
 Import: OK / Fail (theory: ...)
 Slice: OK / Fail
@@ -297,8 +296,3 @@ Phase 5 全体 (5.0-5.7 全 sub-phase) は以下で完成判定:
 ## 7. 関連 doc
 
 - `docs/PIPELINE_COMPLETE.md` — Phase 5 全体仕様書
-- `~/ALICE-Bamboo/CLAUDE.md` — Bamboo 実プリント設計原則
-- `~/ALICE-Bamboo/CLAUDE.md § MakerWorld アップロード` — 3MF 内部構造仕様
-- `~/CLAUDE.md § 3Dプリント出力バリデーションフロー` — user side 検証原則
-- `~/.claude/projects/-Users-ys/memory/reference_bambu_3mf_analyzed_assets.md` — Bambu template 資産索引
-- `~/.claude/projects/-Users-ys/memory/feedback_alice_polygon_extrude_data_route.md` — Phase 4 polygon_extrude 削除経緯

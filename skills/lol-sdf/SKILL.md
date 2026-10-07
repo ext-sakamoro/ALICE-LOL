@@ -112,7 +112,7 @@ For LLM-oriented workflows the shell CLI gap is less critical because the primar
 
 **Roadmap** (would unblock the scripts):
 - Add `alice-lol/src/bin/lol.rs` with subcommands `parse`, `print`, `roblox` accepting `--input <path>` — the API surface exists; this is packaging work.
-- The `laser.sh` script additionally depends on the `alice-metal-card` companion crate at `~/Project-ALICE/alice-metal-card` for `.lac` generation from SVG.
+- The `laser.sh` script additionally depends on the `alice-metal-card` companion crate for `.lac` generation from SVG.
 
 Use `scripts/<name>.sh --help` for the full documented interface.
 
@@ -131,7 +131,7 @@ The runtime parser does not currently support Law declarations (Law is a proc_ma
 
 ## Print output rules (safety)
 
-From parent crate `~/ALICE-LOL/CLAUDE.md`:
+From the parent crate's print rules:
 
 1. **`subtract` must be nested** (sequential carving). Do **not** `union` the cutters — non-manifold edges will result.
 2. **`intersection` + TPMS (gyroid / schwarz / etc.)** is unsafe for mesh export. Use `lattice_infill` / `diamond_infill` / `schwarz_infill` instead — they guarantee full containment.
@@ -147,11 +147,10 @@ After generating a print / laser / Roblox artifact, always report the file path.
 - **`alice-implicit-cad`** (companion, ALICE-SDF side) — lower-level SDF authoring with 126 constructs and direct GLSL / WGSL / HLSL emit. Prefer for engine-integration workflows and shader-native output.
 - **`earthtojake/text-to-cad` `cad`** — STEP-first parametric CAD (build123d Python). Use for mechanical CAD with mating / assembly semantics; ALICE-LOL does not model BREP.
 - **`earthtojake/text-to-cad` `bambu-labs`** — post-slice print job dispatch. Feed LOL-generated `.3mf` to that skill for actual printer control.
-- **`karikari-review`** (Rust push-time gate) — apply when editing the parent `alice-lol` crate itself.
 
 ## References
 
 - `references/syntax.md` — 124-construct reference (mirrors parent `LLM_REFERENCE.md`)
 - `references/print-guide.md` — 3D print system prompt (mirrors parent `LLM_PRINT_PROMPT.md`)
 - `references/lol.gbnf` — GBNF grammar for constrained decoding
-- Parent docs: `~/ALICE-LOL/README.md`, `~/ALICE-LOL/LLM_REFERENCE.md`, `~/ALICE-LOL/LLM_PRINT_PROMPT.md`, `~/ALICE-LOL/SPEC.md`
+- Parent docs: `README.md`, `LLM_REFERENCE.md`, `LLM_PRINT_PROMPT.md`, `SPEC.md`

@@ -7,10 +7,6 @@
 //! ```bash
 //! cargo run --example verify_customizers --release
 //! ```
-//!
-//! Related memory: `feedback_alice_sdf_rounded_box_six_face_inflate`,
-//! `success_skadis_panel_canonical_alignment_2026_08_09`,
-//! `success_text_to_print_customizer_verification_methodology_2026_08_25`
 
 use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::mesh::{sdf_to_mesh, MarchingCubesConfig, Mesh};

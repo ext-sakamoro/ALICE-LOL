@@ -1,6 +1,6 @@
 //! Fuzz target: LOL DSL parser (`parse_lol`) が任意 input で panic しないことを検証
 //!
-//! canonical CI template [[reference_alice_ci_canonical_template]] 準拠
+//! ALICE-* 共通の CI 構成
 //! DSL parser は user-facing 面が広い = 攻撃対象になり得る (LLM 出力の grammar-constrained
 //! decoding 経由でも malformed DSL が入ってくる可能性あり)
 

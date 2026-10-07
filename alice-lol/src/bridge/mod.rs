@@ -46,8 +46,8 @@
 //!
 //! # What is out of scope here
 //!
-//! - Real-model end-to-end verification (Phase X.8 B-9 — Mac Metal +
-//!   Jetson Vulkan smoke run against a shipped GGUF).
+//! - Real-model end-to-end verification (Phase X.8 B-9 — Metal and
+//!   Vulkan smoke runs against a shipped GGUF).
 //! - Sampling knobs beyond greedy: [`generate_sdf_from_prompt`] hard-codes
 //!   `temperature = 1.0` (no scaling) and `top_k = 1` (strict argmax)
 //!   because DSL generation wants determinism, not diversity. A

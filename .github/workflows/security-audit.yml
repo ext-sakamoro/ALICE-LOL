@@ -1,6 +1,6 @@
 name: Security & Hygiene
 
-# canonical CI template: [[reference_alice_ci_canonical_template]]
+# ALICE-* 共通の CI 構成
 # ALICE-SDF v1.7.7 (commit 5a6056a) を base に ALICE-LOL 用に調整
 # ALICE-LOL は workspace (alice-lol / alice-lol-macro / alice-lol-humanoid)
 
@@ -186,9 +186,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # canonical 罠 #9-b/#9-c 準拠 (reference_alice_ci_canonical_template.md):
-      # todo!() / unimplemented!() は CLAUDE.md 仮実装規律が endorse する
-      # legitimate な fail-fast idiom なので informational のみ (ALICE-LOL
+      # todo!() / unimplemented!() は未実装を実行時に止める正当な
+      # fail-fast の書き方なので informational のみ (ALICE-LOL
       # は旧 (block する) 版から drift していた、2026-10-02
       # alice-world-auditor scaffold の todo!() stub landing で発覚して修正)
       # block するのは明示的な STUB marker と dbg!() 残留のみ
