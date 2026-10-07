@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `alice-lol`: `research_law` (単位付きの多変数の研究 Law)
+
+`research_law::ResearchLaw` を追加 式を文字列で書き (`+ - * / ^`、単項マイナス、括弧、`exp` / `ln` / `sqrt` / `sin` / `cos`)、
+入力と parameter に単位 (`Pa` / `kPa` / `J/(mol*K)` / `m^3` / `L` / `m/s^2` 等、SI への倍率と 7 基本次元) を持たせ、構築時に次元を検査する
+(`+` / `-` は同次元、`exp` 等の引数は無次元、指数は定数で結果の次元が整数、式の次元が出力と一致)
+`evaluate` は宣言した単位で入力を受け SI で評価して出力の単位で返し、成立範囲の外・非有限の入力は `OutOfRange`、0 除算等の非有限な途中値は `NonFinite` を返す (外挿しない、NaN を `Ok` で返さない)
+`compare` は `Bridge` (入力名の対応) で単位を換算して 2 つの式を同条件で評価し、差と相対差を返す (次元の違う対応は error)
+`ingest` は新しい観測を `alice_zip::law::SignalLaw::ingest` と同じ規則順で 支持 / parameter 更新 / residual 増 / 破綻 / 範囲外 / 証拠なし に判定する
+parameter 更新は全 parameter の最小二乗 (中心差分 Jacobian、部分 pivot 付き消去、step 半減、反復上限と収束閾値は公開定数) 残差統計は保持した観測から測る
+`ValidRange` / `ResidualStats` / `Provenance` / `IngestPolicy` は `alice-zip` (0.5、no_std の `law` module) と共有し、`alice-zip` を依存に追加 (default feature なし)
+example `research_law_demo` と解析解 oracle `tests/analytic_research_law.rs` (理想気体 / 自由落下 / kPa・L と SI の比較 / 判定 / 退化入力) を追加
+SDF の幾何制約を扱う既存の `law` module は変更していない
+
+### Changed — CI: `ALICE-Zip` を sibling として checkout
+
+`alice-lol` を build する job (ci / fuzz / quality-deep / security-audit) で `ext-sakamoro/ALICE-Zip` を `ALICE-Zip` に checkout する
+
 ### Added — `alice-world-auditor`: Phase 5 3 値判定 (`audit`、2026-10-04)
 
 `audit(body, config, goal, params) -> Audit` を追加 整数格子の探索で得た行動列を、渡された `PhysicsConfig` から作った新しい world で再生し、

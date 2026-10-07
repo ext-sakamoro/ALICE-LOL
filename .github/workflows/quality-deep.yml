@@ -90,6 +90,12 @@ jobs:
           repository: ext-sakamoro/ALICE-SDF
           path: ALICE-SDF
 
+      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+
       - uses: actions/checkout@v5
         with:
           repository: ext-sakamoro/ALICE-LLM

@@ -17,6 +17,9 @@ categories = ["graphics", "game-development", "mathematics"]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
 alice-sdf = { path = "../../ALICE-SDF", version = "4.0.0", default-features = false, features = ["glsl"] }
 glam = "0.29"
+# `research_law` が成立範囲 / 残差統計 / 出典 / 判定閾値の型を共有する
+# (no_std の `law` module だけを使うので default feature の zlib は引かない)
+alice-zip = { path = "../../ALICE-Zip", version = "0.5", default-features = false }
 # 深い LOL tree (stdlib product の subtract 2,400 連鎖等) を parse / emit する時、
 # parse_expr の大 frame × 再帰で 8 MB stack が尽きる → 再帰時に heap 上で
 # stack を伸ばす (rustc と同じ手法) MIT OR Apache-2.0
@@ -72,6 +75,9 @@ name = "pruning_demo"
 
 [[example]]
 name = "law_demo"
+
+[[example]]
+name = "research_law_demo"
 
 [[example]]
 name = "autodiff_demo"

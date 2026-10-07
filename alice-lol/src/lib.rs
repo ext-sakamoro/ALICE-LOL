@@ -65,6 +65,10 @@ pub mod pruned_compile;
 // LawSet ビルダー、静的矛盾検出、残差フィルタリング
 pub mod law;
 
+// ── 研究 Law (単位付きの多変数の式 + 成立範囲 + 残差 + 出典 + oracle) ──
+// 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う
+pub mod research_law;
+
 // ── Intent Layer (Milestone B.1、Phase 3 Intent 相 IR skeleton) ──
 // IntentNode + Program 独立型、GPU backend との型分離、L1 Physical Intent 14 verb + Sequence/Parallel
 pub mod intent;

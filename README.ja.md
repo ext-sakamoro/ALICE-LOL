@@ -61,6 +61,7 @@ DSL の `box3d` は**半幅**) は `alice-lol/tests/readme_parity.rs` が固定�
 - **3 シェーダ出力** — GLSL（デフォルト）、WGSL、HLSL（Hardcoded / Dynamic 両モード）
 - **空間枝刈りコンパイラ** — 区間演算で評価不要領域を除外、IFS フラクタルで最大 10 倍高速化
 - **法則制約チェッカー** — `NonOverlap`、`Containment`、`MinThickness`、ハード/ソフト優先度、空間座標レポート
+- **研究 Law** (`research_law`) — 単位付きの多変数の式 (`n*R*T/V` 等) を文字列で書き、次元を検査し、成立範囲の外では値を返さない 単位の違う 2 つの式を変数対応 (`Bridge`) で同条件に揃えて比較し、新しい観測を 支持 / parameter 更新 / residual 増 / 破綻 / 範囲外 に判定する 成立範囲・残差統計・出典の型は `alice-zip` の `law` module と共有 (SDF の幾何制約を扱う `law` とは別物)
 - **変数キャプチャ** — `{rust_expr}` または裸の変数名で Rust の値を DSL 内に注入
 - **自動微分** — 勾配、平均曲率、ガウス曲率、主曲率、ヘシアン
 - **CompiledSdf** — SIMD 8-wide バッチ評価、BVH 空間索引、Rayon 並列
@@ -237,6 +238,7 @@ let program = parallel(vec![
 | `showcase` | 全 120 構文のショーケース |
 | `pruning_demo` | 空間枝刈りコンパイラの効果比較 |
 | `law_demo` | 法則制約 — NonOverlap、Containment、MinThickness |
+| `research_law_demo` | 研究 Law — 理想気体の式を SI と (kPa, L) で書き、別条件の再計算 / 同条件比較 / oracle 照合 / 新しい観測の判定 |
 | `autodiff_demo` | 自動微分 — 勾配、曲率解析 |
 | `compiled_demo` | CompiledSdf — SIMD バッチ評価 |
 | `llm_bench` (`--features llm-bridge`) | LLM 生成品質 benchmark — 20 prompt (T1-T4) を oracle (SDF 点内外 / Intent verb 構造) で判定、grammar-only vs think→grammar の pass 率 (2026-09-14) |
@@ -274,6 +276,27 @@ let laws = LawSet::new()
     .add(Law::min_thickness(&node, 0.1), Priority::Soft(0.5));
 let report = laws.check();
 ```
+
+### 研究 Law (`research_law`)
+
+```rust
+use alice_lol::research_law::{compare, Bridge, Param, ResearchLaw, Var};
+use alice_zip::law::{Provenance, ValidRange};
+
+let gas = ResearchLaw::new(
+    "ideal gas",
+    "n*R*T/V",
+    Var::new("P", "Pa"),
+    &[Var::new("n", "mol"), Var::new("T", "K"), Var::new("V", "m^3")],
+    &[Param::new("R", 8.314462618, 0.0, "J/(mol*K)")],
+    &[("T", ValidRange { lo: 1.0, hi: 2000.0 })],
+    Provenance::new("equation of state", "closed form"),
+)?;
+let p = gas.evaluate(&[("n", 1.0), ("T", 300.0), ("V", 0.025)])?; // Pa
+// T = 5000 K は成立範囲の外なので OutOfRange (外挿しない)
+```
+
+`ingest(&observations, &policy)` の判定順は `alice_zip::law::SignalLaw::ingest` と同じ (証拠なし → 範囲外 → 支持 → parameter 更新 → residual 増 → 破綻) parameter 更新は全 parameter の最小二乗 (反復回数と収束閾値を固定した Gauss–Newton) 残差は保持した観測から測った値で、自己申告の値は持たない 解析解 oracle は `tests/analytic_research_law.rs` (理想気体 / 自由落下 / 単位換算 / 判定 5 種 / 退化入力)
 
 ## 品質
 
