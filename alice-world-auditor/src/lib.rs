@@ -27,8 +27,10 @@
 //!   goal then holds exactly in `Fix128` and the engine's overflow flag is
 //!   not set. Sufficient conditions for `Proven` on a reachable target:
 //!   `a_max_axis * dt` and `dt` dyadic (exact in `Fix128`), damping `1`,
-//!   zero gravity along the goal axis. Otherwise the answer is
-//!   `Undecided`, with the reason.
+//!   zero gravity and no starting velocity off the goal axis. They are
+//!   not necessary: a plan outside them is `Proven` when its replay still
+//!   ends in the goal exactly. Otherwise the answer is `Undecided`, with
+//!   the reason.
 //! - `plan` (feature `physics`): the lattice search followed by driving
 //!   the caller's world. Its `Ok(Optimal)` is a lattice claim only and is
 //!   not checked against the engine.
@@ -46,10 +48,16 @@
 //!
 //! # `AtRest` in the search vs. in the engine
 //!
-//! The search decides `AtRest` as "lattice `S == 0`". The engine re-derives
-//! velocity from a position delta every substep, so for a non-dyadic
-//! `a*dt` / `dt` its velocity after the same plan is a few ulp away from
-//! zero; `audit` reports that as `Undecided` rather than hiding it.
+//! The search decides `AtRest` as "lattice `S == 0`" on the goal axis. In
+//! the engine a body no constraint or contact moves keeps its predicted
+//! velocity bit for bit, so under zero gravity and damping `1` the final
+//! `v.x` is the start velocity plus the injected impulses, exactly: a
+//! rest-to-rest plan from rest ends at `v.x == 0` even for a non-dyadic
+//! `a*dt` / `dt`, and only the position carries the rounding. `AtRest` in
+//! the engine is the whole linear velocity, so a velocity off the goal
+//! axis (a starting drift, gravity on `y` / `z`), or a start velocity that
+//! is not a whole number of `a*dt` steps, leaves it non-zero; `audit`
+//! reports that as `Undecided` rather than hiding it.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -678,12 +686,14 @@ fn exact_state(body: &alice_physics::RigidBody, target: &FixAabb) -> (bool, bool
 ///
 /// For a reachable target, the replay matches the lattice exactly when
 /// `a_max_axis * dt` and `dt` are dyadic (exact in `Fix128`, e.g.
-/// `a = 4, dt = 1/64`), `config.damping == 1`, gravity is zero along the
-/// goal axis, and `target`'s `x` window contains a lattice point. When any
-/// of these fails (e.g. `dt = 1/60`, or the default damping `0.99`), the
-/// replay generally misses the goal and the answer is
-/// [`UndecidedCause::ReplayMismatch`] — never a `Proven` the engine does
-/// not back.
+/// `a = 4, dt = 1/64`), `config.damping == 1`, gravity is zero, the body
+/// has no starting velocity off the goal axis, and `target`'s `x` window
+/// contains a lattice point. These are sufficient, not necessary: `Proven`
+/// rests on the replay, so a plan outside them (e.g. `dt = 1/60`) is
+/// `Proven` when its replay still ends in the goal exactly. When the replay
+/// misses (e.g. the default damping `0.99`, or a non-dyadic position that
+/// rounds past an edge), the answer is [`UndecidedCause::ReplayMismatch`] —
+/// never a `Proven` the engine does not back.
 ///
 /// # When `Violated` is returned
 ///

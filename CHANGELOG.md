@@ -467,6 +467,20 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### `alice-world-auditor`: Phase 5 の oracle を `alice-physics` の XPBD 速度の修正に追従
+
+`alice-physics` の XPBD は、拘束も接触も動かさなかった body の線速度を予測速度のまま保つようになった (位置差からの再導出をやめた)
+これに合わせて `tests/phase5_verdict_oracles.rs` の 3 件を更新
+
+- 正負の impulse が同数の行動列では速度が厳密に `0` になる dyadic でない 537 frame の scene は位置だけが target を外れる
+  (`ReplayMismatch`、`at_rest == true`) として前提を書き直した
+- dyadic でない行動列 (`a = 5, dt = 1/60`、target [0.9, 1.1]、51 frame) は再生結果が target 内で速度 `0` になり `Proven` を返す
+  `Proven` の根拠は再生結果で、dyadic な `a*dt` / `dt` は十分条件の 1 つにすぎない この scene を `Proven` の oracle に変更した
+- 「target 内だが動いている」場合の `Undecided` は、goal 軸以外の初速度 (`v.y = 1/64`) を持つ dyadic な scene で閉形式から検査する
+- overflow する substep では範囲内の速度が保たれるため、旧 scene では最終状態が goal を満たさなくなった
+  位置だけの goal で、1 substep 進んだ位置が target 内に残る scene に置き換え、`Undecided(Overflow)` を検査する
+- `audit` の doc と crate README の `Proven` の十分条件を「重力 0、goal 軸以外の初速度 0」に改め、十分条件であって必要条件ではないことを明記した
+
 #### `research_law` を `alice-det-math` で評価
 
 - 超越関数 (`exp` / `ln` / `sqrt` / `sin` / `cos` / 非整数の冪) を `alice-det-math` 0.3.2 の f64 関数で評価し、整数の冪と単位の倍率は下位 bit からの繰り返し 2 乗で計算する ⇒ 同じ法則と条件はどの platform でも同じ bit を返す (`tests/research_law_bit_exact.rs`)

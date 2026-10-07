@@ -31,9 +31,11 @@ IDA\* (`k = 1`、1 frame に 1 行動) で探索し、得た行動列を呼び�
 | `Violated` | (1) target が空、(2) `a_max_axis == 0` かつ body が静止・重力 0・target 外、の 2 件のみ | `Violation` |
 
 **`Proven` になる十分条件** (到達可能な target の場合): `a_max_axis * dt` と `dt` が dyadic
-(`Fix128` で厳密に表せる、例 `a = 4`、`dt = 1/64`)、damping が `1`、goal 軸方向の重力が 0
-`dt = 1/60` や既定の damping `0.99` では格子上の行動列が engine 上で厳密に再現されず、結果は
-`Undecided` (`ReplayMismatch`) になる engine が裏付けない `Proven` は返さない `plan`
+(`Fix128` で厳密に表せる、例 `a = 4`、`dt = 1/64`)、damping が `1`、重力が 0、goal 軸以外の
+初速度が 0 これは十分条件で必要条件ではない `Proven` の根拠は再生結果なので、`dt = 1/60` の
+行動列でも再生結果が goal を厳密に満たせば `Proven` になる 再生結果が goal を外れる場合
+(既定の damping `0.99`、dyadic でない位置の丸めが端を越える場合) は `Undecided`
+(`ReplayMismatch`) になる engine が裏付けない `Proven` は返さない `plan`
 (格子探索の後に呼び出し側の world を駆動する関数) の挙動は変えていない その `Ok(Optimal)`
 は格子上の主張で、engine 上の成立は検査していない
 

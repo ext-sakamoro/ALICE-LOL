@@ -37,10 +37,13 @@ the caller's `PhysicsConfig` and returns `Proven` / `Violated` /
 
 **Sufficient conditions for `Proven`** on a reachable target:
 `a_max_axis * dt` and `dt` are dyadic (exact in `Fix128`, e.g. `a = 4`,
-`dt = 1/64`), damping is `1`, and gravity along the goal axis is zero.
-With `dt = 1/60` or the default damping `0.99`, the lattice plan does not
-replay exactly and the answer is `Undecided` (`ReplayMismatch`), not a
-`Proven` the engine does not back. `plan` (the lattice search that drives
+`dt = 1/64`), damping is `1`, gravity is zero, and the body has no
+starting velocity off the goal axis. They are sufficient, not necessary:
+`Proven` rests on the replay, so a plan with `dt = 1/60` is `Proven` when
+its replay still ends in the goal exactly. When the replay misses (the
+default damping `0.99`, or a non-dyadic position that rounds past an
+edge), the answer is `Undecided` (`ReplayMismatch`), not a `Proven` the
+engine does not back. `plan` (the lattice search that drives
 the caller's world) is unchanged; its `Ok(Optimal)` is a lattice claim and
 is not checked against the engine.
 
