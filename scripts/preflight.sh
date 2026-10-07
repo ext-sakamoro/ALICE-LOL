@@ -92,6 +92,12 @@ step "ci.yml / wiring-guard: oracle + 新規の未配線 / 理由の無い dead_
 python3 scripts/test_wiring_guard.py
 python3 scripts/wiring_guard.py
 
+step "ci.yml / docs: readme_sync + docs_lint (oracle + check)"
+python3 scripts/test_readme_sync.py
+python3 scripts/readme_sync.py --check
+python3 scripts/test_docs_lint.py
+python3 scripts/docs_lint.py --check
+
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 
@@ -201,6 +207,9 @@ fi
 step "ci.yml / test: Test"
 ( export CARGO_TERM_COLOR="always"; cargo test )
 
+step "ci.yml / test: Law oracles (each target ran at least one test)"
+( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default )
+
 step "ci.yml / test: Test [features=--features llm-bridge]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features llm-bridge )
 
@@ -209,6 +218,9 @@ step "ci.yml / test: Test [features=--features glsl,wgsl,hlsl]"
 
 step "ci.yml / test: Test [features=--features physics]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features physics )
+
+step "ci.yml / test: Law oracles (physics, each target ran at least one test)"
+( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh physics )
 
 step "ci.yml / test: Test [features=--features roblox]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features roblox )

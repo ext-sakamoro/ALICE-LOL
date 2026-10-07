@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### README とコードの一致を検査する gate (`scripts/readme_sync.py`)
+
+README.md / README_JP.md の構文表 (グループごと) が `alice-lol/src/syntax_table.rs` の名前の一覧と過不足・重複なく一致すること、
+`lol!` マクロが受け付ける名前が `stdlib` グループと `RUNTIME_ONLY` を除いた構文表と一致すること、
+法則表が `law::Constraint` の variant と一致し各行の根拠が `Constraint::evidence_class` の返す値と一致すること、
+`research_law` の判定表が `ResearchVerdict` の variant と一致すること、feature 表が `[features]` と、MSRV 行が `rust-version` と一致すること、
+最初の ```` ```rust ```` block が crate doc の doctest と同一であること、相対リンクの実在、英日の節数を検査する どの検査も比較 0 件なら fail
+`scripts/test_readme_sync.py` (27 本) が各検査の歯を確かめる ci.yml の `docs` job (3 OS) と preflight で実行
+
+#### parser の名前の一覧と、それを parser と突き合わせる test (`alice-lol/src/syntax_table.rs`)
+
+runtime parser は名前の `match` で dispatch するので、名前の一覧を test 専用 (`#[cfg(test)]`) の表として置いた
+test が 2 方向で一致を確かめる: `parse_expr_inner` / `parse_intent` の dispatch の腕を source から読んだ集合と表が一致すること、
+表の全名前について不完全な呼び出しが「unknown」以外の error になること (未知の名前の対照つき) 公開 API は変えていない
+
+#### 法則の oracle を target ごとに走らせる step (`scripts/law_tests.sh`)
+
+`law_tests` / `law_corpus_oracle` / `analytic_law` / `test_field_law_oracle` / `analytic_research_law` /
+`interior_lipschitz_bound_probe` / `print_tests` / `analytic_robot_law` / `alice-lol` の `law` unit test と、
+feature `physics` の `analytic_thermal` を 1 target ずつ `scripts/cargo_test_nonzero.sh` に通し、0 件実行なら fail にする
+`law::` / `research_law` を使う test file が一覧に無い場合も fail ci.yml の test job (既定 entry と `physics` entry) と preflight で実行
+
+#### 公開文書と tracked file の語彙検査 (`scripts/docs_lint.py`)
+
+README.md / README_JP.md / CHANGELOG.md と全 tracked file について、開発の進め方を表す語・内部の記録名・機器名・
+private address を検査し、CHANGELOG の版見出しの順序と `[Unreleased]` の分類 (各 1 回、絵文字なし) を検査する
+固有名は SHA-256 で照合し、検査器に平文で持たない `skills/` 以下は言語モデル向けツールの package 形式なので、
+その形式名の語はその中でだけ許す (path の `skills/` はどこでも語として数えない) ci.yml の `docs` job (3 OS) と preflight で実行
+
 #### `alice-lol`: `research_law` (単位付きの多変数の研究 Law)
 
 `research_law::ResearchLaw` を追加 式を文字列で書き (`+ - * / ^`、単項マイナス、括弧、`exp` / `ln` / `sqrt` / `sin` / `cos`)、
@@ -440,6 +469,23 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 - 超越関数 (`exp` / `ln` / `sqrt` / `sin` / `cos` / 非整数の冪) を `alice-det-math` 0.3.2 の f64 関数で評価し、整数の冪と単位の倍率は下位 bit からの繰り返し 2 乗で計算する ⇒ 同じ法則と条件はどの platform でも同じ bit を返す (`tests/research_law_bit_exact.rs`)
 - `alice-zip` の下限を `law` module を含む 0.5.1 に上げた
+
+#### README を書き直し、`README.ja.md` を `README_JP.md` に改名
+
+英日で同じ節構成 (向き不向き / インストール / 使用例 / 位置づけ / 構文 / 幾何法則 / 研究 Law / crate / feature / example / MSRV / ビルドとテスト / 関連 crate / ライセンス) にした
+使用例は crate doc の doctest と同一 (doctest は `ignore` を外してコンパイル・実行する形に変更)
+構文表はグループごとに parser の名前の一覧と一致させ、`terrain` と `capsule_ab` の記載漏れを解消した
+検査されていない件数・版数・日付つきの見出し・非公開 repository への言及を削除した `research_law` の節に、
+超越関数を `alice-det-math` の `f64` 関数で評価して全プラットフォームで bit 一致にすることを記載
+`alice-lol` の crates.io 向け README を root の README.md に変更し、内容が古くなっていた `alice-lol/README.md` を削除
+
+#### コメントと文書の表記を整理
+
+コメント・workflow・文書から内部の記録名・機器名・home directory の path を除き、技術的な内容は残した
+個人のローカル設定ファイルの ignore を `.gitignore` から外した (各 clone の `.git/info/exclude` で扱う)
+`scripts/wiring_guard.py` は隠しディレクトリを一律に走査対象から外す
+CHANGELOG の `[Unreleased]` を Keep a Changelog の分類ごとに 1 つへまとめ、各項目の見出しを `####` にした
+
 
 #### CI: `ALICE-Zip` を sibling として checkout
 
