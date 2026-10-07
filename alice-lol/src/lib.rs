@@ -1,23 +1,39 @@
-//! # ALICE-LOL: Law-Oriented Language v0.1
+//! # ALICE-LOL: Law-Oriented Language
 //!
-//! `proc_macro` DSL that compiles LOL syntax → `SdfNode` → GLSL/WGSL/HLSL.
+//! A text language for signed distance fields: the `lol!` macro (compile time)
+//! and [`runtime_parser`] (run time) turn the same text into an
+//! [`SdfNode`] tree, which can be evaluated on the CPU, transpiled to
+//! GLSL / WGSL / HLSL, exported for 3D printing, and checked against
+//! geometric constraints ([`law`]). [`research_law`] holds unit-checked
+//! formulas with valid ranges, residuals and provenance.
 //!
-//! ## Quick Start
-//!
-//! ```ignore
+//! ```rust
 //! use alice_lol::lol;
+//! use alice_lol::runtime_parser::parse_lol;
+//! use alice_lol::Vec3;
 //!
-//! let node = lol! {
-//!     field MyScene {
-//!         smooth_union(0.2,
-//!             sphere(1.0),
-//!             translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5))
-//!         )
-//!     }
+//! // Compile time: the macro builds the tree
+//! let scene = lol! {
+//!     smooth_union(0.2,
+//!         sphere(1.0),
+//!         translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5))
+//!     )
 //! };
 //!
-//! let glsl = alice_lol::to_glsl(&node);
-//! println!("{glsl}");
+//! // Run time: the same text through the parser (from a file or a language model)
+//! let parsed = parse_lol(
+//!     "smooth_union(0.2, sphere(1.0), translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5)))",
+//! )
+//! .unwrap();
+//!
+//! // Both are the same field; the origin is inside the sphere
+//! let p = Vec3::new(0.3, 0.1, 0.0);
+//! assert_eq!(alice_lol::eval(&scene, p), alice_lol::eval(&parsed, p));
+//! assert!(alice_lol::eval(&scene, Vec3::ZERO) < 0.0);
+//!
+//! // GLSL source for a shader (default feature `glsl`)
+//! let glsl = alice_lol::to_glsl(&scene);
+//! assert!(!glsl.is_empty());
 //! ```
 
 // ── ランタイム LOL パーサー（LLM Text-to-3D 用） ──
@@ -68,6 +84,10 @@ pub mod law;
 // ── 研究 Law (単位付きの多変数の式 + 成立範囲 + 残差 + 出典 + oracle) ──
 // 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う
 pub mod research_law;
+
+// ── 構文名の一覧 (parser の dispatch と README の構文表を突き合わせる test 専用) ──
+#[cfg(test)]
+mod syntax_table;
 
 // ── Intent Layer (Milestone B.1、Phase 3 Intent 相 IR skeleton) ──
 // IntentNode + Program 独立型、GPU backend との型分離、L1 Physical Intent 14 verb + Sequence/Parallel

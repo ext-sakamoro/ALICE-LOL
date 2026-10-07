@@ -1,384 +1,370 @@
 # ALICE-LOL
 
-**Law-Oriented Language — SDF DSL as Rust proc_macro**
+[![crates.io](https://img.shields.io/crates/v/alice-lol.svg)](https://crates.io/crates/alice-lol)
+[![docs.rs](https://img.shields.io/docsrs/alice-lol)](https://docs.rs/alice-lol)
+[![MSRV](https://img.shields.io/crates/msrv/alice-lol)](#msrv)
+[![CI](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#license)
 
-> "Don't write instructions. Declare laws."
+English | [日本語](README_JP.md)
 
-LOL（Law-Oriented Language）は、ALICE-SDF エコシステム向けの法則指向 DSL。
-`lol!` マクロで SDF シーンを宣言的に記述し、コンパイル時に `SdfNode` → GLSL / WGSL / HLSL へトランスパイルする。
+A text language for signed distance fields. The `lol!` macro (compile time) and
+the runtime parser turn the same text into an
+[ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) `SdfNode` tree, which can
+be evaluated on the CPU, transpiled to GLSL / WGSL / HLSL, exported as a mesh
+for 3D printing, and checked against geometric constraints whose verdict is
+three-valued (satisfied / violated / undecided). A separate module,
+`research_law`, holds unit-checked formulas with valid ranges, residuals and
+provenance.
+
+## What it is for, and what it is not for
+
+It is for writing geometry as short text that both people and language models
+can produce: the grammar shipped with the crate ([`alice-lol/lol.gbnf`](alice-lol/lol.gbnf))
+can constrain a model's decoding so that only parseable text comes out, and the
+parser turns that text into a field you can evaluate, render or print.
+
+It is not a CAD kernel: there is no boundary representation, no assembly
+mating and no STEP output. Distance evaluation, compiled backends, shader
+transpilers and meshing belong to ALICE-SDF; this crate is the language on top
+of it. The geometric law checker answers questions about a field on a sampling
+grid and reports what it could not decide instead of passing it; it is not a
+finite-element solver.
+
+## Installation
+
+```bash
+cargo add alice-lol
+```
+
+The path dependencies of this repository (`alice-sdf`, `alice-zip`, and the
+optional `alice-physics` / `alice-llm`) are expected as sibling checkouts when
+building from source; see [Building and testing](#building-and-testing).
+
+## Example
 
 ```rust
 use alice_lol::lol;
+use alice_lol::runtime_parser::parse_lol;
+use alice_lol::Vec3;
 
+// Compile time: the macro builds the tree
 let scene = lol! {
-    field MyScene {
-        smooth_union(0.2,
-            sphere(1.0),
-            translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5))
-        )
-    }
+    smooth_union(0.2,
+        sphere(1.0),
+        translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5))
+    )
 };
 
+// Run time: the same text through the parser (from a file or a language model)
+let parsed = parse_lol(
+    "smooth_union(0.2, sphere(1.0), translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5)))",
+)
+.unwrap();
+
+// Both are the same field; the origin is inside the sphere
+let p = Vec3::new(0.3, 0.1, 0.0);
+assert_eq!(alice_lol::eval(&scene, p), alice_lol::eval(&parsed, p));
+assert!(alice_lol::eval(&scene, Vec3::ZERO) < 0.0);
+
+// GLSL source for a shader (default feature `glsl`)
 let glsl = alice_lol::to_glsl(&scene);
+assert!(!glsl.is_empty());
 ```
 
-## Where this sits: LOL writes the law, ALICE-SDF evaluates it
+The two front ends differ in one convention: `SdfNode::box3d` takes **full**
+extents, the DSL's `box3d` takes **half** extents. Both notations of the same
+shape are compared in [`alice-lol/tests/readme_parity.rs`](alice-lol/tests/readme_parity.rs).
 
-This crate is a **language**. It parses to
-[ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF)'s `SdfNode` tree and hands
-it over — ALICE-SDF owns the distance functions, the compiled backends
-(scalar / SIMD / BVH / JIT), the shader transpilers and the mesh pipeline. What
-LOL adds on top is the authoring surface (text in, tree out: `lol!` macro,
-runtime parser, GBNF grammar for LLM constrained decoding) and the **law
-verifier**, whose three values (satisfied / violated / *undecided*) never
-promote "not found" to a pass.
+## Where it sits
 
-The same shape in both notations, and the one argument convention that differs
-(`SdfNode::box3d` takes **full** extents, the DSL's `box3d` takes **half**
-extents), are pinned by `alice-lol/tests/readme_parity.rs` and documented in
-[ALICE-SDF's README](https://github.com/ext-sakamoro/ALICE-SDF#two-front-ends-this-crates-api-or-the-lol-language).
+| Crate | Owns |
+|-------|------|
+| ALICE-LOL | the language (macro, runtime parser, grammar, `SdfNode` → text emitter) and the law checkers |
+| [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) | distance functions, compiled backends (scalar / SIMD / BVH), shader transpilers, meshing |
+| [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) | fixed-point rigid bodies and the heat solver behind `Constraint::ThermalField` (feature `physics`) |
+| [ALICE-DetMath](https://github.com/ext-sakamoro/ALICE-DetMath) | `sin` / `cos` / `exp` / `ln` … with a bit-exact contract, shared instead of platform libm |
+| [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip) | the `law` vocabulary (valid range, residual statistics, provenance, ingest policy) that `research_law` shares |
 
-## How the core crates lock together
+Keep `alice-det-math` unified across the resolved dependency graph: two
+versions in one tree are two implementations of the same function. Check with
+`cargo tree -i alice-det-math`.
 
-These four are built as one mechanism rather than as a bundle. Each owns exactly
-one thing, and the seams between them are the point:
+## Syntax
 
-| Crate | Owns | The joint |
-|-------|------|-----------|
-| [ALICE-LOL](https://github.com/ext-sakamoro/ALICE-LOL) | the language and the law verifier | parses to ALICE-SDF's `SdfNode`; verdicts are three-valued (satisfied / violated / *undecided*) and *undecided* is never promoted to a pass |
-| [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) | the distance functions and every backend (scalar / SIMD / BVH / JIT / shader transpilers / mesh) | evaluates the tree LOL writes, and supplies colliders to ALICE-Physics |
-| [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) | 128-bit fixed-point rigid bodies, CCD, XPBD | collides against the same field that is rendered, instead of a second approximation of it |
-| [ALICE-DetMath](https://github.com/ext-sakamoro/ALICE-DetMath) | `sin` / `cos` / `atan2` … under a bit-exact contract | the joint itself — ALICE-SDF and ALICE-Physics both call it instead of platform libm |
+Every name below is accepted by `alice_lol::runtime_parser::parse_lol`. The
+`lol!` macro accepts the same names except the `stdlib` group and
+`capsule_ab`. Arguments are numbers (or, in the macro, `{rust_expr}` / bare
+identifiers) followed by child expressions; the argument order of each name is
+in [LLM_REFERENCE.md](LLM_REFERENCE.md) and in the grammar. Text may be wrapped
+as `field Name { ... }`. The runtime parser accepts `//` comments; the grammar,
+written for model decoding, does not.
 
-The coupling exists for one property: **the same input has to produce the same
-bits on every platform.** A field that disagrees with itself across machines
-cannot be printed to spec, verified by a law, or replayed in lockstep, so the
-transcendentals are shared rather than reimplemented per crate.
+Primitives:
 
-> Keep `alice-det-math` unified across the resolved graph. Two versions in one
-> dependency tree means two implementations of the same function, and the
-> guarantee is gone. Check with `cargo tree -i alice-det-math`.
+<!-- readme-sync: syntax-primitives -->
+```text
+sphere box3d rounded_box cylinder torus cone capsule capsule_ab ellipsoid
+plane octahedron rounded_cone pyramid hex_prism link capped_cone capped_torus
+rounded_cylinder tube barrel heart egg helix tetrahedron box_frame diamond
+star_polygon cross_shape triangle bezier triangular_prism cut_sphere
+cut_hollow_sphere death_star solid_angle rhombus horseshoe vesica
+infinite_cylinder infinite_cone gyroid chamfered_cube schwarz_p superellipsoid
+rounded_x pie trapezoid parallelogram tunnel uneven_capsule arc_shape moon
+blobby_cross parabola_segment regular_polygon stairs_prim dodecahedron
+icosahedron truncated_octahedron truncated_icosahedron diamond_surface neovius
+lidinoid iwp frd fischer_koch_s pmy circle_2d rect_2d segment_2d
+rounded_rect_2d annular_2d terrain
+```
+
+CSG operations (the variadic ones fold left):
+
+<!-- readme-sync: syntax-csg -->
+```text
+union smooth_union intersection smooth_intersection subtract smooth_subtract
+chamfer_union chamfer_intersection chamfer_subtraction stairs_union
+stairs_intersection stairs_subtraction xor pipe engrave groove tongue
+columns_union columns_intersection columns_subtraction exp_smooth_union
+exp_smooth_intersection exp_smooth_subtraction
+```
+
+Transforms:
+
+<!-- readme-sync: syntax-transforms -->
+```text
+translate rotate scale scale_non_uniform
+```
+
+Modifiers:
+
+<!-- readme-sync: syntax-modifiers -->
+```text
+round onion twist bend mirror repeat elongate revolution extrude taper
+displacement polar_repeat shear noise repeat_finite octant_mirror
+icosahedral_symmetry with_material surface_roughness sweep_bezier
+```
+
+3D-print infill (shell plus lattice):
+
+<!-- readme-sync: syntax-print -->
+```text
+lattice_infill diamond_infill schwarz_infill
+```
+
+Time:
+
+<!-- readme-sync: syntax-time -->
+```text
+animate morph
+```
+
+<details>
+<summary>Product and mechanical shortcuts (runtime parser only)</summary>
+
+<!-- readme-sync: syntax-stdlib -->
+```text
+shopping_cart_coin skadis_panel skadis_hook_l skadis_hook_j skadis_hook_s
+skadis_container skadis_clip skadis_shelf skadis_elastic_cord mug
+gridfinity_bin gridfinity_bin_ex wall_hook drawer_organizer shelf_divider
+sticky_note_holder business_card_holder pen_cup phone_stand headphone_holder
+under_desk_mount desk_shelf monitor_riser coaster tissue_box_cover storage_box
+cable_clip led_channel card_tray token_well wrench_holder socket_rail
+hex_bit_holder raspi_case esp32_enclosure battery_18650_holder
+toothbrush_holder drill_bit_holder pliers_rack spice_rack egg_tray
+utensil_caddy filament_spool_holder nozzle_holder build_plate_rack
+cutlery_tray pill_organizer magnetic_strip hairdryer_holder kcup_holder
+hex_key_holder wrap_holder sock_divider soap_tray razor_holder
+chopstick_holder swatch_holder tp_holder sd_card_holder driver_rack
+cotton_dispenser sink_caddy clamp_rack dry_box outdoor_enclosure jewelry_stand
+phone_dock cutting_board_rack tape_dispenser shower_caddy caliper_holder
+bag_clip_org can_rack led_hub_box makeup_organizer vesa_mount l_bracket
+t_slot_bracket_2020 raspi_mount_plate heat_set_array flange_mount
+dovetail_pair profile_extrusion snap_fit_pair boss_array screw_hole tap_hole
+counterbore countersink heat_set_hole bolt bracket_l flange_circular
+t_slot_2020 profile_2020 profile_3030 dovetail slot snap_fit_annular
+pin_hinge_knuckle boss rib bearing_seat rack_shelf cable_grommet
+curtain_rod_bracket dowel_hole wood_screw_pilot arduino_mount_plate
+pixhawk_mount servo_mount jst_ph_slot
+```
+
+</details>
+
+`runtime_parser::parse_program` also reads
+`program(<sdf>, entities(<sdf>, ...), <intent>)`, where the intent is built
+from these verbs (`turn` is the text form of the rotate verb, since `rotate`
+is the SDF transform):
+
+<!-- readme-sync: syntax-intent -->
+```text
+grasp release catch walk gaze point throw push pull turn align follow avoid
+rest latent seq par music
+```
+
+## Geometric laws (`law`)
+
+`law::Constraint` declares a property of a field; `LawSet` collects them with
+a hard or soft priority and checks them on a grid. Each sample point ends as
+satisfied, violated or **undecided**, and undecided points are reported in
+`LawReport::unresolved` instead of being counted as passes. `LawReport::hard_verdict`
+returns `Proven` / `Violated` / `Undecided` for the hard constraints.
+
+The distance-dependent constraints do not read the field value as a distance
+(that is wrong for TPMS surfaces and inside unions): a box is proved free of
+surface by interval arithmetic, and an upper bound on the distance to the
+surface comes from a sign change between two evaluated points.
+
+Each constraint has an evidence class (`Constraint::evidence_class`).
+`Modelled` constraints rest on a model (grid resolution, a threshold, a
+proxy) and cannot be added with `Priority::Hard`.
+
+<!-- readme-sync: laws -->
+| Constraint | Checks | Evidence |
+|------------|--------|----------|
+| `NonOverlap` | two fields do not overlap | `Witnessed` |
+| `Containment` | one field lies inside another | `Witnessed` |
+| `MinThickness` | the wall is at least a given thickness | `Witnessed` |
+| `Stress` | wall thickness near load points scales with the load (geometric proxy) | `Modelled` |
+| `Thermal` | surface-to-volume ratio near heat sources (geometric proxy) | `Modelled` |
+| `Contact` | the gap between two fields lies in a range | `Witnessed` |
+| `Continuity` | the interior is one connected region (flood fill) | `Modelled` |
+| `GradientBound` | the field gradient stays under a bound | `Witnessed` |
+| `Reachable` | two interior points are connected through the interior | `Proved` |
+| `VolumeConservation` | volume before and after a change agrees within a tolerance | `Modelled` |
+| `ThermalField` (feature `physics`) | the peak temperature of a solved heat field stays under a limit, bracketed between an insulated and an isothermal surface | `Modelled` |
+
+Closed-form oracles: [`alice-lol/tests/analytic_law.rs`](alice-lol/tests/analytic_law.rs),
+[`alice-lol/tests/test_field_law_oracle.rs`](alice-lol/tests/test_field_law_oracle.rs);
+the grammar corpus against a brute-force refuter:
+[`alice-lol/tests/law_corpus_oracle.rs`](alice-lol/tests/law_corpus_oracle.rs).
+
+## Research laws (`research_law`)
+
+`research_law` is unrelated to the geometric `law` module. A `ResearchLaw` is
+a claim about data, `output = f(inputs; parameters)`, written as text
+(`n*R*T/V`) together with:
+
+- **units and dimensions**: inputs, output and parameters carry units
+  (`Pa`, `kPa`, `J/(mol*K)`, `m^3`, `L`, …); the dimension of the expression
+  is checked when the law is built (`+` / `-` need equal dimensions, `exp` /
+  `ln` / `sin` / `cos` need a dimensionless argument, the result must have the
+  output's dimension)
+- **valid ranges**: evaluation outside the range of an input is refused
+  (`OutOfRange`); the law does not extrapolate, and a non-finite intermediate
+  value is an error rather than a NaN
+- **residuals**: measured from the stored observations, not reported numbers
+- **provenance** and **oracles**: where the law comes from, and reference values
+  it has to reproduce within a tolerance (`check_oracles`)
+- **comparison**: `compare` evaluates two laws written in different units under
+  the same conditions through a `Bridge` (input-name mapping with unit conversion)
+- **new evidence**: `ingest` judges new observations, in the rule order of
+  `alice_zip::law::SignalLaw::ingest`; a parameter update is a least-squares
+  refit of all parameters (Gauss–Newton with a fixed iteration limit and
+  tolerance)
+
+<!-- readme-sync: research-verdicts -->
+| Verdict | Meaning |
+|---------|---------|
+| `NoEvidence` | no observations were given |
+| `OutOfRange` | some observations lie where the law cannot be evaluated; nothing was judged |
+| `Supports` | the new observations agree with the law within the band |
+| `ParameterUpdate` | the same expression fits stored and new evidence with refitted parameters |
+| `ResidualGrew` | the deviation exceeds the band but not the break threshold |
+| `Breaks` | the evidence is not described by this law |
+
+The transcendental functions of an expression (`exp`, `ln`, `sqrt`, powers,
+`sin`, `cos`) are evaluated through `alice-det-math`'s `f64` functions instead
+of the platform math library, and the evaluation is a fixed sequence of `f64`
+operations without fused multiply-add, so the same inputs give the same bits on
+every platform. Range, residual, provenance and policy types are those of
+`alice_zip::law`. Example: [`research_law_demo`](alice-lol/examples/research_law_demo.rs);
+oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_research_law.rs).
+
+## Crates in this workspace
+
+| Crate | Role |
+|-------|------|
+| `alice-lol-macro` | the `lol!` proc-macro |
+| `alice-lol` | runtime parser, emitter, transpile and export functions, law checkers, intent IR, stdlib shapes |
+| `alice-lol-humanoid` | parametric humanoid template (joint FK, VRM / BVH import) |
+| `alice-lol-robot` | intent verbs to humanoid FK and an 8-byte kinematics packet, with a safety law |
+| `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law |
+| `alice-lol-datagen` | synthetic (caption, LOL) pair generator with self-check (not published) |
+| `alice-world-auditor-types` | goal and verdict types shared by law checkers and planners |
+| `alice-world-auditor` | planner over `alice-physics` worlds with three-valued verdicts (AGPL-3.0-or-later or commercial) |
 
 ## Features
 
-- **123 DSL 構文** — 71 プリミティブ、23 CSG オペレーション、4 トランスフォーム、20 モディファイア、3 3Dプリント構造意図、2 時間制御、3 法則制約
-- **3 シェーダ出力** — GLSL (default), WGSL, HLSL（Hardcoded / Dynamic 両モード）
-- **空間枝刈りコンパイラ** — 区間演算で評価不要領域を除外、IFS フラクタルで最大 10x 高速化
-- **法則制約チェッカー** — `NonOverlap`, `Containment`, `MinThickness`、ハード/ソフト優先度、空間座標レポート
-- **研究 Law** (`research_law`) — 単位付きの多変数の式 (`n*R*T/V` 等) を文字列で書き、次元を検査し、成立範囲の外では値を返さない 単位の違う 2 つの式を変数対応 (`Bridge`) で同条件に揃えて比較し、新しい観測を 支持 / parameter 更新 / residual 増 / 破綻 / 範囲外 に判定する 成立範囲・残差統計・出典の型は `alice-zip` の `law` module と共有 (SDF の幾何制約を扱う `law` とは別物)
-- **変数キャプチャ** — `{rust_expr}` または裸の変数名で Rust の値を DSL 内に注入
-- **Autodiff** — 勾配、平均曲率、ガウス曲率、主曲率、ヘシアン
-- **CompiledSdf** — SIMD 8-wide バッチ評価、BVH 空間索引、Rayon 並列
-- **Physics bridge** — `physics` feature で ALICE-Physics 連携
-
-## Architecture
-
-```
-┌──────────────────────────────────────────┐
-│  lol! { sphere(1.0) ∪ box3d(0.5,0.5,0.5) }  │  ← Rust ソース内 proc_macro
-└─────────────────┬────────────────────────┘
-                  │ cargo build (コンパイル時)
-                  ▼
-┌──────────────────────────┐
-│  alice-lol-macro          │  ← syn + quote パーサー
-│  LOL DSL → SdfNode 生成   │
-└─────────────────┬────────┘
-                  ▼
-┌──────────────────────────┐
-│  alice-sdf                │
-│  ├─ eval()        CPU 評価 │
-│  ├─ interval.rs   枝刈り   │
-│  ├─ glsl.rs       GLSL    │
-│  ├─ wgsl.rs       WGSL    │
-│  └─ hlsl.rs       HLSL    │
-└──────────────────────────┘
-```
-
-## Crate Structure
-
-| Crate | Type | Role |
-|-------|------|------|
-| `alice-lol-macro` | proc-macro | LOL DSL パーサー + `SdfNode` コード生成 |
-| `alice-lol` | rlib | Re-export + トランスパイル関数 + 法則チェッカー + 空間枝刈り + Intent IR (14 verb) |
-| `alice-lol-humanoid` | rlib (sibling) | Humanoid template (16 joint FK + VRM/BVH import) |
-| `alice-lol-datagen` | rlib + bin (sibling) | 合成 (caption, LOL) pair generator (Track C1、8 template family + self-check、6,500 sample/s) |
-| `alice-lol-robot` | rlib (sibling) | Robot template (Intent verb → humanoid FK + 8-byte Kinematics packet + ISO 10218 参考 safety law) |
-| `alice-lol-ui` | rlib (sibling) | UI/UX template (Button / Card / Panel / Icon / Divider / InputField / Badge / Chip → SdfNode + Flex/Grid/Stack layout + WCAG AA a11y law checker) |
-
-## Quick Start
-
-```bash
-# ビルド
-cargo build
-
-# テスト (216 tests)
-cargo test
-
-# 基本デモ
-cargo run --example basic
-
-# 全構文ショーケース
-cargo run --example showcase
-```
-
-## DSL Syntax (v1.0)
-
-### Primitives (71)
-
-```
-sphere(r)  box3d(x,y,z)  rounded_box(x,y,z,r)  cylinder(h,r)  torus(R,r)
-cone(h,r1,r2)  capsule(h,r)  ellipsoid(rx,ry,rz)  plane(nx,ny,nz,d)  octahedron(s)
-rounded_cone(r1,r2,h)  pyramid(h)  hex_prism(r,h)  link(l,r1,r2)
-capped_cone(h,r1,r2)  capped_torus(R,r,angle)  rounded_cylinder(r,rr,h)
-tube(r,t,h)  barrel(r,h,b)  heart(s)  egg(ra,rb)  helix(R,r,pitch,h)
-tetrahedron(s)  box_frame(x,y,z,e)  diamond(r,h)  star_polygon(r,n,m,h)  cross_shape(l,t,r,h)
-triangle(ax,ay,az,bx,by,bz,cx,cy,cz)  bezier(ax,ay,az,bx,by,bz,cx,cy,cz,r)
-triangular_prism(w,d)  cut_sphere(r,h)  cut_hollow_sphere(r,h,t)  death_star(ra,rb,d)
-solid_angle(a,r)  rhombus(la,lb,h,r)  horseshoe(a,r,l,w,t)  vesica(r,d)
-infinite_cylinder(r)  infinite_cone(a)  gyroid(s,t)  chamfered_cube(x,y,z,c)
-schwarz_p(s,t)  superellipsoid(x,y,z,e1,e2)  rounded_x(w,r,h)  pie(a,r,h)
-trapezoid(r1,r2,th,d)  parallelogram(w,h,s,d)  tunnel(w,h,d)  uneven_capsule(r1,r2,h,d)
-arc_shape(a,r,t,h)  moon(d,ra,rb,h)  blobby_cross(s,h)  parabola_segment(w,h,d)
-regular_polygon(r,n,h)  stairs_prim(sw,sh,n,d)
-dodecahedron(r)  icosahedron(r)  truncated_octahedron(r)  truncated_icosahedron(r)
-diamond_surface(s,t)  neovius(s,t)  lidinoid(s,t)  iwp(s,t)  frd(s,t)
-fischer_koch_s(s,t)  pmy(s,t)
-circle_2d(r,h)  rect_2d(x,y,h)  segment_2d(ax,ay,bx,by,t,h)
-rounded_rect_2d(x,y,r,h)  annular_2d(r,t,h)
-```
-
-### CSG Operations (23)
-
-```
-union  smooth_union(k)  intersection  smooth_intersection(k)  subtract  smooth_subtract(k)
-chamfer_union(r)  chamfer_intersection(r)  chamfer_subtraction(r)
-stairs_union(r,n)  stairs_intersection(r,n)  stairs_subtraction(r,n)
-columns_union(r,n)  columns_intersection(r,n)  columns_subtraction(r,n)
-exp_smooth_union(k)  exp_smooth_intersection(k)  exp_smooth_subtraction(k)
-xor  pipe(r)  engrave(r)  groove(ra,rb)  tongue(ra,rb)
-```
-
-### Transforms (4)
-
-```
-translate(x,y,z, child)  rotate(rx,ry,rz, child)  scale(s, child)  scale_non_uniform(x,y,z, child)
-```
-
-### Modifiers (20)
-
-```
-round(r)  onion(t)  twist(k)  bend(k)  mirror(axis)  repeat(sx,sy,sz)
-elongate(hx,hy,hz)  revolution(o)  extrude(h)  taper(k)  displacement(amp,freq)
-polar_repeat(n)  shear(kxy,kxz,kyz)  noise(amp,freq,oct)  repeat_finite(sx,sy,sz,nx,ny,nz)
-octant_mirror  icosahedral_symmetry  with_material(id)  surface_roughness(amp,freq)
-sweep_bezier(p0x,p0y,p1x,p1y,p2x,p2y, child)
-```
-
-### 3D Print Structural Intent (3)
-
-```
-lattice_infill(shell_t, scale, lattice_t, child)   — Shell + Gyroid infill (general purpose)
-diamond_infill(shell_t, scale, lattice_t, child)    — Shell + Diamond infill (high stiffness)
-schwarz_infill(shell_t, scale, lattice_t, child)    — Shell + Schwarz-P infill (isotropic)
-```
-
-### Time (2)
-
-```
-animate(speed, amplitude, child)  morph(t, a, b)
-```
-
-### Laws (8) — geometric proxy 制約チェッカー
-
-```
-# 幾何 (v0.3 baseline、3 variant)
-NonOverlap(a, b)  Containment(outer, inner)  MinThickness(node, min_t)
-
-# 物理 proxy (Milestone A.2、2026-08-06 追加、5 variant)
-Stress(node, load_points, min_thickness_factor)     # 荷重点近傍の応力集中
-Thermal(node, heat_sources, search_radius, min_surface_ratio)  # 熱源近傍の放熱面積比
-Contact(a, b, min_distance, max_distance)           # 接触可能距離範囲
-Continuity(node, seed_point)                        # 単一連結領域 (BFS flood fill)
-VolumeConservation(before, after, relative_tolerance)  # morph 前後の体積保存
-```
-
-距離依存 5 variant (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact`) は 0.4.0 から **場の値を距離として使わない** (TPMS は √3〜7 倍に過大、union 内部は過小、`eval_lipschitz` は外部限定) `eval_interval` (区間演算) で「箱に表面なし」を証明し、点評価の符号変化 (中間値定理) で「表面まで ≤ |p − q|」の証拠を取り、決められなかった標本点は `LawReport::unresolved` に載せる `all_passed()` は「違反なし」ではなく「全標本点で証明済」 `Priority::Hard` だけを gate したい時は **`hard_verdict()`** が 3 値 (`Proven` / `Violated` / `Undecided`) を返す (`!has_hard_violations()` は判定不能を合格側へ倒すので gate に使わない、`all_passed()` は Soft の判定不能でも落ちるので Hard の主張には過剰) 解析解 oracle は `tests/analytic_law.rs` (gyroid 板 / union 内部 / 球殻 / 2 球 / Contact gap / 板 Stress、resolution 独立性) 既定では Physics dep なし `physics` feature を有効にすると `Constraint::ThermalField` が増え、放熱面積比の幾何 proxy (`Thermal`) の代わりに `alice-physics` の 3D 熱伝導 solver で実温度場を解いて「最高温度 ≤ 上限」を判定する 対流熱伝達率 `h` は設計時に決まらないので `h = 0` (断熱、上界) と `h = ∞` (表面が周囲温度、下界) の両端で挟み、上限を跨いだら未定にする ⚠️ **`alice-physics` は AGPL-3.0-or-later なので、この feature を有効にすると下流にも伝播する**
-
-`LawSet` builder に convenience method あり (`.stress()` / `.thermal()` / `.contact()` / `.continuity()` / `.volume_conservation()` / `.gradient_bound()` / `.reachable()`、`physics` feature 時は `.thermal_field()`)。モデル推定にとどまる法則は `Priority::Hard` を名乗れないので `weight` を取る soft 版になっている。`detect_contradictions()` で NonOverlap+Containment、Contact+NonOverlap の静的矛盾検出も追加。
-
-### Intent (Milestone B.1、2026-08-06、Phase 3 IR skeleton)
-
-`IntentNode` 17 variant + `Program { sdf, sdf_registry, intent }` 独立型 (GPU backend 型分離設計) L1 Physical Intent verb 14 種 (grasp / release / walk / gaze / point / throw / catch / push / pull / rotate / align / follow / avoid / rest) + 合成 2 種 (Sequence / Parallel) + L1 Musical Intent 1 種 (Music、2026-09-13 追加)
-
-```rust
-use alice_lol::intent::{grasp, walk, sequence, HandSide, ProgramBuilder};
-use alice_lol::SdfNode;
-use glam::Vec3;
-
-let mut builder = ProgramBuilder::new().with_sdf(SdfNode::sphere(1.0));
-let cup_id = builder.register(SdfNode::sphere(0.3));
-let intent = sequence(vec![
-    walk(Vec3::new(1.0, 0.0, 0.0), 0.5),
-    grasp(cup_id, HandSide::Right, 5.0),
-]);
-let prog = builder.with_intent(intent).build();
-```
-
-- `Program::as_sdf()` は intent field を露出しない = GPU backend 型分離で誤解釈事故を防止
-- ALICE-Kinematics `lol` feature 経由で 8-byte Intent packet に翻訳可 (Milestone B.3)
-- **`emit::to_lol` (C0、2026-09-14)**: `SdfNode` → LOL text の逆変換 (128 variant exhaustive、正規形 = 左畳み込み 2 分木 / 角度 1e-3 度 / ノイズ吸収、eval parity round-trip を全 237 construct で CI 固定) + `Program::to_lol()` 合成 data generator (Track C) の基盤
-- **LOL text 構文 (A0、2026-09-14)**: `runtime_parser::parse_program("program(<sdf>, entities(...), <intent>)")` で LLM 出力から `Program` を直接構築、`IntentNode::to_lol()` で逆変換 (round-trip)、`lol.gbnf` も同構文を受理 (grammar-constrained decoding で Phase 3 Intent を emit 可能) `rotate` verb は SDF transform と衝突するため text では `turn`
-
-#### L1 Musical Intent (Phase 3.1、2026-09-13)
-
-演奏中の身体動作 + 音楽的意図を同一 Intent tree に埋め込むための Music variant `IntentNode::Music { packet: [u8; 8] }` は opaque 8-byte payload で、内訳は [`alice-synth` の `intent::MusicIntent`](https://github.com/ext-sakamoro/ALICE-Synth) が正式定義 (byte 0: genre / 1: mood / 2: length_bars / 3: tempo_bpm_offset / 4: key / 5: mode / 6-7: variation_seed LE)
-
-```rust
-use alice_lol::intent::{grasp, music_intent, parallel, HandSide};
-
-// ある楽器を掴みながら、その楽器で C major folk を演奏する Intent
-let program = parallel(vec![
-    music_intent([0, 0, 4, 80, 0, 0, 0xC0, 0xDE]),  // C major Folk / Happy, seed 0xC0DE
-    grasp(0, HandSide::Right, 5.0),                    // 楽器を右手で把持
-]);
-```
-
-- **依存なし**: `alice-lol` は `alice-synth` に依存しない = 8-byte packet が唯一の cross-crate 契約
-- consumer (interpreter、LLM plan head、remote 演奏服) は `MusicIntent::from_bytes(packet)` で復元 → `synthesize()` で PCM 生成
-- ALICE 三相原理 Phase 3 (Intent 相) の音楽 variant、Physical Intent の隣に対等に配置
-
-### Variable Capture
-
-```rust
-let r = 1.5_f32;
-let node = lol! { sphere({r}) };           // {expr} 形式
-let node = lol! { sphere(r) };             // 裸の変数名
-let node = lol! { sphere({r * 2.0}) };     // 算術式
-```
+<!-- readme-sync: features -->
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `glsl` | yes | GLSL transpilation (`to_glsl`, `to_glsl_dynamic`, `to_glsl_full`) |
+| `wgsl` | no | WGSL transpilation |
+| `hlsl` | no | HLSL transpilation |
+| `physics` | no | `Constraint::ThermalField` and material data from `alice-physics` (AGPL-3.0-or-later; enabling it applies that license downstream) |
+| `roblox` | no | OBJ / FBX export within Roblox mesh limits (`roblox_export`) |
+| `llm-bridge` | no | grammar-constrained generation through `alice-llm` (`bridge`; AGPL-3.0-or-later, applies downstream) |
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| `basic` | 基本構文 — sphere, box, union, smooth_union |
-| `showcase` | 全120構文のショーケース |
-| `pruning_demo` | 空間枝刈りコンパイラの効果比較 |
-| `law_demo` | 法則制約 — NonOverlap, Containment, MinThickness |
-| `research_law_demo` | 研究 Law — 理想気体の式を SI と (kPa, L) で書き、別条件の再計算 / 同条件比較 / oracle 照合 / 新しい観測の判定 |
-| `autodiff_demo` | 自動微分 — 勾配、曲率解析 |
-| `compiled_demo` | CompiledSdf — SIMD バッチ評価 |
-| `print_demo` | 3Dプリント構造意図 — 装飾/構造/ソリッド |
+| Example | Shows |
+|---------|-------|
+| [`basic`](alice-lol/examples/basic.rs) | the macro and GLSL output |
+| [`showcase`](alice-lol/examples/showcase.rs) | a tour of the syntax, variable capture, autodiff, `CompiledSdf` |
+| [`law_demo`](alice-lol/examples/law_demo.rs) | declaring and checking geometric laws |
+| [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | the ideal-gas law in SI and in (kPa, L): re-evaluation, comparison, oracles, new evidence |
+| [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
+| [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |
+| [`compiled_demo`](alice-lol/examples/compiled_demo.rs) | compiled evaluation (single point, SIMD batch, normals) |
+| [`print_export`](alice-lol/examples/print_export.rs) | STL / 3MF export |
+| [`print_verify`](alice-lol/examples/print_verify.rs) | numerical check of a lattice infill against the mesh |
+| [`roblox_accessory`](alice-lol/examples/roblox_accessory.rs) | Roblox accessory export (feature `roblox`) |
+| [`prompt_to_sword`](alice-lol/examples/prompt_to_sword.rs) | prompt → grammar-constrained LOL → mesh (feature `llm-bridge`) |
 
-## Cargo Features
+Run one with `cargo run -p alice-lol --example <name>`.
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `glsl` | Yes | GLSL トランスパイル出力 |
-| `wgsl` | No | WGSL (WebGPU) 出力 |
-| `hlsl` | No | HLSL (DirectX) 出力 |
-| `physics` | No | ALICE-Physics bridge + `Constraint::ThermalField` (実温度場の法則、`alice-physics` **AGPL-3.0-or-later propagation 注意**) |
-| `roblox` | No | Roblox OBJ/FBX (MeshPart / accessory) |
-| `llm-bridge` | No | GBNF constrained decoding + think-prefix 2 段生成 (alice-llm `grammar` + `simd` + `parallel`、AGPL-3.0 propagation 注意) |
+## MSRV
 
-### LLM 生成品質 benchmark (`examples/llm_bench.rs`、2026-09-14)
+Minimum supported Rust version: **1.90** <!-- readme-sync: msrv -->. CI checks
+the whole workspace with that toolchain.
 
-`cargo run --release --example llm_bench --features llm-bridge -- --model <gguf> [--mode grammar|think|both] [--prefix-budget 800] [--only T2] [--out results.jsonl]`
+## Building and testing
 
-20 prompt (T1 単体 primitive / T2 合成 / T3 変換・修飾 / T4 Phase 3 Intent) を投げ、出力を **oracle** (ALICE-SDF `eval` の点内外判定、Intent は verb 構造) で判定する 文字列一致ではないので同じ形を別の式で書いても pass grammar-only と think→grammar の pass 率を tier 別に集計し、A3 SFT の効果測定 baseline に使う
+The crates depend on sibling repositories by path, so clone them next to this
+one:
 
-### Backend parity test suite (Milestone A.4、2026-08-06)
-
-`tests/backend_parity.rs` に 22 test を追加、GLSL/WGSL/HLSL 3 backend で同一 SdfNode の transpile parity を CI で保証 (primitive 7 + CSG 5 + transform 3 + modifier 4 + TPMS 1 + composite 2)。
-
-CI matrix に `--features glsl,wgsl,hlsl` entry (`backend-parity` label) 追加済。Level 2 (実 GPU 実行 + CPU eval 数値比較) は A.4.1 別 sprint (wgpu setup 必要)。
-
-## API
-
-```rust
-use alice_lol::{lol, to_glsl, to_wgsl, to_hlsl, eval};
-use alice_lol::law::{LawSet, Law, Priority};
-
-// DSL → SdfNode
-let node = lol! { smooth_union(0.3, sphere(1.0), box3d(0.8, 0.8, 0.8)) };
-
-// Transpile
-let glsl = to_glsl(&node);                   // GLSL (hardcoded)
-let wgsl = alice_lol::to_wgsl(&node);        // WGSL
-let hlsl = alice_lol::to_hlsl(&node);        // HLSL
-
-// CPU evaluation
-let dist = eval(&node, glam::Vec3::ZERO);
-
-// Law constraint check
-let laws = LawSet::new()
-    .add(Law::non_overlap(&a, &b), Priority::Hard)
-    .add(Law::min_thickness(&node, 0.1), Priority::Soft(0.5));
-let report = laws.check();
+```bash
+git clone https://github.com/ext-sakamoro/ALICE-LOL
+git clone https://github.com/ext-sakamoro/ALICE-SDF
+git clone https://github.com/ext-sakamoro/ALICE-Zip
+git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
+git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
+git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
+cd ALICE-LOL
+cargo test
+scripts/law_tests.sh            # the law oracles, failing if any of them ran zero tests
+python scripts/readme_sync.py --check
+python scripts/docs_lint.py --check
+scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 ```
 
-### 研究 Law (`research_law`)
+## Related crates
 
-```rust
-use alice_lol::research_law::{compare, Bridge, Param, ResearchLaw, Var};
-use alice_zip::law::{Provenance, ValidRange};
-
-let gas = ResearchLaw::new(
-    "ideal gas",
-    "n*R*T/V",
-    Var::new("P", "Pa"),
-    &[Var::new("n", "mol"), Var::new("T", "K"), Var::new("V", "m^3")],
-    &[Param::new("R", 8.314462618, 0.0, "J/(mol*K)")],
-    &[("T", ValidRange { lo: 1.0, hi: 2000.0 })],
-    Provenance::new("equation of state", "closed form"),
-)?;
-let p = gas.evaluate(&[("n", 1.0), ("T", 300.0), ("V", 0.025)])?; // Pa
-// T = 5000 K は成立範囲の外なので OutOfRange (外挿しない)
-```
-
-`ingest(&observations, &policy)` の判定順は `alice_zip::law::SignalLaw::ingest` と同じ (証拠なし → 範囲外 → 支持 → parameter 更新 → residual 増 → 破綻) parameter 更新は全 parameter の最小二乗 (反復回数と収束閾値を固定した Gauss–Newton) 残差は保持した観測から測った値で、自己申告の値は持たない 解析解 oracle は `tests/analytic_research_law.rs` (理想気体 / 自由落下 / 単位換算 / 判定 5 種 / 退化入力)
-
-## Quality
-
-| Metric | Value |
-|--------|-------|
-| clippy (pedantic+nursery) | 0 warnings, `--workspace --all-targets --all-features` |
-| Tests | lib 607 / integration 190 / doc 125 (default features, 2026-09-27) |
-| Law verifier oracle | `tests/analytic_law.rs` 16 (closed-form) + `tests/law_corpus_oracle.rs` (grammar corpus 244 constructs vs a brute-force refuter: no proven pass the refuter contradicts, every reported violation has a witness, undecided rate measured) |
-| Mutation score | `law.rs` must have **0 surviving mutants** (`.github/workflows/quality-deep.yml`, equivalent mutants excluded with a reason in `mutants.toml`) |
-| Shader parity | corpus + fixtures through naga validation and a real GPU (`gpu-parity` job, lavapipe) |
-| fmt | clean |
+- [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF): the field the language describes
+- [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics): deterministic physics
+- [ALICE-DetMath](https://github.com/ext-sakamoro/ALICE-DetMath): bit-exact math functions
+- [ALICE-Zip](https://github.com/ext-sakamoro/ALICE-Zip): the `law` vocabulary shared with `research_law`
+- [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): defines the 8-byte payload of the `music` intent
+- [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu renderer
 
 ## License
 
-MIT OR Apache-2.0
+MIT OR Apache-2.0 ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)),
+except `alice-world-auditor` (AGPL-3.0-or-later or commercial). The `physics`
+and `llm-bridge` features pull in AGPL-3.0-or-later dependencies.
 
-### Credits
-
-The LOL DSL exposes the [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF)
-primitive set, so the attribution of that crate carries over: a large part of
-the distance-function *forms* follow **Inigo Quilez**'s published articles and
-Shadertoy demos, the stairs / columns / chamfer operators follow **Mercury's
-hg_sdf**, and the noise gradient table follows **Ken Perlin**. The
-implementations are ALICE-SDF's own Rust code. Full list:
+The DSL exposes the ALICE-SDF primitive set, so that crate's attribution carries
+over: many distance-function forms follow Inigo Quilez's published articles,
+the stairs / columns / chamfer operators follow Mercury's hg_sdf, and the noise
+gradient table follows Ken Perlin. The implementations are ALICE-SDF's own Rust
+code; the full list is in
 [ALICE-SDF/THIRD-PARTY-NOTICES.md](https://github.com/ext-sakamoro/ALICE-SDF/blob/main/THIRD-PARTY-NOTICES.md).
-
-## Claude Code / Codex Skill
-
-The `skills/lol-sdf/` directory bundles ALICE-LOL as an installable agent skill for Claude Code / Codex. It ships the GBNF grammar (`references/lol.gbnf`) for LLM constrained decoding, the print-oriented system prompt (`references/print-guide.md`), and thin CLI wrappers for STL/3MF export, Bambu H2D laser (`.lac`), and Roblox OBJ/FBX. See [`skills/lol-sdf/SKILL.md`](skills/lol-sdf/SKILL.md). Companion `alice-implicit-cad` skill (in the [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) repo) provides the lower-level SDF composition front-end.
-
-## Related
-
-- [ALICE-SDF](https://github.com/ext-sakamoro/ALICE-SDF) — SDF evaluation, compiled backends, SIMD, BVH
-- [ALICE-View](https://github.com/ext-sakamoro/ALICE-View) — wgpu GPU renderer
-- [ALICE-Physics](https://github.com/ext-sakamoro/ALICE-Physics) — Deterministic 128-bit physics engine
-
-## Consumers
-
-以下 crate が ALICE-LOL DSL を consumer として利用中 or 計画中:
-
-| Consumer | 状態 | 用途 |
-|---|---|---|
-| [ALICE-Bamboo](https://github.com/ext-sakamoro/ALICE-Bamboo) | Active | 3D プリント統合 pipeline (LOL DSL → SDF → Physics 検証 → 3MF → Bambu Studio) |
-| [ALICE-Manga](https://github.com/ext-sakamoro/ALICE-Manga) | Integration PoC (2026-07-29〜) | 漫画キャラ silhouette / scene の宣言的定義 T1 statement 完了 (dev-dep + PoC example)、`docs/INTEGRATION_STRATEGY.md` T1-T5 roadmap で本格統合予定 |
-| ALICE-Metal-Card | Active | H2D レーザー用 SVG → `.lac` 生成 |
-- [ALICE-Eco-System](https://github.com/ext-sakamoro/ALICE-Eco-System) — 1,250 cross-crate bridges
