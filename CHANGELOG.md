@@ -467,6 +467,13 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### `alice-sdf` 5.0 へ追従 (破壊的)
+
+`alice-lol` / `alice-lol-ui` の `alice-sdf` の要求を `4.0.0` から `5.0` に上げた
+`alice-lol` が再 export している `Vec3x8` から、`alice-sdf` 5.0 で消えた method 12 件 (`zero` / `length` / `length_squared` / `normalize` / `dot` / `abs` / `max_zero` / `max` / `min` / `clamp` / `max_component` / `min_component`) が無くなる
+移行: field (`x` / `y` / `z` は `wide::f32x8`) に `wide` の演算を掛ける (例 `v.length()` は `(v.x * v.x + v.y * v.y + v.z * v.z).sqrt()`)
+本 crate 内に 5.0 で変わった API の利用は無く、code の変更は無い
+
 #### `alice-world-auditor`: Phase 5 の oracle を `alice-physics` の XPBD 速度の修正に追従
 
 `alice-physics` の XPBD は、拘束も接触も動かさなかった body の線速度を予測速度のまま保つようになった (位置差からの再導出をやめた)
