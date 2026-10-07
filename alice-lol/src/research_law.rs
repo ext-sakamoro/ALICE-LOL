@@ -500,7 +500,7 @@ impl UnitParser<'_> {
         let exp = i8::try_from(n).map_err(|_| ResearchLawError::DimensionOverflow)?;
         Ok(Unit {
             dimension: base.dimension.pow(f64::from(exp))?,
-            scale: base.scale.powi(i32::from(exp)),
+            scale: powi_exact(base.scale, i32::from(exp)),
         })
     }
 
@@ -993,23 +993,43 @@ fn eval(code: &Code, inputs: &[f64], params: &[f64]) -> Result<f64> {
         Code::Pow(a, p) => {
             let x = eval(a, inputs, params)?;
             if *p == p.trunc() && p.abs() <= f64::from(i32::MAX) {
-                x.powi(*p as i32)
+                powi_exact(x, *p as i32)
             } else {
-                x.powf(*p)
+                alice_det_math::powf64(x, *p)
             }
         }
         Code::Call(f, a) => {
             let x = eval(a, inputs, params)?;
             match f {
-                Func::Exp => x.exp(),
-                Func::Ln => x.ln(),
-                Func::Sqrt => x.sqrt(),
-                Func::Sin => x.sin(),
-                Func::Cos => x.cos(),
+                Func::Exp => alice_det_math::exp64(x),
+                Func::Ln => alice_det_math::ln64(x),
+                Func::Sqrt => alice_det_math::sqrt64(x),
+                Func::Sin => alice_det_math::sin64(x),
+                Func::Cos => alice_det_math::cos64(x),
             }
         }
     };
     finite(v)
+}
+
+/// `x^n` by repeated squaring from the least significant bit of `|n|`, then a
+/// reciprocal for negative `n` — a fixed sequence of IEEE multiplications, so the
+/// result is the same on every platform (the operation order of `f64::powi` is
+/// not specified)
+fn powi_exact(x: f64, n: i32) -> f64 {
+    let (mut base, mut e, mut acc) = (x, n.unsigned_abs(), 1.0_f64);
+    while e > 0 {
+        if e & 1 == 1 {
+            acc *= base;
+        }
+        base *= base;
+        e >>= 1;
+    }
+    if n < 0 {
+        1.0 / acc
+    } else {
+        acc
+    }
 }
 
 // ── declarations ─────────────────────────────────────────────────────

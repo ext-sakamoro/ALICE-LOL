@@ -20,6 +20,11 @@ parameter 更新は全 parameter の最小二乗 (中心差分 Jacobian、部分
 example `research_law_demo` と解析解 oracle `tests/analytic_research_law.rs` (理想気体 / 自由落下 / kPa・L と SI の比較 / 判定 / 退化入力) を追加
 SDF の幾何制約を扱う既存の `law` module は変更していない
 
+### Changed — `alice-lol`: `research_law` を `alice-det-math` で評価
+
+- `research_law`: 超越関数 (`exp` / `ln` / `sqrt` / `sin` / `cos` / 非整数の冪) を `alice-det-math` 0.3.2 の f64 関数で評価し、整数の冪と単位の倍率は下位 bit からの繰り返し 2 乗で計算する ⇒ 同じ法則と条件はどの platform でも同じ bit を返す (`tests/research_law_bit_exact.rs`)
+- `alice-zip` の下限を `law` module を含む 0.5.1 に上げた
+
 ### Changed — CI: `ALICE-Zip` を sibling として checkout
 
 `alice-lol` を build する job (ci / fuzz / quality-deep / security-audit) で `ext-sakamoro/ALICE-Zip` を `ALICE-Zip` に checkout する
