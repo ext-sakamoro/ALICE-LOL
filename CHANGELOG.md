@@ -26,10 +26,12 @@ test が 2 方向で一致を確かめる: `parse_expr_inner` / `parse_intent` �
 
 #### 法則の oracle を target ごとに走らせる step (`scripts/law_tests.sh`)
 
-`law_tests` / `law_corpus_oracle` / `analytic_law` / `test_field_law_oracle` / `analytic_research_law` /
+`law_tests` / `law_corpus_oracle` / `analytic_law` / `test_field_law_oracle` / `analytic_research_law` / `research_law_bit_exact` /
 `interior_lipschitz_bound_probe` / `print_tests` / `analytic_robot_law` / `alice-lol` の `law` unit test と、
 feature `physics` の `analytic_thermal` を 1 target ずつ `scripts/cargo_test_nonzero.sh` に通し、0 件実行なら fail にする
-`law::` / `research_law` を使う test file が一覧に無い場合も fail ci.yml の test job (既定 entry と `physics` entry) と preflight で実行
+`law::` / `research_law` を使う test file が一覧に無い場合も fail
+preflight では target ごとに実行する CI では同じ target を走らせ直さず、test job の `cargo test` の log を
+`scripts/law_tests_from_log.py` で読み、各 target が log にあり 1 件以上実行されたかを確かめる (既定 entry と `physics` entry)
 
 #### 公開文書と tracked file の語彙検査 (`scripts/docs_lint.py`)
 

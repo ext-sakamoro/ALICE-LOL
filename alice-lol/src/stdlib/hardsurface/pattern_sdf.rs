@@ -2096,15 +2096,15 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 23. raspi_case (electronics-enclosure § 1 RPi Cases)
+// 23. raspi_case (electronics-enclosure § 1 single-board computer cases)
 // ────────────────────────────────────────────────────────
 
-/// `RPi` ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
+/// SBC (シングルボードコンピュータ) ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RaspiCaseSpec {
-    /// PCB 幅 (mm、`RPi` 5/4=85 / Zero 2W=65、default 85)
+    /// PCB 幅 (mm、85 mm 級 SBC=85 / 小型 SBC=65、default 85)
     pub pcb_width: f32,
-    /// PCB 奥行 (mm、`RPi` 5/4=56 / Zero 2W=30、default 56)
+    /// PCB 奥行 (mm、85 mm 級 SBC=56 / 小型 SBC=30、default 56)
     pub pcb_depth: f32,
     /// PCB 上の内部高さ (mm、Active Cooler=25 / bare=15、default 25)
     pub internal_height: f32,
@@ -2127,7 +2127,7 @@ pub struct RaspiCaseSpec {
 }
 
 impl RaspiCaseSpec {
-    /// `RPi` 5 with Active Cooler 85×56×25mm (electronics-enclosure § 1 default)
+    /// 85×56 mm SBC + 冷却ファン 85×56×25mm (electronics-enclosure § 1 default)
     #[must_use]
     pub const fn rpi5_active_cooler() -> Self {
         Self {
@@ -2146,7 +2146,7 @@ impl RaspiCaseSpec {
     }
 }
 
-/// `RPi` ケース (top 開口、4 standoff peg、片側 port opening、`to_z_up` wrap)
+/// SBC ケース (top 開口、4 standoff peg、片側 port opening、`to_z_up` wrap)
 ///
 /// 構造 (electronics-enclosure § 1 準拠、Y-up 設計):
 /// - Outer: `RoundedBox` (`(pcb_w+2×(clear+wall)) × (int_h+floor) × (pcb_d+2×(clear+wall))`)
@@ -6333,7 +6333,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
     to_z_up(result)
 }
 
-/// `RPi` マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
+/// SBC マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RaspiMountPlateSpec {
     /// Pi model (4=Pi4B、5=Pi5、3=Pi3B+ = 58×49、0=Zero = 58×23)
@@ -6374,7 +6374,7 @@ impl RaspiMountPlateSpec {
     }
 }
 
-/// `RPi` マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
+/// SBC マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
 ///
 /// 構造: 板 (`RoundedBox`) から Pi model 別 M2.5 穴 4 個 + optional M4 穴 4 隅を Subtraction
 /// Pi 3B+/4B/5: 58×49mm rectangular pattern

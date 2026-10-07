@@ -9,7 +9,9 @@
 # law modules but is not listed below also fails the run, so a new oracle file
 # cannot be skipped silently. Used by ci.yml and scripts/preflight.sh.
 #
-# usage: scripts/law_tests.sh [default|physics|all]   (default: all)
+# usage: scripts/law_tests.sh [default|physics|all|list]   (default: all)
+#   list: only check that every law test file is listed (CI counts the runs from
+#         the log of its full `cargo test` with scripts/law_tests_from_log.py)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,6 +23,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test analytic_law|"
   "alice-lol|--test test_field_law_oracle|"
   "alice-lol|--test analytic_research_law|"
+  "alice-lol|--test research_law_bit_exact|"
   "alice-lol|--test interior_lipschitz_bound_probe|"
   "alice-lol|--test print_tests|"
   "alice-lol-robot|--test analytic_robot_law|"
@@ -33,8 +36,8 @@ mode="${1:-all}"
 case "$mode" in
   default) targets=("${DEFAULT_TARGETS[@]}") ;;
   physics) targets=("${PHYSICS_TARGETS[@]}") ;;
-  all) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}") ;;
-  *) echo "usage: $0 [default|physics|all]" >&2; exit 2 ;;
+  all|list) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}") ;;
+  *) echo "usage: $0 [default|physics|all|list]" >&2; exit 2 ;;
 esac
 
 # Every integration test file that uses `law::` or `research_law` must be listed
@@ -51,6 +54,11 @@ done < <(grep -lE 'law::|research_law' -- */tests/*.rs)
 if [ "${#unlisted[@]}" -gt 0 ]; then
   echo "error: law test files not listed in scripts/law_tests.sh: ${unlisted[*]}" >&2
   exit 1
+fi
+
+if [ "$mode" = list ]; then
+  echo "law tests: every law test file is listed"
+  exit 0
 fi
 
 for t in "${targets[@]}"; do

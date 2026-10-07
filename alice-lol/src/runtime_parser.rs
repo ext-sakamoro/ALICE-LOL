@@ -5153,7 +5153,7 @@ mod tests {
 
     #[test]
     fn test_screw_hole_m2_5_pi() {
-        // RPi M2.5 = snap to M2_5
+        // SBC mount M2.5 = snap to M2_5
         let node = parse_lol("screw_hole(2.5, 8)").unwrap();
         assert!(matches!(node, SdfNode::Cylinder { .. }));
     }

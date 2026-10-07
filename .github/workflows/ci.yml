@@ -99,21 +99,28 @@ jobs:
 
       - name: Test
         working-directory: ALICE-LOL
-        run: cargo test ${{ matrix.features }}
+        shell: bash
+        run: cargo test ${{ matrix.features }} 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
 
-      # 法則の oracle を test target ごとに走らせ、どれか 1 つでも 0 件実行なら fail にする
+      # 上の Test の log から、法則の oracle が test target ごとに 1 件以上実行されたかを確かめる
+      # (同じ target を走らせ直すと最も重い oracle を二度実行するので、log を読む)
+      # どれか 1 つでも log に無い / 0 件実行なら fail
       # (feature で module が消える / target の登録が外れると `cargo test` は green のまま、
       # 複数 target の合計では 1 つの空振りが他の件数に隠れる) law::/research_law を使う
       # test file が scripts/law_tests.sh に無い場合も fail する
       - name: Law oracles (each target ran at least one test)
         if: matrix.label == ''
         working-directory: ALICE-LOL
-        run: scripts/law_tests.sh default
+        shell: bash
+        run: |
+          scripts/law_tests.sh list
+          python3 scripts/law_tests_from_log.py default "$RUNNER_TEMP/cargo-test.log"
 
       - name: Law oracles (physics, each target ran at least one test)
         if: matrix.label == ' physics'
         working-directory: ALICE-LOL
-        run: scripts/law_tests.sh physics
+        shell: bash
+        run: python3 scripts/law_tests_from_log.py physics "$RUNNER_TEMP/cargo-test.log"
 
       # `required-features` 付きの test target は feature が無いと黙ってスキップされるので、
       # roblox の entry では名指しで走らせる (target が消える / 登録が外れるとここで fail する)
