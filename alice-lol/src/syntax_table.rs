@@ -5,7 +5,7 @@
 //! list, written once: the tests below keep it equal to the parser in both
 //! directions (every name in the table is dispatched, every dispatched name is
 //! in the table), and `scripts/readme_sync.py` keeps the syntax tables of
-//! README.md / README_JP.md equal to it. The table exists only for those
+//! `README.md` / `README_JP.md` equal to it. The table exists only for those
 //! checks, so it is compiled for tests only.
 
 /// SDF construct names per README group (`parse_lol` / `parse_expr_inner`)
@@ -114,7 +114,7 @@ mod tests {
 
     const PARSER_SRC: &str = include_str!("runtime_parser.rs");
 
-    /// The body of `fn <name>` in runtime_parser.rs (up to the next item at
+    /// The body of `fn <name>` in `runtime_parser.rs` (up to the next item at
     /// the same indentation)
     fn fn_body(name: &str) -> &'static str {
         let head = format!("fn {name}(");

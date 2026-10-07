@@ -56,12 +56,12 @@ pub const HEAT_SET_SINK_MARGIN: f32 = 0.3;
 ///
 /// 各 method は ISO 4762 (ソケットキャップ) / ISO 10642 (皿頭) 規格値を返す
 /// M10 以上は Phase A.4 (mount) で追加予定 (2020 profile / 3030 profile の締結軸として)
-/// M2/M2.5 は RPi / Arduino / spring hinge 等の小型基板・センサー用途で頻出
+/// M2/M2.5 は `RPi` / Arduino / spring hinge 等の小型基板・センサー用途で頻出
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MetricSize {
     /// M2 (呼び径 2mm、小型基板 / センサー)
     M2,
-    /// M2.5 (呼び径 2.5mm、RPi / Arduino 標準)
+    /// M2.5 (呼び径 2.5mm、`RPi` / Arduino 標準)
     M2_5,
     /// M3 (呼び径 3mm)
     M3,
