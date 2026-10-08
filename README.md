@@ -200,6 +200,27 @@ grasp release catch walk gaze point throw push pull turn align follow avoid
 rest latent seq par music
 ```
 
+## Audit laws (`audit_law`)
+
+An audit law states what a check must find, never how to measure it. One clause
+per line; `parse_law` reads them and `AuditLaw::evaluate` answers with a
+six-valued verdict (`Supports` / `NoEvidence` / `Breaks` / `OutOfRange` /
+`ParameterUpdate` / `Undecided`). Whoever runs the check supplies the numbers,
+so the same law can be fed from Rust or from another language.
+
+<!-- readme-sync: syntax-law -->
+```text
+audit evidence expect range
+```
+
+`evidence <metric>` requires that the metric was measured at all — a check that
+compared nothing answers `NoEvidence` instead of passing. `expect <metric> ==
+<value> [within <tol>]` is the expectation, and `range <key> <value>...` records
+a known violation: it is allowed while the measurement matches, becomes
+`OutOfRange` once the row no longer applies, and `ParameterUpdate` when the
+values move. Evidence is judged before expectations, so `0 == 0` cannot pass by
+accident on an empty measurement.
+
 ## Geometric laws (`law`)
 
 `law::Constraint` declares a property of a field; `LawSet` collects them with

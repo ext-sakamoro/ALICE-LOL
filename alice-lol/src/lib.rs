@@ -85,6 +85,10 @@ pub mod law;
 // 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う
 pub mod research_law;
 
+// ── 監査 Law (検査器が何件比べたか / 既知の違反がどこまでか を主張する) ──
+// 上の 2 つとも別物: 一致を検査する対象が測定そのもので、判定は 6 値
+pub mod audit_law;
+
 // ── 構文名の一覧 (parser の dispatch と README の構文表を突き合わせる test 専用) ──
 #[cfg(test)]
 mod syntax_table;

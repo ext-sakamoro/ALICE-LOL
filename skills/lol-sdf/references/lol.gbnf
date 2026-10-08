@@ -40,7 +40,25 @@
 # Either a bare SDF expression (Phase 2 Law, backward compatible) or a
 # full `program(...)` wrapping SDF + entity registry + Intent (Phase 3).
 
-root ::= ws (program | expr) ws
+root ::= ws (program | expr | law) ws
+
+# ─── 監査 Law (行ごとに 1 項、`runtime_parser::parse_law`) ──────────────
+#
+# 何が成立すべきかの主張で、測り方は書かない (測るのは host)
+# 項の keyword は test 専用の `syntax_table::LAW_SYNTAX` と一致する
+#
+# ⚠️ ここだけ **開いた識別子** (`ident`) を使う 上の構文は「parser が知る名前だけ
+# 受理する」ために名前を全部列挙しているが、Law の metric 名と成立範囲の key は
+# **host が何を測ったかで決まる**ので列挙できない 代わりに項の形を固定する
+law ::= "audit" sp ident nl lawline (nl lawline)* nl?
+lawline ::= lawevidence | lawexpect | lawrange
+lawevidence ::= "evidence" sp ident
+lawexpect ::= "expect" sp ident sp "==" sp number (sp "within" sp number)?
+lawrange ::= "range" sp ident (sp lawvalue)+
+ident ::= [a-zA-Z_] [a-zA-Z0-9_-]*
+lawvalue ::= [0-9a-zA-Z.+-]+
+sp ::= " "
+nl ::= "\n"
 
 # ─── Program (SDF + entities + Intent) ────────────────────────────────
 #

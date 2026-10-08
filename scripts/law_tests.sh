@@ -19,6 +19,7 @@ cd "$(dirname "$0")/.."
 DEFAULT_TARGETS=(
   "alice-lol|--lib law::|"
   "alice-lol|--test law_tests|"
+  "alice-lol|--test audit_law_parity|"
   "alice-lol|--test law_corpus_oracle|"
   "alice-lol|--test analytic_law|"
   "alice-lol|--test test_field_law_oracle|"
@@ -41,6 +42,7 @@ case "$mode" in
 esac
 
 # Every integration test file that uses `law::` or `research_law` must be listed
+# (`audit_law::` matches `law::` too, so audit laws are covered by the same scan)
 listed=" "
 for t in "${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}"; do
   args="${t#*|}"; args="${args%%|*}"

@@ -189,6 +189,25 @@ grasp release catch walk gaze point throw push pull turn align follow avoid
 rest latent seq par music
 ```
 
+## 監査法則 (`audit_law`)
+
+監査法則は検査が何を見つけるべきかを述べ、どう測るかは書かない 1 行 1 項で、
+`parse_law` が読み `AuditLaw::evaluate` が 6 値の判定 (`Supports` / `NoEvidence` /
+`Breaks` / `OutOfRange` / `ParameterUpdate` / `Undecided`) を返す
+数値を渡すのは検査を走らせる側なので、同じ法則を Rust からでも別の言語からでも
+食わせられる
+
+<!-- readme-sync: syntax-law -->
+```text
+audit evidence expect range
+```
+
+`evidence <metric>` はその量が測られたこと自体を要求する — 1 件も比べていない検査は
+合格ではなく `NoEvidence` を返す `expect <metric> == <value> [within <tol>]` が期待値、
+`range <key> <value>...` は既知の違反を記録し、実測と一致する間は許容され、行が
+当てはまらなくなれば `OutOfRange`、値の組が動けば `ParameterUpdate` になる
+証拠は期待値より先に判定するので、空の実測で `0 == 0` が偶然通ることはない
+
 ## 幾何法則 (`law`)
 
 `law::Constraint` は場の性質を宣言し、`LawSet` が Hard / Soft の優先度つきで集めて

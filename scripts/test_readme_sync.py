@@ -46,6 +46,8 @@ const SDF_SYNTAX: &[(&str, &[&str])] = &[
 
 const INTENT_SYNTAX: &[&str] = &["walk", "grasp"];
 
+const LAW_SYNTAX: &[&str] = &["audit", "evidence"];
+
 const RUNTIME_ONLY: &[&str] = &["capsule_ab"];
 """
 
@@ -129,6 +131,11 @@ mug
 walk grasp
 ```
 
+<!-- readme-sync: syntax-law -->
+```text
+audit evidence
+```
+
 ## Laws
 
 <!-- readme-sync: laws -->
@@ -206,7 +213,7 @@ class Checks(unittest.TestCase):
     def test_clean_tree_passes(self):
         errs, counts = rs.check(crate())
         self.assertEqual(errs, [])
-        self.assertEqual(counts["syntax"], 16)
+        self.assertEqual(counts["syntax"], 20)
         self.assertEqual(counts["laws"], 6)
         self.assertEqual(counts["verdicts"], 4)
         self.assertEqual(counts["macro"], 4)
@@ -242,7 +249,7 @@ class Checks(unittest.TestCase):
 
     def test_all_syntax_markers_removed_compares_nothing(self):
         text = R
-        for g in ("primitives", "csg", "stdlib", "intent"):
+        for g in ("primitives", "csg", "stdlib", "intent", "law"):
             text = text.replace(f"<!-- readme-sync: syntax-{g} -->\n", "")
         e = errors(both(text))
         self.assertTrue(any("`syntax` compared nothing" in x for x in e), e)

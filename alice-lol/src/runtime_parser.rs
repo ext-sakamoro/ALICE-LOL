@@ -11,6 +11,7 @@
 //! let dist = alice_lol::eval(&node, glam::Vec3::ZERO);
 //! ```
 
+use crate::audit_law::{sorted_values, AuditLaw, Clause};
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
 use crate::SdfNode;
 use glam::{EulerRot, Quat, Vec2, Vec3};
@@ -3491,6 +3492,115 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
         });
     }
     Ok(program)
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 監査 Law (行ごとに 1 項、SDF の式とも Intent とも別の文)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// 監査 Law を読む
+///
+/// 1 行 1 項で、先頭の語が項の種類を決める (`audit` / `evidence` / `expect` /
+/// `range`、一覧は test 専用の `syntax_table::LAW_SYNTAX`) `#` から行末は注記
+///
+/// ```text
+/// audit lock-single-version
+/// evidence packages
+/// expect unbaselined_duplicates == 0
+/// range alice-det-math 0.3.2 0.4.0
+/// ```
+///
+/// # Errors
+///
+/// `audit` の行が無い / 項が 0 件 / 読めない行がある場合
+pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
+    let mut name: Option<String> = None;
+    let mut clauses: Vec<Clause> = Vec::new();
+    let mut position = 0_usize;
+
+    for raw in input.lines() {
+        let at = position;
+        position += raw.len() + 1;
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut words = line.split_whitespace();
+        let head = words.next().unwrap_or("");
+        let rest: Vec<&str> = words.collect();
+        match head {
+            "audit" => {
+                if rest.len() != 1 {
+                    return Err(law_error("`audit` takes one name", at));
+                }
+                name = Some(rest[0].to_owned());
+            }
+            "evidence" => {
+                if rest.len() != 1 {
+                    return Err(law_error("`evidence` takes one metric", at));
+                }
+                clauses.push(Clause::Evidence {
+                    metric: rest[0].to_owned(),
+                });
+            }
+            "expect" => clauses.push(
+                law_expect(&rest)
+                    .ok_or_else(|| law_error("`expect <metric> == <value> [within <tol>]`", at))?,
+            ),
+            "range" => {
+                let (key, values) = rest
+                    .split_first()
+                    .ok_or_else(|| law_error("`range <key> <value>...`", at))?;
+                if values.is_empty() {
+                    return Err(law_error("`range` needs at least one value", at));
+                }
+                clauses.push(Clause::Range {
+                    key: (*key).to_owned(),
+                    values: sorted_values(values),
+                });
+            }
+            other => {
+                return Err(law_error(
+                    &format!("unknown audit law clause `{other}`"),
+                    at,
+                ))
+            }
+        }
+    }
+
+    let name = name.ok_or_else(|| law_error("no `audit <name>` line", 0))?;
+    if clauses.is_empty() {
+        return Err(law_error(
+            &format!("`{name}` states nothing (an audit needs at least one clause)"),
+            0,
+        ));
+    }
+    Ok(AuditLaw::new(name, clauses))
+}
+
+fn law_error(message: &str, position: usize) -> ParseError {
+    ParseError {
+        message: message.to_owned(),
+        position,
+    }
+}
+
+fn law_expect(rest: &[&str]) -> Option<Clause> {
+    let metric = rest.first()?;
+    if *rest.get(1)? != "==" {
+        return None;
+    }
+    let value: f64 = rest.get(2)?.parse().ok()?;
+    let tolerance = match rest.len() {
+        3 => 0.0,
+        5 if rest[3] == "within" => rest[4].parse().ok()?,
+        _ => return None,
+    };
+    Some(Clause::Expect {
+        metric: (*metric).to_owned(),
+        value,
+        tolerance,
+    })
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

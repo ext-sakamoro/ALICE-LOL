@@ -65,16 +65,23 @@ def strings(text: str) -> list[str]:
 # ── sources ────────────────────────────────────────────────────────────
 
 
-def syntax_table(src: str) -> tuple[list[tuple[str, list[str]]], list[str], list[str]]:
-    """(SDF groups in order, intent verbs, runtime-only names) from syntax_table.rs."""
+def syntax_table(src: str) -> tuple[list[tuple[str, list[str]]], list[str], list[str], list[str]]:
+    """(SDF groups in order, intent verbs, audit-law clauses, runtime-only names)
+    from syntax_table.rs."""
     sdf = re.search(r"^(?:pub(?:\([a-z]+\))? )?const SDF_SYNTAX[^=]*=\s*&\[(.*?)^\];", src, re.M | re.S)
     groups = []
     if sdf:
         for m in re.finditer(r'\(\s*"([a-z0-9_]+)"\s*,\s*&\[(.*?)\]\s*,?\s*\)', sdf.group(1), re.S):
             groups.append((m.group(1), strings(m.group(2))))
     intent = re.search(r"^(?:pub(?:\([a-z]+\))? )?const INTENT_SYNTAX[^=]*=\s*&\[(.*?)\];", src, re.M | re.S)
+    law = re.search(r"^(?:pub(?:\([a-z]+\))? )?const LAW_SYNTAX[^=]*=\s*&\[(.*?)\];", src, re.M | re.S)
     only = re.search(r"^(?:pub(?:\([a-z]+\))? )?const RUNTIME_ONLY[^=]*=\s*&\[(.*?)\];", src, re.M | re.S)
-    return groups, strings(intent.group(1)) if intent else [], strings(only.group(1)) if only else []
+    return (
+        groups,
+        strings(intent.group(1)) if intent else [],
+        strings(law.group(1)) if law else [],
+        strings(only.group(1)) if only else [],
+    )
 
 
 def macro_names(src: str) -> list[str]:
@@ -223,11 +230,12 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
             docs[rel] = ""
 
     # syntax
-    groups, intent, runtime_only = syntax_table(read(root, SYNTAX_RS))
+    groups, intent, law, runtime_only = syntax_table(read(root, SYNTAX_RS))
     want = dict(groups)
     want["intent"] = intent
-    if not groups or not intent:
-        errors.append(f"{SYNTAX_RS}: SDF_SYNTAX / INTENT_SYNTAX not found")
+    want["law"] = law
+    if not groups or not intent or not law:
+        errors.append(f"{SYNTAX_RS}: SDF_SYNTAX / INTENT_SYNTAX / LAW_SYNTAX not found")
     n = 0
     for rel, text in docs.items():
         listed_anywhere: list[str] = []

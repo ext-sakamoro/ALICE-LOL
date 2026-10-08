@@ -1,7 +1,6 @@
 # wiring-guard baseline: 既存の違反 (ラチェット) 新規は fail、解消したら行を消す
 dead_code alice-lol/examples/complete_pipeline_output.rs 1
 dead_code alice-lol/src/law.rs 2
-unwired alice-lol-datagen/src/rng.rs::range
 unwired alice-lol-datagen/src/sample.rs::parse_sdf
 unwired alice-lol-humanoid/src/bvh.rs::frame_root_position
 unwired alice-lol-humanoid/src/bvh.rs::is_position

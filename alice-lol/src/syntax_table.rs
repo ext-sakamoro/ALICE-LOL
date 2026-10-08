@@ -102,14 +102,17 @@ const INTENT_SYNTAX: &[&str] = &[
     "align", "follow", "avoid", "rest", "latent", "seq", "par", "music",
 ];
 
+/// The clause keywords of an audit law (`parse_law`), one per line of the law
+const LAW_SYNTAX: &[&str] = &["audit", "evidence", "expect", "range"];
+
 /// SDF names the `lol!` macro does not accept (runtime parser only), in
 /// addition to the whole `stdlib` group
 const RUNTIME_ONLY: &[&str] = &["capsule_ab"];
 
 #[cfg(test)]
 mod tests {
-    use super::{INTENT_SYNTAX, RUNTIME_ONLY, SDF_SYNTAX};
-    use crate::runtime_parser::{parse_lol, parse_program};
+    use super::{INTENT_SYNTAX, LAW_SYNTAX, RUNTIME_ONLY, SDF_SYNTAX};
+    use crate::runtime_parser::{parse_law, parse_lol, parse_program};
     use std::collections::BTreeSet;
 
     const PARSER_SRC: &str = include_str!("runtime_parser.rs");
@@ -183,6 +186,35 @@ mod tests {
         let table: BTreeSet<&str> = INTENT_SYNTAX.iter().copied().collect();
         assert!(table.len() >= 10, "INTENT_SYNTAX has {} names", table.len());
         assert_eq!(parser, table, "parse_intent arms vs INTENT_SYNTAX");
+    }
+
+    #[test]
+    fn law_table_equals_the_parser_dispatch() {
+        assert_no_duplicates(LAW_SYNTAX, "LAW_SYNTAX");
+        let parser = dispatched(fn_body("parse_law"));
+        let parser: BTreeSet<&str> = parser.iter().map(String::as_str).collect();
+        let table: BTreeSet<&str> = LAW_SYNTAX.iter().copied().collect();
+        assert!(table.len() >= 4, "LAW_SYNTAX has {} names", table.len());
+        assert_eq!(parser, table, "parse_law arms vs LAW_SYNTAX");
+    }
+
+    #[test]
+    fn every_law_keyword_reaches_its_arm() {
+        // 表に載っている keyword は、引数が足りない形でも「未知の語」ではなく
+        // その腕の中で落ちる (= 表と parser が同じものを指している行動的な確認)
+        let unknown = parse_law("audit a\nnot_a_law_keyword x\n")
+            .unwrap_err()
+            .message;
+        assert!(unknown.contains("unknown audit law clause"), "{unknown}");
+        for name in LAW_SYNTAX {
+            let err = parse_law(&format!("audit a\n{name}\n"))
+                .unwrap_err()
+                .message;
+            assert!(
+                !err.contains("unknown audit law clause"),
+                "`{name}` is in LAW_SYNTAX but the parser does not know it: {err}"
+            );
+        }
     }
 
     #[test]

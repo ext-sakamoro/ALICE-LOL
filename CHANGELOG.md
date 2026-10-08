@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 監査 Law — 検査を「何が成立すべきか」として書く (`audit_law` + `parse_law`)
+
+`law` (幾何の制約) と `research_law` (データに対する式) に続く 3 つ目の Law 一致を検査する対象が
+**測定そのもの**で、検査器が何件比べたか / 既知の違反がどこまでかを主張する 判定は 6 値
+(`Supports` / `NoEvidence` / `Breaks` / `OutOfRange` / `ParameterUpdate` / `Undecided`)
+
+```text
+audit lock-single-version
+evidence packages
+expect unbaselined_duplicates == 0
+range alice-det-math 0.3.2 0.4.0
+```
+
+**Law は測り方を書かない** 数値を渡すのは検査を走らせる側 (`Measurements`) なので、同じ Law を
+Rust からでも別の言語からでも食わせられる 真偽の 2 値では「測れていない」と「違反した」が同じ失敗に
+なり「判定不能」を表現できないため、`research_law::ResearchVerdict` と同じ考え方で証拠に対する判定を分けた
+証拠は期待値より先に判定するので、空の実測で `0 == 0` が偶然通ることはない
+
+`LAW_SYNTAX` を構文表に追加し、`parse_law` の dispatch と README の `syntax-law` 表との 3 者一致を
+既存の仕組みで強制する (語彙を足して parser か README を足さなければ red) 文法 (`lol.gbnf`) にも
+`law` を root の選択肢として追加したので、制約デコードで Law を書ける Law の metric 名と成立範囲の
+key は測る側が決めるので列挙できず、ここだけ開いた識別子 (`ident`) を使う
+
+`tests/audit_law_parity.rs` が `scripts/lock_single_version.py` の試験入力 13 件で判定の一致を確かめる
+(残る 3 件は lock の読み方なので測る側の責務) `scripts/law_tests.sh` に登録済
+`examples/audit_law_demo.rs` が公開入口 (Law の構文解析 → 実測 → 6 判定) を通して実行する
+
+#### 文法 file の 2 つの写しが同一であることの検査 (`tests/gbnf_copy_is_in_sync.rs`)
+
+`alice-lol/lol.gbnf` (正典) と `skills/lol-sdf/references/lol.gbnf` (配布に同梱する写し) を byte で比べる
+片方だけ編集しても気付けない状態だった — `lol_gbnf_test` は正典しか読まず、しかも `llm-bridge`
+feature 配下なので feature 無しの run では 0 test で通る 本 test は feature を要求しない
+
 #### 同じ `alice-*` crate が 2 版以上 lock に入っていないことを検査する gate (`scripts/lock_single_version.py`)
 
 semver 非互換な要求 (`^0.3` と `^0.4` 等) が混ざると cargo はどちらも正当な解決として 1 つの build に両方を link する
