@@ -23,7 +23,7 @@ Use this skill when the task calls for:
 
 - **LLM-driven text→3D** with correctness-critical output — the GBNF grammar rejects invalid syntax at inference time, eliminating a whole class of LLM failure modes
 - **3D print automation** — `print_export` emits FDM / SLA / SLS-tuned STL / 3MF with automatic mesh repair (`MeshRepair::repair_all`)
-- **Bambu Lab H2D laser** — `.lac` project generation from LOL 2D DSL (see companion `alice-metal-card` for SVG → `.lac` implementation)
+- **Bambu Lab H2D laser** — `.lac` project generation from LOL 2D DSL (the SVG → `.lac` step lives in a separate, unpublished crate)
 - **Roblox UGC** — `roblox_export` emits OBJ / FBX with triangle-count validation for UGC accessory (4000 tri) or generic MeshPart (10000 tri)
 - **Law-constrained generation** — declare `NonOverlap`, `Containment`, `MinThickness` constraints and get a residual report with spatial coordinates
 - **Variable capture** — `{rust_expr}` inject Rust values into DSL at compile time (proc_macro path only, not runtime LLM path)
@@ -90,7 +90,7 @@ From this skill directory:
 ```bash
 scripts/parse.sh <input.lol>                                   # syntax validation (STUB — use library API)
 scripts/print.sh <input.lol> --format {stl|3mf} [--output <path>]  # STUB — parent crate example is hardcoded
-scripts/laser.sh <input.lol> --output <path.lac>               # STUB — requires alice-metal-card companion
+scripts/laser.sh <input.lol> --output <path.lac>               # STUB — requires the unpublished companion crate
 scripts/roblox.sh <input.lol> --format {obj|fbx} [--preset accessory|meshpart]  # STUB — same pending CLI
 ```
 
@@ -112,7 +112,7 @@ For LLM-oriented workflows the shell CLI gap is less critical because the primar
 
 **Roadmap** (would unblock the scripts):
 - Add `alice-lol/src/bin/lol.rs` with subcommands `parse`, `print`, `roblox` accepting `--input <path>` — the API surface exists; this is packaging work.
-- The `laser.sh` script additionally depends on the `alice-metal-card` companion crate for `.lac` generation from SVG.
+- The `laser.sh` script additionally depends on a separate, unpublished crate for `.lac` generation from SVG.
 
 Use `scripts/<name>.sh --help` for the full documented interface.
 

@@ -5,24 +5,23 @@
 #   scripts/laser.sh <input.lol> --output part.lac
 #   scripts/laser.sh --help
 #
-# Note: .lac generation lives in a separate crate (`alice-metal-card`),
-# not directly in `alice-lol`. This script documents the pipeline; the actual
-# LOL 2D DSL → SVG → .lac path requires the alice-metal-card `lac_gen.rs`
-# module or equivalent.
+# Note: .lac generation lives in a separate internal crate, not directly in
+# `alice-lol`. This script documents the pipeline; the actual LOL 2D DSL → SVG
+# → .lac path requires that crate's `lac_gen.rs` module or equivalent.
 #
 # Pipeline:
 #   LOL 2D DSL (circle_2d / rect_2d / bezier)
 #     → alice_lol runtime parser
 #     → alice_sdf 2D SDF evaluation
 #     → contour extraction → SVG paths (mm coordinates)
-#     → alice_metal_card::lac_gen (usvg parse + PathObject conversion)
+#     → the companion crate's lac_gen (usvg parse + PathObject conversion)
 #     → .lac (Bambu Suite ZIP+JSON)
 #     → open in Bambu Suite → H2D laser
 #
 # Required for full pipeline:
 #   - Rust toolchain
 #   - ALICE-LOL workspace at ../..
-#   - Companion alice-metal-card crate (Project-ALICE/alice-metal-card)
+#   - The companion crate that generates .lac (not published)
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -57,7 +56,7 @@ if [[ -z "$OUTPUT" ]]; then
     OUTPUT="${STEM}.lac"
 fi
 
-echo "[alice-lol-sdf] .lac generation requires the alice-metal-card companion crate." >&2
-echo "[alice-lol-sdf] For now, manually run the alice-metal-card pipeline against $INPUT." >&2
+echo "[alice-lol-sdf] .lac generation requires the companion crate (not published)." >&2
+echo "[alice-lol-sdf] For now, run that crate's pipeline against $INPUT by hand." >&2
 echo "[alice-lol-sdf] Target output: $OUTPUT" >&2
 exit 4

@@ -497,7 +497,7 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - **`capsule_ab(ax, ay, az, bx, by, bz, r)`** — 任意 2 点 capsule (`SdfNode::Capsule` の一般形) stdlib の SKADIS hook 等が生成する非 Y 対称 capsule を text に書き戻せるように追加 (`capsule(r, h)` は Y 対称の短縮形のまま) grammar `name_7f` + parser + LLM_REFERENCE
 - `llm_bench` の出力表示を `Debug` から `Program::to_lol` (正規形 LOL) に変更
 - **`lol.gbnf` に product / mechanical / fastener 構文 103 個を追加** (`pen_cup` / `coaster` / `gridfinity_bin` / `gridfinity_bin_ex` (新 `prim_7f`) / `wall_hook` / 12 archetype 3f 群 64 個 / `vesa_mount` / `l_bracket` / `screw_hole` / `heat_set_hole` / `jst_ph_slot` 等) 事案: 2026-08-20 Sprint C で text-to-print の grammar copy と `runtime_parser` には足されたが canonical `lol.gbnf` には upstream されず、mechanical 38 個はどの grammar にも無かった (system prompt は案内しているのに grammar ON だと emit 不能) 新 golden test `grammar_covers_every_runtime_parser_construct` (parser の `"name" =>` arm ⊆ grammar 名、include_str! で source を走査) で再発を CI で検知、`accepts_product_and_mechanical_shortcuts`
-- **`alice_lol::LOL_GBNF`** (feature 外の `pub const`、`include_str!("lol.gbnf")`) — 下流 (alice-bamboo → text-to-print 等) が grammar を copy して drift させる運用を廃止するための単一 source `bridge::lol_grammar` も同じ bytes を parse
+- **`alice_lol::LOL_GBNF`** (feature 外の `pub const`、`include_str!("lol.gbnf")`) — 下流 (非公開の pipeline crate → text-to-print 等) が grammar を copy して drift させる運用を廃止するための単一 source `bridge::lol_grammar` も同じ bytes を parse
 
 - **`examples/llm_bench.rs` (A2-3、feature `llm-bridge`)** — LOL 生成品質 benchmark 20 prompt (T1 単体 primitive 5 / T2 合成 5 / T3 変換・修飾 5 / T4 Phase 3 Intent 5) を ChatML system prompt 付きで GGUF に投げ、**oracle** (T1-T3: ALICE-SDF `eval` の点内外判定、T4: `Program.intent` の合成種別 + verb 列 + entity id) で判定 grammar-only (`generate_program_from_prompt`) と think→grammar (`generate_program_thinking`) を同一 prompt で比較、tier 別 pass 率 + JSONL (`--out`、serde 非依存) A3 SFT の効果測定 baseline 用
   - **Baseline (MiniCPM5-2B Q4_K_M、arm64 CPU、prefix budget 800)**: grammar-only **7/20** (T1 3/5 / T2 0/5 / T3 2/5 / T4 2/5、46 s/prompt) vs think→grammar **9/20** (T1 5/5 / T2 1/5 / T3 1/5 / T4 2/5、138 s/prompt) parse は 40/40 (grammar が構文を保証) fail 24 件は全て model の実誤りで型は 4 つ: translate 欠落 (指定座標を無視して原点) / half 引数の誤解 (cylinder half_height に全高、box3d に全寸) / 合成の省略 (mug handle・table 脚・arch subtract・plate 穴を落とす) / Intent 混入・欠落 (幾何 prompt に `program(…, seq(rest(1000)))`、Intent prompt で `entities()` 省略、`par` を `seq`) think は単体 primitive を完全に直すが合成は直らない = 語彙・引数規約の学習不足で A3 SFT の対象
@@ -939,7 +939,7 @@ error: couldn't read `.../alice-lol-0.3.0/src/bridge/../../../lol.gbnf`:
 - canonical を `alice-lol/lol.gbnf` に移動 (workspace root から package 内へ)。
   `include_str!` は `"../lol.gbnf"` になり、参照先が package に収まる
 - 参照は 2 箇所のみ (`alice-lol/src/lib.rs` / `alice-lol/tests/lol_gbnf_test.rs`)。
-  下流 (alice-bamboo → text-to-print) は `alice_lol::LOL_GBNF` の re-export 経由
+  下流 (非公開の pipeline crate → text-to-print) は `alice_lol::LOL_GBNF` の re-export 経由
   なので影響なし。grammar の単一 source 運用 (copy 廃止、2026-09-14) は維持
 - symlink は張っていない。Windows の CI job で git symlink の checkout が
   問題になり得るため、単純な移動で解決している

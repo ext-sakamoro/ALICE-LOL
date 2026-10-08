@@ -30,7 +30,7 @@
 //! # H.3 実装ノート (duplication)
 //!
 //! GLB JSON parser + node hierarchy walker + `extract_humanoid_bones` +
-//! VRM bone name → [`Joint`] mapping は ALICE-Manga `src/vrm_import.rs` から抜粋
+//! VRM bone name → [`Joint`] mapping は 参照実装の `src/vrm_import.rs` から抜粋
 //! Phase H.5 で Manga / LOL 間の reconciliation 判断
 
 use std::collections::HashMap;

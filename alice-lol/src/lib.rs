@@ -40,7 +40,7 @@
 // `parse_lol("sphere(1.0)")` → `SdfNode` に変換
 /// The LOL DSL grammar (`lol.gbnf`, GBNF) as shipped with this crate version.
 ///
-/// Feature-free on purpose: downstream crates (alice-bamboo → text-to-print,
+/// Feature-free on purpose: downstream crates (the pipeline crate → text-to-print,
 /// or any llama.cpp-compatible runtime) embed the *same* bytes instead of
 /// keeping a copy that drifts. With `llm-bridge` enabled,
 /// [`bridge::lol_grammar`] parses exactly this text.

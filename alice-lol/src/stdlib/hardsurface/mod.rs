@@ -1,6 +1,6 @@
 //! # hardsurface — メカ / 建築 / パーツ / 道具 / 家具 の構造要素 primitive library
 //!
-//! ALICE-Bamboo 実プリント検証で確立された formulas を LOL の `SdfNode` として提供する
+//! 実プリント検証で確立された formulas を LOL の `SdfNode` として提供する
 //!
 //! ## モジュール
 //!
@@ -13,7 +13,7 @@
 //! - [`pattern_sdf`] — Bamboo Rust generator を `SdfNode` 直接構築に翻訳した完成 pattern 4 種 (Phase `B.1.b、wall_hook` / `gridfinity_bin` / `drawer_organizer` / `shelf_divider`)
 //! - [`cavity`] — Subtract 系 helper (Phase C 根本 refactor 2026-09-01、cavity margin +5mm rule intrinsic 化、archetype 側の rule 忘却事故を primitive API で防ぐ)
 //!
-//! ## 準拠 formulas (ALICE-Bamboo `src/formulas.rs`)
+//! ## 準拠 formulas (pipeline 側 `src/formulas.rs`)
 //!
 //! | 用途 | 式 | 出典 |
 //! |------|-----|-----|
@@ -21,7 +21,7 @@
 //! | ヒートセットインサート下穴径 | `insert_od + 0.2` | Bamboo `heat_insert_hole()` |
 //! | クリアランス穴径 (H2D 0.4 nozzle FDM) | `screw_dia + 0.2` | H2D 実測 |
 //!
-//! ## ALICE-Bamboo 実プリント合格の baseline
+//! ## 実プリント合格の baseline
 //!
 //! umbrella 削除後 (2026-08-06、Bamboo commit `6727f3f`) 残った 5 generator
 //! (drawer / gridfinity / hook / `shelf_divider` / skadis) が本 module の骨格となる

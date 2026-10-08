@@ -4,7 +4,7 @@
 
 ## 背景
 
-- ALICE-Manga `src/skeleton3d.rs` (937 行) が既に VRM → `SdfNode` の canonical converter として完成 (Phase α / Phase β 実装済、Alice VRM 実 PoC empirical 実証済)
+- 別の非公開 crate の `src/skeleton3d.rs` (937 行) が既に VRM → `SdfNode` の canonical converter として完成 (Phase α / Phase β 実装済、Alice VRM 実 PoC empirical 実証済)
 - alice-lol は `SdfNode` を中核型として持ち、GLSL/WGSL/HLSL transpile + `intent` module (Milestone B.1 skeleton) を備える
 - 三相原理 Milestone B (Intent スケルトン) の hero use case として humanoid template が最短距離
 - 詳細背景は `HUMANOID_TEMPLATE_DESIGN.md` §1-2 参照
@@ -44,7 +44,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 
 **scope**: 静的 humanoid template を LOL 独自実装として持つ
 
-- ALICE-Manga `skeleton3d.rs` の `Skeleton3D::humanoid_default()` 相当 logic を移植 (code copy、依存反転しない、H.5 で再検討)
+- 参照実装の `skeleton3d.rs` の `Skeleton3D::humanoid_default()` 相当 logic を移植 (code copy、依存反転しない、H.5 で再検討)
 - `HumanoidTemplate::default()` factory (canonical T-pose、16 joint / 15 bone、Y up 右手系)
 - `HumanoidTemplate::to_sdf(k)` method (Capsule chain + SmoothUnion tree で `SdfNode` 生成)
 - `examples/humanoid_default.rs` (SdfNode を GLSL transpile して stdout 出力、及び CPU rasterize で PNG 出力)
@@ -83,7 +83,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 **scope**: 実 VRM file からの HumanoidTemplate 生成
 
 - Cargo.toml に optional dep 追加: `gltf` 1.x + `serde_json` (`vrm` feature)
-- ALICE-Manga `vrm_import.rs` の `VrmFile::extract_humanoid_bones()` 相当 logic を移植 or 抽出 (code copy first、H.5 で共通化検討)
+- 参照実装の `vrm_import.rs` の `VrmFile::extract_humanoid_bones()` 相当 logic を移植 or 抽出 (code copy first、H.5 で共通化検討)
 - `HumanoidTemplate::from_vrm(path)` method (VRM 15 bone → joint position 変換、`from_vrm_bones()` 相当)
 - 公開できる VRM の test asset を選んで integration test を置く
 - `examples/humanoid_from_vrm.rs` (env `VRM_PATH` で任意 VRM を読み込み PNG 出力)
@@ -99,7 +99,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 
 **scope**: 動的 pose 変形
 
-- ALICE-Manga `bvh_import.rs` の pure Rust BVH parser (773 行) を移植 (dep 無しなので拾いやすい)
+- 参照実装の `bvh_import.rs` の pure Rust BVH parser (773 行) を移植 (dep 無しなので拾いやすい)
 - `mixamo_to_vrm()` / `cmu_to_vrm()` bone map converter 移植
 - `HumanoidTemplate::apply_pose(&BvhFrame)` method (FK 適用、`from_vrm_bones_with_pose()` 相当)
 - `examples/humanoid_bvh_animation.rs` (Alice VRM + Mixamo walk BVH の複数 frame PNG 出力、animation GIF 化は次段)
@@ -113,9 +113,9 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 
 **MVP 到達**: H.0-H.4 完了時点で「3D モデル (VRM) + motion (BVH) → LOL テンプレート化された `SdfNode`」の canonical pipeline 完成
 
-### H.5 ALICE-Manga との duplication 整理
+### H.5 参照実装との duplication 整理
 
-**scope**: Manga 側 `skeleton3d.rs` と LOL 側 `alice-lol-humanoid` の code 重複を解消するか、併存するかを決定
+**scope**: 参照実装側 `skeleton3d.rs` と LOL 側 `alice-lol-humanoid` の code 重複を解消するか、併存するかを決定
 
 **3 案 (未決定、Sprint 前議論)**
 

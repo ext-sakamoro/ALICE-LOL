@@ -1,21 +1,21 @@
 //! # `complete_pipeline_output` — Phase 5.3、全 13 品目 Bambu 対応 3MF 生成
 //!
-//! LOL DSL text → `parse_lol` → `SdfNode` → alice-bamboo `sdf_to_bambu_3mf` → `MakerWorld` 対応 .3mf
+//! LOL DSL text → `parse_lol` → `SdfNode` → 非公開の pipeline crate の `sdf_to_bambu_3mf` → `MakerWorld` 対応 .3mf
 //! 全 13 品目 (薄物 DC 経路 9 + 厚物 MC 経路 4) を `./output/{thin,thick}/` に出力
 //!
-//! **注意**: 本 example は `alice-bamboo` に依存 alice-lol 単独 crate では動作しない
-//! `alice-bamboo` を dev-dependencies に追加した状態で:
+//! **注意**: 本 example は非公開の pipeline crate に依存 alice-lol 単独 crate では動作しない
+//! その crate を dev-dependencies に追加した状態で:
 //! ```bash
 //! cargo run --release --example complete_pipeline_output --features bamboo-bridge
 //! ```
 //!
-//! LOL 単独では動かないため、実際の使用パターンは text-to-print / alice-bamboo 側で
+//! LOL 単独では動かないため、実際の使用パターンは text-to-print / pipeline 側で
 //! `sdf_to_bambu_3mf` を呼ぶ 本 example は「LOL DSL → `SdfNode` の完成度」の実測が主眼
-//! 3MF 生成部分は「LOL DSL parse 成功 + `SdfNode` 生成成功 + Bambu 変換部は alice-bamboo に委譲」
+//! 3MF 生成部分は「LOL DSL parse 成功 + `SdfNode` 生成成功 + Bambu 変換部は pipeline 側に委譲」
 //! の形で確認する
 //!
 //! 現状: LOL 単独 example として `parse_lol` + `SdfNode` 生成のみ確認、3MF は
-//! `alice-bamboo` example 側 (Phase 5.5) で実行推奨
+//! pipeline 側の example (Phase 5.5) で実行推奨
 
 use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::eval;
@@ -23,7 +23,7 @@ use glam::Vec3;
 
 fn main() {
     println!("=== ALICE-LOL Phase 5.3 — 全 13 品目 LOL DSL parse + SdfNode 生成 verify ===\n");
-    println!("(Bambu 対応 3MF 実生成は alice-bamboo example 側で実施、本 example は SdfNode 完成度のみ)\n");
+    println!("(Bambu 対応 3MF 実生成は pipeline 側の example で実施、本 example は SdfNode 完成度のみ)\n");
 
     // 全 13 品目 (Phase 5.1 + Phase 5.2 の高階 primitive + Phase B.1 の pattern_sdf 相当)
     let items: Vec<(&str, &str, PatternRoute)> = vec![
@@ -109,14 +109,14 @@ fn main() {
     println!(
         "\n厚物 4 品目 (wall_hook / gridfinity / drawer / shelf_divider) は LOL DSL text から\n\
          直接呼べない (0-arg primitive 未登録) Bamboo CLI 経由が canonical:\n\
-         cargo run --release --bin alice-bamboo -- hook --load 3 --output ./thick/hook.3mf\n\
-         cargo run --release --bin alice-bamboo -- gridfinity --units 2x2 --output ./thick/gridfinity.3mf\n\
-         cargo run --release --bin alice-bamboo -- drawer --width 250 --depth 200 --height 40 --slots \"chopsticks:2\" --output ./thick/drawer.3mf\n\
-         cargo run --release --bin alice-bamboo -- shelf-divider --width 560 --depth 250 --height 120 --output-dir ./thick/"
+         cargo run --release --bin <pipeline-cli> -- hook --load 3 --output ./thick/hook.3mf\n\
+         cargo run --release --bin <pipeline-cli> -- gridfinity --units 2x2 --output ./thick/gridfinity.3mf\n\
+         cargo run --release --bin <pipeline-cli> -- drawer --width 250 --depth 200 --height 40 --slots \"chopsticks:2\" --output ./thick/drawer.3mf\n\
+         cargo run --release --bin <pipeline-cli> -- shelf-divider --width 560 --depth 250 --height 120 --output-dir ./thick/"
     );
     println!("\nBambu 対応 3MF 生成 (12 file zip + template embed):");
     println!(
-        "  alice-bamboo::sdf_to_bambu_3mf(&sdf, path, name, resolution=128, use_dc=true)\n\
+        "  <pipeline-crate>::sdf_to_bambu_3mf(&sdf, path, name, resolution=128, use_dc=true)\n\
          → 素の 3MF (alice_sdf::io::export_3mf) の代わりに使う"
     );
 }

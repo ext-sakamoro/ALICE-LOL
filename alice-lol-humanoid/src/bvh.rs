@@ -37,7 +37,7 @@
 //!
 //! # H.4 実装ノート (duplication)
 //!
-//! BVH parser + bone map converters は ALICE-Manga `src/bvh_import.rs` の code copy
+//! BVH parser + bone map converters は 参照実装の `src/bvh_import.rs` の code copy
 //! Phase H.5 で reconciliation 判断
 
 use std::collections::HashMap;

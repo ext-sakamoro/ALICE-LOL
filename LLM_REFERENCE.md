@@ -379,7 +379,7 @@ alice_lol::print_export::lol_to_stl("lattice_infill(0.05, 5.0, 0.02, sphere(1.0)
 
 MakerWorld (makerworld.com) は素の3MFを拒否する。Bambu Studio互換メタデータ（`xmlns:BambuStudio` 名前空間、`project_settings.config`、サムネイルPNG）が必須。
 
-`ALICE-Bamboo/scripts/` にH2D用テンプレートを格納済み。`export_bambu_3mf()` (Python) がテンプレートを埋め込んでMakerWorld対応3MFを直接出力する。Bambu Studioでの再保存は不要。
+pipeline 側の `scripts/` にH2D用テンプレートを格納済み。`export_bambu_3mf()` (Python) がテンプレートを埋め込んでMakerWorld対応3MFを直接出力する。Bambu Studioでの再保存は不要。
 
 
 ### Examples for 3D Printing
@@ -502,7 +502,7 @@ ZIP+JSON プロジェクトファイル（3DプリントのBambu Studio `.3mf` �
 
 **パイプライン**: `LOL → SDF → SVG → .lac → Bambu Suite → H2D`
 
-**SVG → .lac 変換の必須ルール**（`alice-metal-card/src/lac_gen.rs` 実装リファレンス）:
+**SVG → .lac 変換の必須ルール**（非公開 crate の `src/lac_gen.rs` 実装リファレンス）:
 
 1. **PathObject に `is_closed: true/false` 必須** — 欠けると `Invalid data from PathObject` エラー
 2. **SVG path の Q コマンド → C 変換必須** — Bambu Suite は Q 非対応
@@ -756,7 +756,7 @@ Key principles:
 ### Pipeline
 
 ```
-LOL formulas → alice-metal-card (Rust) → laser-svg command → Layer-separated SVGs (no background)
+LOL formulas → 非公開 crate (Rust) → laser-svg command → Layer-separated SVGs (no background)
   → Bambu Studio (per-layer import, set Power/Speed/Interval) → H2D 40W laser → Material
 
 Alternative: laser command → G-code directly (rasterize → scanlines → G-code), bypassing Bambu Studio
@@ -1091,7 +1091,7 @@ assert mesh.is_watertight, "Mesh must be watertight for 3D printing"
 | Print | 192 | ~1M | ~80MB |
 | High quality | 256 | ~2M | ~170MB |
 
-## Parametric Design Formulas (ALICE-Bamboo formulas.rs)
+## Parametric Design Formulas (pipeline 側 formulas.rs)
 
 All dimensions derive from nozzle diameter (N), layer height (L), and material.
 

@@ -143,12 +143,12 @@ Slice → G-code → Print
 **実装**:
 - `scripts/verify_bamboo_generators.sh` 新規 bash script:
   ```bash
-  cargo run --release --bin alice-bamboo -- drawer --width 250 --depth 200 --height 40 --slots "chopsticks:2,fork:4,knife:4" --output /tmp/verify/drawer.3mf
-  cargo run --release --bin alice-bamboo -- gridfinity --units 2x2 --height 4 --output /tmp/verify/gridfinity.3mf
-  cargo run --release --bin alice-bamboo -- hook --load 3 --mount screw --output /tmp/verify/hook.3mf
-  cargo run --release --bin alice-bamboo -- shelf-divider --width 560 --depth 250 --height 120 --output-dir /tmp/verify/
+  cargo run --release --bin <pipeline-cli> -- drawer --width 250 --depth 200 --height 40 --slots "chopsticks:2,fork:4,knife:4" --output /tmp/verify/drawer.3mf
+  cargo run --release --bin <pipeline-cli> -- gridfinity --units 2x2 --height 4 --output /tmp/verify/gridfinity.3mf
+  cargo run --release --bin <pipeline-cli> -- hook --load 3 --mount screw --output /tmp/verify/hook.3mf
+  cargo run --release --bin <pipeline-cli> -- shelf-divider --width 560 --depth 250 --height 120 --output-dir /tmp/verify/
   # skadis は Phase B.1.c で ALICE 準拠検証済、Rust SDF 版は既存維持
-  cargo run --release --bin alice-bamboo -- skadis --size 300 --output /tmp/verify/skadis_panel.3mf
+  cargo run --release --bin <pipeline-cli> -- skadis --size 300 --output /tmp/verify/skadis_panel.3mf
   ```
 - 4 CLI 実行成功 + 3MF 生成確認
 
@@ -247,7 +247,7 @@ Slice → G-code → Print
 
 - alice-sdf `1.7.4` (`dual_contouring` module 既存活用)
 - alice-lol `0.2.0` (Phase A / B.1 / 3'' 実装済 stdlib + print_export)
-- alice-bamboo (Phase B.1.d wrapper 化済 4 generator)
+- pipeline crate (Phase B.1.d wrapper 化済 4 generator)
 - text-to-print (`crates/core/src/pipeline.rs` は Phase A.5 で README 更新のみ、pipeline 内部変更なし)
 
 ## 9. 除外項目 (Phase 5 scope 外)

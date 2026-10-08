@@ -12,10 +12,11 @@
 
 ## 0. Pre-Verify 実測結果 + Bambu Studio 検証優先順位 (2026-08-07 rev.2 全 fix 完了)
 
-**実行**: `cd ALICE-Bamboo && cargo test --test bambu_pre_verify --release -- --nocapture`
+**実行**: 3D プリント pipeline 側の repo で
+`cargo test --test bambu_pre_verify --release -- --nocapture`
 
 Phase 5.6 手順書 17 items のうち **自動検証可能 9 items** を Rust integration test で
-先行実施 (`ALICE-Bamboo/tests/bambu_pre_verify.rs`) user は残 **8 items** (Bambu Studio
+先行実施 (pipeline 側の `tests/bambu_pre_verify.rs`) 残 **8 items** (Bambu Studio
 目視 / slice / 実プリント) に絞れる
 
 **★ 2026-08-07 rev.2**: 発見された 5 SDF/mesh bug (skadis_container / gridfinity_bin /
@@ -77,7 +78,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 ## 1. 検証対象ファイル一覧 (17 品目)
 
-### 1.1 薄物 DC 経路 (9 品目、`ALICE-Bamboo/output/thin/`)
+### 1.1 薄物 DC 経路 (9 品目、pipeline 側の `output/thin/`)
 
 | No | file | LOL DSL | 実測 (Phase 5.3) | 期待 slice 時間 (PLA, 0.12mm layer) |
 |--|--|--|--|--|
@@ -91,7 +92,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 | T8 | `skadis_shelf.3mf` | `skadis_shelf()` | 87K vert / 171K tri / 1297KB | ~4-6 hours (幅 260mm) |
 | T9 | `skadis_elastic_cord.3mf` | `skadis_elastic_cord()` | 66K vert / 132K tri / 1207KB | ~1 hour |
 
-### 1.2 厚物 MC 経路 (4 品目、`ALICE-Bamboo/output/thick/`)
+### 1.2 厚物 MC 経路 (4 品目、pipeline 側の `output/thick/`)
 
 | No | file | Rust API 呼び出し | 実測 | 期待 slice 時間 |
 |--|--|--|--|--|
@@ -102,16 +103,16 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 ### 1.3 Bamboo CLI 経路 (4 品目、`/tmp/bamboo_verify/`、Phase 5.5)
 
-**注意**: 本 4 品目は `alice-bamboo` CLI で生成、**素の 3MF** (Bambu template 埋込なし)
+**注意**: 本 4 品目は pipeline の CLI で生成、**素の 3MF** (Bambu template 埋込なし)
 Bambu Studio で開くと「印刷設定なし」で表示される、user が material / printer を毎回設定要
 本格運用は Phase 5.3 example (Bambu template embed 版) を推奨
 
 | No | file | CLI subcommand | 実測サイズ | 状態 |
 |--|--|--|--|--|
-| C1 | `hook.3mf` | `alice-bamboo hook --load 3 --mount screw` | 18MB | OK |
-| C2 | `gridfinity_2x2_div2x2.3mf` | `alice-bamboo gridfinity --units 2x2 --dividers 2x2` | **1.3KB** | ⚠ **degenerate mesh 疑い** (別 sprint 修正、Bamboo generators/gridfinity.rs wrapper 実装確認要) |
-| C3 | `drawer_chopsticks_set.3mf` | `alice-bamboo drawer --slots "chopsticks:2,fork:4,knife:4"` | 146MB | 大きすぎる (resolution 高すぎ、--resolution 128 で縮小可) |
-| C4 | `shelf_divider/shelf_divider.3mf` | `alice-bamboo shelf-divider --width 560 --depth 250 --height 120` | 64MB | OK |
+| C1 | `hook.3mf` | `<pipeline-cli> hook --load 3 --mount screw` | 18MB | OK |
+| C2 | `gridfinity_2x2_div2x2.3mf` | `<pipeline-cli> gridfinity --units 2x2 --dividers 2x2` | **1.3KB** | ⚠ **degenerate mesh 疑い** (別 sprint 修正、Bamboo generators/gridfinity.rs wrapper 実装確認要) |
+| C3 | `drawer_chopsticks_set.3mf` | `<pipeline-cli> drawer --slots "chopsticks:2,fork:4,knife:4"` | 146MB | 大きすぎる (resolution 高すぎ、--resolution 128 で縮小可) |
+| C4 | `shelf_divider/shelf_divider.3mf` | `<pipeline-cli> shelf-divider --width 560 --depth 250 --height 120` | 64MB | OK |
 
 ---
 
@@ -239,7 +240,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 
 | エラー | 原因候補 | 対処 |
 |--|--|--|
-| "3MF file corrupted" | zip package 破損、writer bug | Phase 5.7 alice-bamboo bambu_3mf.rs の bug report 要 |
+| "3MF file corrupted" | zip package 破損、writer bug | Phase 5.7 pipeline 側 bambu_3mf.rs の bug report 要 |
 | "No printable object" | mesh 空、degenerate | file size < 10KB なら degenerate 疑い (C2 gridfinity と同型) |
 | "Non-manifold edges detected" | mesh 非多様体 | DC 経路のはず = Phase 3''.2 実測で 0 だったので新 bug、report 要 |
 | "Object out of build volume" | build volume 超過 (H2D 315mm) | K4 shelf_divider 560mm など、Cut tool で分割印刷 |

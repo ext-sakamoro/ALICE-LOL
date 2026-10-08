@@ -53,7 +53,7 @@ canonical narrative
 
 - alice-sdf は透過依存 (alice-lol 経由)
 - 姉妹 crate 拡張路線: 将来 `alice-lol-quadruped` / `alice-lol-mech` / `alice-lol-creature` を同構造で追加可能
-- alice-manga との関係は Phase H.5 で決定 (A 併存 / B wrapper 化 / C 段階移行)
+- 参照実装との関係は Phase H.5 で決定 (A 併存 / B wrapper 化 / C 段階移行)
 
 ## 3. API 表面 draft
 
@@ -182,11 +182,11 @@ default features: なし (`vrm` は opt-in、pure な static + BVH のみで動�
 - `RUSTFLAGS='-Dwarnings'` build green
 - 仮実装 grep 罠回避 (`unwrap!` / `unimplemented!` / `todo!` / `panic!.*stub` は 0)
 
-## 6. ALICE-Manga との関係
+## 6. 既存の参照実装との関係
 
-- 現状: `ALICE-Manga/src/skeleton3d.rs` (937 行) が同等 logic 実装済
+- 現状: 別の非公開 crate の `src/skeleton3d.rs` (937 行) が同等 logic 実装済
 - 本 crate は Phase H.0-H.4 で **code copy** で立ち上げる (依存反転しない、変更影響を最小化)
-- Phase H.5 で 3 案検討 (A 併存 / B Manga → LOL wrapper 化 / C 段階移行)
+- Phase H.5 で 3 案検討 (A 併存 / B 参照実装側を LOL の wrapper 化 / C 段階移行)
 - 未決定、当面は併存想定
 
 ## 7. License
@@ -211,5 +211,5 @@ default features: なし (`vrm` は opt-in、pure な static + BVH のみで動�
 ## 9. 参考
 
 - [HUMANOID_TEMPLATE_ROADMAP.md](HUMANOID_TEMPLATE_ROADMAP.md)
-- ALICE-Manga `src/skeleton3d.rs` (canonical Reference 実装)
-- ALICE-Manga `docs/CHARACTER_AUTHORING_PIPELINE.md` (Phase α / β empirical 実測)
+- 参照実装側の `src/skeleton3d.rs` (canonical Reference 実装)
+- 同じ crate の `docs/CHARACTER_AUTHORING_PIPELINE.md` (Phase α / β empirical 実測)

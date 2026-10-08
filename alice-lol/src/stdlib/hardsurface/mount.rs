@@ -17,7 +17,7 @@
 //!
 //! IKEA SKADIS hook 全体 (peg + 爪 + 引っかけ部) を実プリント可能な品質で
 //! 生成するには **2D polygon + extrude 方式** が canonical
-//! → `ALICE-Bamboo/src/generators/skadis.rs` (Python `generate.py` 経由) を使う
+//! → pipeline 側の `src/generators/skadis.rs` (Python `generate.py` 経由) を使う
 //!
 //! 本 module では **peg tenon 単体のみ SDF 提供** ([`skadis_peg_compat`])
 //! hook 本体組立は Bamboo 側に委譲

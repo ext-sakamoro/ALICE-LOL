@@ -8,8 +8,8 @@
 # 全 13 pattern の PrintabilityScore 再計算 (5 SDF bug 全完全 fix、13/13 pre-verify PASS)
 #
 # 参照:
-#   `ALICE-Bamboo/pattern_scores.json` (Bamboo simulation 実測 dump)
-#   `ALICE-Bamboo/tests/bambu_pre_verify.rs` (自動 9 items pre-verify、13/13 PASS)
+#   pipeline 側の `pattern_scores.json` (Bamboo simulation 実測 dump)
+#   pipeline 側の `tests/bambu_pre_verify.rs` (自動 9 items pre-verify、13/13 PASS)
 #   `docs/BAMBU_STUDIO_VERIFICATION.md` (Phase 5.6 user 目視 8 items 手順書)
 
 # ─── 薄物 (Phase 3''-3''.3.1、DC 経路) ───

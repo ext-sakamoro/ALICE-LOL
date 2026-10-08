@@ -1642,7 +1642,7 @@ impl<'a> Parser<'a> {
             }
             "skadis_panel" => {
                 // Variadic 0/1/2/3-arg 対応 defaults は SKADIS canonical
-                // (300×5×5、ALICE-Bamboo `ALICE-Bamboo/models/wall-organizer/skadis-300x300/`)
+                // (300×5×5、pipeline 側の `models/wall-organizer/skadis-300x300/`)
                 // LLM 側で「SKADISパネル 10✖10」等の曖昧入力を parse fail させず
                 // canonical に丸める β UX 用の forgiving 動作 (2026-09-04 追加)
                 let (size, thickness, corner_r) = self.parse_skadis_panel_args()?;

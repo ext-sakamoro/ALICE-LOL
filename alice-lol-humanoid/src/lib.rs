@@ -12,7 +12,7 @@
 //! - H.2 Parametric morphology (完了)
 //! - H.3 VRM import (完了)
 //! - **H.4 BVH import + pose** (本 Phase、`bvh` module 常時 available + `with_pose` FK)
-//! - H.5 ALICE-Manga との duplication 整理
+//! - H.5 参照実装との duplication 整理
 //! - H.6 Intent 結線 (`apply_intent(&IntentNode)`)
 //!
 //! # 三相原理での位置付け
@@ -23,7 +23,7 @@
 //! # H.1 / H.2 実装ノート (duplication)
 //!
 //! `Joint` enum / `Bone` struct / `MuscleWidths` / bones topology は
-//! ALICE-Manga `src/skeleton.rs` + `src/skeleton3d.rs` の code copy
+//! 参照実装の `src/skeleton.rs` + `src/skeleton3d.rs` の code copy
 //! Phase H.5 で reconciliation (併存 / wrapper 化 / 段階移行) を決める (未決定)
 //!
 //! # Quick start

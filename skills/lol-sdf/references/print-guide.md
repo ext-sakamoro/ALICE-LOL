@@ -97,4 +97,4 @@ Before emitting, verify:
 - `syntax.md` — 124-construct DSL reference
 - `lol.gbnf` — GBNF grammar for constrained decoding (prevents syntax-level errors)
 - Parent `LLM_PRINT_PROMPT.md` for the full system prompt with more worked examples
-- Companion `ALICE-Bamboo` — 3D print pipeline (LOL → SDF → Physics validation → Print / 3MF → Bambu Studio)
+- A separate, unpublished pipeline crate — LOL → SDF → physics validation → print / 3MF → slicer

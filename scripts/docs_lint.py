@@ -135,6 +135,13 @@ PRIVATE_NAME_HASHES = {
     "f59367a3ffb393334570507ae7d5d0f7b1b92b0b7dd8a9a229c0d3f1df416388",
     "96ac2ef53544a3e2fbe76274f9124be1e78c878f03bdf2ae6ed9aa7864dddecd",
     "8653d44dc6fd3b625cba9865fc10f6b8d2d9d871d5da9e3624bc6d87179ed8f1",
+    # sibling repositories and crates that are not published: naming them here
+    # would disclose an inventory that is deliberately not public (both the
+    # hyphen and the underscore spelling, since Rust paths use the latter)
+    "378f5e12256d4d847ec2e5a750b2e5118b4749cd75352d1ab26cfd3fca936f06",
+    "47d8bd8487117f1f9f05fd56fd011946858084a01cbaefd5deed52e9a05eeb2b",
+    "8e2774e9aafc847145a806227a80c6a51d91abade45a6220e0519c39f3f567bd",
+    "de735c5c8d8ee5f8ba0468a624fd847d37591b8f112579e7fc5216760088221c",
     # internal review / rule names
     "d44eb131a9fc729aae3aed377733d242c0796290775259142e0bd8d26e1e3132",
     "9330fafbe2c0a50b50ab63cbc545e79f87b76394b7efa9b6f1dc90f4ce76bfb1",
