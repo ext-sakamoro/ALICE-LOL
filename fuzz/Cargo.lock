@@ -22,7 +22,7 @@ checksum = "eef90265249a97cc0fac787cf918f62639991513c0219c33e1853de7f1a28a03"
 name = "alice-lol"
 version = "0.4.0"
 dependencies = [
- "alice-det-math 0.3.2",
+ "alice-det-math 0.4.0",
  "alice-lol-macro",
  "alice-sdf",
  "alice-zip",

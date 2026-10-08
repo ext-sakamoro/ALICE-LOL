@@ -37,7 +37,7 @@ dependencies = [
 name = "alice-lol"
 version = "0.4.0"
 dependencies = [
- "alice-det-math 0.3.2",
+ "alice-det-math 0.4.0",
  "alice-llm",
  "alice-lol-macro",
  "alice-physics",
@@ -97,7 +97,8 @@ dependencies = [
 name = "alice-physics"
 version = "2.0.0"
 dependencies = [
- "alice-det-math 0.3.2",
+ "alice-det-math 0.4.0",
+ "sha2",
 ]
 
 [[package]]

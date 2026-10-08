@@ -18,7 +18,7 @@ semver 非互換な要求 (`^0.3` と `^0.4` 等) が混ざると cargo はど�
 `<crate 名> <版> <版>` で載せる 解消した行が残っていても fail する (ラチェット) 読めた package が 0 件なら fail する
 third-party の重複 (`syn` / `thiserror` 等) は上流の都合で日常的に起きるので対象にしない
 `scripts/test_lock_single_version.py` (16 本) が各検査の歯を確かめる ci.yml の `wiring-guard` job (3 OS) と preflight で実行
-現在の baseline は `alice-det-math` の 1 行で、`alice-zip` が `^0.4` を、`alice-lol` 自身と `alice-sdf` / `alice-physics` が `^0.3` を要求するため
+現在の baseline は `alice-det-math` の 1 行で、`alice-lol` 自身と `alice-zip` / `alice-physics` が `^0.4` を、`alice-sdf` が `^0.3.1` を要求するため
 
 #### README とコードの一致を検査する gate (`scripts/readme_sync.py`)
 
@@ -477,6 +477,17 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - tests: `tests/program_parser_tests.rs` (11、全 verb parse + round-trip + error) / `tests/lol_gbnf_test.rs` に program / intent golden 3 件追加
 
 ### Changed
+
+#### `alice-det-math` 0.4 へ追従
+
+`alice-lol` の `alice-det-math` の要求を `0.3.2` から `0.4` に上げた
+法則を保存・復元する経路 (`alice-zip` 0.7 / `alice-physics` 2.0) が既に `^0.4` を要求しているので、
+`research_law` が法則を評価する時の超越関数と、保存した法則を復元する時の超越関数が同じ世代になる
+`research_law` が使うのは `sin64` / `cos64` / `exp64` / `ln64` / `sqrt64` / `powf64` で、0.4 でも同じ名前と signature
+`tests/research_law_bit_exact.rs` (22 本) は評価結果が `alice-det-math` の関数と bit 一致することを固定しており、
+上げた後も同じ 22 本が通る
+`scripts/lock-duplicates-baseline.txt` の `alice-det-math` の行は残る 残る `^0.3` 要求は `alice-sdf` (`^0.3.1`) だけで、
+0.3 系の最新が 0.3.2 なので解決結果の版の組は `0.3.2 0.4.0` のまま変わらない
 
 #### `alice-physics` 2.0 へ追従
 
