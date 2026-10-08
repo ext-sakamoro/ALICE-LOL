@@ -91,6 +91,51 @@ fn a_duplicate_inside_the_range_supports_the_law() {
     assert!(law().evaluate(&healthy()).passed());
 }
 
+/// ⚠️ 上の試験はすべて期待値が 0 なので、差の取り方 (`got - value`) を和や商に
+/// 変えても答えが変わらない (0 との差は演算に依らない) 非零の期待値を 1 本置くと
+/// 差の取り方そのものが固定される
+#[test]
+fn a_non_zero_expectation_fixes_how_the_difference_is_taken() {
+    let law = parse_law("audit counted\nevidence packages\nexpect packages == 175\n")
+        .expect("the law text parses");
+    let exact = Measurements::new().with_number("packages", 175.0);
+    assert_eq!(law.evaluate(&exact), Verdict::Supports);
+    let off = Measurements::new().with_number("packages", 170.0);
+    assert_eq!(
+        law.evaluate(&off),
+        Verdict::Breaks {
+            metric: "packages".to_owned(),
+            expected: "175".to_owned(),
+            measured: "170".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn a_tolerance_accepts_only_inside_the_band() {
+    let law = parse_law("audit timed\nevidence seconds\nexpect seconds == 10 within 2\n")
+        .expect("the law text parses");
+    for inside in [8.0, 10.0, 12.0_f64] {
+        let m = Measurements::new().with_number("seconds", inside);
+        assert_eq!(law.evaluate(&m), Verdict::Supports, "{inside}");
+    }
+    for outside in [7.9, 12.1_f64] {
+        let m = Measurements::new().with_number("seconds", outside);
+        assert!(
+            matches!(law.evaluate(&m), Verdict::Breaks { .. }),
+            "{outside}"
+        );
+    }
+}
+
+#[test]
+fn a_failing_verdict_does_not_pass() {
+    // ⚠️ 上の test は `Supports` 側しか見ないので、`passed()` が常に true を
+    // 返す実装でも通る 通らない側を 1 本置いて両方向を固定する
+    let m = healthy().with_number("unbaselined_duplicates", 1.0);
+    assert!(!law().evaluate(&m).passed());
+}
+
 #[test]
 fn a_range_whose_versions_moved_is_a_parameter_update() {
     // script 版 `test_a_baseline_row_with_other_versions_fails`

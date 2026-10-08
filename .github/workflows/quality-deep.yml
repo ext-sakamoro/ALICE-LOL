@@ -20,6 +20,11 @@
 # **sound 化した law を足したら `--re` にその関数名を足すこと** — 足さないと
 # 新しい判定経路は測定対象外のまま green に見える
 #
+# 2026-10-09: 監査の判定器 (`audit_law.rs` / `audit_law_parity.rs`) を対象に加えた
+# `paths` を law.rs だけに絞っていたため、監査 Law を足した push では 1 件も測って
+# いなかった ⚠️ 期待値が 0 の試験しか無いと `got - value` の差の取り方を変える変異が
+# 恒等になるので、非零の期待値と許容差の試験を対で置いている
+#
 # continue-on-error は compile error も green に潰すので
 # continue-on-error は使わない measurement の exit code (2 = missed、3 =
 # timeout) は受けてから中身で判定する
@@ -46,18 +51,22 @@ on:
     branches: [main]
     paths:
       - 'alice-lol/src/law.rs'
+      - 'alice-lol/src/audit_law.rs'
       - 'alice-lol/tests/analytic_law.rs'
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
+      - 'alice-lol/tests/audit_law_parity.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
   pull_request:
     branches: [main]
     paths:
       - 'alice-lol/src/law.rs'
+      - 'alice-lol/src/audit_law.rs'
       - 'alice-lol/tests/analytic_law.rs'
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
+      - 'alice-lol/tests/audit_law_parity.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
 
@@ -70,7 +79,7 @@ env:
 
 jobs:
   mutants:
-    name: Mutation testing (law core, shard ${{ matrix.shard }}/4)
+    name: Mutation testing (law cores, shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -125,7 +134,7 @@ jobs:
       # in-place は tree を書き換えるので並列不可 — `--jobs` と併用すると
       # cargo-mutants 自身が usage error で落ちる (2026-09-27 実測)
       # test 集合は判定器を動かすものだけ (`--lib` が law.rs 内 `core_probe_tests`)
-      - name: Mutants (law core, shard ${{ matrix.shard }}/4)
+      - name: Mutants (law cores, shard ${{ matrix.shard }}/4)
         working-directory: ALICE-LOL
         run: |
           # 変異した `const fn` が rustc の const-eval を無限ループさせ、
@@ -141,8 +150,9 @@ jobs:
           cargo mutants --in-place --shard ${{ matrix.shard }}/4 \
             --timeout 300 --build-timeout 240 \
             --file alice-lol/src/law.rs \
-            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven|lipschitz_enclosure|refine_with_lipschitz' \
-            -- --lib --test analytic_law --test law_tests
+            --file alice-lol/src/audit_law.rs \
+            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven|lipschitz_enclosure|refine_with_lipschitz|evaluate|check_evidence|check_ranges|check_expectations|sorted_values|version_key|passed' \
+            -- --lib --test analytic_law --test law_tests --test audit_law_parity
           rc=$?
           set -e
           # 0 = 全て caught、2 = missed あり、3 = timeout あり → ここでは測定結果
@@ -155,7 +165,7 @@ jobs:
         working-directory: ALICE-LOL
         run: |
           {
-            echo "## cargo-mutants — law core shard ${{ matrix.shard }}/4 (\`alice-lol/src/law.rs\`)"
+            echo "## cargo-mutants — law cores shard ${{ matrix.shard }}/4 (\`law.rs\` + \`audit_law.rs\`)"
             if [ -f mutants.out/outcomes.json ]; then
               python3 - <<'PY'
           import json
