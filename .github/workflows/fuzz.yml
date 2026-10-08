@@ -87,7 +87,7 @@ jobs:
       - name: Create SDF dependency stubs
         run: |
           for crate_info in \
-            "ALICE-Physics:alice-physics:1.0.0" \
+            "ALICE-Physics:alice-physics:2.0.0" \
             "ALICE-Codec:alice-codec:0.1.0" \
             "ALICE-Streaming-Protocol:libasp:0.1.0" \
             "ALICE-Cache:alice-cache:0.1.0" \

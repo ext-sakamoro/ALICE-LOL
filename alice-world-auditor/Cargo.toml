@@ -28,7 +28,7 @@ glam = "0.29"
 # Both ALICE-SDF and ALICE-Physics are already checked out by ALICE-LOL's
 # existing CI (alice-lol itself has identical path deps to these siblings),
 # so no new CI checkout step is needed.
-alice-physics = { path = "../../ALICE-Physics", version = "1.0", default-features = false, features = ["std"], optional = true }
+alice-physics = { path = "../../ALICE-Physics", version = "2.0", default-features = false, features = ["std"], optional = true }
 
 [features]
 default = []

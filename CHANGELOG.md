@@ -478,6 +478,14 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### `alice-physics` 2.0 へ追従
+
+**Breaking:** `alice-lol` と `alice-world-auditor` の `alice-physics` の要求を `1.0` から `2.0` に上げた (どちらも `physics` feature の optional dep)
+`physics` feature を使い `alice-physics` 1.x を pin している利用者は 2.0 へ上げる必要がある
+`.github/workflows/fuzz.yml` が optional path dep に作る stub の版も `2.0.0` に合わせた (stub の版が要求を外すと resolve 段で全 job が落ちる)
+2.0.0 の破壊的変更 (`#[non_exhaustive]` の一括付与と enum の variant 追加) に当たる呼び出しは無く、`cargo build --features physics --all-targets` と `cargo test --features physics` はどちらも通る
+要求を上げるまでは `^1.0` が sibling の 2.0.0 に一致せず、cargo を使う job が resolve 段で落ちていた
+
 #### `alice-zip` 0.7 へ追従
 
 `alice-lol` の `alice-zip` の要求を `0.6` から `0.7` に上げた `0.7` は配列の再構成法則を `f64` で積んで返り値で 1 度だけ `f32` に丸める形に替えており、`generators` の返す bit が下位で変わる
