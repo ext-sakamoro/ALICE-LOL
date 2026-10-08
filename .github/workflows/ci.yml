@@ -344,8 +344,10 @@ jobs:
 
   # 配線ガード: 実装したが production から呼ばれていない pub item と、理由の無い
   # allow(dead_code) の新規追加を止める (既存分は scripts/wiring-baseline.txt)
+  # 併せて版ガード: 同じ alice-* crate が 2 版以上 lock に入っている (= 同じ法則が
+  # 2 通りに評価されうる) 状態を止める (既存分は scripts/lock-duplicates-baseline.txt)
   # 検査器自身が OS 依存で空振り / 異常終了しないよう、test matrix と同じ 3 OS で動かす
-  # (検査対象 0 件は empty_scan で fail する)
+  # (検査対象 0 件は empty_scan / nothing compared で fail する)
   wiring-guard:
     name: Wiring guard (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -362,6 +364,10 @@ jobs:
         run: python scripts/test_wiring_guard.py
       - name: wiring-guard (新規の未配線 / 理由の無い dead_code が無い)
         run: python scripts/wiring_guard.py
+      - name: lock-single-version oracle (検査器自身の試験)
+        run: python scripts/test_lock_single_version.py
+      - name: lock-single-version (alice-* が 2 版以上 lock に入っていない)
+        run: python scripts/lock_single_version.py
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py) と、公開文書と全 tracked file の語彙 (scripts/docs_lint.py)

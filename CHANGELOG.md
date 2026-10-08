@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 同じ `alice-*` crate が 2 版以上 lock に入っていないことを検査する gate (`scripts/lock_single_version.py`)
+
+semver 非互換な要求 (`^0.3` と `^0.4` 等) が混ざると cargo はどちらも正当な解決として 1 つの build に両方を link する
+法則を評価する crate と法則を保存する crate が別の版の算術 crate を引くと、同じ法則が 2 通りに評価されうるが、
+片方だけを相手にした bit 一致試験は green のまま通るので差が出口に現れない
+`Cargo.lock` の `alice-` で始まる package が 2 版以上あれば fail し、既知の分は `scripts/lock-duplicates-baseline.txt` に
+`<crate 名> <版> <版>` で載せる 解消した行が残っていても fail する (ラチェット) 読めた package が 0 件なら fail する
+third-party の重複 (`syn` / `thiserror` 等) は上流の都合で日常的に起きるので対象にしない
+`scripts/test_lock_single_version.py` (16 本) が各検査の歯を確かめる ci.yml の `wiring-guard` job (3 OS) と preflight で実行
+現在の baseline は `alice-det-math` の 1 行で、`alice-zip` が `^0.4` を、`alice-lol` 自身と `alice-sdf` / `alice-physics` が `^0.3` を要求するため
+
 #### README とコードの一致を検査する gate (`scripts/readme_sync.py`)
 
 README.md / README_JP.md の構文表 (グループごと) が `alice-lol/src/syntax_table.rs` の名前の一覧と過不足・重複なく一致すること、
@@ -466,6 +477,12 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - tests: `tests/program_parser_tests.rs` (11、全 verb parse + round-trip + error) / `tests/lol_gbnf_test.rs` に program / intent golden 3 件追加
 
 ### Changed
+
+#### `alice-zip` 0.7 へ追従
+
+`alice-lol` の `alice-zip` の要求を `0.6` から `0.7` に上げた `0.7` は配列の再構成法則を `f64` で積んで返り値で 1 度だけ `f32` に丸める形に替えており、`generators` の返す bit が下位で変わる
+`alice-lol` は `alice_zip::law` の型 (`SignalLaw` / `IngestPolicy` / `Provenance` / `ResidualStats` / `ValidRange`) だけを使い `generators` を呼んでいないので、`research_law` の挙動は変わらない
+要求を上げるまでは `0.6` と `0.7` のどちらでも解決できない状態だった (`^0.6` に `0.7.0` が一致しない)
 
 #### `alice-sdf` 5.0 へ追従 (破壊的)
 

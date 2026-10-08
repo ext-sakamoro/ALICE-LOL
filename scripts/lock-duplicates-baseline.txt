@@ -1,0 +1,10 @@
+# lock-single-version baseline: 同じ build に 2 版以上入っている alice-* crate のラチェット
+# 新規は fail、版が動いたら行を書き替える、解消したら行を消す
+# 書式: <crate 名> <版> <版> ...
+#
+# alice-det-math: 法則を保存・復元する経路 (alice-zip) が ^0.4 を、法則を評価する経路
+#   (alice-lol 自身 / alice-sdf / alice-physics) が ^0.3 を要求するので、semver 非互換な
+#   2 世代が同じ build に link される 同じ超越関数が 2 通りに評価されうる状態で、
+#   tests/research_law_bit_exact.rs が固定しているのは ^0.3 側だけ
+#   世代を揃えるには上流の crate 群をまとめて上げる必要があり、本 repo 単独では閉じない
+alice-det-math 0.3.2 0.4.0
