@@ -11,7 +11,11 @@ splits an output at input values. The corners are read from those lines
 only; nothing is chosen by hand:
 
 - `bound`: an accepted request with the input at its bound; for an integer
-  input also the neighbour of the other parity (lo + 1, hi - 1)
+  input also the neighbour of the other parity (lo + 1, hi - 1). A grid search
+  over the other inputs gives a `witness` request that also satisfies every
+  scalar x-range; when none is found, no request with the bound is accepted
+  as far as the search sees, the corner becomes a rejected one and is marked
+  `unreachable` (the input range is wider than the law can use)
 - `outside`: a rejected request with the input just below lo / above hi
 - `non-integer`: a rejected request with a non-integer value
 - `edge`: an accepted request with a derived quantity at an edge of its
@@ -22,7 +26,10 @@ only; nothing is chosen by hand:
 - `piece`: an accepted request with the input at an inner piece edge
 - `vertex`: an accepted (or, when a scalar x-range rules it out, rejected)
   request with every ranged input at one of its bounds, one entry per
-  combination (integer inputs use both values of their bound pair)
+  combination (integer inputs use both values of their bound pair); a vertex
+  whose x-range quantity lies within 1e-9 of an edge is left out, because
+  the verdict there depends on rounding (e.g. kd = 0.01, kp = m = 0.1 gives
+  zeta = 0.05 exactly, and 0.049999999999999996 in double)
 
 Each corner is a dict that `matches(corner, law, inputs, rejected)` decides
 for one corpus vector. The module also evaluates law expressions (with
@@ -278,9 +285,12 @@ def env_for(law: dict, inputs: dict, lib=math) -> dict:
             env[k] = conv(v)
     for name, tree in law["lets"] + law["x_exprs"]:
         try:
-            env[name] = evaluate(tree, env, lib)
-        except (ExprError, ValueError, ZeroDivisionError, TypeError):
-            pass
+            val = evaluate(tree, env, lib)
+        except (ExprError, ValueError, ZeroDivisionError, TypeError, AttributeError):
+            continue
+        if isinstance(val, complex) or getattr(val, "imag", 0):
+            continue  # e.g. sqrt of a negative number with mpmath: not a real value
+        env[name] = val
     return env
 
 
@@ -350,11 +360,60 @@ def corners(law: dict) -> list[dict]:
                 choices.append([(v["name"], lo), (v["name"], hi)])
         for combo in itertools.product(*choices):
             point = dict(combo)
+            if on_edge(law, point):
+                continue
             accept = scalar_ranges_hold(law, point)
             tag = ",".join(f"{k}={_fmt(x)}" for k, x in combo)
             out.append({"id": f"vertex[{tag}]", "type": "vertex", "point": point,
                         "accept": accept is not False})
+    for c in out:
+        if c["type"] == "bound":
+            w = witness(law, c["input"], c["value"])
+            if w is False:
+                c["accept"] = False
+                c["unreachable"] = True
+            elif w:
+                c["witness"] = w
     return out
+
+
+GRID = 9  # values per other input in the witness search
+
+
+def _grid(v: dict, integer: bool) -> list[float]:
+    lo, hi = v["range"]
+    if lo > 0:
+        xs = [lo * (hi / lo) ** (k / (GRID - 1)) for k in range(GRID)]
+    else:
+        xs = [lo + (hi - lo) * k / (GRID - 1) for k in range(GRID)]
+    if integer:
+        xs = sorted({float(round(x)) for x in xs})
+    # centre first, so that the witness is an ordinary point
+    mid = (len(xs) - 1) / 2
+    return sorted(xs, key=lambda x: abs(xs.index(x) - mid))
+
+
+def witness(law: dict, name: str, value: float):
+    """A point with `name = value` and every other ranged input inside its range
+    that satisfies every scalar x-range: the point, None when the x-ranges cannot
+    be decided from scalars (they need a list input) or there are none, False
+    when no point of the grid search satisfies them. The search tries GRID values
+    per other input, so False means "none found", not a proof."""
+    if not law["x_ranges"]:
+        return None
+    others = [v for v in law["inputs"] if v["range"] and v["name"] != name]
+    grids = [[(v["name"], x) for x in _grid(v, v["name"] in law["integers"])] for v in others]
+    undecided = False
+    for combo in itertools.product(*grids):
+        point = {name: value, **dict(combo)}
+        if on_edge(law, point):
+            continue
+        ok = scalar_ranges_hold(law, point)
+        if ok:
+            return point
+        if ok is None:
+            undecided = True
+    return None if undecided else False
 
 
 def _fmt(x: float) -> str:
@@ -373,6 +432,18 @@ def scalar_ranges_hold(law: dict, point: dict):
         if not (q > r["lo"] if r["op"] == ">" else r["lo"] <= q <= r["hi"]):
             return False
     return verdict
+
+
+def on_edge(law: dict, point: dict) -> bool:
+    """Whether a scalar x-range quantity of the point is within rounding of its edge
+    (the verdict there depends on the evaluation order, so no request is made there)"""
+    env = env_for(law, point)
+    for r in law["x_ranges"]:
+        if r["q"] in env:
+            for edge in (r["lo"], r["hi"]):
+                if edge is not None and abs(env[r["q"]] - edge) <= 1e-9 * max(1.0, abs(edge)):
+                    return True
+    return False
 
 
 def _derived(law: dict, inputs: dict, q: str) -> list[float]:
@@ -441,7 +512,8 @@ def main(argv: list[str]) -> int:
         for name, cs in result.items():
             print(f"{name}: {len(cs)} corners")
             for c in cs:
-                print(f"  {'accept' if c['accept'] else 'reject'}  {c['id']}")
+                print(f"  {'accept' if c['accept'] else 'reject'}  {c['id']}"
+                      + ("  (unreachable: no point of the witness search satisfies the x-ranges)" if c.get("unreachable") else ""))
     total = sum(len(cs) for cs in result.values())
     if total == 0:
         print("error: 0 corners enumerated", file=sys.stderr)

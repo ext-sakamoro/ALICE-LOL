@@ -15,7 +15,7 @@ import os
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,14 +27,14 @@ ROOT = Path(__file__).resolve().parent.parent
 LAW = """# demo
 law demo
 kind research
-input a 1 range 0 10
+input a 1 range -1 10
 input n 1 range 1 5
 input t s
 input b 1
 x-integer n
 x-list t
 let q 1 = a*n
-x-range q 0 20
+x-range q -4 25
 let r 1 = t/2
 x-range r 0 3
 x-expr m 1 = min(b, 4) - 1
@@ -42,10 +42,12 @@ x-range m > 0
 """
 
 # one vector per corner of LAW that no vertex covers (accept unless "reject");
-# the vertices (added by corpus()) cover a@lo / a@hi / n@* / q@lo / q@hi
+# the vertices (added by corpus()) cover a@* / n@* / q<lo / q>hi
 FULL = [
-    ({"a": -1, "n": 3, "b": 2, "t": [1]}, "reject"),    # a<lo, q<lo
-    ({"a": 11, "n": 3, "b": 2, "t": [1]}, "reject"),    # a>hi, q>hi
+    ({"a": -2, "n": 3, "b": 2, "t": [1]}, "reject"),    # a<lo
+    ({"a": 11, "n": 1, "b": 2, "t": [1]}, "reject"),    # a>hi
+    ({"a": -1, "n": 4, "b": 2, "t": [1]}, "value"),     # q@lo (= -4, also the vertex left out)
+    ({"a": 5, "n": 5, "b": 2, "t": [1]}, "value"),      # q@hi (= 25)
     ({"a": 2, "n": 3, "b": 2, "t": [6]}, "value"),      # r@hi
     ({"a": 2, "n": 3, "b": 2, "t": [0]}, "value"),      # r@lo
     ({"a": 2, "n": 0, "b": 2, "t": [1]}, "reject"),     # n<lo
@@ -56,14 +58,15 @@ FULL = [
     ({"a": 1, "n": 2, "b": 1.01, "t": [1]}, "value"),   # m just above 0 (scale 2)
     ({"a": 1, "n": 2, "b": 1, "t": [1]}, "reject"),     # m <= 0
 ]
-VERTICES = [(a, n) for a in (0, 10) for n in (1, 2, 4, 5)]
+# (-1, 4) is left out: q = -4 is on the edge of its x-range
+VERTICES = [(a, n) for a in (-1, 10) for n in (1, 2, 4, 5) if (a, n) != (-1, 4)]
 
 
 def corpus(vectors):
     out = [{"law": "demo", "inputs": i, "kind": k} for i, k in vectors]
     for a, n in VERTICES:
         out.append({"law": "demo", "inputs": {"a": a, "n": n, "b": 2, "t": [1]},
-                    "kind": "value" if a * n <= 20 else "reject"})
+                    "kind": "value" if -4 <= a * n <= 25 else "reject"})
     return out
 
 
@@ -72,7 +75,7 @@ def run_cover(laws_dir, corpus_list):
         json.dump(corpus_list, f)
     try:
         buf = io.StringIO()
-        with redirect_stdout(buf):
+        with redirect_stdout(buf), redirect_stderr(io.StringIO()):
             code = cov.main(["--laws", str(laws_dir), "--corpus", f.name])
         return code, buf.getvalue()
     finally:
@@ -113,12 +116,34 @@ class Corners(unittest.TestCase):
         cs = {c["id"]: c for c in lc.corners(lc.parse_law(LAW))}
         self.assertTrue(cs["vertex[a=10,n=2]"]["accept"])     # q = 20
         self.assertFalse(cs["vertex[a=10,n=4]"]["accept"])    # q = 40
-        self.assertTrue(cs["vertex[a=0,n=1]"]["accept"])      # m needs b: not decidable, kept
+        self.assertFalse(cs["vertex[a=-1,n=5]"]["accept"])    # q = -5
+        self.assertTrue(cs["vertex[a=-1,n=1]"]["accept"])     # m needs b: not decidable, kept
+        self.assertNotIn("vertex[a=-1,n=4]", cs)              # q = -4 on the edge
 
     def test_integer_line_adds_parity_neighbours(self):
         without = [c["id"] for c in lc.corners(lc.parse_law(LAW.replace("x-integer n\n", "")))]
         self.assertNotIn("n@lo+1", without)
         self.assertNotIn("n:non-integer", without)
+
+    def test_witness_and_unreachable_bound(self):
+        law = lc.parse_law("law w\nkind research\ninput a 1 range 0 10\ninput b 1 range 1 10\n"
+                           "let s 1 = a + b\nx-range s 0 5\n")
+        cs = {c["id"]: c for c in lc.corners(law)}
+        self.assertTrue(cs["a@hi"].get("unreachable"))     # a = 10 needs s >= 11
+        self.assertFalse(cs["a@hi"]["accept"])
+        w = cs["a@lo"]["witness"]
+        self.assertEqual(w["a"], 0)
+        self.assertTrue(lc.scalar_ranges_hold(law, w))
+        self.assertTrue(cs["b@hi"].get("unreachable"))     # b = 10 needs s >= 10
+        self.assertTrue(cs["b@lo"]["accept"])
+
+    def test_vertex_on_an_edge_is_left_out(self):
+        law = lc.parse_law("law v\nkind research\ninput a 1 range 1 2\ninput b 1 range 1 2\n"
+                           "let s 1 = a + b\nx-range s 0 3\n")
+        ids = [c["id"] for c in lc.corners(law)]
+        self.assertNotIn("vertex[a=1,b=2]", ids)      # s = 3, on the edge
+        self.assertIn("vertex[a=1,b=1]", ids)
+        self.assertIn("vertex[a=2,b=2]", ids)
 
     def test_matches(self):
         law = lc.parse_law(LAW)
