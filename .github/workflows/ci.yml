@@ -403,6 +403,10 @@ jobs:
         run: python scripts/test_law_corners.py
       - name: law_corners (laws/spike の全 law file から corner を列挙、0 件は fail)
         run: python scripts/law_corners.py laws/spike
+      - name: law_ambiguity_lint oracle (検査器自身の試験)
+        run: python scripts/test_law_ambiguity_lint.py
+      - name: law_ambiguity_lint (method scope / range provenance / 言語中立性、0 件は fail)
+        run: python scripts/law_ambiguity_lint.py laws/spike
 
   actionlint:
     name: actionlint (workflow YAML 検証)

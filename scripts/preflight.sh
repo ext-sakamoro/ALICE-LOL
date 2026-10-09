@@ -110,6 +110,10 @@ step "ci.yml / docs: law_corners (oracle + corner enumeration)"
 python3 scripts/test_law_corners.py
 python3 scripts/law_corners.py laws/spike
 
+step "ci.yml / docs: law_ambiguity_lint (method scope, range provenance, language neutrality)"
+python3 scripts/test_law_ambiguity_lint.py
+python3 scripts/law_ambiguity_lint.py laws/spike
+
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 

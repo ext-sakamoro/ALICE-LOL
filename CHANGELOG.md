@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### law file の曖昧さ検査 (`scripts/law_ambiguity_lint.py`)
+
+- `x-invariant` を持つ law は、判定が特定の積分法に限定されることを `claim` に明記しなければならない
+- 同じ law が `input ... range` も持つ場合、有効範囲をどう測定したかを comment に明記しなければならない (script path を含む)
+- 全 law の文面 (`claim` / `verdict` / comment) に実装言語固有の語 (`f64` / `Vec` / `::` パス / `.method()` 表記 / 数値 literal 表記 等) を書いてはならない、数値の型は言語中立に書く (`source` 行は引用として対象外)
+- 比較した law file が 0 件なら fail CI と preflight は検査器自身の試験と `laws/spike` 全体の検査を走らせる
+
 #### law file の適合性 corpus (`laws/spike/`, `conformance/`)
 
 - `laws/spike/*.law`: 言語に依らない法則の記述 9 件 (`alice-lol/tests/spike_law_files_parse.rs` が既存の parser で読む)
