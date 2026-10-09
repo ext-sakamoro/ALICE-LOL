@@ -108,6 +108,11 @@ README = """# t
 
 See [lib](alice-lol/src/lib.rs).
 
+| Example | Shows |
+|---------|-------|
+| [`one`](alice-lol/examples/one.rs) | one |
+| [`two`](alice-lol/examples/two.rs) | two |
+
 ## Syntax
 
 <!-- readme-sync: syntax-primitives -->
@@ -175,6 +180,8 @@ def crate(overrides: dict[str, str] | None = None, drop: tuple[str, ...] = ()) -
         rs.RESEARCH_RS: RESEARCH,
         "README.md": README.format(example=EXAMPLE),
         "README_JP.md": README.format(example=EXAMPLE),
+        "alice-lol/examples/one.rs": "fn main() {}\n",
+        "alice-lol/examples/two.rs": "fn main() {}\n",
     }
     files.update(overrides or {})
     d = tempfile.mkdtemp()
@@ -330,5 +337,41 @@ class Checks(unittest.TestCase):
         self.assertTrue(any("README_JP.md: missing" in x for x in e), e)
 
 
+
+class Examples(unittest.TestCase):
+    """`examples` 検査の歯 — 表と disk の過不足を双方向で見ていること"""
+
+    def test_an_example_missing_from_the_table_is_an_error(self):
+        errs = errors({"alice-lol/examples/three.rs": "fn main() {}\n"})
+        self.assertTrue(
+            any("not listed in the table: three" in e for e in errs), errs
+        )
+
+    def test_a_table_row_without_a_file_is_an_error(self):
+        errs = errors(
+            both(R.replace("| [`two`](alice-lol/examples/two.rs) | two |", ""))
+        )
+        # file は在るのに行が消えた ⇒ 「表に無い」側で出る
+        self.assertTrue(any("not listed in the table: two" in e for e in errs), errs)
+
+    def test_a_row_pointing_at_a_deleted_example_is_an_error(self):
+        errs = errors(drop=("alice-lol/examples/two.rs",))
+        self.assertTrue(
+            any("does not exist: two" in e for e in errs), errs
+        )
+
+    def test_a_missing_examples_directory_is_an_error(self):
+        # ⚠️ 空振り防止 — ディレクトリごと無い時に素通りしない
+        # ⚠️ ここは「compared nothing」では捕まらない: 表の行は数えられるので
+        #    counts["examples"] が非 0 になる ⇒ 名指しの error が要る
+        errs = errors(
+            drop=("alice-lol/examples/one.rs", "alice-lol/examples/two.rs")
+        )
+        self.assertTrue(
+            any("alice-lol/examples is missing" in e for e in errs), errs
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -529,6 +529,11 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### `readme_sync` が example の一覧を検査する (2026-10-09)
+
+- `alice-lol/examples/*.rs` の集合と両 README の Example 表の行を双方向で突合する (表に無い example / 実在しない行 / ディレクトリ自体の不在をそれぞれ名指しで落とす)
+- 入れた時点で 13 example が両 README の表から落ちていたので、同じ commit で表に追加した
+
 #### **Breaking:** pattern registry の 2 つの名前を内容に合わせて改名
 
 公開していない姉妹 crate の名前を含んでいた 2 項目を、何を表すかで名付け直した

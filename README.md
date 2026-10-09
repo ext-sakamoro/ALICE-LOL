@@ -360,6 +360,19 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`print_verify`](alice-lol/examples/print_verify.rs) | numerical check of a lattice infill against the mesh |
 | [`roblox_accessory`](alice-lol/examples/roblox_accessory.rs) | Roblox accessory export (feature `roblox`) |
 | [`prompt_to_sword`](alice-lol/examples/prompt_to_sword.rs) | prompt → grammar-constrained LOL → mesh (feature `llm-bridge`) |
+| [`alice_coaster`](alice-lol/examples/alice_coaster.rs) | a 10 cm round coaster built from an SDF pattern |
+| [`coin_dc_vs_mc`](alice-lol/examples/coin_dc_vs_mc.rs) | marching cubes against dual contouring on a 1.7 mm coin |
+| [`complete_pipeline_output`](alice-lol/examples/complete_pipeline_output.rs) | 3MF export of every catalogue item in one run |
+| [`hardsurface_bolt_plate`](alice-lol/examples/hardsurface_bolt_plate.rs) | the fastener primitives |
+| [`hardsurface_snap_case`](alice-lol/examples/hardsurface_snap_case.rs) | the joint primitives |
+| [`hardsurface_ribbed_bracket`](alice-lol/examples/hardsurface_ribbed_bracket.rs) | the reinforcement primitives |
+| [`hardsurface_wall_bracket`](alice-lol/examples/hardsurface_wall_bracket.rs) | fasteners, joints, reinforcement and mounts in one part |
+| [`pattern_catalog`](alice-lol/examples/pattern_catalog.rs) | the pattern registry as a catalogue |
+| [`print_demo`](alice-lol/examples/print_demo.rs) | structural intent for 3D printing |
+| [`royal_crown`](alice-lol/examples/royal_crown.rs) | an ornate crown exported as OBJ |
+| [`skadis_panel_dc_vs_mc`](alice-lol/examples/skadis_panel_dc_vs_mc.rs) | marching cubes against dual contouring on a perforated panel |
+| [`verify_customizers`](alice-lol/examples/verify_customizers.rs) | the customizer archetypes render the expected shape |
+| [`llm_bench`](alice-lol/examples/llm_bench.rs) | pass rate of grammar-constrained decoding against a think-then-grammar prompt (feature `llm-bridge`) |
 
 Run one with `cargo run -p alice-lol --example <name>`.
 

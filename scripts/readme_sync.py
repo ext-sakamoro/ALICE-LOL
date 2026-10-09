@@ -28,6 +28,8 @@ follow fails CI instead of drifting:
   * example   the first ```rust block of each README is the ```rust block of
               the crate documentation in alice-lol/src/lib.rs (a doctest)
   * links     every relative link in both READMEs points at a file that exists
+  * examples  every `alice-lol/examples/*.rs` appears in each README's table
+              and every listed example exists (both directions)
   * sections  README_JP.md has the same number of `##` sections as README.md
 
 Every check must compare at least one item; a check that compared nothing
@@ -401,6 +403,29 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
             if not os.path.exists(os.path.normpath(os.path.join(base, path))):
                 errors.append(f"{rel}: link target does not exist: {target}")
     counts["links"] = n
+
+    # examples
+    # ⚠️ example を足しても README の表に足さなければ、ここが無い状態では gate が
+    #    通ってしまう (2026-10-09 実測: `audit_law_demo` が両 README の表から落ちた
+    #    まま exit 0 だった) 双方向で突合する — 表に無い example / 実在しない行
+    ex_dir = os.path.join(root, "alice-lol", "examples")
+    # ⚠️ ディレクトリが消えたら「比較 0 件」で素通りさせず、ここで名指しで落とす
+    if os.path.isdir(ex_dir):
+        on_disk = {
+            os.path.splitext(f)[0] for f in os.listdir(ex_dir) if f.endswith(".rs")
+        }
+    else:
+        on_disk = set()
+        errors.append("alice-lol/examples is missing (nothing to compare)")
+    n = 0
+    for rel in READMES:
+        listed = set(re.findall(r"\]\(alice-lol/examples/([A-Za-z0-9_]+)\.rs\)", docs[rel]))
+        n += len(listed)
+        for missing in sorted(on_disk - listed):
+            errors.append(f"{rel}: example not listed in the table: {missing}")
+        for stale in sorted(listed - on_disk):
+            errors.append(f"{rel}: table lists an example that does not exist: {stale}")
+    counts["examples"] = n
 
     # sections
     secs = {rel: len(re.findall(r"^## ", docs[rel], re.M)) for rel in READMES}

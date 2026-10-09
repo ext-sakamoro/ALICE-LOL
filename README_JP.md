@@ -331,6 +331,19 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`print_verify`](alice-lol/examples/print_verify.rs) | ラティス充填をメッシュと数値で照合 |
 | [`roblox_accessory`](alice-lol/examples/roblox_accessory.rs) | Roblox アクセサリ出力 (feature `roblox`) |
 | [`prompt_to_sword`](alice-lol/examples/prompt_to_sword.rs) | プロンプト → 文法制約つき LOL → メッシュ (feature `llm-bridge`) |
+| [`alice_coaster`](alice-lol/examples/alice_coaster.rs) | SDF の模様で作る 10cm 丸型コースター |
+| [`coin_dc_vs_mc`](alice-lol/examples/coin_dc_vs_mc.rs) | 1.7mm の薄い coin で marching cubes と dual contouring を比較 |
+| [`complete_pipeline_output`](alice-lol/examples/complete_pipeline_output.rs) | カタログの全品目を 1 回で 3MF 出力 |
+| [`hardsurface_bolt_plate`](alice-lol/examples/hardsurface_bolt_plate.rs) | 締結の primitive |
+| [`hardsurface_snap_case`](alice-lol/examples/hardsurface_snap_case.rs) | 組立の primitive |
+| [`hardsurface_ribbed_bracket`](alice-lol/examples/hardsurface_ribbed_bracket.rs) | 補強の primitive |
+| [`hardsurface_wall_bracket`](alice-lol/examples/hardsurface_wall_bracket.rs) | 締結・組立・補強・取付を 1 つの部品にまとめた例 |
+| [`pattern_catalog`](alice-lol/examples/pattern_catalog.rs) | pattern registry のカタログ表示 |
+| [`print_demo`](alice-lol/examples/print_demo.rs) | 3D プリント向けの構造意図 |
+| [`royal_crown`](alice-lol/examples/royal_crown.rs) | 装飾的な王冠を OBJ で出力 |
+| [`skadis_panel_dc_vs_mc`](alice-lol/examples/skadis_panel_dc_vs_mc.rs) | 穴あきパネルで marching cubes と dual contouring を比較 |
+| [`verify_customizers`](alice-lol/examples/verify_customizers.rs) | customizer の原型が期待した形になることの確認 |
+| [`llm_bench`](alice-lol/examples/llm_bench.rs) | 文法制約デコードと think→文法の pass 率の比較 (feature `llm-bridge`) |
 
 実行は `cargo run -p alice-lol --example <name>`
 
