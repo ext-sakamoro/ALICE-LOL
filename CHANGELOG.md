@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Law の識別子 (`law_id`) — 同じ主張に同じ名前
+
+- `law_id::LawIdHasher` / `AuditLaw::law_id`: 監査 Law に内容由来の 32 byte 識別子を付ける (`alice-zip` の `LAW_ID_DOMAIN` を共有し種類の tag を足す形)
+- 識別子は domain / 種類 / 算術の世代 / 主張から決まる **Behavior change:** 同じ text でも評価する算術が違えば別の識別子になる
+- 値ごとに型と長さを書くので `["ab","c"]` と `["a","bc"]`、`u32 5` と `u64 5`、空の項と項の不在がそれぞれ別の識別子になる
+- `law_id::LOL_SEMANTICS_ID` は `LOL_SEMANTICS_PINS` の fold で、pin は振る舞いから計算する (`audit_verdict_order_fingerprint`) 判定順序を変えると pin が合わなくなる
+- 幾何の制約と研究の法則の識別子は未実装 (前者は正規形が失敗しうるため戻り値の形が変わり、後者は式に canonical な text 形が無い)
+
 #### 判定経路に platform 依存の超越関数が入るのを止める gate (`scripts/det_math_guard.py`)
 
 Law は「同じ実測なら同じ判定」でなければならないが、`sin` / `cos` / `exp` 等は IEEE 754 が

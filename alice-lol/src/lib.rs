@@ -80,6 +80,7 @@ pub mod pruned_compile;
 // ── 法則（Law）制約チェッカー ──
 // LawSet ビルダー、静的矛盾検出、残差フィルタリング
 pub mod law;
+pub mod law_id;
 
 // ── 研究 Law (単位付きの多変数の式 + 成立範囲 + 残差 + 出典 + oracle) ──
 // 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う

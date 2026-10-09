@@ -221,6 +221,24 @@ a known violation: it is allowed while the measurement matches, becomes
 values move. Evidence is judged before expectations, so `0 == 0` cannot pass by
 accident on an empty measurement.
 
+## Law identity (`law_id`)
+
+A stored law and an evaluated law are the same law only if they carry the same
+name. `AuditLaw::law_id` derives a 32-byte identifier from the domain, the kind
+of law, the arithmetic generation and the claim itself. Every field is written
+with its type and its length, so `["ab", "c"]` and `["a", "bc"]`, `u32 5` and
+`u64 5`, and an empty field and a missing field all get different identifiers.
+
+The arithmetic generation is part of the name: the same text evaluated with
+different arithmetic can answer differently, so it is a different law.
+`LOL_SEMANTICS_ID` is the fold of `LOL_SEMANTICS_PINS`, and the pins are
+computed from behaviour (`audit_verdict_order_fingerprint`) rather than written
+down, so changing the order in which verdicts are reached makes the pin
+disagree. Geometric and research laws do not have identifiers yet.
+
+Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs); oracle:
+[`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs).
+
 ## Geometric laws (`law`)
 
 `law::Constraint` declares a property of a field; `LawSet` collects them with
@@ -333,6 +351,8 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`showcase`](alice-lol/examples/showcase.rs) | a tour of the syntax, variable capture, autodiff, `CompiledSdf` |
 | [`law_demo`](alice-lol/examples/law_demo.rs) | declaring and checking geometric laws |
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | the ideal-gas law in SI and in (kPa, L): re-evaluation, comparison, oracles, new evidence |
+| [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | writing a check as an audit law and reaching the six verdicts |
+| [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | what a law's identifier is derived from, and what changes it |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |
 | [`compiled_demo`](alice-lol/examples/compiled_demo.rs) | compiled evaluation (single point, SIMD batch, normals) |

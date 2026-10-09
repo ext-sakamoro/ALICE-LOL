@@ -45,6 +45,7 @@ dependencies = [
  "alice-zip",
  "glam",
  "naga",
+ "sha2",
  "stacker",
 ]
 

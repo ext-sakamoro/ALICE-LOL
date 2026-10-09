@@ -1,0 +1,237 @@
+//! Law の識別子が「何を同じと呼ぶか」を固定する.
+//!
+//! Law は「何が成立すべきか」の記述なので、**同じ主張には同じ名前**が付かなければ
+//! 保存した Law と評価する Law が同じものだと言えない 逆に主張が 1 bit でも違えば
+//! 別の名前になる必要がある ここはその両方向を固定する
+//!
+//! ⚠️ **識別子は算術世代を含む** 同じ text の Law でも、評価する算術が違えば別の答えが
+//! 出るので別の Law として扱う (`semantics_id` を混ぜる理由)
+//!
+//! ⚠️ **連結の曖昧さが最も危ない** 長さを前置せずに bytes を繋ぐと `["ab", "c"]` と
+//! `["a", "bc"]` が同じ hash になり、**別の Law が同じ名前を名乗る** 下の衝突試験が
+//! その経路を塞ぐ
+
+use alice_lol::law_id::{
+    audit_verdict_order_fingerprint, LawIdHasher, AUDIT_LAW_KIND, LOL_SEMANTICS_ID,
+    LOL_SEMANTICS_PINS,
+};
+use alice_lol::runtime_parser::parse_law;
+
+/// 算術世代を 1 つ変えた架空の識別子 (値そのものに意味はない)
+const OTHER_SEMANTICS: [u8; 32] = [0x5a; 32];
+
+fn audit(text: &str) -> alice_lol::audit_law::AuditLaw {
+    parse_law(text).expect("the law text parses")
+}
+
+const LAW_A: &str = "\
+audit lock-single-version
+evidence packages
+expect unbaselined_duplicates == 0
+range alice-det-math 0.3.2 0.4.0
+";
+
+#[test]
+fn the_same_law_gets_the_same_identifier() {
+    let x = audit(LAW_A).law_id(&LOL_SEMANTICS_ID);
+    let y = audit(LAW_A).law_id(&LOL_SEMANTICS_ID);
+    assert_eq!(x, y);
+}
+
+#[test]
+fn a_different_expected_value_gets_a_different_identifier() {
+    let a = audit(LAW_A).law_id(&LOL_SEMANTICS_ID);
+    let b = audit(&LAW_A.replace("== 0", "== 1")).law_id(&LOL_SEMANTICS_ID);
+    assert_ne!(a, b);
+}
+
+#[test]
+fn a_different_metric_name_gets_a_different_identifier() {
+    let a = audit(LAW_A).law_id(&LOL_SEMANTICS_ID);
+    let b = audit(&LAW_A.replace("evidence packages", "evidence crates")).law_id(&LOL_SEMANTICS_ID);
+    assert_ne!(a, b);
+}
+
+#[test]
+fn the_order_of_the_clauses_is_part_of_the_law() {
+    // ⚠️ 判定は「証拠 → 成立範囲 → 期待値」の順に見るので、書いた順が答えを変える
+    // ことはない しかし Law の text としては別物なので、識別子は分かれる
+    let reordered = "\
+audit lock-single-version
+expect unbaselined_duplicates == 0
+evidence packages
+range alice-det-math 0.3.2 0.4.0
+";
+    assert_ne!(
+        audit(LAW_A).law_id(&LOL_SEMANTICS_ID),
+        audit(reordered).law_id(&LOL_SEMANTICS_ID)
+    );
+}
+
+#[test]
+fn the_arithmetic_generation_is_part_of_the_identifier() {
+    // 同じ text でも評価する算術が違えば別の答えが出るので、別の Law として扱う
+    let same_text = audit(LAW_A);
+    assert_ne!(
+        same_text.law_id(&LOL_SEMANTICS_ID),
+        same_text.law_id(&OTHER_SEMANTICS)
+    );
+}
+
+#[test]
+fn the_name_of_the_law_is_part_of_the_identifier() {
+    let a = audit(LAW_A).law_id(&LOL_SEMANTICS_ID);
+    let b =
+        audit(&LAW_A.replace("lock-single-version", "lock-one-version")).law_id(&LOL_SEMANTICS_ID);
+    assert_ne!(a, b);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 衝突試験 — 連結の曖昧さで別の Law が同じ名前を名乗らないこと
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#[test]
+fn concatenation_is_not_ambiguous() {
+    // ⚠️ 長さを前置しないと `["ab", "c"]` と `["a", "bc"]` が同じ hash になる
+    let ab_c = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .bytes(b"ab")
+        .bytes(b"c")
+        .finish();
+    let a_bc = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .bytes(b"a")
+        .bytes(b"bc")
+        .finish();
+    assert_ne!(ab_c, a_bc);
+}
+
+#[test]
+fn an_empty_field_is_not_the_same_as_no_field() {
+    let one_empty = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .bytes(b"")
+        .finish();
+    let none = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID).finish();
+    assert_ne!(one_empty, none);
+}
+
+#[test]
+fn integers_of_different_widths_do_not_collide() {
+    let as_u32 = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .u32(5)
+        .finish();
+    let as_u64 = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .u64(5)
+        .finish();
+    assert_ne!(as_u32, as_u64);
+}
+
+#[test]
+fn the_kind_separates_laws_that_encode_the_same_bytes() {
+    // 別の種類の Law が偶然同じ byte 列を書いても、名前は分かれる
+    let audit_kind = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .u64(1)
+        .finish();
+    let other_kind = LawIdHasher::new(b"lol.law.not-a-real-kind", &LOL_SEMANTICS_ID)
+        .u64(1)
+        .finish();
+    assert_ne!(audit_kind, other_kind);
+}
+
+#[test]
+fn a_float_is_encoded_by_its_bits_not_its_text() {
+    // ⚠️ `-0.0` と `0.0` は `==` では等しいが、別の値として識別する
+    let neg_zero = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .f64(-0.0)
+        .finish();
+    let pos_zero = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .f64(0.0)
+        .finish();
+    assert_ne!(neg_zero, pos_zero);
+}
+
+#[test]
+fn every_nan_payload_is_the_same_law() {
+    // ⚠️ 逆に NaN は payload が違っても「判定できない」という同じ意味なので揃える
+    let a = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .f64(f64::NAN)
+        .finish();
+    let b = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
+        .f64(-f64::NAN)
+        .finish();
+    assert_eq!(a, b);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 算術世代の識別子そのもの
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#[test]
+fn the_semantics_identifier_is_not_all_zero() {
+    // 「まだ決めていない」値を識別子として配ってしまう経路を塞ぐ
+    assert_ne!(LOL_SEMANTICS_ID, [0_u8; 32]);
+}
+
+#[test]
+fn the_semantics_identifier_folds_the_upstream_arithmetic() {
+    // 上流の算術世代が変われば、こちらの識別子も変わらなければならない
+    // (上流の id を pin 表の 1 項目として含めていることの確認)
+    assert!(
+        alice_lol::law_id::LOL_SEMANTICS_PINS
+            .iter()
+            .any(|(name, _)| *name == "alice-det-math"),
+        "{:?}",
+        alice_lol::law_id::LOL_SEMANTICS_PINS
+            .iter()
+            .map(|(n, _)| *n)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn the_semantics_identifier_is_the_fold_of_its_pins() {
+    // ⚠️ 識別子が、それが名乗る振る舞いから drift できないことの検査
+    // pin 表を書き換えたら定数も変わる (定数だけ直しても pin と食い違えば fail)
+    assert_eq!(
+        LOL_SEMANTICS_ID,
+        alice_lol::law_id::fold_semantics_pins(alice_lol::law_id::LOL_SEMANTICS_PINS)
+    );
+}
+
+/// ⚠️⚠️ **この 1 本が「識別子が振る舞いから drift できない」ことの本体**
+///
+/// `LOL_SEMANTICS_ID` と pin 表の fold を比べるだけでは、**定数 vs 定数**なので
+/// 振る舞いを変えても通ってしまう (実測: 判定順序を入れ替える変異が 16 passed のまま
+/// 通った) pin の値を**その場で測り直した指紋**と比べて初めて歯になる
+#[test]
+fn the_audit_order_pin_is_the_measured_behaviour() {
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| name.contains("audit verdict order"))
+        .expect("判定順序の pin");
+    assert_eq!(
+        *pinned,
+        audit_verdict_order_fingerprint(),
+        "判定順序を変えたなら pin を再記録する (module doc の「再記録する順序」)"
+    );
+}
+
+#[test]
+fn the_upstream_arithmetic_pin_is_the_upstream_constant() {
+    // 上流の世代が上がったら、こちらの pin も追従しなければならない
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| *name == "alice-det-math")
+        .expect("上流の pin");
+    assert_eq!(*pinned, alice_det_math::SEMANTICS_ID);
+}
+
+#[test]
+fn the_judgment_order_is_pinned_as_a_semantics() {
+    // 監査 Law の「証拠 → 成立範囲 → 期待値」の順は verdict を変えるので、
+    // 算術と同じく識別子の一部でなければならない
+    assert!(
+        alice_lol::law_id::LOL_SEMANTICS_PINS
+            .iter()
+            .any(|(name, _)| name.contains("audit verdict order")),
+        "判定順序の pin が無い"
+    );
+}
