@@ -100,7 +100,8 @@ class Vocabulary(unittest.TestCase):
         self.assertTrue(any("internal tracker `Backlog`" in x for x in e), e)
 
     def test_session_name(self):
-        e = errors({"README_JP.md": README + "ys-3a が検出\n"})
+        # a stand-in name: a real one would be published by this file itself
+        e = errors({"README_JP.md": README + "ys-00 が検出\n"})
         self.assertTrue(any("session name" in x for x in e), e)
 
     def test_private_names_are_matched_by_hash_including_phrases(self):
