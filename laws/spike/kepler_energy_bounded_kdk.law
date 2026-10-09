@@ -53,6 +53,8 @@ x-output states = list of [x, y, vx, vy] after step 1, 2, .. n * periods (n * pe
 
 let energy J/kg = (vx^2 + vy^2)/2 - mu/sqrt(x^2 + y^2)
 let rel_err 1 = sqrt(((energy - e0)/e0)^2)     # |.| written as sqrt of a square
+x-invariant step(1) and step(n periods) equal the x-method trajectory to within 1e-7 in each of x, y, vx, vy
+                              # spread over 4 r^3 evaluation orders <= 2.2e-11 (e at its upper bound, n = 100, 101, 2000 with 40 periods, 1999 with 2); one step moves the state by >= 1e-3
 x-invariant first(n) = max of rel_err over steps 1 .. n
 x-invariant later(n) = max of rel_err over steps n + 1 .. periods n
 x-invariant later(n) <= 1.2 first(n)
@@ -60,5 +62,5 @@ x-invariant mean(k) = mean of rel_err over steps 1 .. k of a run with k steps pe
 x-invariant k = n when 2 n <= 2000, otherwise floor(n / 2); runs with k and 2 k steps per period (inside the range of n)
 x-invariant 3 <= mean(k) / mean(2 k) <= 5
 
-verdict conforms when the reported states have the stated length and step, and both invariants hold
+verdict conforms when the reported states have the stated length, the first and last states follow the stated method, and both energy invariants hold
 verdict an input outside its range, or a non-integer n or periods, is rejected
