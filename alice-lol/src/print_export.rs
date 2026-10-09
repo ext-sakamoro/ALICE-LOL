@@ -27,6 +27,7 @@
 
 use crate::SdfNode;
 use glam::Vec3;
+use std::collections::HashMap;
 use std::path::Path;
 
 // ── re-export ──
@@ -107,6 +108,70 @@ fn orient_outward(mut mesh: Mesh) -> Mesh {
     mesh
 }
 
+/// 同じ位置に落ちた別頂点を統合し、index が重複した三角形を落とす
+///
+/// marching cubes は格子の辺ごとに 1 頂点を作るので、**格子点が表面ちょうどに
+/// 載っている時はその点から出る複数の辺の頂点が同じ位置に重なる** 位置は同じまま
+/// 別の index として残るため、その頂点を 2 回使う三角形 = 面積 0 の三角形ができる
+/// (上流の `marching_cubes` は個数を閉形式 `2 Σ (k−1)` で固定しており、k は表面上の
+/// 格子点の内側隣接数 = 意図された帰結) slicer は面積 0 の facet を拒否するので、
+/// 出力の直前にここで畳む
+///
+/// # ⚠️ 距離や量子化で溶接しない
+///
+/// 統合は **`f32` の bit 完全一致**だけで行う 距離で溶接すると別の位置の頂点まで
+/// 巻き込んで非多様体 edge が出る (上流が旧方式で報告した形) ⚠️ 上流の
+/// `optimize::deduplicate_vertices` は量子化した位置 + 法線 + UV を hash するので
+/// ここでは使えない
+///
+/// # ⚠️ 破壊的ではないが非回帰 guard は掛ける
+///
+/// 頂点を 1 つも動かさず、落とすのは面積 0 の三角形だけなので原理的に水密性を
+/// 壊さない ([`repair_preserving_watertightness`] の破壊的修復とは別の操作)
+/// それでも欠陥数が増えたら採らない — 判定を実測に委ねる
+fn weld_coincident_vertices(raw: &Mesh) -> Mesh {
+    // `Mesh::indices` が `u32` なので、これを超える頂点は index で指せない
+    // ⚠️ 黙って `u32::MAX` に切り詰めずに、畳まず生 mesh を返す
+    if u32::try_from(raw.vertices.len()).is_err() {
+        return raw.clone();
+    }
+    let mut id: HashMap<[u32; 3], usize> = HashMap::with_capacity(raw.vertices.len());
+    let mut out = Mesh::new();
+    let mut remap: Vec<usize> = Vec::with_capacity(raw.vertices.len());
+    for v in &raw.vertices {
+        let next = id.len();
+        let slot = *id
+            .entry(v.position.to_array().map(f32::to_bits))
+            .or_insert(next);
+        if slot == next {
+            out.vertices.push(*v);
+        }
+        remap.push(slot);
+    }
+    // 統合後の頂点数は元以下なので、上の早期 return が `u32` に収まることを保証する
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "頂点数が u32 に収まることは関数先頭で確認済み、統合でしか減らない"
+    )]
+    let remap: Vec<u32> = remap.into_iter().map(|i| i as u32).collect();
+    for t in raw.indices.as_chunks::<3>().0 {
+        let (a, b, c) = (
+            remap[t[0] as usize],
+            remap[t[1] as usize],
+            remap[t[2] as usize],
+        );
+        // index が重複した三角形 = 畳まれて面積 0 になったもの
+        if a != b && b != c && a != c {
+            out.indices.extend_from_slice(&[a, b, c]);
+        }
+    }
+    if watertight_defects(&validate_mesh(&out)) <= watertight_defects(&validate_mesh(raw)) {
+        out
+    } else {
+        raw.clone()
+    }
+}
+
 /// 修復が実際に改善した時だけ修復後を採る
 ///
 /// # ⚠️ なぜ `MeshRepair::repair_all` を直接呼ばないか
@@ -128,6 +193,9 @@ fn orient_outward(mut mesh: Mesh) -> Mesh {
 /// そこで (a) **水密な mesh には破壊的操作を掛けない** (b) 掛けた結果が悪化したら
 /// **採らない** の 2 段で、`node_to_mesh` を**非回帰**にする
 fn repair_preserving_watertightness(raw: &Mesh, eps: f32) -> Mesh {
+    // ⚠️ 先に同位置の頂点を畳む — ここで畳まないと、水密な mesh (境界 edge 0 /
+    //    非多様体 edge 0) に面積 0 の三角形が残ったまま下の早期 return を通る
+    let raw = &weld_coincident_vertices(raw);
     let before = validate_mesh(raw);
     if watertight_defects(&before) == 0 {
         // ⚠️ 既に水密 — 破壊的操作も winding の付け替えもしない

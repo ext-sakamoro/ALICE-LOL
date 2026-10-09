@@ -923,3 +923,85 @@ fn dual_contouring_export_files_are_consistent() {
         "DC 3MF の <triangle> 数が stats と不一致"
     );
 }
+
+/// 同位置の頂点の統合は「位置を bit で一致させた分だけ」畳む
+///
+/// ⚠️ **既存の「零面積三角形 0」だけでは実装を区別できない** — 距離や量子化で
+/// 溶接しても零面積は 0 になるが、別の位置の頂点まで巻き込んで非多様体 edge が
+/// 出る (上流が旧方式で報告した形) 本 test は上流の閉形式
+/// `落とした三角形 = 2 × 畳んだ頂点` を LOL の export 経路の出力で突き合わせ、
+/// **畳んだ数そのもの**を固定する
+///
+/// 歯の範囲 (2026-10-09 に量子化へ差し替える変異で実測、res 128 / cell 0.03125):
+/// 刻み **0.00125** (= `VERTEX_MERGE_CELL_RATIO * cell`、この repo が破壊的修復で
+/// 使う許容量) / 0.003125 / 0.005 / 0.01 / 0.02 / 0.05 はすべて red
+/// ⚠️ 刻み **0.0001** (cell の 1/312) だけは green — この scene では隣接頂点を
+/// 1 つも巻き込まないので bit 一致と出力が同じ = 等価変異であって歯の欠落ではない
+#[test]
+fn coincident_vertices_are_welded_by_exact_position_only() {
+    // 生 mesh (修復前) を同じ config で取り直して、統合の前後を数える
+    let node = SdfNode::torus(0.8, 0.3);
+    // ⚠️ `scale_mm` は修復の **後** に掛かるので、既定 (10.0) のままだと位置の bit が
+    //    一致しない 統合そのものを見たいので 1.0 にする (他の性質は scale 非依存)
+    let c = PrintConfig {
+        scale_mm: 1.0,
+        ..PrintConfig::default()
+    };
+    let raw = alice_sdf::mesh::sdf_to_mesh(
+        &node,
+        c.bounds_min,
+        c.bounds_max,
+        &alice_sdf::mesh::MarchingCubesConfig {
+            resolution: c.resolution,
+            compute_normals: true,
+            ..alice_sdf::mesh::MarchingCubesConfig::default()
+        },
+    );
+    let exported = node_to_mesh(&node, &c);
+
+    // 位置の相異なる個数 (bit で数える) は統合で変わらない
+    let positions = |m: &Mesh| -> HashSet<[u32; 3]> {
+        m.vertices
+            .iter()
+            .map(|v| v.position.to_array().map(f32::to_bits))
+            .collect()
+    };
+    let raw_distinct = positions(&raw);
+    assert_eq!(
+        raw_distinct.len(),
+        exported.vertices.len(),
+        "統合後の頂点数が「生 mesh の相異なる位置の数」と違う \
+         (多ければ畳み漏れ、少なければ別の位置まで巻き込んでいる)"
+    );
+    assert_eq!(
+        raw_distinct,
+        positions(&exported),
+        "統合で位置の集合が変わった (頂点を動かしてはいけない)"
+    );
+
+    // 上流の閉形式: 畳んだ頂点 1 つにつき三角形が 2 枚潰れる
+    let welded = raw.vertices.len() - exported.vertices.len();
+    assert!(
+        welded > 0,
+        "この scene では頂点が 1 つも重なっていない — 閉形式を検査できていない \
+         (上流の marching cubes が変わったか bounds/res が変わった)"
+    );
+    assert_eq!(
+        raw.indices.len() / 3 - exported.indices.len() / 3,
+        2 * welded,
+        "落とした三角形が 2 × 畳んだ頂点 と一致しない"
+    );
+
+    // 畳んだ結果も閉じている (torus なので χ = 0)
+    assert_eq!(open_edges(&exported), 0, "統合後に境界 edge がある");
+    assert_eq!(
+        non_manifold_edges(&exported),
+        0,
+        "統合後に非多様体 edge がある"
+    );
+    assert_eq!(
+        euler_characteristic(&exported),
+        0,
+        "torus の χ が 0 でない (統合で位相が変わった)"
+    );
+}
