@@ -165,3 +165,7 @@ unwired alice-lol/src/stdlib/hardsurface/skadis_sdf.rs::SKADIS_OUTER_FRAME
 unwired alice-lol/src/stdlib/pattern.rs::find_by_name
 unwired alice-lol/src/stdlib/pattern.rs::pattern_passes_ci_gate
 unwired alice-lol/src/stdlib/pattern.rs::patterns_failing_ci_gate
+unwired alice-lol/src/laser_pattern.rs::new
+unwired alice-lol/src/roblox_export.rs::preview
+unwired alice-lol/src/stdlib/hardsurface/fastener.rs::from_f32_snap
+unwired alice-lol-humanoid/src/vrm.rs::from_vrm_bones

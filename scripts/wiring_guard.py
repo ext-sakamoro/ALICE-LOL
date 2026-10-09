@@ -26,6 +26,10 @@ baseline (`scripts/wiring-baseline.txt`) は既存の違反を記録するラチ
 新規の違反だけが fail する 解消された entry が残っていても fail (stale_baseline).
 
 限界: 名前で数えるので、(1) 別 file の同名 item は区別しない (同名の free fn が別 module にあれば一方の呼び出しで両方配線済)
+      ⚠️ ただし **method は `Type::name` の修飾子を所有型と突き合わせる** ので、別の型の同名 method は配線済にならない
+      (2026-10-09: `PrintConfig::preview()` が `RobloxConfig::preview` を配線済にして負債の記録を消していた)
+      `.name(` の呼び出しは型を特定できないので従来どおり配線済に倒す / 所有型が取れない impl も倒す
+      ⚠️ 違反の key は `<file>::<symbol>` なので、**同じ file 内の同名 method は 1 key に畳まれて区別できない**
 (2) match 腕のパターン束縛や macro 内の束縛は束縛と認識しない (配線済側に倒れる)
 (3) `impl Foo { .. }` の見出しが型名を参照するので、impl を持つ struct / enum は未配線でも配線済になる
 (4) trait impl の member は常に根とみなす (dispatch 先が分からないため)
@@ -42,6 +46,10 @@ from pathlib import Path
 
 MIN_REASON = 12
 SKIP_DIRS = {"target", ".git", "tests", "node_modules"}
+# `impl Foo`/`impl<T> Foo<T>`/`impl Trait for Foo` の **所有型** を取る (trait 名でなく対象型)
+# `Foo::bar` の `Foo` (直前の識別子、`<..>` の generic は飛ばす)
+QUAL_RE = re.compile(r"(\w+)(?:\s*::\s*<[^>]*>)?\s*$")
+IMPL_OWNER_RE = re.compile(r"^impl(?:\s*<[^>]*>)?\s+(?:[\w:]+(?:\s*<[^>]*>)?\s+for\s+)?(?:&\s*)?([A-Z]\w*)")
 EXEMPT_ATTRS = re.compile(r"no_mangle|export_name|wasm_bindgen|pyfunction|pyclass|pymethods|napi|uniffi")
 DEF_RE = re.compile(
     r"\bpub(?:\([^)]*\))?\s+"
@@ -237,7 +245,11 @@ def parse_nodes(code: str, rel: str, in_src: bool, first_idx: int) -> list[Node]
                 continue  # `<const N: usize>` 等の generic 引数
         cands.append((m.start(), kind, m.group(2), m.start(2)))
     for m in IMPL_RE.finditer(code):
-        cands.append((m.end() - 4, "impl", None, -1))
+        # ⚠️ impl の所有型を name に入れる (従来は None) `Type::method` の修飾子と
+        #    突き合わせて、別の型の同名 method を配線済と誤判定しないようにする
+        head = code[m.end() - 4 : m.end() - 4 + 400]
+        om = IMPL_OWNER_RE.search(head)
+        cands.append((m.end() - 4, "impl", om.group(1) if om else None, -1))
     for m in MACRO_RE.finditer(code):
         cands.append((m.start(), "macro", m.group(1), m.start(1)))
     cands.sort(key=lambda c: (c[0], c[1]))
@@ -337,11 +349,21 @@ def _is_struct_literal_field(code: str, s: int) -> bool:
     return False
 
 
-def _compat(node: Node, dot: bool, path: bool) -> bool:
-    """この出現の形が、その node を指しうるか (free fn は `.name(` に呼ばれない / method は `.name` か `::name`)."""
+def _compat(node: Node, dot: bool, path: bool, qual: str | None = None) -> bool:
+    """この出現の形が、その node を指しうるか (free fn は `.name(` に呼ばれない / method は `.name` か `::name`).
+
+    ⚠️ method が `Type::name` で修飾されていて、その `Type` が **別の型**なら指していない
+    (2026-10-09: `PrintConfig::preview()` が `RobloxConfig::preview` を配線済にしていた)
+    `.name(` は型を特定できないので従来どおり配線済に倒す (偽陽性より偽陰性)
+    所有型が取れなかった impl (`name is None`) も従来どおり倒す
+    """
     if node.cls == "free":
         return not dot
     if node.cls == "method":
+        if path and qual is not None:
+            owner = node.parent.name if node.parent is not None else None
+            if owner is not None and qual != owner:
+                return False
         return dot or path
     return True
 
@@ -406,7 +428,12 @@ def collect_refs(code: str, nodes: list[Node], names: set[str], decl_pos: set[in
                 continue
             if not call and not path and not dot and fn is not None and bound.get((fn.idx, name), n + 1) < s:
                 continue  # 同じ fn 内で束縛された local の使用
-        refs.append((cid, name, dot, path))
+        qual = None
+        if path:
+            qm = QUAL_RE.search(code, max(0, j - 80), j - 1)
+            if qm is not None:
+                qual = qm.group(1)
+        refs.append((cid, name, dot, path, qual))
     return refs
 
 
@@ -571,9 +598,9 @@ def check(root: Path, baseline_text: str = "") -> list[Violation]:
     refs_by_name: dict[str, list[tuple[int, bool, bool]]] = {}
     for p in files:
         decl_pos = {m.start(1) for m in DECL_RE.finditer(plain[p])} | {nd.name_pos for nd in file_nodes[p] if nd.name_pos >= 0}
-        for cid, name, dot, path in collect_refs(plain[p], file_nodes[p], names, decl_pos):
-            refs_by_ctx.setdefault(cid, set()).add((name, dot, path))
-            refs_by_name.setdefault(name, []).append((cid, dot, path))
+        for cid, name, dot, path, qual in collect_refs(plain[p], file_nodes[p], names, decl_pos):
+            refs_by_ctx.setdefault(cid, set()).add((name, dot, path, qual))
+            refs_by_name.setdefault(name, []).append((cid, dot, path, qual))
     by_name: dict[str, list[Node]] = {}
     for nd in nodes:
         if nd.in_src and nd.name and nd.kind != "macro":
@@ -586,16 +613,16 @@ def check(root: Path, baseline_text: str = "") -> list[Violation]:
         while frontier:
             nxt: list[int] = []
             for ctx in frontier:
-                for name, dot, path in refs_by_ctx.get(ctx, ()):
+                for name, dot, path, qual in refs_by_ctx.get(ctx, ()):
                     for m in by_name.get(name, ()):
-                        if m.idx not in live and m.idx != ctx and _compat(m, dot, path):
+                        if m.idx not in live and m.idx != ctx and _compat(m, dot, path, qual):
                             live.add(m.idx)
                             nxt.append(m.idx)
             frontier = nxt
         return live
 
     def referenced_from_dead(nd: Node) -> bool:
-        return any(c != nd.idx and _compat(nd, d, pa) for c, d, pa in refs_by_name.get(nd.name, ()))
+        return any(c != nd.idx and _compat(nd, d, pa, q) for c, d, pa, q in refs_by_name.get(nd.name, ()))
 
     # --- markers ---
     unwired_markers: dict[str, tuple[Path, int, str]] = {}  # key -> (file, line, reason)
@@ -656,7 +683,7 @@ def check(root: Path, baseline_text: str = "") -> list[Violation]:
         if mine & static_roots:
             return True
         rest = marker_nodes - mine
-        outer = [(c, d, pa) for nd in def_nodes[key] for c, d, pa in refs_by_name.get(nd.name, ()) if c not in mine and _compat(nd, d, pa)]
+        outer = [(c, d, pa) for nd in def_nodes[key] for c, d, pa, q in refs_by_name.get(nd.name, ()) if c not in mine and _compat(nd, d, pa, q)]
         if not any(c == -1 or c in live_all for c, _d, _pa in outer):
             return False
         if any(c == -1 for c, _d, _pa in outer):

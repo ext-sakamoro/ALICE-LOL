@@ -445,6 +445,57 @@ class NameCollisions(unittest.TestCase):
         self.assertNotIn("LIMIT", unwired(wg.check(crate(files))))
 
 
+class QualifiedMethodOwner(unittest.TestCase):
+    """`Type::method` で修飾された参照は、**その型の** method しか配線しない.
+
+    ⚠️ 実測 (2026-10-09、ALICE-LOL): `PrintConfig::preview()` を呼ぶ example を足したら、
+    別の型の `RobloxConfig::preview` まで「配線済」と判定されて baseline から
+    負債の記録が消えた (誰も呼んでいないのに) 名前だけで数えると区別できない
+
+    `.method(` の呼び出しは型を特定できないので従来どおり両方を配線済に倒す
+    (偽陽性より偽陰性を選ぶ guard の方針を変えない)
+    """
+
+    def files(self, caller: str):
+        return {
+            "src/lib.rs": LIB,
+            # ⚠️ 違反の key は `<file>::<symbol>` なので、同じ file に置くと 2 つの型の
+            #    同名 method が 1 つの key に畳まれて区別できない 実物も別 file にある
+            "src/a.rs": "pub struct Alpha;\nimpl Alpha { pub fn shared() {} }\n",
+            "src/d.rs": "pub struct Beta;\nimpl Beta { pub fn shared() {} }\n",
+            "src/b.rs": "pub fn x() {}\n",
+            EX: caller,
+        }
+
+    def test_a_qualified_call_wires_only_that_type(self):
+        r = crate(self.files("fn main() { mycrate::b::x(); mycrate::a::Alpha::shared(); }\n"))
+        u = unwired(wg.check(r))
+        # Alpha::shared は呼ばれたので配線済、Beta::shared は誰も呼んでいない
+        self.assertIn("shared", u, f"Beta::shared が未配線として出ていない: {u}")
+
+    def test_both_are_wired_when_each_type_is_called(self):
+        r = crate(
+            self.files(
+                "fn main() { mycrate::b::x(); mycrate::a::Alpha::shared(); mycrate::d::Beta::shared(); }\n"
+            )
+        )
+        self.assertNotIn("shared", unwired(wg.check(r)))
+
+    def test_a_method_style_call_still_wires_both(self):
+        # ⚠️ `.shared()` は型が分からないので従来どおり両方配線済に倒す (方針を変えない)
+        # ⚠️ `go` 自身を example から呼ぶ — 未配線の item の本体の参照は生きた文脈にならない
+        r = crate(
+            {
+                **self.files(
+                    "fn main() { mycrate::b::x(); mycrate::c::go(&mycrate::a::Alpha); }\n"
+                ),
+                "src/c.rs": "pub fn go(a: &crate::a::Alpha) { a.shared(); }\n",
+            }
+        )
+        u = unwired(wg.check(r))
+        self.assertNotIn("shared", u, f"メソッド呼び出しで配線済に倒れていない: {u}")
+
+
 class Robustness(unittest.TestCase):
     """検査器自身が例外終了せず、明示的な違反か empty_scan になる."""
 

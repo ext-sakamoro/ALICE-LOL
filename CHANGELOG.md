@@ -539,6 +539,12 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - `lol_to_3mf` / `lol_to_fbx` / `node_to_fbx` / `PrintConfig::ultra` は `src` / `tests` / `examples` から呼び出しが 0 件で、壊れても気付けない状態だった
 - 同じ mesh を STL / 3MF / FBX に書き、書かれた file 側から面数を数え直して突き合わせる (STL は `84 + 50n` byte / 3MF は非圧縮の `<triangle ` を byte 検索)
 
+#### 配線ガードが `Type::method` の修飾子を所有型と突き合わせる (2026-10-09)
+
+- method は `Type::name` で修飾された参照だけがその型の member を配線済にする 別の型の同名 method は配線済にならない
+- `.name(` の呼び出しは型を特定できないので従来どおり配線済に倒す (偽陽性より偽陰性の方針は変えない)
+- 厳格化で真の未配線 4 件が露出した (呼び出しが `#[cfg(test)]` 内か doc comment だけだったもの) baseline に記録済
+
 #### `readme_sync` が example の一覧を検査する (2026-10-09)
 
 - `alice-lol/examples/*.rs` の集合と両 README の Example 表の行を双方向で突合する (表に無い example / 実在しない行 / ディレクトリ自体の不在をそれぞれ名指しで落とす)
