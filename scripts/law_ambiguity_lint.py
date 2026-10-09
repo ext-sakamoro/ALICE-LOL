@@ -38,9 +38,9 @@ fixture in scripts/test_law_ambiguity_lint.py):
 
 Neither precondition rule depends on what the x-invariant content says (only
 that it exists and how many there are), and the vocabulary rule does not read
-x-invariant content at all, so both generalize past physics laws to the
-coding-rule laws a later pass is expected to add (P4): a rule here is a
-function of the lines a .law file has, not of physics semantics.
+x-invariant content at all, so both generalize past physics laws to other law
+subjects a later pass may add: a rule here is a function of the lines a .law
+file has, not of physics semantics.
 
 Exit 0 if every law passes every applicable rule, 1 if any fails, 2 if no law
 file was read (compared nothing: a bad glob or directory must not pass
@@ -56,9 +56,11 @@ import re
 import sys
 from pathlib import Path
 
-# Rust-specific vocabulary a law's prose must not contain (CLAUDE.md policy:
-# LOL states laws independent of the implementation language; these are
-# common technical terms, not confidential names, so a plain list is fine).
+ROOT = Path(__file__).resolve().parent.parent
+
+# Rust-specific vocabulary a law's prose must not contain. LOL states laws
+# independent of the implementation language; these are common technical
+# terms, not confidential names, so a plain list is fine.
 RUST_PRIMITIVE_TYPES = frozenset({
     "f32", "f64", "u8", "u16", "u32", "u64", "u128", "usize",
     "i8", "i16", "i32", "i64", "i128", "isize",
@@ -70,20 +72,33 @@ RUST_STD_TYPES = frozenset({
 RUST_WORD_RE = re.compile(
     r"\b(" + "|".join(sorted(RUST_PRIMITIVE_TYPES | RUST_STD_TYPES)) + r")\b"
 )
+# generic packaging/build jargon, not a type name but still Rust-specific;
+# case-insensitive on its own ("vec"/"Vec" is common math shorthand for
+# "vector" and must not be caught by this, unlike the type name above)
+RUST_JARGON_RE = re.compile(r"\bcrate\b", re.IGNORECASE)
 RUST_PATH_RE = re.compile(r"::")
 RUST_METHOD_CALL_RE = re.compile(r"\.[a-zA-Z_][a-zA-Z0-9_]*\(")
-# a Rust integer/float literal with a type suffix (`1u32`, `3.14f64`) or a
-# digit-group underscore separator (`1_000_000`); either form on its own is
-# this notation, so neither requires the other
+# a Rust integer/float literal: a type suffix (`1u32`, `3.14f64`, `1_000u32`)
+# or, with no suffix, a digit-group underscore separator (`1_000_000`) -- the
+# suffix form allows (but does not require) internal underscores too
 RUST_LITERAL_RE = re.compile(
-    r"\b\d+(?:_\d+)+\b"
-    r"|\b\d+(?:\.\d+)?(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)\b"
+    r"\b\d[\d_]*(?:\.\d[\d_]*)?(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)\b"
+    r"|\b\d+_\d[\d_]*\b"
 )
 ALICE_CRATE_RE = re.compile(r"\balice-[a-z][a-z0-9-]*\b")
 
 RANGE_PROVENANCE_RE = re.compile(r"\b(measured|sweep)\b", re.IGNORECASE)
 SCRIPT_PATH_RE = re.compile(r"[\w./-]+\.(?:py|rs|sh)\b")
-METHOD_CLAIM_RE = re.compile(r"\bmethod\b", re.IGNORECASE)
+# general numerical-integration-method vocabulary: a claim must name one of
+# these (or the law's own x-method value) rather than merely containing the
+# bare word "method" ("the method is unclear" must not pass)
+KNOWN_METHOD_TERMS = frozenset({
+    "verlet", "kick-drift-kick", "drift-kick-drift", "kdk", "dkd", "leapfrog",
+    "euler", "runge-kutta", "rk4", "rk2", "midpoint", "heun",
+    "adams-bashforth", "adams-moulton", "dormand-prince", "symplectic",
+    "free",
+})
+X_METHOD_RE = re.compile(r"^x-method\s+(\S+)")
 
 
 class LintError(Exception):
@@ -99,6 +114,7 @@ class Law:
         self.comments: list[tuple[int, str]] = []
         self.x_invariant_count = 0
         self.input_range_count = 0
+        self.x_method: str | None = None
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.split("\n"), start=1):
             stripped = line.strip()
@@ -112,6 +128,10 @@ class Law:
                 self.x_invariant_count += 1
             elif stripped.startswith("input ") and " range " in stripped:
                 self.input_range_count += 1
+            else:
+                m = X_METHOD_RE.match(stripped)
+                if m:
+                    self.x_method = m.group(1).lower()
         if not self.claims and not self.verdicts and self.x_invariant_count == 0:
             raise LintError(f"{path}: no `claim`/`verdict`/`x-invariant` line (not a law file?)")
 
@@ -124,12 +144,20 @@ class Law:
 def rule_method_scope(law: Law) -> list[str]:
     if law.x_invariant_count == 0:
         return []
-    if any(METHOD_CLAIM_RE.search(text) for _, text in law.claims):
-        return []
+    # the claim must name an actual method value/class, not merely contain the
+    # bare word "method" ("the method is unclear" must not pass): accept the
+    # law's own x-method token, or any term from the general vocabulary
+    allowed = set(KNOWN_METHOD_TERMS)
+    if law.x_method:
+        allowed.add(law.x_method)
+    for _, text in law.claims:
+        lowered = text.lower()
+        if any(term in lowered for term in allowed):
+            return []
     return [
         f"{law.path}: {law.x_invariant_count} x-invariant line(s) but no `claim` "
-        f"mentions \"method\" (an invariant judged over a trajectory is specific "
-        f"to one method; state which one it is scoped to)"
+        f"names a specific method (an invariant judged over a trajectory is "
+        f"specific to one method; name it, not just the word \"method\")"
     ]
 
 
@@ -137,12 +165,16 @@ def rule_range_provenance(law: Law) -> list[str]:
     if law.x_invariant_count == 0 or law.input_range_count == 0:
         return []
     for _, text in law.comments:
-        if RANGE_PROVENANCE_RE.search(text) and SCRIPT_PATH_RE.search(text):
-            return []
+        if not RANGE_PROVENANCE_RE.search(text):
+            continue
+        for m in SCRIPT_PATH_RE.finditer(text):
+            if (ROOT / m.group(0)).exists():
+                return []
     return [
         f"{law.path}: {law.input_range_count} ranged input(s) and "
         f"{law.x_invariant_count} x-invariant line(s) but no comment documents how "
-        f"the range was measured (a \"measured\"/\"sweep\" word plus a script path)"
+        f"the range was measured with a path that exists in the repo (a "
+        f"\"measured\"/\"sweep\" word plus a real script path, not a dangling one)"
     ]
 
 
@@ -151,6 +183,8 @@ def rule_language_neutral(law: Law) -> list[str]:
     for lineno, text in law.prose():
         hits = []
         hits += RUST_WORD_RE.findall(text)
+        if RUST_JARGON_RE.search(text):
+            hits.append(RUST_JARGON_RE.search(text).group(0))
         if RUST_PATH_RE.search(text):
             hits.append("::")
         if RUST_METHOD_CALL_RE.search(text):
