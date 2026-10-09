@@ -238,20 +238,16 @@ class HistoricalKeplerLaw(unittest.TestCase):
 
 
 class RealRepoLaws(unittest.TestCase):
-    # identifier_feature_independent.law:4 reads "the crate is built once per
-    # feature set"; this is the corpus's one real rule-language-neutral hit
-    # (a law using "crate" in the jargon sense). Fixing laws/ content is out
-    # of this lint's scope (laws/ is owned separately); this test pins the
-    # exact known finding so a NEW, different violation still fails the test.
-    KNOWN_FINDING_SUBSTRING = "identifier_feature_independent.law:4"
-
-    def test_every_current_law_passes_every_rule_except_the_one_known_finding(self):
+    # identifier_feature_independent.law:4 used to read "the crate is built
+    # once per feature set" (a Rust-jargon "crate" this lint's tightened
+    # language-neutral rule caught); fixed upstream (laws/ is owned
+    # separately from this lint) to "the package is built...", so the
+    # corpus is clean again.
+    def test_every_current_law_passes_every_rule(self):
         files = sorted((ROOT / "laws" / "spike").glob("*.law"))
         self.assertGreater(len(files), 0)
         errs = lint.lint(files)
-        self.assertEqual(len(errs), 1, errs)
-        self.assertIn(self.KNOWN_FINDING_SUBSTRING, errs[0])
-        self.assertIn("'crate'", errs[0])
+        self.assertEqual(errs, [])
 
 
 class CliAndExitCodes(unittest.TestCase):
