@@ -167,254 +167,316 @@ fn split_def(rest: &str) -> (String, String, String) {
     (name, unit, expr.trim().to_owned())
 }
 
-fn check_file(path: &Path, counts: &mut Counts) {
-    let file = path.file_name().unwrap().to_string_lossy().into_owned();
-    let text = std::fs::read_to_string(path).unwrap();
-    let mut env = Env::default();
-    let mut law_name: Option<String> = None;
-    let mut audit: Option<String> = None;
-    let mut audits_here = 0;
-    let mut checked_here = 0;
-    let mut x_names: Vec<String> = Vec::new();
+/// State of one file while its lines are checked
+struct FileCheck<'a> {
+    file: String,
+    counts: &'a mut Counts,
+    env: Env,
+    law_name: Option<String>,
+    audit: Option<String>,
+    audits_here: usize,
+    checked_here: usize,
+    x_names: Vec<String>,
+}
 
-    for raw in text.lines() {
-        let line = raw.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
+impl FileCheck<'_> {
+    /// Collects the lines of an audit block; returns false outside a block
+    fn audit_line(&mut self, line: &str) -> bool {
+        let file = &self.file;
+        let Some(block) = self.audit.as_mut() else {
+            return false;
+        };
+        if line == "end audit" {
+            let law = parse_law(block)
+                .unwrap_or_else(|e| panic!("{file}: audit block does not parse: {e:?}"));
+            let expected = self.law_name.as_deref().unwrap().replace('_', "-");
+            assert_eq!(law.name(), expected, "{file}: audit name");
+            assert!(!law.clauses().is_empty());
+            self.counts.audits += 1;
+            self.audits_here += 1;
+            self.audit = None;
+        } else {
+            block.push_str(line);
+            block.push('\n');
         }
-        if let Some(block) = audit.as_mut() {
-            if line == "end audit" {
-                let law = parse_law(block)
-                    .unwrap_or_else(|e| panic!("{file}: audit block does not parse: {e:?}"));
-                let expected = law_name.as_deref().unwrap().replace('_', "-");
-                assert_eq!(law.name(), expected, "{file}: audit name");
-                assert!(!law.clauses().is_empty());
-                counts.audits += 1;
-                audits_here += 1;
-                audit = None;
-            } else {
-                block.push_str(line);
-                block.push('\n');
-            }
-            continue;
+        true
+    }
+
+    fn line(&mut self, line: &str) {
+        if self.audit_line(line) {
+            return;
         }
+        let file = self.file.clone();
         let (head, rest) = line.split_once(' ').unwrap_or((line, ""));
         let rest = rest.trim();
         if head.starts_with("x-") {
-            *counts.extensions.entry(head.to_owned()).or_default() += 1;
+            *self.counts.extensions.entry(head.to_owned()).or_default() += 1;
         }
         match head {
-            "law" => law_name = Some(rest.to_owned()),
+            "law" => self.law_name = Some(rest.to_owned()),
             "kind" => assert!(rest == "research" || rest == "audit", "{file}: kind"),
-            "claim" | "verdict" | "source" => {}
-            "input" => {
-                let w: Vec<&str> = rest.split_whitespace().collect();
-                Unit::parse(w[1]).unwrap_or_else(|e| panic!("{file}: unit `{}`: {e}", w[1]));
-                counts.units += 1;
-                let range = match w.len() {
-                    2 => None,
-                    5 if w[2] == "range" => Some(ValidRange {
-                        lo: w[3].parse().unwrap(),
-                        hi: w[4].parse().unwrap(),
-                    }),
-                    _ => panic!("{file}: `input <name> <unit> [range <lo> <hi>]`: {line}"),
-                };
-                env.inputs.push(Input {
-                    name: w[0].to_owned(),
-                    unit: w[1].to_owned(),
-                    range,
-                });
-            }
-            "param" => {
-                let w: Vec<&str> = rest.split_whitespace().collect();
-                assert_eq!(w.len(), 4, "{file}: `param <name> <value> <unc> <unit>`");
-                Unit::parse(w[3]).unwrap_or_else(|e| panic!("{file}: unit `{}`: {e}", w[3]));
-                counts.units += 1;
-                env.params.push(Param::new(
-                    w[0],
-                    w[1].parse().unwrap(),
-                    w[2].parse().unwrap(),
-                    w[3],
-                ));
-            }
+            // prose lines and free-text extensions are only counted
+            "claim" | "verdict" | "source" | "x-method" | "x-step" | "x-output" | "x-reduce"
+            | "x-invariant" | "x-metric" | "x-at-least" | "x-input" => {}
+            "input" => self.input(rest, line),
+            "param" => self.param(rest),
             "let" | "output" | "x-piece" | "tolerance" | "x-ode" | "x-initial" => {
-                let (name, unit, expr) = split_def(rest);
-                LawExpr::parse(&expr).unwrap_or_else(|e| panic!("{file}: `{expr}`: {e}"));
-                let full = expand(&expr, &env.lets);
-                let (unit, range) = match head {
-                    "x-piece" => {
-                        // `<out> <unit> <input> <lo> <hi>`
-                        let w: Vec<&str> = unit.split_whitespace().collect();
-                        assert_eq!(w.len(), 4, "{file}: x-piece header");
-                        let r = ValidRange {
-                            lo: w[2].parse().unwrap(),
-                            hi: w[3].parse().unwrap(),
-                        };
-                        (w[0].to_owned(), Some((w[1].to_owned(), r)))
-                    }
-                    "x-initial" => {
-                        let u = env
-                            .states
-                            .iter()
-                            .find(|(n, _)| *n == name)
-                            .unwrap_or_else(|| panic!("{file}: x-initial of unknown state {name}"))
-                            .1
-                            .clone();
-                        (u, None)
-                    }
-                    _ => (unit, None),
-                };
-                Unit::parse(&unit).unwrap_or_else(|e| panic!("{file}: unit `{unit}`: {e}"));
-                counts.units += 1;
-                // a tolerance may refer to its output; an output that is also a
-                // simulated state is already a variable
-                let extra: Vec<(String, String)> =
-                    if head == "tolerance" && !env.states.iter().any(|(n, _)| *n == name) {
-                        vec![(name.clone(), env.outputs[&name].clone())]
-                    } else {
-                        Vec::new()
-                    };
-                // number literals are dimensionless in `LawExpr`, so `x-initial v = 0`
-                // cannot be checked against a dimensioned state; a bare `0` start
-                // value is accepted for any state (part of the extension)
-                if head == "x-initial" && expr == "0" {
-                    *counts
-                        .extensions
-                        .entry("x-initial-zero".to_owned())
-                        .or_default() += 1;
-                    continue;
-                }
-                let _ = env.law(
-                    &file,
-                    &full,
-                    &unit,
-                    &extra,
-                    range.as_ref().map(|(n, r)| (n.as_str(), *r)),
-                );
-                if head == "x-ode" {
-                    // d(state)/dt has the state's dimension over time
-                    let su = &env
-                        .states
-                        .iter()
-                        .find(|(n, _)| *n == name)
-                        .unwrap_or_else(|| panic!("{file}: x-ode of unknown state {name}"))
-                        .1;
-                    let rate = Unit::parse(&format!("({su})/s")).unwrap();
-                    assert_eq!(
-                        rate.dimension(),
-                        Unit::parse(&unit).unwrap().dimension(),
-                        "{file}: d{name}/dt unit"
-                    );
-                }
-                counts.exprs += 1;
-                checked_here += 1;
-                match head {
-                    "let" => {
-                        env.lets.insert(name, (unit, full));
-                    }
-                    "output" | "x-piece" => {
-                        env.outputs.insert(name.clone(), unit.clone());
-                        env.exprs.insert(name, (unit, full));
-                    }
-                    _ => {}
-                }
+                self.definition(head, rest);
             }
-            "oracle" => {
-                // oracle <name> k=v ... -> <value> within <tol>
-                let (lhs, rhs) = rest.split_once("->").expect("`->`");
-                let mut w = lhs.split_whitespace();
-                let name = w.next().unwrap();
-                let conds: Vec<(String, f64)> = w
-                    .map(|kv| {
-                        let (k, v) = kv.split_once('=').unwrap();
-                        (k.to_owned(), v.parse().unwrap())
-                    })
-                    .collect();
-                let r: Vec<&str> = rhs.split_whitespace().collect();
-                assert_eq!(r[1], "within");
-                let (unit, expr) = env
-                    .exprs
-                    .get(name)
-                    .or_else(|| env.lets.get(name))
-                    .unwrap_or_else(|| panic!("{file}: oracle of unknown {name}"))
-                    .clone();
-                let borrowed: Vec<(&str, f64)> =
-                    conds.iter().map(|(k, v)| (k.as_str(), *v)).collect();
-                // the closed form does not depend on simulated states, and
-                // evaluation needs a value for every declared variable
-                let states = std::mem::take(&mut env.states);
-                let law = env.law(&file, &expr, &unit, &[], None);
-                env.states = states;
-                let law = law.with_oracle(ResearchOracle::new(
-                    &borrowed,
-                    r[0].parse().unwrap(),
-                    r[2].parse().unwrap(),
-                    &file,
-                ));
-                let out = law.check_oracles();
-                assert!(out[0].passed, "{file}: oracle {name}: {:?}", out[0]);
-                counts.oracles += 1;
-                checked_here += 1;
-            }
+            "oracle" => self.oracle(rest),
             "begin" => {
                 assert_eq!(rest, "audit", "{file}: `begin audit`");
-                audit = Some(String::new());
+                self.audit = Some(String::new());
             }
             "x-state" => {
                 let w: Vec<&str> = rest.split_whitespace().collect();
                 Unit::parse(w[1]).unwrap_or_else(|e| panic!("{file}: unit `{}`: {e}", w[1]));
-                counts.units += 1;
-                env.states.push((w[0].to_owned(), w[1].to_owned()));
+                self.counts.units += 1;
+                self.env.states.push((w[0].to_owned(), w[1].to_owned()));
             }
-            "x-expr" => {
-                let (name, unit, expr) = split_def(rest);
-                Unit::parse(&unit).unwrap();
-                match LawExpr::parse(&expr) {
-                    Err(ResearchLawError::UnknownFunction(_)) => counts.x_expr_rejected += 1,
-                    // functions of several arguments: `,` is not in the expression language
-                    Err(ResearchLawError::UnexpectedCharacter { position })
-                        if expr.as_bytes().get(position) == Some(&b',') =>
-                    {
-                        counts.x_expr_rejected += 1;
-                    }
-                    other => panic!(
-                        "{file}: x-expr `{expr}` should need a function LawExpr lacks, got {other:?}"
-                    ),
-                }
-                env.outputs.insert(name.clone(), unit);
-                x_names.push(name);
-            }
+            "x-expr" => self.x_expr(rest),
             "x-list" | "x-integer" => {
                 assert!(
-                    env.inputs.iter().any(|v| v.name == rest),
+                    self.env.inputs.iter().any(|v| v.name == rest),
                     "{file}: {head} {rest}"
                 );
             }
             "x-range" => {
                 let name = rest.split_whitespace().next().unwrap();
                 assert!(
-                    env.lets.contains_key(name) || x_names.iter().any(|n| n == name),
+                    self.env.lets.contains_key(name) || self.x_names.iter().any(|n| n == name),
                     "{file}: x-range of undeclared {name}"
                 );
             }
             "x-periodic" => {
                 let name = rest.split_whitespace().next().unwrap();
-                assert!(x_names.iter().any(|n| n == name) || env.known(name));
+                assert!(self.x_names.iter().any(|n| n == name) || self.env.known(name));
             }
-            "x-method" | "x-step" | "x-output" | "x-reduce" | "x-invariant" | "x-metric"
-            | "x-at-least" | "x-input" => {}
             other => panic!("{file}: unknown keyword `{other}` in `{line}`"),
         }
     }
-    assert!(audit.is_none(), "{file}: unterminated audit block");
-    let name = law_name.unwrap_or_else(|| panic!("{file}: no `law` line"));
+
+    /// `input <name> <unit> [range <lo> <hi>]`
+    fn input(&mut self, rest: &str, line: &str) {
+        let file = &self.file;
+        let w: Vec<&str> = rest.split_whitespace().collect();
+        Unit::parse(w[1]).unwrap_or_else(|e| panic!("{file}: unit `{}`: {e}", w[1]));
+        self.counts.units += 1;
+        let range = match w.len() {
+            2 => None,
+            5 if w[2] == "range" => Some(ValidRange {
+                lo: w[3].parse().unwrap(),
+                hi: w[4].parse().unwrap(),
+            }),
+            _ => panic!("{file}: `input <name> <unit> [range <lo> <hi>]`: {line}"),
+        };
+        self.env.inputs.push(Input {
+            name: w[0].to_owned(),
+            unit: w[1].to_owned(),
+            range,
+        });
+    }
+
+    /// `param <name> <value> <uncertainty> <unit>`
+    fn param(&mut self, rest: &str) {
+        let file = &self.file;
+        let w: Vec<&str> = rest.split_whitespace().collect();
+        assert_eq!(w.len(), 4, "{file}: `param <name> <value> <unc> <unit>`");
+        Unit::parse(w[3]).unwrap_or_else(|e| panic!("{file}: unit `{}`: {e}", w[3]));
+        self.counts.units += 1;
+        self.env.params.push(Param::new(
+            w[0],
+            w[1].parse().unwrap(),
+            w[2].parse().unwrap(),
+            w[3],
+        ));
+    }
+
+    /// The unit of a definition and, for `x-piece`, the input range it covers
+    fn def_unit(
+        &self,
+        head: &str,
+        name: &str,
+        unit: String,
+    ) -> (String, Option<(String, ValidRange)>) {
+        let file = &self.file;
+        match head {
+            "x-piece" => {
+                // `<out> <unit> <input> <lo> <hi>`
+                let w: Vec<&str> = unit.split_whitespace().collect();
+                assert_eq!(w.len(), 4, "{file}: x-piece header");
+                let r = ValidRange {
+                    lo: w[2].parse().unwrap(),
+                    hi: w[3].parse().unwrap(),
+                };
+                (w[0].to_owned(), Some((w[1].to_owned(), r)))
+            }
+            "x-initial" => (self.state_unit(name, head).to_owned(), None),
+            _ => (unit, None),
+        }
+    }
+
+    fn state_unit(&self, name: &str, head: &str) -> &str {
+        let file = &self.file;
+        &self
+            .env
+            .states
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("{file}: {head} of unknown state {name}"))
+            .1
+    }
+
+    /// `let` / `output` / `x-piece` / `tolerance` / `x-ode` / `x-initial`
+    fn definition(&mut self, head: &str, rest: &str) {
+        let file = self.file.clone();
+        let (name, unit, expr) = split_def(rest);
+        LawExpr::parse(&expr).unwrap_or_else(|e| panic!("{file}: `{expr}`: {e}"));
+        let full = expand(&expr, &self.env.lets);
+        let (unit, range) = self.def_unit(head, &name, unit);
+        Unit::parse(&unit).unwrap_or_else(|e| panic!("{file}: unit `{unit}`: {e}"));
+        self.counts.units += 1;
+        // a tolerance may refer to its output; an output that is also a
+        // simulated state is already a variable
+        let extra: Vec<(String, String)> =
+            if head == "tolerance" && !self.env.states.iter().any(|(n, _)| *n == name) {
+                vec![(name.clone(), self.env.outputs[&name].clone())]
+            } else {
+                Vec::new()
+            };
+        // number literals are dimensionless in `LawExpr`, so `x-initial v = 0`
+        // cannot be checked against a dimensioned state; a bare `0` start
+        // value is accepted for any state (part of the extension)
+        if head == "x-initial" && expr == "0" {
+            *self
+                .counts
+                .extensions
+                .entry("x-initial-zero".to_owned())
+                .or_default() += 1;
+            return;
+        }
+        let _ = self.env.law(
+            &file,
+            &full,
+            &unit,
+            &extra,
+            range.as_ref().map(|(n, r)| (n.as_str(), *r)),
+        );
+        if head == "x-ode" {
+            // d(state)/dt has the state's dimension over time
+            let su = self.state_unit(&name, head);
+            let rate = Unit::parse(&format!("({su})/s")).unwrap();
+            assert_eq!(
+                rate.dimension(),
+                Unit::parse(&unit).unwrap().dimension(),
+                "{file}: d{name}/dt unit"
+            );
+        }
+        self.counts.exprs += 1;
+        self.checked_here += 1;
+        match head {
+            "let" => {
+                self.env.lets.insert(name, (unit, full));
+            }
+            "output" | "x-piece" => {
+                self.env.outputs.insert(name.clone(), unit.clone());
+                self.env.exprs.insert(name, (unit, full));
+            }
+            _ => {}
+        }
+    }
+
+    /// `oracle <name> k=v ... -> <value> within <tol>`
+    fn oracle(&mut self, rest: &str) {
+        let file = self.file.clone();
+        let (lhs, rhs) = rest.split_once("->").expect("`->`");
+        let mut w = lhs.split_whitespace();
+        let name = w.next().unwrap();
+        let conds: Vec<(String, f64)> = w
+            .map(|kv| {
+                let (k, v) = kv.split_once('=').unwrap();
+                (k.to_owned(), v.parse().unwrap())
+            })
+            .collect();
+        let r: Vec<&str> = rhs.split_whitespace().collect();
+        assert_eq!(r[1], "within");
+        let (unit, expr) = self
+            .env
+            .exprs
+            .get(name)
+            .or_else(|| self.env.lets.get(name))
+            .unwrap_or_else(|| panic!("{file}: oracle of unknown {name}"))
+            .clone();
+        let borrowed: Vec<(&str, f64)> = conds.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+        // the closed form does not depend on simulated states, and
+        // evaluation needs a value for every declared variable
+        let states = std::mem::take(&mut self.env.states);
+        let law = self.env.law(&file, &expr, &unit, &[], None);
+        self.env.states = states;
+        let law = law.with_oracle(ResearchOracle::new(
+            &borrowed,
+            r[0].parse().unwrap(),
+            r[2].parse().unwrap(),
+            &file,
+        ));
+        let out = law.check_oracles();
+        assert!(out[0].passed, "{file}: oracle {name}: {:?}", out[0]);
+        self.counts.oracles += 1;
+        self.checked_here += 1;
+    }
+
+    /// `x-expr <name> <unit> = <expr>`: must need a function `LawExpr` lacks
+    fn x_expr(&mut self, rest: &str) {
+        let file = &self.file;
+        let (name, unit, expr) = split_def(rest);
+        Unit::parse(&unit).unwrap();
+        match LawExpr::parse(&expr) {
+            Err(ResearchLawError::UnknownFunction(_)) => self.counts.x_expr_rejected += 1,
+            // functions of several arguments: `,` is not in the expression language
+            Err(ResearchLawError::UnexpectedCharacter { position })
+                if expr.as_bytes().get(position) == Some(&b',') =>
+            {
+                self.counts.x_expr_rejected += 1;
+            }
+            other => panic!(
+                "{file}: x-expr `{expr}` should need a function LawExpr lacks, got {other:?}"
+            ),
+        }
+        self.env.outputs.insert(name.clone(), unit);
+        self.x_names.push(name);
+    }
+}
+
+fn check_file(path: &Path, counts: &mut Counts) {
+    let file = path.file_name().unwrap().to_string_lossy().into_owned();
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut fc = FileCheck {
+        file: file.clone(),
+        counts,
+        env: Env::default(),
+        law_name: None,
+        audit: None,
+        audits_here: 0,
+        checked_here: 0,
+        x_names: Vec::new(),
+    };
+    for raw in text.lines() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if !line.is_empty() {
+            fc.line(line);
+        }
+    }
+    assert!(fc.audit.is_none(), "{file}: unterminated audit block");
+    let name = fc
+        .law_name
+        .unwrap_or_else(|| panic!("{file}: no `law` line"));
     assert_eq!(
         format!("{name}.law"),
         file,
         "{file}: law name and file name differ"
     );
     assert!(
-        checked_here + audits_here > 0,
+        fc.checked_here + fc.audits_here > 0,
         "{file}: nothing in the file went through a parser"
     );
 }
