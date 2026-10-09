@@ -1,0 +1,64 @@
+# Two-body orbit integrated with position Verlet (drift-kick-drift) and a fixed step: the energy error stays bounded and is second order
+law kepler_energy_bounded_dkd
+kind research
+claim the relative orbit of two bodies with mu = 1 and semi-major axis a = 1 is integrated with the fixed step h = T / n
+claim the method is position Verlet (drift-kick-drift), exactly as written on the x-method line
+claim methods outside this class (rk4, any non-symplectic method, other splittings or compositions) are out of scope of this law
+claim the peak energy error after the first period does not exceed 1.2 times the peak in the first period
+claim halving h divides the period-averaged energy error by 3 to 5
+source ALICE-Physics tests/analytic_nbody.rs:260 (e = 0.5, start at apoapsis), :294 (N = 500, 20 periods), :296 (last <= 1.2 first), :302 (first(N) / first(2N) in [3, 5])
+
+# Valid range, measured (sweep: e 0.2 .. 0.8 step 0.005 and 0.7 .. 0.8 step 0.001; every n 100 .. 300,
+# odd and even, and every 37th n up to 2000; periods 2 .. 40; four evaluation orders of r^3:
+# r2*sqrt(r2), r2^1.5 via pow, r*r*r, sqrt(r2^3); spot points re-integrated at 50 digits agree to 1e-9)
+# - first failure of the criteria below: e = 0.789 (n = 103), the growth bound (1.240 at n = 103)
+# - upper bound of e = first failure - 0.02, rounded down to 0.005; margin 0.024
+# - inside the range: growth ratio <= 1.052 (e = 0.77, n = 151), order ratio >= 3.83; the spread of either over the four
+#   r^3 orders is <= 3e-7, so no verdict depends on the evaluation order
+# - n parity: no failure inside the range for odd or even n; the range is the same for both
+# - outside the range (e about 0.79 .. 0.8, n about 100 .. 107) the stepped orbit becomes chaotic over 40 periods
+#   and the verdict can change with the evaluation order of r^3 alone
+# - the former criteria (max of the last period / max of the first <= 1.2, max-based order ratio) first failed at e = 0.789: same point as the new criteria (growth bound)
+input e 1 range 0.2 0.765
+input n 1 range 100 2000
+input periods 1 range 2 40
+x-integer n                   # integer counts
+x-integer periods
+
+param mu 1 0 m^3/s^2
+param a 1 0 m
+param pi 3.141592653589793 0 1
+
+let period s = 2*pi*sqrt(a^3/mu)
+let h s = period/n
+let r0 m = a*(1 + e)
+let v0 m/s = sqrt(mu*(2/r0 - 1/a))
+let e0 J/kg = -mu/(2*a)
+
+x-state x m
+x-state y m
+x-state vx m/s
+x-state vy m/s
+x-initial x = r0
+x-initial y = 0
+x-initial vx = 0
+x-initial vy = v0
+x-ode x m/s = vx
+x-ode y m/s = vy
+x-ode vx m/s^2 = -mu*x/(x^2 + y^2)^1.5
+x-ode vy m/s^2 = -mu*y/(x^2 + y^2)^1.5
+x-step fixed h                # exactly n * periods steps of size h, no substeps reported
+x-method dkd                  # one step: x += (h/2) v; v += h a(x); x += (h/2) v
+x-output states = list of [x, y, vx, vy] after step 1, 2, .. n * periods (n * periods entries; the first is after one step, the last at t = periods T)
+
+let energy J/kg = (vx^2 + vy^2)/2 - mu/sqrt(x^2 + y^2)
+let rel_err 1 = sqrt(((energy - e0)/e0)^2)     # |.| written as sqrt of a square
+x-invariant first(n) = max of rel_err over steps 1 .. n
+x-invariant later(n) = max of rel_err over steps n + 1 .. periods n
+x-invariant later(n) <= 1.2 first(n)
+x-invariant mean(k) = mean of rel_err over steps 1 .. k of a run with k steps per period
+x-invariant k = n when 2 n <= 2000, otherwise floor(n / 2); runs with k and 2 k steps per period (inside the range of n)
+x-invariant 3 <= mean(k) / mean(2 k) <= 5
+
+verdict conforms when the reported states have the stated length and step, and both invariants hold
+verdict an input outside its range, or a non-integer n or periods, is rejected
