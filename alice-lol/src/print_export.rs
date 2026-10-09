@@ -111,6 +111,11 @@ fn euler_characteristic(m: &Mesh) -> i64 {
 ///    scale 2.0 で境界 edge −3 と引き換えに三角形 −3,179 (3.0%)、χ −20 → −39 の結果を
 ///    採っていた (scale 2.5 / 3.0 も同形) 「悪化」の定義を要しないよう等号で判定する
 /// 3. **孤立頂点 ([`isolated_vertices`]) が増えない**
+///
+/// 2 と 3 は互いに独立の guard χ は index から参照される頂点だけで数えるので孤立頂点の
+/// 増加を見ず、孤立頂点の数は位相の変化を見ない 上の gyroid の実測で誤って採られた結果は
+/// 条件 2 だけで止まり、条件 3 が単独で効く形は単体試験
+/// (`the_repair_gate_rejects_each_kind_of_regression_on_its_own`) で固定している
 fn repair_is_non_regressive(before: &Mesh, after: &Mesh) -> bool {
     watertight_defects(&validate_mesh(after)) <= watertight_defects(&validate_mesh(before))
         && euler_characteristic(after) == euler_characteristic(before)
