@@ -30,8 +30,31 @@ class Fail(Exception):
         self.kind, self.detail = kind, detail
 
 
+_INF_TOKEN = "\u0000inf\u0000"
+
+
+def wire(obj):
+    """JSON text for the request: infinity is written as the overflowing literal 1e400
+
+    JSON has no infinity literal; a number too large for a double parses to infinity in
+    every common parser, which is how a request can carry a value that is not finite
+    """
+    def mark(v):
+        if isinstance(v, float) and math.isinf(v):
+            return ("-" if v < 0 else "") + _INF_TOKEN
+        if isinstance(v, float) and math.isnan(v):
+            raise ValueError("NaN cannot be written as JSON text")
+        if isinstance(v, list):
+            return [mark(x) for x in v]
+        if isinstance(v, dict):
+            return {k: mark(x) for k, x in v.items()}
+        return v
+    text = json.dumps(mark(obj), allow_nan=False)
+    return text.replace('"-' + json.dumps(_INF_TOKEN)[1:], "-1e400").replace(json.dumps(_INF_TOKEN), "1e400")
+
+
 def call(cmd, law, inputs, timeout):
-    req = json.dumps({"law": law, "inputs": inputs})
+    req = wire({"law": law, "inputs": inputs})
     try:
         p = subprocess.run(cmd, input=req, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

@@ -172,12 +172,20 @@ def x_metrics(law, inputs):
     nums = {k: v for k, v in inputs.items() if is_num(v)}
     ranges = {k: v for k, v in inputs.items() if isinstance(v, list) and all(isinstance(s, str) for s in v)}
     if law["name"] == "identifier_feature_independent":
-        builds = inputs.get("builds") or []
-        nums = {"builds": len(builds)}
-        fs = len({frozenset(b.get("features", [])) for b in builds})
-        nums["feature_sets"] = fs
-        if builds and all(b.get("id") is not None for b in builds):
-            nums["distinct_identifiers"] = len({b["id"] for b in builds})
+        # the x-metric lines of the law: builds counts every element whatever its shape
+        # (not measured when builds is not a list); feature_sets is not measured when any
+        # build is not an object or its features is not a list of text; an id that is not
+        # text is no identifier
+        builds = inputs.get("builds", [])
+        nums = {}
+        if isinstance(builds, list):
+            nums["builds"] = len(builds)
+            shaped = all(isinstance(b, dict) and isinstance(b.get("features"), list)
+                         and all(isinstance(f, str) for f in b["features"]) for b in builds)
+            if shaped:
+                nums["feature_sets"] = len({frozenset(b["features"]) for b in builds})
+            if builds and all(isinstance(b, dict) and isinstance(b.get("id"), str) for b in builds):
+                nums["distinct_identifiers"] = len({b["id"] for b in builds})
         ranges = {}
     for line in Path(law["_file"]).read_text().splitlines():
         w = line.split("#", 1)[0].split()
@@ -271,6 +279,7 @@ DESIGN = {
     "identifier_feature_independent": {"cases": [], "edges": {}},
 }
 
+INF = float("inf")  # written on the wire as the literal 1e400 (run_conformance.py)
 K42 = ["case-17", "case-42"]
 DESIGN["gate_compares_nonzero"]["cases"] = [(i, n) for i, n in [
     ({"compared": 12, "mismatches": 0, "known-mismatches": K42}, "all good"),
@@ -307,6 +316,10 @@ DESIGN["gate_compares_nonzero"]["cases"] = [(i, n) for i, n in [
     ({"compared": 5, "mismatches": 0, "known-mismatches": [17, 42]}, "known list of numbers"),
     ({"compared": 5, "mismatches": 3, "known-mismatches": None}, "null range before expect"),
     ({"compared": 5, "mismatches": "0", "known-mismatches": K42}, "mismatches given as text is not measured"),
+    # a literal too large for a double (sent as 1e400) parses to infinity: not a number, not measured
+    ({"compared": INF, "mismatches": 0, "known-mismatches": K42}, "overflowing count is not evidence"),
+    ({"compared": 5, "mismatches": INF, "known-mismatches": K42}, "overflowing mismatches is not measured"),
+    ({"compared": 5, "mismatches": -INF, "known-mismatches": K42}, "negative overflow is not measured"),
 ]]
 B = lambda feats, i: {"features": feats, "id": i} if i is not None else {"features": feats}
 DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"builds": b}, n) for b, n in [
@@ -321,6 +334,14 @@ DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"bui
     ([B(["std"], "ab"), B(["std"], None)], "evidence before expect"),
     ([B([], "x"), B(["a"], "y"), B(["b"], "z")], "all differ"),
     ([B([], "x"), B(["a"], "x"), B(["b"], "x"), B(["a", "b"], "y")], "one differs"),
+    # a build of the wrong shape: builds still counts it, feature_sets is not measured
+    ([{"id": "ab"}, B(["std"], "ab"), B(["simd"], "ab")], "a build without features"),
+    ([{"features": "std", "id": "ab"}, B(["simd"], "ab"), B([], "ab")], "features given as text"),
+    ([7, B(["std"], "ab"), B(["simd"], "ab")], "a build that is not an object"),
+    ([B(["std", 3], "ab"), B(["simd"], "ab")], "a feature that is not text"),
+    # an id that is not text is no identifier
+    ([B(["std"], 5), B(["simd"], 5)], "id given as a number"),
+    ("std", "builds given as text"),
 ]]
 
 KEPLER_BASE = {"e": 0.5, "n": 200, "periods": 4}

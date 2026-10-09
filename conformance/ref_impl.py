@@ -12,6 +12,8 @@ REF_BUG=7: Kepler reports the state before each step (initial state first, last 
 REF_BUG=8: Kepler evaluates r^3 as sqrt(r2) ** 3 (another rounding; must still conform)
 REF_BUG=9: audit evidence read as "not 0" over every non-array value (a negative count is evidence)
 REF_BUG=10: audit ranges compared with their duplicates (multisets, not sets)
+REF_BUG=11: a number that is not finite after parsing (1e400) is read as a number
+REF_BUG=12: identifier audit reads a build of the wrong shape as an empty feature set
 
 An unknown law or a missing input exits with status 2 and writes nothing on stdout.
 """
@@ -30,7 +32,7 @@ def rng(name, x, lo, hi):
 
 
 def is_num(x):
-    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and (BUG == "11" or math.isfinite(x))
 
 
 def time_list(ts):
@@ -259,13 +261,24 @@ def gate(i):
 
 
 def ident(i):
-    builds = i.get("builds") or []
-    nums = {"builds": len(builds)}
-    sets = {frozenset(b.get("features", [])) for b in builds}
-    fs = len(sets)
-    nums["feature_sets"] = fs if (fs >= 2 or BUG == "3") else 0
-    if builds and all(b.get("id") is not None for b in builds):
-        nums["distinct_identifiers"] = len({b["id"] for b in builds})
+    builds = i.get("builds", [])
+    nums = {}
+    if isinstance(builds, list):
+        # builds counts every element whatever its shape
+        nums["builds"] = len(builds)
+        # feature_sets is not measured when any build is not an object or its features
+        # is not a list of text
+        if BUG == "12":
+            fs = len({frozenset(b["features"]) if isinstance(b, dict) and isinstance(b.get("features"), list)
+                      else frozenset() for b in builds})
+            nums["feature_sets"] = fs if fs >= 2 else 0
+        elif all(isinstance(b, dict) and isinstance(b.get("features"), list)
+                 and all(isinstance(f, str) for f in b["features"]) for b in builds):
+            fs = len({frozenset(b["features"]) for b in builds})
+            nums["feature_sets"] = fs if (fs >= 2 or BUG == "3") else 0
+        # an id that is not text is no identifier
+        if builds and all(isinstance(b, dict) and isinstance(b.get("id"), str) for b in builds):
+            nums["distinct_identifiers"] = len({b["id"] for b in builds})
     v, s = audit([("evidence", "builds"), ("evidence", "feature_sets"),
                   ("expect", "distinct_identifiers", 1.0, 0.0)], nums, {})
     return {"verdict": v, "subject": s}

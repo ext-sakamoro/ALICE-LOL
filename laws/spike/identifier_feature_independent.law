@@ -6,9 +6,9 @@ claim every build must report the same identifier; one feature set is not eviden
 source ALICE-Physics tests/physics_semantics_id.rs:552 (the identifier is pinned and independent of features)
 
 x-input builds list of {features: list of names, id: text or absent}
-x-metric builds = number of builds reported
-x-metric feature_sets = number of distinct feature sets (a feature set is unordered; duplicates collapse)
-x-metric distinct_identifiers = number of distinct identifiers; unmeasured when any build has no identifier
+x-metric builds = number of builds reported: the length of the builds list, every element counted whatever its shape; unmeasured when builds is not a list
+x-metric feature_sets = number of distinct feature sets (a feature set is unordered; duplicates collapse); unmeasured when any build is not an object, or its features is missing or not a list of text
+x-metric distinct_identifiers = number of distinct identifiers; unmeasured when any build has no identifier (an id that is not text counts as no identifier)
 x-at-least feature_sets 2     # fewer than 2 distinct feature sets gives no evidence for feature_sets
 
 begin audit

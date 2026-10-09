@@ -22,7 +22,7 @@ One command-line program that implements every law you are given. The programmin
   ```
 
 - Write `rejected` when the law does not apply to the inputs, for example an input outside its valid range. Do not clamp. Do not extrapolate.
-- Numbers are JSON numbers in the units the law states. A list input is a JSON array. A list output is a JSON array with one entry per input element, in the same order. The input list may repeat values and may be unsorted.
+- Numbers are JSON numbers in the units the law states. JSON has no NaN or infinity literal, but a number literal too large for a double (for example `1e400`) parses to infinity. A number that is not finite after parsing is not a number: an input of a quantitative law that is not finite is rejected, and an audit measurement that is not finite is not measured. A list input is a JSON array. A list output is a JSON array with one entry per input element, in the same order. The input list may repeat values and may be unsorted.
 - Do not print anything else on standard output. Use standard error for diagnostics.
 - A request for an unknown law, or a request in which an input of a quantitative law is missing, is an error of the request, not a rejection: exit with status 2 and write nothing on standard output.
 
@@ -118,7 +118,7 @@ An audit block holds one clause per line:
 
 The measurements are the request inputs:
 
-- A **numeric metric** is a JSON number. A value that is not a number (text, `true` / `false`, `null`, an array, an object) counts as not measured, as if the key were missing. JSON has no NaN or infinity, so a request never carries them.
+- A **numeric metric** is a JSON number. A value that is not a number (text, `true` / `false`, `null`, an array, an object) counts as not measured, as if the key were missing. A number that is not finite after parsing (an overflowing literal such as `1e400`) is not a number, so it is not measured either.
 - A **range key** is an array of text. A value that is not an array of text, including `null`, counts as not measured, so the verdict for that key is `out_of_range`. An empty array is a measured, empty set.
 - Values are compared as text. Two values are the same only when their text is identical.
 - `x-metric` lines describe derived metrics.

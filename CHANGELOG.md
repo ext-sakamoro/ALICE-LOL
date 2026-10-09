@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `conformance/`: law file から corpus を生成する script、採点 runner、参照実装と欠陥のある変種、生成 → 採点 → 削除を 1 回で行う `score.sh`、must-red の対照 `controls.sh` corpus の生成には mpmath が要る (`conformance/requirements.txt`)
 - `conformance/TASK.md`: 実装する側に渡す契約と law file の読み方 (言語に依らない) 監査の証拠は有限で 0 より大きい数、成立範囲は集合として比べる、数でない値は測られていないものとする、`x-list` に配列でない値は拒否、未知の law と欠けた入力は exit status 2 で標準出力に何も書かない、を明記 `PROTOCOL.md` はこれを参照する
 - corpus と参照実装を `TASK.md` の規則に揃えた: 証拠は有限で 0 より大きい数 (負の数・text・`true`・`null` の件数は証拠にならない)、成立範囲は集合 (重複を含む同じ集合は `supports`)、配列でない成立範囲と `null` は `out_of_range`、`x-list` に数や object を渡すと拒否 それぞれの vector を corpus に足し、旧い証拠の読み方 (`REF_BUG=9`) と重複を残す範囲の比較 (`REF_BUG=10`) を `controls.sh` の must-red に加えた 参照実装は未知の law と欠けた入力で exit status 2 を返す
+- 有限でない数と形の崩れた build の読み方を `TASK.md` と law file に明記した JSON に NaN と無限大の literal は無いが、double に収まらない literal (`1e400`) は無限大に読まれる 有限でない数は数でないものとし、量の法則の入力なら拒否、監査の量なら測られていない (`expect` は `undecided`) `identifier_feature_independent` は `builds` の要素数を形によらず数え (`builds` が配列でなければ測られていない)、要素が object でないか `features` が text の配列でない時は `feature_sets` を測られていないとし (`no_evidence`、subject `feature_sets`)、`id` が text でない build は識別子を持たないとする それぞれの vector を corpus に足し (326 件)、runner は無限大を `1e400` として送る `REF_BUG=11` (有限でない数を数と読む) と `REF_BUG=12` (形の崩れた build を空の feature set と読む) を must-red に加えた
 
 #### Law の識別子 (`law_id`) — 同じ主張に同じ名前
 
