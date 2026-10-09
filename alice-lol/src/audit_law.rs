@@ -240,6 +240,13 @@ impl AuditLaw {
                     reason: format!("`{metric}` is not in the measurement"),
                 });
             };
+            // NaN・±∞ は測られていないのと同じ ⚠️ `(NaN - v).abs() > tol` は false
+            // なので、ここで止めないと Supports に倒れる
+            if !got.is_finite() {
+                return Some(Verdict::Undecided {
+                    reason: format!("`{metric}` is not a finite number"),
+                });
+            }
             if (got - value).abs() > *tolerance {
                 return Some(Verdict::Breaks {
                     metric: metric.clone(),

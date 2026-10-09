@@ -5,7 +5,10 @@
 //! 2. **成立範囲** — 値の組は**集合**として比べる 順序と重複は判定に影響しない
 //!    (実測側も Law 側も同じ正規化を通る)
 //!
-//! どちらも別の言語で書いた実装と同じ判定を出すための規則で、
+//! 3. **期待値の実測が有限でない** — NaN・±∞ は測られていないのと同じ (`Undecided`)
+//!    ⚠️ `(NaN - v).abs() > tol` は false なので、検査しないと `Supports` に倒れる
+//!
+//! どれも別の言語で書いた実装と同じ判定を出すための規則で、
 //! `conformance/TASK.md` の監査の表と同じ内容
 
 use alice_lol::audit_law::{Measurements, Verdict};
@@ -125,4 +128,31 @@ fn values_with_the_same_version_key_still_form_a_set() {
             "{measured:?}"
         );
     }
+}
+
+fn judge_expect(value: f64) -> Verdict {
+    parse_law("audit expect-only\nexpect mismatches == 0\n")
+        .expect("the law text parses")
+        .evaluate(&Measurements::new().with_number("mismatches", value))
+}
+
+const fn is_undecided(v: &Verdict) -> bool {
+    matches!(v, Verdict::Undecided { .. })
+}
+
+#[test]
+fn a_nan_measurement_of_an_expectation_is_undecided() {
+    assert!(is_undecided(&judge_expect(f64::NAN)));
+}
+
+#[test]
+fn an_infinite_measurement_of_an_expectation_is_undecided() {
+    assert!(is_undecided(&judge_expect(f64::INFINITY)));
+    assert!(is_undecided(&judge_expect(f64::NEG_INFINITY)));
+}
+
+#[test]
+fn a_finite_measurement_of_an_expectation_is_still_judged() {
+    assert_eq!(judge_expect(0.0), Verdict::Supports);
+    assert!(matches!(judge_expect(1.0), Verdict::Breaks { .. }));
 }

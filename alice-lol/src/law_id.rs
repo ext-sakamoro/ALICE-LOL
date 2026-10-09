@@ -79,13 +79,13 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     // 監査の判定順序 (証拠 -> 成立範囲 -> 期待値) 順序は verdict を変えるので意味論
     (
         "audit verdict order: evidence -> ranges -> expectations",
-        hex32("c755eb31eda59bab3ff577e4ecd8355b57881fcc8bb9d433ca2e8dead4bc5f2b"),
+        hex32("14e30eaa97ad76260f022b28f4fc15f06f9df779256439078289400b8ce11e64"),
     ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("6f3c9c1518f12990f4b4ff1e4dc948c2bd6c2c2ce7f877aff1de445ceb833313");
+    hex32("bc2befdcd5c0e1e190a145eb3f0e15c5f5698886e946dd6aecf33e406c39b71a");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -185,6 +185,12 @@ pub fn audit_verdict_order_fingerprint() -> [u8; 32] {
             .with_number("n", 3.0)
             .with_number("bad", 0.0)
             .with_range("k", &["2", "1", "2"]),
+        // 期待値の実測が有限でない (NaN) のは測られていないのと同じ
+        // ⚠️ 検査しない読み方では `(NaN - 0).abs() > 0` が false で Supports に倒れる
+        Measurements::new()
+            .with_number("n", 3.0)
+            .with_number("bad", f64::NAN)
+            .with_range("k", &["1", "2"]),
     ];
     let mut h = Sha256::new();
     h.update(LAW_ID_DOMAIN);
