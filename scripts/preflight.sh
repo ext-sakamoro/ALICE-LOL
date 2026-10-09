@@ -106,6 +106,10 @@ python3 scripts/readme_sync.py --check
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
 
+step "ci.yml / docs: law_corners (oracle + corner enumeration)"
+python3 scripts/test_law_corners.py
+python3 scripts/law_corners.py laws/spike
+
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 
