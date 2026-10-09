@@ -28,6 +28,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test research_law_bit_exact|"
   "alice-lol|--test interior_lipschitz_bound_probe|"
   "alice-lol|--test print_tests|"
+  "alice-lol|--test spike_law_files_parse|"
   "alice-lol-robot|--test analytic_robot_law|"
 )
 PHYSICS_TARGETS=(
