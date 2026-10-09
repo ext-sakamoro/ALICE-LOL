@@ -529,6 +529,11 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### `alice-zip` の要求を 0.8 に上げる (2026-10-09)
+
+- `alice-zip = "0.7"` → `"0.8"` 上流の 0.8.0 は残差の容器と既定 encoder を変える破壊的変更だが、この crate が使うのは `law::{IngestPolicy, Provenance, ResidualStats, ValidRange, SignalLaw, LAW_ID_DOMAIN}` だけなので経路外
+- `law_id::LOL_SEMANTICS_ID` は不変 (保存した Law の識別子はずれない)
+
 #### `readme_sync` が example の一覧を検査する (2026-10-09)
 
 - `alice-lol/examples/*.rs` の集合と両 README の Example 表の行を双方向で突合する (表に無い example / 実在しない行 / ディレクトリ自体の不在をそれぞれ名指しで落とす)
