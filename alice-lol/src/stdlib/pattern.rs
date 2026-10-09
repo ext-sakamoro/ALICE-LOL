@@ -12,7 +12,7 @@
 //! ## `certified_by` 分類
 //!
 //! - **`UserFieldTest`**: user が実プリントして動作確認済 (pipeline `models/` 配下)
-//! - **`BambooSimulation`**: pipeline `safety::safety_validate` 通過のみ
+//! - **`SimulationOnly`**: pipeline `safety::safety_validate` 通過のみ
 //! - **`Both`**: 上記両方
 //! - **`None`**: 未検証 (primitive 組立て段階、実プリント推奨せず)
 //!
@@ -57,7 +57,7 @@ pub enum CertificationSource {
     /// 未検証 (primitive 組立て段階、実プリント推奨せず)
     None,
     /// pipeline `safety::safety_validate` 通過のみ、実プリント未実施
-    BambooSimulation,
+    SimulationOnly,
     /// user 実プリントで動作確認済 (pipeline `models/` 配下に .3mf 記録あり)
     UserFieldTest,
     /// 上記両方 (最高信頼度)
@@ -70,7 +70,7 @@ impl CertificationSource {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::None => "uncertified",
-            Self::BambooSimulation => "pipeline simulation only",
+            Self::SimulationOnly => "pipeline simulation only",
             Self::UserFieldTest => "user field test",
             Self::Both => "user field test + pipeline simulation",
         }
@@ -122,7 +122,7 @@ pub struct LolPattern {
     ///
     /// canonical 実装は公開していない crate にあるので、その中の位置は載せない
     /// (以前は file path を持っていた) 未実地検証 pattern の場合は `None`
-    pub bamboo_canonical: Option<&'static str>,
+    pub canonical_kind: Option<&'static str>,
 }
 
 // ────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ pub mod registry {
         field_test: None, // Phase B.2 で date/material/printer/notes 埋め込み
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// IKEA SKADIS 300×300 panel (pipeline `python generator`)
@@ -161,7 +161,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// U 字棚仕切り (pipeline `python generator`、Rust generator canonical)
@@ -178,7 +178,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("rust generator"),
+        canonical_kind: Some("rust generator"),
     };
 
     // ── SKADIS アクセサリー 6 種 (pipeline python generator、Phase B.1.c で primitive 実装予定) ──
@@ -193,7 +193,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS L 型 hook (Sim 79 Good、直角曲げの overhang が主因、Field test で通過)
@@ -207,7 +207,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS S 型 hook (Sim 88 Excellent)
@@ -221,7 +221,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS container (小物入れ、2 peg、Sim 76 Good、Field test で通過)
@@ -235,7 +235,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS clip (単 peg、Sim 88 Excellent)
@@ -248,7 +248,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS shelf (2 peg 棚、Sim 70 Good、Field test で通過)
@@ -263,7 +263,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     /// SKADIS elastic cord holder (伸縮ホルダー、Sim 88 Excellent)
@@ -276,7 +276,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("python generator"),
+        canonical_kind: Some("python generator"),
     };
 
     // ── pipeline simulation certified (未実地検証、Sim score のみで CI gate 判定) ──
@@ -291,12 +291,12 @@ pub mod registry {
         description:
             "壁掛けフック (荷重指定 kgf で応力逆算、pipeline Rust generator canonical、Sim 79)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::BambooSimulation,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("rust generator"),
+        canonical_kind: Some("rust generator"),
     };
 
     /// Gridfinity bin (pipeline `rust generator`、Sim 79 Good、CI gate 未通過)
@@ -307,12 +307,12 @@ pub mod registry {
         name: "gridfinity_bin",
         description: "Gridfinity 互換 bin (42mm grid、任意 units × height × dividers、Sim 79)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::BambooSimulation,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("rust generator"),
+        canonical_kind: Some("rust generator"),
     };
 
     /// Drawer organizer (pipeline `rust generator`、Sim 72 Good、CI gate 未通過)
@@ -322,12 +322,12 @@ pub mod registry {
         name: "drawer_organizer",
         description: "引出し仕切り (chopsticks/fork/knife/spoon/marker/pen 等 slot 定義、Sim 72)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::BambooSimulation,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(72),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("rust generator"),
+        canonical_kind: Some("rust generator"),
     };
 
     /// registry 全 pattern (12 件、iterate 用)
@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn uncertified_patterns_count() {
         // Phase B.2 代替 (2026-08-06): pipeline simulation 反映後、全 13 pattern が
-        // UserFieldTest / Both / BambooSimulation のいずれかで certified、None は 0
+        // UserFieldTest / Both / SimulationOnly のいずれかで certified、None は 0
         let uncertified = registry::ALL
             .iter()
             .filter(|p| p.certified_by == CertificationSource::None)
@@ -482,9 +482,9 @@ mod tests {
         // Phase B.2 代替 (2026-08-07): tight_aabb 修正で真 bbox 取得、Sim 70 → 79 改善
         // 依然 Sim < 85 で CI gate 未通過 (user field test 待ち or spec 見直し必要)
         let p = find_by_name("wall_hook").expect("registered");
-        assert_eq!(p.certified_by, CertificationSource::BambooSimulation);
+        assert_eq!(p.certified_by, CertificationSource::SimulationOnly);
         assert_eq!(p.printability_score, Some(79));
-        assert!(p.bamboo_canonical.is_some());
+        assert!(p.canonical_kind.is_some());
         assert!(
             !pattern_passes_ci_gate(p),
             "wall_hook は Sim 79 なので CI gate 未通過"
@@ -500,7 +500,7 @@ mod tests {
     fn certification_includes_field_test_flag() {
         assert!(CertificationSource::UserFieldTest.includes_field_test());
         assert!(CertificationSource::Both.includes_field_test());
-        assert!(!CertificationSource::BambooSimulation.includes_field_test());
+        assert!(!CertificationSource::SimulationOnly.includes_field_test());
         assert!(!CertificationSource::None.includes_field_test());
     }
 
@@ -565,12 +565,12 @@ mod tests {
     }
 
     #[test]
-    fn all_field_tested_have_bamboo_canonical() {
+    fn all_field_tested_have_a_canonical_kind() {
         for p in registry::ALL {
             if p.certified_by.includes_field_test() {
                 assert!(
-                    p.bamboo_canonical.is_some(),
-                    "{}: field-tested pattern must have bamboo_canonical set",
+                    p.canonical_kind.is_some(),
+                    "{}: field-tested pattern must have canonical_kind set",
                     p.name
                 );
             }

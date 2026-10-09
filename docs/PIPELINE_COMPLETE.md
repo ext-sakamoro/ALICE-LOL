@@ -126,7 +126,7 @@ Slice → G-code → Print
 
 ### Phase 5.4: text-to-print pipeline.rs の DC 経路切替
 
-**現状**: text-to-print `crates/core/src/pipeline.rs::export_3mf_via_bamboo` は SDF+MC hardcode
+**現状**: text-to-print `crates/core/src/pipeline.rs` の 3MF 出力経路は SDF+MC hardcode
 **修正内容**:
 - 厚さ判定 helper 追加: SdfNode の Y 軸方向 AABB を評価、`< 5mm` なら DC 経路、`>= 5mm` なら MC 経路
 - `export_3mf_via_dual_contouring` 新規関数追加 (MC 版と対を成す)
@@ -141,7 +141,7 @@ Slice → G-code → Print
 
 **現状**: Phase B.1.d で 4 generator を LOL pattern_sdf 呼出し wrapper に置換、しかし CLI 実行後の .3mf 生成成功は未確認
 **実装**:
-- `scripts/verify_bamboo_generators.sh` 新規 bash script:
+- pipeline 側の検証 script (新規 bash script):
   ```bash
   cargo run --release --bin <pipeline-cli> -- drawer --width 250 --depth 200 --height 40 --slots "chopsticks:2,fork:4,knife:4" --output /tmp/verify/drawer.3mf
   cargo run --release --bin <pipeline-cli> -- gridfinity --units 2x2 --height 4 --output /tmp/verify/gridfinity.3mf
@@ -238,7 +238,7 @@ Slice → G-code → Print
 | 5.2 | SKADIS 残 4 accessory SDF | `stdlib/hardsurface/skadis_sdf.rs` 拡張 | 1 (LOL) |
 | 5.3 | 12+ 品目 3MF 生成 example | `examples/complete_pipeline_output.rs` + 実測 | 1 (LOL) |
 | 5.4 | text-to-print pipeline DC 統合 | `crates/core/src/pipeline.rs` | 1 (text-to-print) |
-| 5.5 | pipeline CLI 検証 script | `scripts/verify_bamboo_generators.sh` | 1 (pipeline) |
+| 5.5 | pipeline CLI 検証 script | pipeline 側に新規 | 1 (pipeline) |
 | 5.6 | user Bambu Studio 検証手順書 | `docs/BAMBU_STUDIO_VERIFICATION.md` | 1 (LOL) |
 
 **合計**: 7 commit (LOL 5、pipeline 1、text-to-print 1)、~2000+ 行実装 + ~800 行 docs

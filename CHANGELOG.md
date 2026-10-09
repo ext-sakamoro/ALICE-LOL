@@ -520,6 +520,17 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### **Breaking:** pattern registry の 2 つの名前を内容に合わせて改名
+
+公開していない姉妹 crate の名前を含んでいた 2 項目を、何を表すかで名付け直した
+
+- `CertificationSource::BambooSimulation` → `CertificationSource::SimulationOnly`
+- `PatternSpec.bamboo_canonical` → `PatternSpec.canonical_kind`
+
+`canonical_kind` は値の意味も変わっている: 以前は非公開 crate 内の file path を持っていたが、
+canonical 実装の種別 (`"python generator"` / `"rust generator"`) を持つ
+`certifications.yaml` の `certified_by` の値も新しい名前に合わせた
+
 #### `alice-det-math` 0.4 へ追従
 
 `alice-lol` の `alice-det-math` の要求を `0.3.2` から `0.4` に上げた

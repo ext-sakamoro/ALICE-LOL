@@ -5,8 +5,8 @@
 成功を検証する
 
 **前提**: Phase 5.3 の example を pipeline 側で実行し `./output/{thin,thick}/`
-に 13 品目 `.3mf` が生成済 + Phase 5.5 script (`scripts/verify_bamboo_generators.sh`) を
-実行し `/tmp/bamboo_verify/` に 4 CLI generator `.3mf` が生成済
+に 13 品目 `.3mf` が生成済 + Phase 5.5 の検証 script を pipeline 側で
+実行し その出力 dir に 4 CLI generator `.3mf` が生成済
 
 ---
 
@@ -101,7 +101,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 | K3 | `drawer_organizer_chopsticks.3mf` | `pattern_sdf::drawer_organizer(&DrawerSpec::default_chopsticks_set())` | 159K vert / 318K tri / 2468KB | ~4-6 hours (250mm 幅) |
 | K4 | `shelf_divider_560x250x120.3mf` | `pattern_sdf::shelf_divider(&ShelfDividerSpec::field_tested_560x250x120())` | 98K vert / 197K tri / 1486KB | ~12+ hours (実プリント合格 spec) |
 
-### 1.3 pipeline CLI 経路 (4 品目、`/tmp/bamboo_verify/`、Phase 5.5)
+### 1.3 pipeline CLI 経路 (4 品目、pipeline 側の出力 dir、Phase 5.5)
 
 **注意**: 本 4 品目は pipeline の CLI で生成、**素の 3MF** (Bambu template 埋込なし)
 Bambu Studio で開くと「印刷設定なし」で表示される、user が material / printer を毎回設定要

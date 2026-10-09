@@ -6,7 +6,7 @@
 //! **注意**: 本 example は非公開の pipeline crate に依存 alice-lol 単独 crate では動作しない
 //! その crate を dev-dependencies に追加した状態で:
 //! ```bash
-//! cargo run --release --example complete_pipeline_output --features bamboo-bridge
+//! cargo run --release -p alice-lol --example complete_pipeline_output
 //! ```
 //!
 //! LOL 単独では動かないため、実際の使用パターンは text-to-print / pipeline 側で

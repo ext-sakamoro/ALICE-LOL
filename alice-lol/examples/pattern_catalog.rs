@@ -35,8 +35,8 @@ fn main() {
     let ft = field_tested_patterns();
     println!("\n--- Field-tested baseline ({} patterns) ---", ft.len());
     for p in &ft {
-        let pipeline = p.bamboo_canonical.unwrap_or("(none)");
-        println!("  {:<32} → {pipeline}", p.name);
+        let kind = p.canonical_kind.unwrap_or("(none)");
+        println!("  {:<32} → {kind}", p.name);
     }
 
     // ────────────────────────────────
@@ -58,14 +58,14 @@ fn main() {
         .filter(|p| p.certified_by == CertificationSource::None)
         .count();
     println!(
-        "\n--- Certification breakdown ---\n  UserFieldTest: {}\n  BambooSimulation: {}\n  Both: {}\n  None: {}",
+        "\n--- Certification breakdown ---\n  UserFieldTest: {}\n  SimulationOnly: {}\n  Both: {}\n  None: {}",
         registry::ALL
             .iter()
             .filter(|p| p.certified_by == CertificationSource::UserFieldTest)
             .count(),
         registry::ALL
             .iter()
-            .filter(|p| p.certified_by == CertificationSource::BambooSimulation)
+            .filter(|p| p.certified_by == CertificationSource::SimulationOnly)
             .count(),
         registry::ALL
             .iter()

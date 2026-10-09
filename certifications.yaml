@@ -89,20 +89,20 @@
 - pattern_name: wall_hook
   field_test: {date: null, material: null, printer: null, notes: "PLA_1kgf spec、tight_aabb 修正で Sim 70 → 79 改善、gate 通過には spec 見直し or field test で 85+ 判定必要"}
   printability_score: 79
-  certified_by: BambooSimulation
+  certified_by: SimulationOnly
   sim_axes: {overhang: 40, min_thickness: 100, warp: 100, support: 100, stress: 70}
   passes_ci_gate: false  # Sim < 85
 
 - pattern_name: gridfinity_bin
   field_test: {date: null, material: null, printer: null, notes: "Gridfinity 2×2 default、tight_aabb 修正で mesh 0 bug 解消 (真 bbox 92×92×41mm)、overhang 40 で Sim 97→79 降格、gate 通過には field test 必要"}
   printability_score: 79
-  certified_by: BambooSimulation
+  certified_by: SimulationOnly
   sim_axes: {overhang: 40, min_thickness: 100, warp: 100, support: 100, stress: 70}
   passes_ci_gate: false
 
 - pattern_name: drawer_organizer
   field_test: {date: null, material: null, printer: null, notes: "250mm+ 幅 chopsticks+fork+knife、tight_aabb 修正で真 bbox (252×202×42mm) 取得、warp High + overhang 30%+、gate 通過には field test 必要"}
   printability_score: 72
-  certified_by: BambooSimulation
+  certified_by: SimulationOnly
   sim_axes: {overhang: 70, min_thickness: 100, warp: 20, support: 100, stress: 70}
   passes_ci_gate: false
