@@ -346,6 +346,9 @@ jobs:
   # allow(dead_code) の新規追加を止める (既存分は scripts/wiring-baseline.txt)
   # 併せて版ガード: 同じ alice-* crate が 2 版以上 lock に入っている (= 同じ法則が
   # 2 通りに評価されうる) 状態を止める (既存分は scripts/lock-duplicates-baseline.txt)
+  # 併せて算術ガード: 判定を出す file で platform の libm (値が IEEE 754 で規定されて
+  # いない超越関数) を直呼びしている状態を止める (= 同じ実測で判定が機械ごとに割れる)
+  # 既存分は scripts/det-math-baseline.txt に理由付きで置く
   # 検査器自身が OS 依存で空振り / 異常終了しないよう、test matrix と同じ 3 OS で動かす
   # (検査対象 0 件は empty_scan / nothing compared で fail する)
   wiring-guard:
@@ -368,6 +371,10 @@ jobs:
         run: python scripts/test_lock_single_version.py
       - name: lock-single-version (alice-* が 2 版以上 lock に入っていない)
         run: python scripts/lock_single_version.py
+      - name: det-math-guard oracle (検査器自身の試験)
+        run: python scripts/test_det_math_guard.py
+      - name: det-math-guard (判定経路に platform 依存の超越関数が無い)
+        run: python scripts/det_math_guard.py
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py) と、公開文書と全 tracked file の語彙 (scripts/docs_lint.py)

@@ -96,6 +96,10 @@ step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入って�
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py
 
+step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越関数が無い"
+python3 scripts/test_det_math_guard.py
+python3 scripts/det_math_guard.py
+
 step "ci.yml / docs: readme_sync + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check

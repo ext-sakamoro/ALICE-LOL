@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 判定経路に platform 依存の超越関数が入るのを止める gate (`scripts/det_math_guard.py`)
+
+Law は「同じ実測なら同じ判定」でなければならないが、`sin` / `cos` / `exp` 等は IEEE 754 が
+値を規定しておらず platform の libm ごとに最後の 1 bit が違いうる 判定を出す file
+(`law.rs` / `audit_law.rs` / `research_law.rs`) に限って直呼びを検査する
+正しい丸めが要求される演算 (`sqrt` / `mul_add` / `powi`) は platform に依らないので落とさない
+既存分は `scripts/det-math-baseline.txt` に理由付きで置くラチェットで、解消した行が残っていても
+検査は red になる 対象 file が読めない / 呼び出しを 1 件も見ていない場合も red
+
 #### 監査 Law — 検査を「何が成立すべきか」として書く (`audit_law` + `parse_law`)
 
 `law` (幾何の制約) と `research_law` (データに対する式) に続く 3 つ目の Law 一致を検査する対象が

@@ -1,0 +1,19 @@
+# det-math-guard baseline: 判定経路に残る platform 依存の関数 (ラチェット)
+#
+# 新規の直呼びは fail、解消したら行を消す (残っていても fail)
+# 1 行に 1 つ `<file>::<関数>::<method>` と、**なぜ決定論を要求しないのか**の理由
+#
+# 2026-10-09 実測: 判定 3 file の 82 呼び出しのうち実装依存は下の 2 件だけ
+#   alice-lol/src/audit_law.rs   0 件
+#   alice-lol/src/research_law.rs 0 件 (`.sqrt()` 2 件は IEEE 754 が正しい丸めを
+#     要求する演算なので実装依存ではない 超越関数は既に alice_det_math を通している)
+#   alice-lol/src/law.rs         2 件 (下記)
+
+# `material_fraction` は球面標本で材料の占有率を**測る** helper で、判定ではない
+# (関数の doc が「これは計測であって判定ではない」と明記している) 実測: 呼び出し元
+# 3 件はすべて `#[cfg(test)]` 配下 (law.rs:4823 / :4864 / :4865) で production からの
+# 呼び出しは 0 件 ⇒ 判定が platform で割れる経路になっていない
+# 走査層 (module 冒頭の comment にある「入隅があるか答える層」) を実装して production
+# から呼ぶ時は、方向標本を alice_det_math に通してからにする (その時点で本 2 行を消す)
+alice-lol/src/law.rs::material_fraction::cos
+alice-lol/src/law.rs::material_fraction::sin
