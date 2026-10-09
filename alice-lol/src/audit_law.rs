@@ -133,7 +133,7 @@ impl Verdict {
 /// 値を増やすのは破壊的変更として扱う ([`Verdict`] と同じ理由)
 #[derive(Debug, Clone, PartialEq)]
 pub enum Clause {
-    /// その量が 1 件以上測られていること
+    /// その量が測られていること (有限で 0 より大きい数)
     Evidence {
         /// 証拠として要求する量の名前
         metric: String,
@@ -151,7 +151,7 @@ pub enum Clause {
     Range {
         /// 行の key
         key: String,
-        /// 許容する値の組 (昇順に正規化される)
+        /// 許容する値の組 (集合として正規化される: 昇順、重複なし)
         values: Vec<String>,
     },
 }
@@ -199,7 +199,7 @@ impl AuditLaw {
 
     fn check_evidence(&self, m: &Measurements) -> Option<Verdict> {
         self.clauses.iter().find_map(|c| match c {
-            Clause::Evidence { metric } if m.number(metric).unwrap_or(0.0) == 0.0 => {
+            Clause::Evidence { metric } if !is_evidence(m.number(metric)) => {
                 Some(Verdict::NoEvidence {
                     metric: metric.clone(),
                 })
@@ -256,11 +256,27 @@ impl AuditLaw {
     }
 }
 
-/// 値を昇順に正規化する (`0.10` > `0.9`)
+/// 証拠になる値か — **有限で 0 より大きい数**だけ
+///
+/// ⚠️ 負の数・NaN・±∞ は「数えた」ことを示さないので、測られていないのと同じに扱う
+/// (`0 でない` を証拠とすると `-1` が証拠になり、NaN も `!= 0` を満たす)
+fn is_evidence(value: Option<f64>) -> bool {
+    value.is_some_and(|v| v.is_finite() && v > 0.0)
+}
+
+/// 値を集合として正規化する: 昇順 (`0.10` > `0.9`) に並べ、重複を除く
+///
+/// ⚠️ 成立範囲は集合なので、順序と重複は判定に影響してはいけない Law の側
+/// (parser) と実測の側 ([`Measurements::with_range`]) が同じ関数を通るので、
+/// 比較は正規化した列どうしの一致で足りる
 #[must_use]
 pub(crate) fn sorted_values(values: &[&str]) -> Vec<String> {
     let mut v: Vec<String> = values.iter().map(|s| (*s).to_owned()).collect();
-    v.sort_by_key(|s| version_key(s));
+    // ⚠️ `version_key` だけでは全順序にならない (`1.0` と `1-0`、`01` と `1` が同じ key)
+    // 同じ key の値が入力順のまま残ると、重複が隣り合わず dedup で消えず、順序違いの
+    // 同じ集合が別の列になる ⇒ 文字列そのもので tie を切る
+    v.sort_by(|a, b| version_key(a).cmp(&version_key(b)).then_with(|| a.cmp(b)));
+    v.dedup();
     v
 }
 
@@ -294,7 +310,7 @@ impl Measurements {
         self
     }
 
-    /// 測られた組を足す (版の組など) 値は昇順に正規化する
+    /// 測られた組を足す (版の組など) 値は集合として正規化する (昇順、重複なし)
     #[must_use]
     pub fn with_range(mut self, key: &str, values: &[&str]) -> Self {
         self.ranges.insert(key.to_owned(), sorted_values(values));

@@ -214,11 +214,13 @@ audit evidence expect range
 ```
 
 `evidence <metric>` requires that the metric was measured at all — a check that
-compared nothing answers `NoEvidence` instead of passing. `expect <metric> ==
-<value> [within <tol>]` is the expectation, and `range <key> <value>...` records
-a known violation: it is allowed while the measurement matches, becomes
-`OutOfRange` once the row no longer applies, and `ParameterUpdate` when the
-values move. Evidence is judged before expectations, so `0 == 0` cannot pass by
+compared nothing answers `NoEvidence` instead of passing. Only a finite number
+greater than 0 is evidence; 0, a negative number, NaN and infinity are not.
+`expect <metric> == <value> [within <tol>]` is the expectation, and
+`range <key> <value>...` records a known violation: it is allowed while the
+measurement matches, becomes `OutOfRange` once the row no longer applies, and
+`ParameterUpdate` when the values move. The values are compared as a set (order
+and duplicates are ignored). Evidence is judged before expectations, so `0 == 0` cannot pass by
 accident on an empty measurement.
 
 ## Law identity (`law_id`)

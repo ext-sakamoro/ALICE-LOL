@@ -20,6 +20,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--lib law::|"
   "alice-lol|--test law_tests|"
   "alice-lol|--test audit_law_parity|"
+  "alice-lol|--test audit_law_semantics|"
     "alice-lol|--test law_id_oracle|"
   "alice-lol|--test law_corpus_oracle|"
   "alice-lol|--test analytic_law|"

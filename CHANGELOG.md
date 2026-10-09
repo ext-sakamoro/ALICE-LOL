@@ -536,6 +536,16 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 
 ### Changed
 
+#### 監査 Law の証拠と成立範囲の読み方を固定する (2026-10-09)
+
+- **挙動変更:** `audit_law` の `evidence` は有限で 0 より大きい数だけを証拠と読む これまでは `0 でない` を証拠としていたので、負の数・NaN・±∞ が証拠として通っていた 今後はどれも `Verdict::NoEvidence` になる
+- **挙動変更:** 成立範囲 (`range`) は集合として比べる `Measurements::with_range` と `parse_law` の `range` 行はどちらも昇順に並べて重複を除く (同じ並び順の key を持つ `1.0` と `1-0` は文字列で順を決める) これまでは重複を残していたので、同じ集合に重複があると `Verdict::ParameterUpdate` になっていた 今後は `Verdict::Supports`
+- 移行: 影響を受けるのは、件数に負の数を渡して「測った」ことを表していた呼び出し側と、成立範囲の重複の数に意味を持たせていた呼び出し側 前者は件数を 0 より大きい数で渡す (測れていないなら 0 か値を渡さない) 後者は重複の数を別の数の量 (`with_number`) で渡し、`expect` で判定する Law の text に重複を書いていた場合は、重複を除いた Law と同じ Law になる (`AuditLaw` も識別子も一致)
+- `law_id::audit_verdict_order_fingerprint` に 2 case (証拠が -1 / 成立範囲に重複) を足した 既存の 4 case はどちらの読み方でも同じ判定を出すので、足さないと読み方を変えても pin が動かない
+- 再記録: 判定順序の pin `49769f9b…` → `c755eb31…`、`law_id::LOL_SEMANTICS_ID` `673481121a…` → `6f3c9c1518…` (上の 2 case が判定の並びを変えたため) 監査 Law の識別子はすべて変わる 旧値は `tests/law_id_oracle.rs` に名前つきの定数で残し、新旧が違うことを試験する
+- 公開済の識別子は変わらない `alice-lol` 0.4.0 は未公開で、crates.io の最新は 0.3.0 (`law_id` を持たない)
+- 試験: `alice-lol/tests/audit_law_semantics.rs` (`scripts/law_tests.sh` と変異試験の対象に追加)
+
 #### `alice-zip` の要求を 0.8 に上げる (2026-10-09)
 
 - `alice-zip = "0.7"` → `"0.8"` 上流の 0.8.0 は残差の容器と既定 encoder を変える破壊的変更だが、この crate が使うのは `law::{IngestPolicy, Provenance, ResidualStats, ValidRange, SignalLaw, LAW_ID_DOMAIN}` だけなので経路外

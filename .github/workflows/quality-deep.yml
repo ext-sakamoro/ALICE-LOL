@@ -57,6 +57,7 @@ on:
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
       - 'alice-lol/tests/audit_law_parity.rs'
+      - 'alice-lol/tests/audit_law_semantics.rs'
       - 'alice-lol/tests/law_id_oracle.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
@@ -70,6 +71,7 @@ on:
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
       - 'alice-lol/tests/audit_law_parity.rs'
+      - 'alice-lol/tests/audit_law_semantics.rs'
       - 'alice-lol/tests/law_id_oracle.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
@@ -157,7 +159,7 @@ jobs:
             --file alice-lol/src/audit_law.rs \
             --file alice-lol/src/law_id.rs \
             --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven|lipschitz_enclosure|refine_with_lipschitz|evaluate|check_evidence|check_ranges|check_expectations|sorted_values|version_key|passed|hex32|nibble|fold_semantics_pins|audit_verdict_order_fingerprint|length_prefixed|LawIdHasher::|AuditLaw::law_id' \
-            -- --lib --test analytic_law --test law_tests --test audit_law_parity --test law_id_oracle
+            -- --lib --test analytic_law --test law_tests --test audit_law_parity --test audit_law_semantics --test law_id_oracle
           rc=$?
           set -e
           # 0 = 全て caught、2 = missed あり、3 = timeout あり → ここでは測定結果

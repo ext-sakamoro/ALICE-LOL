@@ -79,13 +79,13 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     // 監査の判定順序 (証拠 -> 成立範囲 -> 期待値) 順序は verdict を変えるので意味論
     (
         "audit verdict order: evidence -> ranges -> expectations",
-        hex32("49769f9b44d0397b7ace9e2ab5352e97d2f7203f12943efc694be400e7b6dd4d"),
+        hex32("c755eb31eda59bab3ff577e4ecd8355b57881fcc8bb9d433ca2e8dead4bc5f2b"),
     ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("673481121a3ed4ba1efb33c2ca62c8e6d2febded9d47e21e79294148d63f6a6f");
+    hex32("6f3c9c1518f12990f4b4ff1e4dc948c2bd6c2c2ce7f877aff1de445ceb833313");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -132,6 +132,10 @@ pub fn fold_semantics_pins(pins: &[(&str, [u8; 32])]) -> [u8; 32] {
 /// 固定の Law と固定の実測列に対する判定の並びを hash する
 /// ⚠️ 判定順序 (証拠 -> 成立範囲 -> 期待値) を入れ替えると並びが変わるので、
 /// この値も変わる = pin が振る舞いを本当に名乗っている
+///
+/// 実測列は判定順序のほかに、**証拠の読み方** (有限で 0 より大きい数) と
+/// **成立範囲の読み方** (集合) を区別する case を含む どちらかの読み方を変えると
+/// 判定の並びが変わり、pin が合わなくなる
 #[must_use]
 pub fn audit_verdict_order_fingerprint() -> [u8; 32] {
     let law = AuditLaw::new(
@@ -169,6 +173,18 @@ pub fn audit_verdict_order_fingerprint() -> [u8; 32] {
             .with_number("n", 3.0)
             .with_number("bad", 0.0)
             .with_range("k", &["1", "2"]),
+        // 負の件数は証拠にならない (有限で 0 より大きい数だけが証拠)
+        // ⚠️ `!= 0` を証拠とする読み方では Supports に倒れる
+        Measurements::new()
+            .with_number("n", -1.0)
+            .with_number("bad", 0.0)
+            .with_range("k", &["1", "2"]),
+        // 成立範囲は集合 (重複は判定に影響しない)
+        // ⚠️ 重複を残す読み方では ParameterUpdate に倒れる
+        Measurements::new()
+            .with_number("n", 3.0)
+            .with_number("bad", 0.0)
+            .with_range("k", &["2", "1", "2"]),
     ];
     let mut h = Sha256::new();
     h.update(LAW_ID_DOMAIN);

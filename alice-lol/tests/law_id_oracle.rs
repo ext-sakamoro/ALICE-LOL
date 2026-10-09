@@ -255,3 +255,47 @@ fn the_judgment_order_is_pinned_as_a_semantics() {
         "判定順序の pin が無い"
     );
 }
+
+/// 証拠を `0 でない` と読み、成立範囲の重複を残していた世代の判定順序の pin
+///
+/// 残す理由: 証拠を「有限で 0 より大きい数」、成立範囲を集合と読むように変えた時に、
+/// pin と識別子が**本当に動いた**ことを固定するため 指紋の case を足さずに読み方だけ
+/// 変えると、旧 4 case はどちらの読み方でも同じ判定を出すので pin が動かず、
+/// 判定の変わった Law が同じ識別子を名乗る
+const PREVIOUS_AUDIT_ORDER_PIN: [u8; 32] =
+    alice_lol::law_id::hex32("49769f9b44d0397b7ace9e2ab5352e97d2f7203f12943efc694be400e7b6dd4d");
+
+/// 上の pin を fold した旧世代の `LOL_SEMANTICS_ID` (理由は同じ)
+const PREVIOUS_SEMANTICS_ID: [u8; 32] =
+    alice_lol::law_id::hex32("673481121a3ed4ba1efb33c2ca62c8e6d2febded9d47e21e79294148d63f6a6f");
+
+#[test]
+fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| name.contains("audit verdict order"))
+        .expect("判定順序の pin");
+    assert_ne!(
+        *pinned, PREVIOUS_AUDIT_ORDER_PIN,
+        "判定順序の pin が旧世代のまま"
+    );
+    assert_ne!(
+        LOL_SEMANTICS_ID, PREVIOUS_SEMANTICS_ID,
+        "識別子が旧世代のまま"
+    );
+    // 旧 ID は旧 pin の fold であること (定数の写し間違いで assert_ne が空振りしない歯)
+    let previous_pins: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+        .iter()
+        .map(|&(name, id)| {
+            if name.contains("audit verdict order") {
+                (name, PREVIOUS_AUDIT_ORDER_PIN)
+            } else {
+                (name, id)
+            }
+        })
+        .collect();
+    assert_eq!(
+        alice_lol::law_id::fold_semantics_pins(&previous_pins),
+        PREVIOUS_SEMANTICS_ID
+    );
+}

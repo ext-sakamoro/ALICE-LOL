@@ -203,9 +203,11 @@ audit evidence expect range
 ```
 
 `evidence <metric>` はその量が測られたこと自体を要求する — 1 件も比べていない検査は
-合格ではなく `NoEvidence` を返す `expect <metric> == <value> [within <tol>]` が期待値、
+合格ではなく `NoEvidence` を返す 証拠になるのは有限で 0 より大きい数だけで、0・負の数・
+NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol>]` が期待値、
 `range <key> <value>...` は既知の違反を記録し、実測と一致する間は許容され、行が
 当てはまらなくなれば `OutOfRange`、値の組が動けば `ParameterUpdate` になる
+値の組は集合として比べる (順序と重複は判定に影響しない)
 証拠は期待値より先に判定するので、空の実測で `0 == 0` が偶然通ることはない
 
 ## Law の識別子 (`law_id`)
