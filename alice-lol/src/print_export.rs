@@ -27,7 +27,7 @@
 
 use crate::SdfNode;
 use glam::Vec3;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 // ── re-export ──
@@ -64,6 +64,57 @@ const fn resolution_as_f32(resolution: usize) -> f32 {
 /// 向きの不整合 (`inconsistent_normals`) も winding の問題なので数えない
 const fn watertight_defects(v: &MeshValidation) -> usize {
     v.boundary_edges + v.non_manifold_edges
+}
+
+/// index から参照されているかを頂点ごとに返す
+fn referenced_vertices(m: &Mesh) -> Vec<bool> {
+    let mut used = vec![false; m.vertices.len()];
+    for &i in &m.indices {
+        used[i as usize] = true;
+    }
+    used
+}
+
+/// index から参照されない頂点 (孤立頂点) の数
+///
+/// 定義は「どの index からも指されない頂点」の 1 つだけ 破壊的修復は三角形を落として
+/// 頂点を残すことがあり (実測 2026-10-09: gyroid scale 3.0 res 64 で 6 個)、その頂点は
+/// 位相にも形状にも寄与しないまま出力に残る
+fn isolated_vertices(m: &Mesh) -> usize {
+    referenced_vertices(m).iter().filter(|&&u| !u).count()
+}
+
+/// Euler 標数 `V − E + F`
+///
+/// ⚠️ `V` は **index から参照される頂点だけ**を数える 孤立頂点は位相に寄与しないので、
+/// `vertices` 全部で数えると孤立頂点の数だけ χ がずれる
+/// (実測 2026-10-09: gyroid scale 3.0 res 64 の修復後で −127 に対し全頂点では −121)
+fn euler_characteristic(m: &Mesh) -> i64 {
+    let v = referenced_vertices(m).iter().filter(|&&u| u).count();
+    let mut edges: HashSet<(u32, u32)> = HashSet::with_capacity(m.indices.len());
+    for t in m.indices.as_chunks::<3>().0 {
+        for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            edges.insert((a.min(b), a.max(b)));
+        }
+    }
+    let f = m.indices.len() / 3;
+    let as_i64 = |n: usize| i64::try_from(n).expect("要素数が i64 に収まらない");
+    as_i64(v) - as_i64(edges.len()) + as_i64(f)
+}
+
+/// 破壊的修復の結果を採ってよいか (非回帰 gate)
+///
+/// 3 条件をすべて満たす時だけ採る
+/// 1. 水密性の欠陥数 ([`watertight_defects`]) が増えない
+/// 2. **χ ([`euler_characteristic`]) が等しい** — 修復は距離で頂点を統合するので位相を
+///    変えうる 実測 (2026-10-09、gyroid bounds ±2.0 res 64): 条件 1 だけだと
+///    scale 2.0 で境界 edge −3 と引き換えに三角形 −3,179 (3.0%)、χ −20 → −39 の結果を
+///    採っていた (scale 2.5 / 3.0 も同形) 「悪化」の定義を要しないよう等号で判定する
+/// 3. **孤立頂点 ([`isolated_vertices`]) が増えない**
+fn repair_is_non_regressive(before: &Mesh, after: &Mesh) -> bool {
+    watertight_defects(&validate_mesh(after)) <= watertight_defects(&validate_mesh(before))
+        && euler_characteristic(after) == euler_characteristic(before)
+        && isolated_vertices(after) <= isolated_vertices(before)
 }
 
 /// 発散定理による符号付き体積 外向き CCW なら正
@@ -190,8 +241,8 @@ fn weld_coincident_vertices(raw: &Mesh) -> Mesh {
 ///    `remove_degenerate_triangles` が sliver を消して**縫い直さない**
 ///    (上流 `alice_sdf::mesh::manifold` 側の課題)
 ///
-/// そこで (a) **水密な mesh には破壊的操作を掛けない** (b) 掛けた結果が悪化したら
-/// **採らない** の 2 段で、`node_to_mesh` を**非回帰**にする
+/// そこで (a) **水密な mesh には破壊的操作を掛けない** (b) 掛けた結果が悪化したか
+/// 位相を変えたら **採らない** ([`repair_is_non_regressive`]) の 2 段で、`node_to_mesh` を**非回帰**にする
 fn repair_preserving_watertightness(raw: &Mesh, eps: f32) -> Mesh {
     // ⚠️ 先に同位置の頂点を畳む — ここで畳まないと、水密な mesh (境界 edge 0 /
     //    非多様体 edge 0) に面積 0 の三角形が残ったまま下の早期 return を通る
@@ -206,11 +257,11 @@ fn repair_preserving_watertightness(raw: &Mesh, eps: f32) -> Mesh {
     let m = MeshRepair::merge_duplicate_vertices(&m, eps);
     let m = MeshRepair::remove_degenerate_triangles(&m);
     let m = MeshRepair::remove_duplicate_triangles(&m);
-    let candidate = if watertight_defects(&validate_mesh(&m)) <= watertight_defects(&before) {
+    let candidate = if repair_is_non_regressive(raw, &m) {
         // 元から不整合があった mesh なので winding を揃える
         MeshRepair::fix_normals(&m)
     } else {
-        // ⚠️ 修復が悪化させた — 生 mesh を採る
+        // ⚠️ 修復が悪化させたか位相を変えた — 生 mesh を採る
         raw.clone()
     };
     orient_outward(candidate)
@@ -568,5 +619,138 @@ impl std::fmt::Display for ExportStats {
             "{}: {} vertices, {} triangles",
             self.path, self.vertex_count, self.triangle_count
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mesh(points: &[[f32; 3]], indices: &[u32]) -> Mesh {
+        let mut m = Mesh::new();
+        for p in points {
+            m.vertices.push(Vertex::new(Vec3::from_array(*p), Vec3::Z));
+        }
+        m.indices.extend_from_slice(indices);
+        m
+    }
+
+    const TETRA_POINTS: [[f32; 3]; 4] = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ];
+    const TETRA_INDICES: [u32; 12] = [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3];
+
+    fn tetra_with_extra_vertex() -> Mesh {
+        let mut points = TETRA_POINTS.to_vec();
+        points.push([5.0, 5.0, 5.0]);
+        mesh(&points, &TETRA_INDICES)
+    }
+
+    /// 三角形 1 枚 (V 3 / E 3 / F 1) の χ は 1、どの index も指さない頂点を 1 つ
+    /// 足しても χ は 1 のまま (全頂点で数えると 2 になる) で、孤立頂点は 1
+    #[test]
+    fn euler_characteristic_counts_only_referenced_vertices() {
+        let tri = mesh(
+            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            &[0, 1, 2],
+        );
+        assert_eq!(euler_characteristic(&tri), 1);
+        assert_eq!(isolated_vertices(&tri), 0);
+
+        let tri_plus = mesh(
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [3.0, 3.0, 3.0],
+            ],
+            &[0, 1, 2],
+        );
+        assert_eq!(
+            euler_characteristic(&tri_plus),
+            1,
+            "未参照の頂点が χ に入った"
+        );
+        assert_eq!(isolated_vertices(&tri_plus), 1);
+
+        // 閉じた四面体 (球面と同相) は χ = 2
+        let tetra = mesh(&TETRA_POINTS, &TETRA_INDICES);
+        assert_eq!(euler_characteristic(&tetra), 2);
+        assert_eq!(isolated_vertices(&tetra), 0);
+        let tetra_plus = tetra_with_extra_vertex();
+        assert_eq!(
+            euler_characteristic(&tetra_plus),
+            2,
+            "未参照の頂点が χ に入った"
+        );
+        assert_eq!(isolated_vertices(&tetra_plus), 1);
+
+        // 未参照の頂点が複数あれば全部数える (index の後ろでなく間にあっても)
+        let gaps = mesh(
+            &[
+                [9.0, 9.0, 9.0],
+                [0.0, 0.0, 0.0],
+                [8.0, 8.0, 8.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            &[1, 3, 4],
+        );
+        assert_eq!(isolated_vertices(&gaps), 2);
+        assert_eq!(euler_characteristic(&gaps), 1);
+    }
+
+    /// gate の 3 項をそれぞれ単独で破る mesh の組で、どの項も効いていることを固定する
+    #[test]
+    fn the_repair_gate_rejects_each_kind_of_regression_on_its_own() {
+        let tetra = mesh(&TETRA_POINTS, &TETRA_INDICES);
+        assert!(repair_is_non_regressive(&tetra, &tetra), "同じ mesh は通る");
+
+        // 孤立頂点だけが増える (欠陥数 0 / χ 2 は不変)
+        assert!(
+            !repair_is_non_regressive(&tetra, &tetra_with_extra_vertex()),
+            "孤立頂点が増えたのに採られた"
+        );
+        // 孤立頂点が減るのは通る
+        assert!(repair_is_non_regressive(&tetra_with_extra_vertex(), &tetra));
+
+        // χ だけが変わる: 離れた四面体 2 つ (χ 4) → 1 つ (χ 2)、欠陥数 0 / 孤立頂点 0
+        let mut two_points = TETRA_POINTS.to_vec();
+        two_points.extend(TETRA_POINTS.iter().map(|p| [p[0] + 3.0, p[1], p[2]]));
+        let mut two_indices = TETRA_INDICES.to_vec();
+        two_indices.extend(TETRA_INDICES.iter().map(|i| i + 4));
+        let two = mesh(&two_points, &two_indices);
+        assert_eq!(euler_characteristic(&two), 4);
+        assert!(
+            !repair_is_non_regressive(&two, &tetra),
+            "χ が変わったのに採られた"
+        );
+
+        // 欠陥数だけが増える: 三角形 1 枚 (境界 3、χ 1) → 2 枚の四角形 (境界 4、χ 1)
+        let tri = mesh(
+            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            &[0, 1, 2],
+        );
+        let quad = mesh(
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ],
+            &[0, 1, 2, 1, 3, 2],
+        );
+        assert_eq!(euler_characteristic(&quad), 1);
+        assert!(
+            !repair_is_non_regressive(&tri, &quad),
+            "境界 edge が増えたのに採られた"
+        );
+        assert!(
+            repair_is_non_regressive(&quad, &tri),
+            "境界 edge が減るのは通る"
+        );
     }
 }

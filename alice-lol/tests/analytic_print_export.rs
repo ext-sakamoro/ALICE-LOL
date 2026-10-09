@@ -1099,3 +1099,175 @@ fn the_weld_scales_with_the_grid_and_the_closed_form_holds_at_every_resolution()
         "最大 res の余剰 {previous_surplus} が小さすぎる — scene が退化した"
     );
 }
+
+// ── 破壊的修復の採否 (位相を変える修復は採らない) ──
+
+/// 生 mesh を `f32` の bit 完全一致だけで畳み、index が重複した三角形を落とす
+///
+/// 実装の `weld_coincident_vertices` を呼ばずに test 側で独立に書いた計器
+/// 破壊的修復が採られなかった時、`node_to_mesh` (`scale_mm` 1.0) の出力は
+/// これと三角形数・頂点数・χ が一致する (向きの付け替えは数を変えない)
+fn weld_exact(raw: &Mesh) -> Mesh {
+    let mut id: HashMap<[u32; 3], u32> = HashMap::new();
+    let mut out = Mesh::new();
+    let mut remap: Vec<u32> = Vec::with_capacity(raw.vertices.len());
+    for v in &raw.vertices {
+        let next = u32::try_from(id.len()).expect("頂点数が u32 に収まらない");
+        let slot = *id
+            .entry(v.position.to_array().map(f32::to_bits))
+            .or_insert(next);
+        if slot == next {
+            out.vertices.push(*v);
+        }
+        remap.push(slot);
+    }
+    for t in raw.indices.as_chunks::<3>().0 {
+        let (a, b, c) = (
+            remap[t[0] as usize],
+            remap[t[1] as usize],
+            remap[t[2] as usize],
+        );
+        if a != b && b != c && a != c {
+            out.indices.extend_from_slice(&[a, b, c]);
+        }
+    }
+    out
+}
+
+/// index から参照されない頂点の数
+fn unreferenced_vertices(m: &Mesh) -> usize {
+    m.vertices.len() - m.indices.iter().collect::<HashSet<_>>().len()
+}
+
+/// 生 mesh を取り、test 側 weld の結果と `node_to_mesh` の出力を返す
+fn welded_and_exported(node: &SdfNode, resolution: usize) -> (Mesh, Mesh) {
+    let c = PrintConfig {
+        resolution,
+        scale_mm: 1.0,
+        ..PrintConfig::default()
+    };
+    let raw = sdf_to_mesh(
+        node,
+        c.bounds_min,
+        c.bounds_max,
+        &MarchingCubesConfig {
+            resolution,
+            compute_normals: true,
+            ..MarchingCubesConfig::default()
+        },
+    );
+    (weld_exact(&raw), node_to_mesh(node, &c))
+}
+
+/// 破壊的修復が採られていない (= 出力が weld だけの mesh と同じ位相・同じ数) ことを assert する
+fn assert_repair_not_adopted(label: &str, welded: &Mesh, exported: &Mesh, triangles: usize) {
+    assert_eq!(
+        welded.indices.len() / 3,
+        triangles,
+        "{label}: weld 後の三角形数が固定値と違う — 上流の marching cubes か scene が変わった"
+    );
+    assert_eq!(
+        exported.indices.len() / 3,
+        triangles,
+        "{label}: 出力の三角形数が weld 後と違う = 破壊的修復が採られた"
+    );
+    assert_eq!(
+        exported.vertices.len(),
+        welded.vertices.len(),
+        "{label}: 出力の頂点数が weld 後と違う = 破壊的修復が採られた"
+    );
+    assert_eq!(
+        euler_characteristic(exported),
+        euler_characteristic(welded),
+        "{label}: χ が weld 後と違う = 位相を変える修復が採られた"
+    );
+    assert_eq!(
+        unreferenced_vertices(exported),
+        0,
+        "{label}: 出力に index から参照されない頂点がある"
+    );
+}
+
+/// gyroid (bounds ±2.0) は bbox で切られた開いた面なので境界 edge が常にあり、
+/// 破壊的修復に入る 2026-10-09 の実測では res 64 の scale 2.0 / 2.5 / 3.0 の
+/// 3 cell で修復が採られ、境界 edge を 3 / 18 / 30 本減らす代わりに三角形を
+/// 3,179 / 3,102 / 5,182 本落とし、χ を −20→−39 / −34→−58 / −106→−127 に変えていた
+/// (scale 3.0 は加えて孤立頂点 6 個) 修復は距離で頂点を統合するので位相が変わる
+///
+/// 修復は**位相 (参照頂点で数えた χ) を変えず、孤立頂点を増やさない時だけ**採る
+/// ⇒ この 3 cell はすべて却下され、出力は weld だけの mesh と一致する
+/// 三角形数は weld 後の実測値 (2026-10-09) で、閉形式ではない
+#[test]
+fn a_repair_that_changes_the_topology_is_rejected() {
+    for (scale, triangles) in [(2.0f32, 104_260usize), (2.5, 123_188), (3.0, 152_090)] {
+        let (welded, exported) = welded_and_exported(&SdfNode::gyroid(scale, 0.1), 64);
+        assert!(
+            open_edges(&welded) > 0,
+            "gyroid scale {scale}: 境界 edge が無い — 修復に入らない scene になった"
+        );
+        assert_repair_not_adopted(
+            &format!("gyroid scale {scale} res 64"),
+            &welded,
+            &exported,
+            triangles,
+        );
+    }
+}
+
+/// 位相の条件を足す前から修復が採られていなかった gyroid の cell が、引き続き
+/// 採られないことを固定する (bounds ±2.0 / `scale_mm` 1.0、res 64 の 3 cell は上の test)
+/// 三角形数は weld 後の実測値 (2026-10-09)
+///
+/// res 128 の 7 cell (scale 0.5〜4.0) も条件の追加前後で採られないことを実測したが、
+/// debug build で 1 cell 数十秒かかるので test には入れていない
+#[test]
+fn gyroid_cells_that_never_adopted_the_repair_stay_unchanged_res_32_and_64() {
+    let cells: [(usize, f32, usize); 11] = [
+        (32, 0.5, 9_428),
+        (32, 1.0, 13_188),
+        (32, 1.5, 20_654),
+        (32, 2.0, 27_432),
+        (32, 2.5, 32_684),
+        (32, 3.0, 40_618),
+        (32, 4.0, 51_230),
+        (64, 0.5, 36_428),
+        (64, 1.0, 50_628),
+        (64, 1.5, 77_310),
+        (64, 4.0, 195_802),
+    ];
+    for (res, scale, triangles) in cells {
+        let (welded, exported) = welded_and_exported(&SdfNode::gyroid(scale, 0.1), res);
+        assert_repair_not_adopted(
+            &format!("gyroid scale {scale} res {res}"),
+            &welded,
+            &exported,
+            triangles,
+        );
+    }
+}
+
+/// 閉じた形状 (球 χ=2 / トーラス χ=0) は weld 後に水密なので破壊的修復に入らない
+/// 位相の条件を足しても出力が変わらないことを固定する
+#[test]
+fn closed_shapes_keep_their_topology_and_never_enter_the_repair() {
+    for (label, node, chi) in [
+        ("sphere 1.0", SdfNode::sphere(1.0), 2i64),
+        ("torus 0.8/0.3", SdfNode::torus(0.8, 0.3), 0),
+    ] {
+        for res in [64usize, 128] {
+            let (welded, exported) = welded_and_exported(&node, res);
+            assert_eq!(
+                open_edges(&welded),
+                0,
+                "{label} res {res}: weld 後に境界 edge"
+            );
+            assert_eq!(euler_characteristic(&exported), chi, "{label} res {res}: χ");
+            assert_repair_not_adopted(
+                &format!("{label} res {res}"),
+                &welded,
+                &exported,
+                welded.indices.len() / 3,
+            );
+        }
+    }
+}
