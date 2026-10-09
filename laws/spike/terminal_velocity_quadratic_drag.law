@@ -1,0 +1,32 @@
+# Falling body under quadratic air drag, released from rest in still air
+law terminal_velocity_quadratic_drag
+kind research
+claim a body of mass m released from rest falls under gravity g against quadratic drag
+claim its downward speed approaches v_t = sqrt(2 m g / (rho cd area)) as v_t tanh(g t / v_t)
+source ALICE-Physics tests/analytic_wind_zone_terminal_velocity.rs:25 (v_t), :57 (8 time constants), :68 (rel err < 1e-3)
+
+input m kg range 0.1 1000
+input g m/s^2 range 1 30
+input rho kg/m^3 range 0.1 2
+input cd 1 range 0.1 3
+input area m^2 range 0.01 10
+input t s
+x-list t                      # t is a sequence of sample times; the law holds at every element
+
+let v_t m/s = sqrt(2*m*g/(rho*cd*area))
+let tau s = v_t/g
+let t_over_tau 1 = t/tau
+x-range t_over_tau 0 8        # valid range on a derived quantity: 0 <= t / tau <= 8
+
+x-state v m/s                 # simulated state: downward speed
+x-initial v = 0
+x-ode v m/s^2 = g - rho*cd*area*v^2/(2*m)
+x-method free                 # the integration method and internal step are the implementer's choice
+
+output v m/s = v_t*(1 - exp(-2*t/tau))/(1 + exp(-2*t/tau))
+tolerance v m/s = 0.001*v_t
+
+oracle v m=10 g=10 rho=1 cd=2 area=1 t=8 -> 9.999997749296758 within 1e-9
+
+verdict conforms when every reported v(t) is within the tolerance of the output expression
+verdict an input outside its range, or any t with t / tau outside [0, 8], is rejected

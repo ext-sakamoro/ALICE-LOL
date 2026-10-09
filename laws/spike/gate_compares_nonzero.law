@@ -1,0 +1,19 @@
+# A check that compared nothing must not pass
+law gate_compares_nonzero
+kind audit
+claim a check reports how many items it compared, how many of them mismatched outside the known list, and the known list
+claim comparing zero items is a failure of the check, not a pass
+source ALICE-Physics scripts/docs_lint.py:33 (every check must compare at least one item), :268 (compared nothing is an error)
+
+input compared 1
+input mismatches 1
+x-input known-mismatches list of case names
+
+begin audit
+audit gate-compares-nonzero
+evidence compared
+expect mismatches == 0
+range known-mismatches case-17 case-42
+end audit
+
+verdict the verdict of the audit block for the given measurements

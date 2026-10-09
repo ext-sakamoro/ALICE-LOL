@@ -1,0 +1,35 @@
+# Four-bar linkage: rocker angle for a given crank angle, open configuration
+law four_bar_rocker_angle
+kind research
+claim ground pin O2 at the origin, ground pin O4 at (lg, 0); crank O2-A of length lc at angle theta2
+claim coupler A-B of length lco, rocker O4-B of length lr; B is on the left of the direction A -> O4
+claim theta4 is the angle of O4 -> B, in (-pi, pi]
+source ALICE-Physics tests/analytic_four_bar_freudenstein.rs:97 (lengths 1, 2, 1.5, 2.3), :128 (24 crank angles over a turn), :151 (angle error < 1e-2)
+
+input lc m range 0.01 100
+input lco m range 0.01 100
+input lr m range 0.01 100
+input lg m range 0.01 100
+input theta2 1 range 0 6.283185307179586
+
+let ax m = lc*cos(theta2)
+let ay m = lc*sin(theta2)
+let dx m = lg - ax
+let dy m = -ay
+let d m = sqrt(dx^2 + dy^2)
+let along m = (d^2 + lco^2 - lr^2)/(2*d)
+let across m = sqrt(lco^2 - along^2)
+let bx m = ax + along*dx/d - across*dy/d
+let by m = ay + along*dy/d + across*dx/d
+
+x-expr theta4 1 = atan2(by, bx - lg)
+x-expr crank_margin m = min(lco, lr, lg) - lc
+x-expr grashof_margin m = lco + lr + lg - lc - 2*max(lco, lr, lg)
+x-range crank_margin > 0                       # the crank is strictly the shortest link
+x-range grashof_margin > 0                     # shortest + longest < sum of the other two
+x-periodic theta4 6.283185307179586            # compare angles modulo 2 pi
+
+tolerance theta4 1 = 0.01
+
+verdict conforms when the reported theta4 is within the tolerance of the angle above, modulo 2 pi
+verdict an input outside its range, or a linkage that is not a crank-rocker, is rejected

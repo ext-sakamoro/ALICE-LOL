@@ -1,0 +1,39 @@
+# U.S. Standard Atmosphere 1976, the two lowest layers, by geopotential altitude
+law isa1976_lower_atmosphere
+kind research
+claim temperature falls linearly up to 11 000 m and is constant above; pressure follows the hydrostatic law
+claim density follows the ideal gas law
+source ALICE-Physics tests/analytic_atmosphere_isa1976.rs:96 (table), :126 (p at 11 km within 0.05 Pa), :168 (pressure ratio rel err < 1e-5), :206 (outside [0, 20 000] m is an error)
+
+input hh m range 0 20000
+
+param t0 288.15 0 K
+param p0 101325 0 Pa
+param lapse 0.0065 0 K/m
+param g0 9.80665 0 m/s^2
+param mm 0.0289644 0 kg/mol
+param rr 8.31432 0 J/(mol*K)
+param h11 11000 0 m
+param dt_table 0.001 0 K      # number literals are dimensionless, so a tolerance in K is a parameter
+
+let t11 K = t0 - lapse*h11
+let p11 Pa = p0*exp((g0*mm/(rr*lapse))*ln(t11/t0))
+let t_trop K = t0 - lapse*hh
+let p_trop Pa = p0*exp((g0*mm/(rr*lapse))*ln(t_trop/t0))
+let p_strat Pa = p11*exp(-g0*mm*(hh - h11)/(rr*t11))
+
+x-piece temperature K hh 0 11000 = t_trop          # piecewise: the piece is chosen by the range of hh
+x-piece temperature K hh 11000 20000 = t11
+x-piece pressure Pa hh 0 11000 = p_trop
+x-piece pressure Pa hh 11000 20000 = p_strat
+x-piece density kg/m^3 hh 0 11000 = p_trop*mm/(rr*t_trop)
+x-piece density kg/m^3 hh 11000 20000 = p_strat*mm/(rr*t11)
+
+tolerance temperature K = dt_table
+tolerance pressure Pa = 0.00001*pressure
+tolerance density kg/m^3 = 0.00001*density
+
+oracle p11 hh=0 -> 22632.06 within 0.05
+
+verdict conforms when temperature, pressure and density are each within their tolerance
+verdict an altitude outside [0, 20 000] m is rejected

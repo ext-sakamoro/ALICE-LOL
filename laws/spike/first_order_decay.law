@@ -1,0 +1,26 @@
+# First-order decay of a concentration
+law first_order_decay
+kind research
+claim a concentration c obeys dc/dt = -k c from c(0) = c0, so c(t) = c0 exp(-k t)
+source ALICE-Physics tests/analytic_scalar_field_first_order_decay.rs:25 (k), :29 (checkpoints up to k t = 4), :42 and :77 (rel err to c0 < 1e-3)
+
+input c0 mol/L range 0.001 1000
+input k 1/s range 0.01 10
+input t s
+x-list t
+
+let kt 1 = k*t
+x-range kt 0 4                # 0 <= k t <= 4
+
+x-state c mol/L
+x-initial c = c0
+x-ode c mol/(L*s) = -k*c
+x-method free
+
+output c mol/L = c0*exp(-k*t)
+tolerance c mol/L = 0.001*c0
+
+oracle c c0=10 k=0.5 t=2 -> 3.6787944117144233 within 1e-12
+
+verdict conforms when every reported c(t) is within the tolerance of the output expression
+verdict an input outside its range, or any t with k t outside [0, 4], is rejected

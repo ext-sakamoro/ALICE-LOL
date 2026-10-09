@@ -1,0 +1,33 @@
+# Mass driven by a proportional-derivative controller towards a target position
+law pd_step_overshoot
+kind research
+claim a mass m at rest at x = 0 driven by F = kp (target - x) - kd v overshoots the target once
+claim the largest position reached is target (1 + exp(-zeta pi / sqrt(1 - zeta^2))), zeta = kd / (2 sqrt(kp m))
+source ALICE-Physics tests/analytic_pd_step_response.rs:29-31 (m, kp, kd), :36 (zeta < 1), :85 (rel err to target < 1e-2)
+
+input m kg range 0.1 100
+input kp N/m range 0.1 1000
+input kd N*s/m range 0.01 1000
+input target m range 0.01 100
+
+param pi 3.141592653589793 0 1
+
+let zeta 1 = kd/(2*sqrt(kp*m))
+x-range zeta 0.05 0.95        # underdamped only
+
+x-state x m
+x-state v m/s
+x-initial x = 0
+x-initial v = 0
+x-ode x m/s = v
+x-ode v m/s^2 = (kp*(target - x) - kd*v)/m
+x-method free
+x-reduce peak_x = max over t >= 0 of x(t)      # a reduction over the simulated trajectory
+
+output peak_x m = target*(1 + exp(-zeta*pi/sqrt(1 - zeta^2)))
+tolerance peak_x m = 0.01*target
+
+oracle peak_x m=1 kp=1 kd=1 target=1 -> 1.1630335348215806 within 1e-12
+
+verdict conforms when the reported peak_x is within the tolerance of the output expression
+verdict an input outside its range, or zeta outside [0.05, 0.95], is rejected

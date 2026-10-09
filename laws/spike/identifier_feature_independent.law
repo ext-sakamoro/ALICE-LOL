@@ -1,0 +1,21 @@
+# An identifier must be the same in every feature set
+law identifier_feature_independent
+kind audit
+claim the crate is built once per feature set and each build reports the identifier it carries
+claim every build must report the same identifier; one feature set is not evidence of independence
+source ALICE-Physics tests/physics_semantics_id.rs:552 (the identifier is pinned and independent of features)
+
+x-input builds list of {features: list of names, id: text or absent}
+x-metric builds = number of builds reported
+x-metric feature_sets = number of distinct feature sets (a feature set is unordered; duplicates collapse)
+x-metric distinct_identifiers = number of distinct identifiers; unmeasured when any build has no identifier
+x-at-least feature_sets 2     # fewer than 2 distinct feature sets gives no evidence for feature_sets
+
+begin audit
+audit identifier-feature-independent
+evidence builds
+evidence feature_sets
+expect distinct_identifiers == 1
+end audit
+
+verdict the verdict of the audit block for the derived measurements
