@@ -25,6 +25,7 @@ One command-line program that implements every law you are given. The programmin
 - Numbers are JSON numbers in the units the law states. JSON has no NaN or infinity literal, but a number literal too large for a double (for example `1e400`) parses to infinity. A number that is not finite after parsing is not a number: an input of a quantitative law that is not finite is rejected, and an audit measurement that is not finite is not measured. A list input is a JSON array. A list output is a JSON array with one entry per input element, in the same order. The input list may repeat values and may be unsorted.
 - Do not print anything else on standard output. Use standard error for diagnostics.
 - A request for an unknown law, or a request in which an input of a quantitative law is missing, is an error of the request, not a rejection: exit with status 2 and write nothing on standard output.
+- A request whose `inputs` is `null`, or that has no `inputs` key, is the same as `"inputs": {}`. An `inputs` value that is not a JSON object (an array, text, a number, `true` or `false`) is an error of the request: exit with status 2 and write nothing on standard output. The same holds for a request that is not a JSON object.
 
 ### Rules
 
@@ -136,4 +137,4 @@ The verdict is found by checking in this fixed order, whatever the order of the 
    - The subject is the metric.
 4. Otherwise the verdict is `supports`, and the subject is `null`.
 
-Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error. A request to an audit law without the `inputs` key is the same as `"inputs": {}`: nothing is measured.
+Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error. A request to an audit law without the `inputs` key, or with `"inputs": null`, is the same as `"inputs": {}`: nothing is measured.

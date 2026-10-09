@@ -53,15 +53,25 @@ def wire(obj):
     return text.replace('"-' + json.dumps(_INF_TOKEN)[1:], "-1e400").replace(json.dumps(_INF_TOKEN), "1e400")
 
 
-def call(cmd, law, inputs, timeout):
-    # inputs None in the corpus: the request carries no inputs key at all
-    req = wire({"law": law} if inputs is None else {"law": law, "inputs": inputs})
+def spawn(cmd, req, timeout):
     try:
-        p = subprocess.run(cmd, input=req, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, input=wire(req), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise Fail("crash", f"timeout after {timeout}s")
     except OSError as e:
         raise Fail("crash", f"cannot run: {e}")
+
+
+def request_of(v):
+    """The request for a vector: request_inputs, when present, is sent as the literal
+    inputs value (null, an array, text); inputs None means no inputs key at all"""
+    if "request_inputs" in v:
+        return {"law": v["law"], "inputs": v["request_inputs"]}
+    return {"law": v["law"]} if v["inputs"] is None else {"law": v["law"], "inputs": v["inputs"]}
+
+
+def call(cmd, law, inputs, timeout, req=None):
+    p = spawn(cmd, {"law": law, "inputs": inputs} if req is None else req, timeout)
     if p.returncode != 0:
         raise Fail("crash", f"exit {p.returncode}: {p.stderr.strip()[-300:]}")
     try:
@@ -179,7 +189,14 @@ def check_kepler(cmd, v, outs, timeout):
 
 
 def run_vector(cmd, v, timeout):
-    out = call(cmd, v["law"], v["inputs"], timeout)
+    if v["kind"] == "request_error":
+        # an error of the request: exit status 2 and nothing on standard output
+        p = spawn(cmd, request_of(v), timeout)
+        if p.returncode != 2 or p.stdout.strip():
+            raise Fail("crash", f"expected exit 2 with empty stdout for {v['note']}, got exit "
+                       f"{p.returncode}, stdout {p.stdout[:80]!r}")
+        return
+    out = call(cmd, v["law"], v["inputs"], timeout, req=request_of(v))
     if v["kind"] == "reject":
         if "rejected" not in out:
             raise Fail("range not enforced", f"returned outputs for {v['note']}")

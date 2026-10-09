@@ -431,7 +431,26 @@ def build(law):
         if not lc.matches(c, law, inputs, v["kind"] == "reject"):
             raise SystemExit(f"{law['name']}: corner {c['id']} not hit by {inputs}")
         vecs.append(v)
-    return vecs
+    return vecs + request_vectors(law)
+
+
+def request_vectors(law):
+    """The request contract: inputs null is the same as no inputs key; inputs that is
+    not an object is an error of the request (exit 2); a quantitative law with no
+    inputs misses its inputs (exit 2)"""
+    out = []
+    for lit, note in [([], "inputs given as an array"), ("hh", "inputs given as text")]:
+        out.append({"law": law["name"], "inputs": None, "request_inputs": lit, "note": note,
+                    "kind": "request_error", "expected": None, "tolerance": None})
+    if law["kind"] == "audit":
+        v = vector(law, None, "inputs given as null")
+        v["request_inputs"] = None
+        out.append(v)
+    else:
+        for lit, note in [(None, "inputs given as null"), ({}, "inputs empty")]:
+            out.append({"law": law["name"], "inputs": None, "request_inputs": lit, "note": note,
+                        "kind": "request_error", "expected": None, "tolerance": None})
+    return out
 
 
 def load_tools(tools):

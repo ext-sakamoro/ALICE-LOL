@@ -35,7 +35,10 @@ def cover(laws: list[dict], corpus: list[dict]) -> tuple[dict, int, int]:
     report = {}
     n_corners = 0
     for law in laws:
-        vecs = by_law.get(law["name"], [])
+        # request-contract vectors (no inputs key, a literal inputs value, an expected
+        # exit 2) carry no input values and cover no range corner
+        vecs = [v for v in by_law.get(law["name"], [])
+                if v["kind"] != "request_error" and "request_inputs" not in v and v["inputs"] is not None]
         cs = lc.corners(law)
         n_corners += len(cs)
         covered, missing = [], []

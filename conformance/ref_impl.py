@@ -15,8 +15,10 @@ REF_BUG=10: audit ranges compared with their duplicates (multisets, not sets)
 REF_BUG=11: a number that is not finite after parsing (1e400) is read as a number
 REF_BUG=12: identifier audit reads a build of the wrong shape as an empty feature set
 REF_BUG=13: a request without the inputs key is a request error (exit 2) instead of inputs {}
+REF_BUG=14: inputs that is null or not an object is passed to the law unchecked
 
-An unknown law or a missing input exits with status 2 and writes nothing on stdout.
+An unknown law, a missing input, inputs that is not an object (null is read as {}) or a
+request that is not a JSON object exits with status 2 and writes nothing on stdout.
 """
 import json, math, os, sys
 
@@ -298,21 +300,36 @@ LAWS = {
 }
 
 
+def request_error(msg):
+    """An error of the request: exit status 2, nothing on standard output"""
+    print(msg, file=sys.stderr)
+    sys.exit(2)
+
+
 def main():
-    req = json.load(sys.stdin)
-    law = LAWS.get(req.get("law"))
-    if law is None:
-        print(f"unknown law: {req.get('law')!r}", file=sys.stderr)
-        sys.exit(2)
     try:
-        # no inputs key = inputs {}: an audit measures nothing, a quantitative law
-        # then misses its inputs (exit 2 below)
-        out = {"outputs": law(req["inputs"] if BUG == "13" else req.get("inputs", {}))}
+        req = json.load(sys.stdin)
+    except ValueError as e:
+        request_error(f"request is not JSON: {e}")
+    if not isinstance(req, dict):
+        request_error("request is not a JSON object")
+    law = LAWS.get(req.get("law")) if isinstance(req.get("law"), str) else None
+    if law is None:
+        request_error(f"unknown law: {req.get('law')!r}")
+    # no inputs key and inputs null are the same as inputs {}: an audit measures
+    # nothing, a quantitative law then misses its inputs (exit 2 below)
+    inputs = req["inputs"] if BUG == "13" else req.get("inputs")
+    if BUG != "14":
+        if inputs is None:
+            inputs = {}
+        elif not isinstance(inputs, dict):
+            request_error(f"inputs is not a JSON object: {type(inputs).__name__}")
+    try:
+        out = {"outputs": law(inputs)}
     except Reject as e:
         out = {"rejected": str(e)}
     except KeyError as e:
-        print(f"missing input: {e}", file=sys.stderr)
-        sys.exit(2)
+        request_error(f"missing input: {e}")
     json.dump(out, sys.stdout)
 
 
