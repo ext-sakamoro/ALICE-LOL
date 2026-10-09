@@ -10,3 +10,6 @@ mutants.out.old/
 
 # python bytecode (scripts/)
 __pycache__/
+
+# conformance/ の corpus 生成用の Python 環境
+.venv-conformance/
