@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### law file の適合性 corpus (`laws/spike/`, `conformance/`)
+
+- `laws/spike/*.law`: 言語に依らない法則の記述 9 件 (`alice-lol/tests/spike_law_files_parse.rs` が既存の parser で読む)
+- Kepler の law は積分法ごとに 2 件 (`kdk` / `dkd`) に分け、有効範囲を掃引で決めた (kdk e <= 0.77、dkd e <= 0.765) 根拠と再現手順は `conformance/kepler_range.md`
+- `scripts/law_corners.py`: law file の range / x-integer / x-range / x-piece の行から有効範囲の corner を列挙する `scripts/law_corpus_cover.py`: corpus が corner を全て含まないと exit 1 (CI と preflight は両者の試験と corner 列挙を走らせる)
+- `conformance/`: law file から corpus を生成する script、採点 runner、参照実装と欠陥のある変種、生成 → 採点 → 削除を 1 回で行う `score.sh`、must-red の対照 `controls.sh` corpus の生成には mpmath が要る (`conformance/requirements.txt`)
+
 #### Law の識別子 (`law_id`) — 同じ主張に同じ名前
 
 - `law_id::LawIdHasher` / `AuditLaw::law_id`: 監査 Law に内容由来の 32 byte 識別子を付ける (`alice-zip` の `LAW_ID_DOMAIN` を共有し種類の tag を足す形)

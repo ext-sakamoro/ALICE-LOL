@@ -8,17 +8,22 @@ claim the peak energy error after the first period does not exceed 1.2 times the
 claim halving h divides the period-averaged energy error by 3 to 5
 source ALICE-Physics tests/analytic_nbody.rs:260 (e = 0.5, start at apoapsis), :294 (N = 500, 20 periods), :296 (last <= 1.2 first), :302 (first(N) / first(2N) in [3, 5])
 
-# Valid range, measured (sweep: e 0.2 .. 0.8 step 0.005 and 0.7 .. 0.8 step 0.001; every n 100 .. 300,
-# odd and even, and every 37th n up to 2000; periods 2 .. 40; four evaluation orders of r^3:
-# r2*sqrt(r2), r2^1.5 via pow, r*r*r, sqrt(r2^3); spot points re-integrated at 50 digits agree to 1e-9)
+# Valid range, measured with conformance/kepler_sweep.py (definitions and full output in conformance/kepler_range.md):
+# cells (e, n) on a coarse grid (e 0.200 .. 0.800 step 0.005; n 100 .. 300, every 37th n from 301, and 2000) and a
+# fine grid (e 0.700 .. 0.800 step 0.001; n 100 .. 200), 40 periods, four evaluation orders of 1/r^3
+# (1/(r2*sqrt(r2)), 1/pow(r2, 1.5), 1/(r*r*r), 1/sqrt(r2^3)); spot points inside the range re-integrated at 50 digits
+# (conformance/kepler_mp_check.py) give the same statistics to within 1e-11
 # - first failure of the criteria below: e = 0.794 (n = 101, odd), the growth bound (1.219 at n = 101)
 # - upper bound of e = first failure - 0.02, rounded down to 0.005; margin 0.024
-# - inside the range: growth ratio <= 1.141 (e = 0.735, n = 103), order ratio >= 3.62; the spread of either over the four
-#   r^3 orders is <= 3e-7, so no verdict depends on the evaluation order
+# - inside the range: growth ratio <= 1.1412 (e = 0.733, n = 101), order ratio >= 3.6184 (e = 0.762, n = 100);
+#   the spread of either over the four orders is <= 3e-7; no verdict inside the range depends on the order
 # - n parity: no failure inside the range for odd or even n; the range is the same for both
-# - outside the range (e about 0.79 .. 0.8, n about 100 .. 107) the stepped orbit becomes chaotic over 40 periods
-#   and the verdict can change with the evaluation order of r^3 alone
-# - the former criteria (max of the last period / max of the first <= 1.2, max-based order ratio) first failed at e = 0.764: with odd n the first period never samples periapsis while the 2 n run does, so the max-based ratio fell below 3 (2.99 at n = 101)
+# - outside the range the verdict can change with the evaluation order of r^3 alone (none on either grid): there
+#   the stepped orbit is chaotic. Two runs started 1 ulp apart (conformance/kepler_divergence.py) separate to
+#   more than 0.1 within 20 .. 56 periods at e = 0.8, n = 100, 101, 103, 105, 107; at the upper bound of e they stay
+#   within 4.0e-12 .. 1.2e-9 over 80 periods (n = 100 .. 107, 131)
+# - the former criteria (max of the last period / max of the first <= 1.2, max-based order ratio) first failed at e = 0.764 (n = 101):
+#   with odd n the first period never samples periapsis while the 2 n run does, so the max-based ratio fell below 3
 input e 1 range 0.2 0.77
 input n 1 range 100 2000
 input periods 1 range 2 40
