@@ -6,6 +6,7 @@ This directory holds the tools that check an independent implementation of the l
 
 | file | role |
 |------|------|
+| `TASK.md` | the contract given to an implementer, with the guide to reading law files |
 | `gen_corpus.py` | builds the corpus from the law files (needs mpmath) |
 | `run_conformance.py` | runs one implementation against a corpus |
 | `ref_impl.py` | reference implementation; `REF_BUG=1..8` selects a defective variant |
@@ -31,17 +32,17 @@ export PYTHON=$PWD/.venv-conformance/bin/python    # used by score.sh and contro
 
 ## Program contract
 
-An implementation is one command:
+The contract given to an implementer is `TASK.md`: the program contract and the guide to reading law files. In short, an implementation is one command:
 
 - It reads `{"law": <name>, "inputs": {...}}` on standard input.
-- It writes `{"outputs": {...}}` or `{"rejected": "<reason>"}` on standard output.
-- It exits with status 0.
+- It writes `{"outputs": {...}}` or `{"rejected": "<reason>"}` on standard output and exits with status 0.
+- For an unknown law or a missing input of a quantitative law, it exits with status 2 and writes nothing on standard output.
 
-The law files and this contract are its whole specification.
+The law files and `TASK.md` are its whole specification.
 
 ## Order of work
 
-1. **Give the implementer only the law files and the program contract.** Do not give them `conformance/`, the source tests cited on `source` lines, or any generated corpus.
+1. **Give the implementer only the law files and `TASK.md`.** Do not give them the rest of `conformance/`, the source tests cited on `source` lines, or any generated corpus.
 2. **Do not generate a corpus while any implementation is still being written.** No corpus file exists during that time.
 3. **When every implementation is finished, score each one:**
 

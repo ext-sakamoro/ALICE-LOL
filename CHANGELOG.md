@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Kepler の law は積分法ごとに 2 件 (`kdk` / `dkd`) に分け、有効範囲を掃引で決めた (kdk e <= 0.77、dkd e <= 0.765) 根拠と再現手順は `conformance/kepler_range.md`
 - `scripts/law_corners.py`: law file の range / x-integer / x-range / x-piece の行から有効範囲の corner を列挙する `scripts/law_corpus_cover.py`: corpus が corner を全て含まないと exit 1 (CI と preflight は両者の試験と corner 列挙を走らせる)
 - `conformance/`: law file から corpus を生成する script、採点 runner、参照実装と欠陥のある変種、生成 → 採点 → 削除を 1 回で行う `score.sh`、must-red の対照 `controls.sh` corpus の生成には mpmath が要る (`conformance/requirements.txt`)
+- `conformance/TASK.md`: 実装する側に渡す契約と law file の読み方 (言語に依らない) 監査の証拠は有限で 0 より大きい数、成立範囲は集合として比べる、数でない値は測られていないものとする、`x-list` に配列でない値は拒否、未知の law と欠けた入力は exit status 2 で標準出力に何も書かない、を明記 `PROTOCOL.md` はこれを参照する
 
 #### Law の識別子 (`law_id`) — 同じ主張に同じ名前
 
