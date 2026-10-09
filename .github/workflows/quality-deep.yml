@@ -52,10 +52,12 @@ on:
     paths:
       - 'alice-lol/src/law.rs'
       - 'alice-lol/src/audit_law.rs'
+      - 'alice-lol/src/law_id.rs'
       - 'alice-lol/tests/analytic_law.rs'
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
       - 'alice-lol/tests/audit_law_parity.rs'
+      - 'alice-lol/tests/law_id_oracle.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
   pull_request:
@@ -63,10 +65,12 @@ on:
     paths:
       - 'alice-lol/src/law.rs'
       - 'alice-lol/src/audit_law.rs'
+      - 'alice-lol/src/law_id.rs'
       - 'alice-lol/tests/analytic_law.rs'
       - 'alice-lol/tests/law_tests.rs'
       - 'alice-lol/tests/law_corpus_oracle.rs'
       - 'alice-lol/tests/audit_law_parity.rs'
+      - 'alice-lol/tests/law_id_oracle.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
 
@@ -151,8 +155,9 @@ jobs:
             --timeout 300 --build-timeout 240 \
             --file alice-lol/src/law.rs \
             --file alice-lol/src/audit_law.rs \
-            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven|lipschitz_enclosure|refine_with_lipschitz|evaluate|check_evidence|check_ranges|check_expectations|sorted_values|version_key|passed' \
-            -- --lib --test analytic_law --test law_tests --test audit_law_parity
+            --file alice-lol/src/law_id.rs \
+            --re 'probe_ball|probe_pair|gap_exceeds|contact_upper_bound|interval_sign|box_expand|box_children|box_nearest|thickness_verdict|pair_verdict|check_min_thickness|check_non_overlap|check_containment|check_contact|hard_verdict|is_proven|lipschitz_enclosure|refine_with_lipschitz|evaluate|check_evidence|check_ranges|check_expectations|sorted_values|version_key|passed|hex32|nibble|fold_semantics_pins|audit_verdict_order_fingerprint|length_prefixed|LawIdHasher::|AuditLaw::law_id' \
+            -- --lib --test analytic_law --test law_tests --test audit_law_parity --test law_id_oracle
           rc=$?
           set -e
           # 0 = 全て caught、2 = missed あり、3 = timeout あり → ここでは測定結果
@@ -165,7 +170,7 @@ jobs:
         working-directory: ALICE-LOL
         run: |
           {
-            echo "## cargo-mutants — law cores shard ${{ matrix.shard }}/4 (\`law.rs\` + \`audit_law.rs\`)"
+            echo "## cargo-mutants — law cores shard ${{ matrix.shard }}/4 (\`law.rs\` + \`audit_law.rs\` + \`law_id.rs\`)"
             if [ -f mutants.out/outcomes.json ]; then
               python3 - <<'PY'
           import json

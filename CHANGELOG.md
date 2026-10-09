@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 値ごとに型と長さを書くので `["ab","c"]` と `["a","bc"]`、`u32 5` と `u64 5`、空の項と項の不在がそれぞれ別の識別子になる
 - `law_id::LOL_SEMANTICS_ID` は `LOL_SEMANTICS_PINS` の fold で、pin は振る舞いから計算する (`audit_verdict_order_fingerprint`) 判定順序を変えると pin が合わなくなる
 - 幾何の制約と研究の法則の識別子は未実装 (前者は正規形が失敗しうるため戻り値の形が変わり、後者は式に canonical な text 形が無い)
+- `law_id.rs` を変異試験の対象に追加 (44 mutant / 30 caught / 見逃し 0、等価な 1 件は理由つきで除外)
 
 #### 判定経路に platform 依存の超越関数が入るのを止める gate (`scripts/det_math_guard.py`)
 

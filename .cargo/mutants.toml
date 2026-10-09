@@ -19,6 +19,13 @@
 exclude_re = [
     # === 等価 (変異させても結果が変わらない) ===
 
+    # `nibble(hi) << 4` は下位 4 bit が必ず 0、`nibble(lo)` は必ず 15 以下なので
+    # 両者は bit が重ならない ⇒ `|` と `^` は全入力で同じ値を返す (真に等価)
+    # ⚠️ 同じ run の残り 4 件 (大文字 arm の削除と arm 内の算術 3 件) は等価では
+    # なかったので除外せず、`hex_literals_are_read_the_same_in_either_case` を
+    # 足して殺した (2026-10-09 local 実測、45 mutant / 当初 26 caught 5 missed)
+    "replace \\| with \\^ in hex32",
+
     # i を 0..8 で全走するので、8 個の子箱の集合は不変 (順序だけ入れ替わる)
     "replace != with == in box_children",
     # 直前に `f_centre == 0.0` で return しているので `>` と `>=` は同じ分岐

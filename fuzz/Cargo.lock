@@ -27,6 +27,7 @@ dependencies = [
  "alice-sdf",
  "alice-zip",
  "glam",
+ "sha2",
  "stacker",
 ]
 

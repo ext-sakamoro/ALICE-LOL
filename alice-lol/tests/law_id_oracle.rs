@@ -164,6 +164,26 @@ fn every_nan_payload_is_the_same_law() {
 // 算術世代の識別子そのもの
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+/// ⚠️ `hex32` は大文字の 16 進も受けるが、repo 内の literal は全部小文字なので
+/// **この 1 本が無いと大文字の arm を消す変異が生き残る** (2026-10-09 実測: 大文字 arm の
+/// 削除と、その中の `c - b'A' + 10` を壊す変異 3 件が合わせて missed だった)
+#[test]
+fn hex_literals_are_read_the_same_in_either_case() {
+    let lower = "0123456789abcdef".repeat(4);
+    let upper = lower.to_uppercase();
+    assert_eq!(
+        alice_lol::law_id::hex32(&lower),
+        alice_lol::law_id::hex32(&upper),
+        "大文字と小文字で違う byte 列になった"
+    );
+    // 値そのものも固定する (arm 内の算術を壊す変異の歯、assert を大小一致だけに
+    // すると「両方同じだけ狂う」変異を見逃す)
+    assert_eq!(
+        alice_lol::law_id::hex32(&upper)[..8],
+        [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+    );
+}
+
 #[test]
 fn the_semantics_identifier_is_not_all_zero() {
     // 「まだ決めていない」値を識別子として配ってしまう経路を塞ぐ
