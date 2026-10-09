@@ -4,6 +4,7 @@
 # every variant gets the expected outcome:
 #   unchanged, 6, 8 (other evaluation orders of r^3)            -> every vector passes
 #   1, 2, 3 (closed-form / range / audit defects)               -> at least one vector fails
+#   9 (evidence read as "not 0"), 10 (ranges as multisets)     -> at least one vector fails
 #   4 (RK4), 5 (last step dropped), 7 (state before each step)  -> every in-range Kepler vector fails
 #   4 again with the state comparison switched off              -> every in-range Kepler vector fails
 # The corpus is deleted at the end.
@@ -53,6 +54,8 @@ run ref_bug_8_sqrt_cubed pass REF_BUG=8
 run ref_bug_1_drag_factor fail REF_BUG=1
 run ref_bug_2_isa_range fail REF_BUG=2
 run ref_bug_3_audit_rule fail REF_BUG=3
+run ref_bug_9_evidence_not_zero fail REF_BUG=9
+run ref_bug_10_range_multiset fail REF_BUG=10
 run ref_bug_4_rk4 kepler-fail REF_BUG=4
 run ref_bug_5_last_step_dropped kepler-fail REF_BUG=5
 run ref_bug_7_state_before_step kepler-fail REF_BUG=7

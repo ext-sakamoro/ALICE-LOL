@@ -10,6 +10,10 @@ REF_BUG=5: Kepler drops the last step (n * periods - 1 states)
 REF_BUG=6: Kepler evaluates r^3 as r2 ** 1.5 (another rounding; must still conform)
 REF_BUG=7: Kepler reports the state before each step (initial state first, last step missing)
 REF_BUG=8: Kepler evaluates r^3 as sqrt(r2) ** 3 (another rounding; must still conform)
+REF_BUG=9: audit evidence read as "not 0" over every non-array value (a negative count is evidence)
+REF_BUG=10: audit ranges compared with their duplicates (multisets, not sets)
+
+An unknown law or a missing input exits with status 2 and writes nothing on stdout.
 """
 import json, math, os, sys
 
@@ -23,6 +27,17 @@ class Reject(Exception):
 def rng(name, x, lo, hi):
     if not isinstance(x, (int, float)) or isinstance(x, bool) or not math.isfinite(x) or x < lo or x > hi:
         raise Reject(f"{name}={x} outside [{lo}, {hi}]")
+
+
+def is_num(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def time_list(ts):
+    """An x-list input: an array of numbers, otherwise the request is rejected"""
+    if not isinstance(ts, list) or not all(is_num(t) for t in ts):
+        raise Reject("t must be an array of numbers")
+    return ts
 
 
 def rk4(f, y, h):
@@ -49,7 +64,7 @@ def terminal(i):
     rng("m", m, 0.1, 1000); rng("g", g, 1, 30); rng("rho", rho, 0.1, 2)
     rng("cd", cd, 0.1, 3); rng("area", area, 0.01, 10)
     vt = math.sqrt(2 * m * g / (rho * cd * area)); tau = vt / g
-    ts = i["t"]
+    ts = time_list(i["t"])
     for t in ts:
         rng("t/tau", t / tau, 0, 8)
     half = 1.0 if BUG == "1" else 0.5
@@ -65,7 +80,7 @@ def terminal(i):
 def decay(i):
     c0, k = i["c0"], i["k"]
     rng("c0", c0, 0.001, 1000); rng("k", k, 0.01, 10)
-    ts = i["t"]
+    ts = time_list(i["t"])
     for t in ts:
         rng("k t", k * t, 0, 4)
     f = lambda y: [-k * y[0]]
@@ -197,17 +212,27 @@ def vkey(v):
     return out
 
 
-def audit(clauses, nums, ranges):
-    """clauses: list of (kind, ...) in file order; returns (verdict, subject)"""
+def audit(clauses, nums, ranges, raw=None):
+    """clauses: list of (kind, ...) in file order; returns (verdict, subject)
+
+    nums: the measured numbers (finite numbers only); ranges: the measured arrays of text;
+    raw: the request inputs (used only by REF_BUG=9)
+    """
     for c in clauses:
-        if c[0] == "evidence" and nums.get(c[1], 0) == 0:
+        if BUG == "9":
+            # the old reading: any non-array value that is not 0 is evidence (-1, "12", true, null)
+            old = {k: v for k, v in (nums if raw is None else raw).items() if not isinstance(v, list)}
+            if c[0] == "evidence" and old.get(c[1], 0) == 0:
+                return "no_evidence", c[1]
+        elif c[0] == "evidence" and not nums.get(c[1], 0) > 0:
             return "no_evidence", c[1]
     for c in clauses:
         if c[0] == "range":
             got = ranges.get(c[1])
             if got is None:
                 return "out_of_range", c[1]
-            if sorted(got, key=vkey) != sorted(c[2], key=vkey):
+            same = (sorted(got, key=vkey) == sorted(c[2], key=vkey)) if BUG == "10" else set(got) == set(c[2])
+            if not same:
                 return "parameter_update", c[1]
     for c in clauses:
         if c[0] == "expect":
@@ -219,11 +244,17 @@ def audit(clauses, nums, ranges):
     return "supports", None
 
 
+def measurements(i):
+    """Numbers are finite numbers; a range is an array of text. Anything else is not measured"""
+    nums = {k: v for k, v in i.items() if is_num(v)}
+    ranges = {k: v for k, v in i.items() if isinstance(v, list) and all(isinstance(s, str) for s in v)}
+    return nums, ranges
+
+
 def gate(i):
-    nums = {k: v for k, v in i.items() if not isinstance(v, list)}
-    ranges = {k: v for k, v in i.items() if isinstance(v, list)}
+    nums, ranges = measurements(i)
     v, s = audit([("evidence", "compared"), ("expect", "mismatches", 0.0, 0.0),
-                  ("range", "known-mismatches", ["case-17", "case-42"])], nums, ranges)
+                  ("range", "known-mismatches", ["case-17", "case-42"])], nums, ranges, i)
     return {"verdict": v, "subject": s}
 
 
@@ -255,10 +286,17 @@ LAWS = {
 
 def main():
     req = json.load(sys.stdin)
+    law = LAWS.get(req.get("law"))
+    if law is None:
+        print(f"unknown law: {req.get('law')!r}", file=sys.stderr)
+        sys.exit(2)
     try:
-        out = {"outputs": LAWS[req["law"]](req["inputs"])}
+        out = {"outputs": law(req["inputs"])}
     except Reject as e:
         out = {"rejected": str(e)}
+    except KeyError as e:
+        print(f"missing input: {e}", file=sys.stderr)
+        sys.exit(2)
     json.dump(out, sys.stdout)
 
 

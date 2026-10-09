@@ -141,17 +141,19 @@ dkd e = 0.8: first period > 0.1 in 24 .. 37
 `conformance/controls.sh` (see `PROTOCOL.md`):
 
 ```
-corpus: 299 vectors, 90 in-range Kepler vectors
-unchanged                          expect pass        exit 0, pass 299, fail 0, Kepler fail 0/90  ok
-ref_bug_6_pow_r3                   expect pass        exit 0, pass 299, fail 0, Kepler fail 0/90  ok
-ref_bug_8_sqrt_cubed               expect pass        exit 0, pass 299, fail 0, Kepler fail 0/90  ok
-ref_bug_1_drag_factor              expect fail        exit 1, pass 256, fail 43, Kepler fail 0/90  ok
-ref_bug_2_isa_range                expect fail        exit 1, pass 297, fail 2, Kepler fail 0/90  ok
-ref_bug_3_audit_rule               expect fail        exit 1, pass 295, fail 4, Kepler fail 0/90  ok
-ref_bug_4_rk4                      expect kepler-fail exit 1, pass 209, fail 90, Kepler fail 90/90  ok
-ref_bug_5_last_step_dropped        expect kepler-fail exit 1, pass 209, fail 90, Kepler fail 90/90  ok
-ref_bug_7_state_before_step        expect kepler-fail exit 1, pass 209, fail 90, Kepler fail 90/90  ok
-ref_bug_4_rk4_invariants_only      expect kepler-fail exit 1, pass 209, fail 90, Kepler fail 90/90  ok
+corpus: 317 vectors, 90 in-range Kepler vectors
+unchanged                          expect pass        exit 0, pass 317, fail 0, Kepler fail 0/90  ok
+ref_bug_6_pow_r3                   expect pass        exit 0, pass 317, fail 0, Kepler fail 0/90  ok
+ref_bug_8_sqrt_cubed               expect pass        exit 0, pass 317, fail 0, Kepler fail 0/90  ok
+ref_bug_1_drag_factor              expect fail        exit 1, pass 274, fail 43, Kepler fail 0/90  ok
+ref_bug_2_isa_range                expect fail        exit 1, pass 315, fail 2, Kepler fail 0/90  ok
+ref_bug_3_audit_rule               expect fail        exit 1, pass 313, fail 4, Kepler fail 0/90  ok
+ref_bug_9_evidence_not_zero        expect fail        exit 1, pass 312, fail 5, Kepler fail 0/90  ok
+ref_bug_10_range_multiset          expect fail        exit 1, pass 315, fail 2, Kepler fail 0/90  ok
+ref_bug_4_rk4                      expect kepler-fail exit 1, pass 227, fail 90, Kepler fail 90/90  ok
+ref_bug_5_last_step_dropped        expect kepler-fail exit 1, pass 227, fail 90, Kepler fail 90/90  ok
+ref_bug_7_state_before_step        expect kepler-fail exit 1, pass 227, fail 90, Kepler fail 90/90  ok
+ref_bug_4_rk4_invariants_only      expect kepler-fail exit 1, pass 227, fail 90, Kepler fail 90/90  ok
 all controls behave as expected
 ```
 
@@ -159,3 +161,4 @@ all controls behave as expected
   - RK4 (bug 4) fails on the trajectory check, and on the energy criteria alone (last row).
   - A run that drops the last step (bug 5) fails on the length check (n * periods states).
   - A run that reports the state before each step (bug 7) keeps the length and passes the energy criteria. It fails only on the trajectory check, which is why that check is part of the law.
+- **What the audit controls catch:** reading evidence as "not 0" (bug 9) fails the 5 vectors with a negative, text, `true` or `null` count. Comparing ranges with their duplicates (bug 10) fails the 2 vectors whose known list repeats a case.

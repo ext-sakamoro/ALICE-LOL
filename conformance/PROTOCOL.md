@@ -9,7 +9,7 @@ This directory holds the tools that check an independent implementation of the l
 | `TASK.md` | the contract given to an implementer, with the guide to reading law files |
 | `gen_corpus.py` | builds the corpus from the law files (needs mpmath) |
 | `run_conformance.py` | runs one implementation against a corpus |
-| `ref_impl.py` | reference implementation; `REF_BUG=1..8` selects a defective variant |
+| `ref_impl.py` | reference implementation; `REF_BUG=1..10` selects a defective variant |
 | `score.sh` | generate, check corner coverage, score, delete |
 | `controls.sh` | must-red controls for the generator and the runner |
 | `kepler_sweep.c`, `kepler_sweep.py` | measurement of the Kepler valid ranges |

@@ -146,7 +146,8 @@ def kepler_states(law, inputs, steps_wanted):
 def audit_verdict(law, metrics, ranges):
     clauses = [l.split() for l in law["audit"]]
     for c in clauses:
-        if c[0] == "evidence" and not metrics.get(c[1]):
+        # evidence is a finite number greater than 0 (metrics holds finite numbers only)
+        if c[0] == "evidence" and not metrics.get(c[1], 0) > 0:
             return "no_evidence", c[1]
     for c in clauses:
         if c[0] == "range":
@@ -166,6 +167,8 @@ def audit_verdict(law, metrics, ranges):
 
 def x_metrics(law, inputs):
     """Derivation of the free-text x-metric lines (held here, see the module doc)"""
+    # a value that is not a finite number is not measured; a range that is not an
+    # array of text (null included) is not measured; ranges compare as sets
     nums = {k: v for k, v in inputs.items() if is_num(v)}
     ranges = {k: v for k, v in inputs.items() if isinstance(v, list) and all(isinstance(s, str) for s in v)}
     if law["name"] == "identifier_feature_independent":
@@ -211,6 +214,8 @@ DESIGN = {
             (T(5, 3.7, 0.1, 1.2, 2.0), "low gravity"),
             (T(250, 24.8, 1.8, 0.8, 4.0), "high gravity"),
             (T(10, 10, 1, 2, 1, [3, 0.5, 3, 1]), "unsorted, repeated times"),
+            (T(10, 10, 1, 2, 1, 1.0), "x-list given a number, not an array"),
+            (T(10, 10, 1, 2, 1, [0.5, "1"]), "x-list with an element that is not a number"),
         ],
         "edges": {
             "t_over_tau@lo": T(10, 10, 1, 2, 1, [0]), "t_over_tau@hi": T(10, 10, 1, 2, 1, [8]),
@@ -226,6 +231,8 @@ DESIGN = {
             (D(3.5, 1.7, [0.2, 0.9, 2.3]), "mid range"),
             (D(42, 0.08, [5, 25, 49.9]), "slow decay"),
             (D(7, 0.5, [8, 1, 4, 1]), "unsorted, repeated times"),
+            (D(10, 0.5, 2.0), "x-list given a number, not an array"),
+            (D(10, 0.5, {"t": 2.0}), "x-list given an object, not an array"),
         ],
         "edges": {"kt@lo": D(10, 0.5, [0]), "kt@hi": D(10, 0.5, [8]),
                   "kt<lo": D(10, 0.5, [-1]), "kt>hi": D(10, 0.5, [9])},
@@ -280,6 +287,26 @@ DESIGN["gate_compares_nonzero"]["cases"] = [(i, n) for i, n in [
     ({"compared": 5, "mismatches": 1, "known-mismatches": K42}, "one mismatch"),
     ({"compared": 1, "mismatches": 7, "known-mismatches": K42}, ""),
     ({"compared": 1, "mismatches": 0, "known-mismatches": K42}, "one item compared"),
+    # evidence is a finite number greater than 0; JSON carries no NaN or infinity,
+    # so a value that is not a number stands for them
+    ({"compared": -1, "mismatches": 0, "known-mismatches": K42}, "negative count is not evidence"),
+    ({"compared": -0.5, "mismatches": 1, "known-mismatches": K42}, "negative count before expect"),
+    ({"compared": "12", "mismatches": 0, "known-mismatches": K42}, "count given as text is not evidence"),
+    ({"compared": True, "mismatches": 0, "known-mismatches": K42}, "true is not a number"),
+    ({"compared": None, "mismatches": 0, "known-mismatches": K42}, "null count is not evidence"),
+    ({"compared": 0.5, "mismatches": 0, "known-mismatches": K42}, "a positive fraction is evidence"),
+    # ranges are sets; a value that is not an array of text is not measured
+    ({"compared": 5, "mismatches": 0, "known-mismatches": ["case-17", "case-42", "case-17"]},
+     "duplicate in the known list, same set"),
+    ({"compared": 5, "mismatches": 0, "known-mismatches": ["case-42", "case-42", "case-17", "case-42"]},
+     "duplicates and another order, same set"),
+    ({"compared": 5, "mismatches": 0, "known-mismatches": ["case-17", "case-17"]},
+     "duplicate hides a missing case"),
+    ({"compared": 5, "mismatches": 0, "known-mismatches": "case-17 case-42"}, "known list given as text"),
+    ({"compared": 5, "mismatches": 0, "known-mismatches": None}, "known list given as null"),
+    ({"compared": 5, "mismatches": 0, "known-mismatches": [17, 42]}, "known list of numbers"),
+    ({"compared": 5, "mismatches": 3, "known-mismatches": None}, "null range before expect"),
+    ({"compared": 5, "mismatches": "0", "known-mismatches": K42}, "mismatches given as text is not measured"),
 ]]
 B = lambda feats, i: {"features": feats, "id": i} if i is not None else {"features": feats}
 DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"builds": b}, n) for b, n in [
