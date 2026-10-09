@@ -4,7 +4,7 @@
 `.3mf` file を Bambu Studio で開き、表示エラーなし + slice 成功 + (option) 実プリント
 成功を検証する
 
-**前提**: Phase 5.3 example (`complete_pipeline_bambu_3mf.rs`) を実行し `./output/{thin,thick}/`
+**前提**: Phase 5.3 の example を pipeline 側で実行し `./output/{thin,thick}/`
 に 13 品目 `.3mf` が生成済 + Phase 5.5 script (`scripts/verify_bamboo_generators.sh`) を
 実行し `/tmp/bamboo_verify/` に 4 CLI generator `.3mf` が生成済
 
@@ -45,7 +45,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 | pattern | 前症状 | 真因 | fix |
 |--|--|--|--|
-| skadis_container / gridfinity_bin | mesh 0 | `TightAabbConfig::default()` initial_half_size=10 で大型 pattern 範囲外 | pre-verify test で `initial_half_size: 500` 明示 (Bamboo lib.rs 準拠) |
+| skadis_container / gridfinity_bin | mesh 0 | `TightAabbConfig::default()` initial_half_size=10 で大型 pattern 範囲外 | pre-verify test で `initial_half_size: 500` 明示 (pipeline lib.rs 準拠) |
 | skadis_elastic_cord | NME 212 | 同上 (偽 bbox で SDF 展開不完全) | 同上 |
 | skadis_clip | NME 4 | 同上 | 同上 |
 | skadis_panel_300x300 | NME 153 | RepeatFinite の distance field bound-only 精度不足 | `RepeatFinite` を 98 hole 明示 `Union` chain に置換 (Phase 5.8 gridfinity 同 pattern) |
@@ -101,7 +101,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 | K3 | `drawer_organizer_chopsticks.3mf` | `pattern_sdf::drawer_organizer(&DrawerSpec::default_chopsticks_set())` | 159K vert / 318K tri / 2468KB | ~4-6 hours (250mm 幅) |
 | K4 | `shelf_divider_560x250x120.3mf` | `pattern_sdf::shelf_divider(&ShelfDividerSpec::field_tested_560x250x120())` | 98K vert / 197K tri / 1486KB | ~12+ hours (実プリント合格 spec) |
 
-### 1.3 Bamboo CLI 経路 (4 品目、`/tmp/bamboo_verify/`、Phase 5.5)
+### 1.3 pipeline CLI 経路 (4 品目、`/tmp/bamboo_verify/`、Phase 5.5)
 
 **注意**: 本 4 品目は pipeline の CLI で生成、**素の 3MF** (Bambu template 埋込なし)
 Bambu Studio で開くと「印刷設定なし」で表示される、user が material / printer を毎回設定要
@@ -110,7 +110,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 | No | file | CLI subcommand | 実測サイズ | 状態 |
 |--|--|--|--|--|
 | C1 | `hook.3mf` | `<pipeline-cli> hook --load 3 --mount screw` | 18MB | OK |
-| C2 | `gridfinity_2x2_div2x2.3mf` | `<pipeline-cli> gridfinity --units 2x2 --dividers 2x2` | **1.3KB** | ⚠ **degenerate mesh 疑い** (別 sprint 修正、Bamboo generators/gridfinity.rs wrapper 実装確認要) |
+| C2 | `gridfinity_2x2_div2x2.3mf` | `<pipeline-cli> gridfinity --units 2x2 --dividers 2x2` | **1.3KB** | ⚠ **degenerate mesh 疑い** (別 sprint 修正、pipeline rust generator wrapper 実装確認要) |
 | C3 | `drawer_chopsticks_set.3mf` | `<pipeline-cli> drawer --slots "chopsticks:2,fork:4,knife:4"` | 146MB | 大きすぎる (resolution 高すぎ、--resolution 128 で縮小可) |
 | C4 | `shelf_divider/shelf_divider.3mf` | `<pipeline-cli> shelf-divider --width 560 --depth 250 --height 120` | 64MB | OK |
 
@@ -229,7 +229,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 
 **C2 gridfinity 1.3KB = degenerate mesh 疑い**:
 - Bambu Studio で開くと mesh 表示なし or 極小
-- **Bamboo generators/gridfinity.rs wrapper 実装の bug 疑い**
+- **pipeline rust generator wrapper 実装の bug 疑い**
 - Report 要 → 別 sprint (Phase 5.8 or B.1.d 補修) で対処
 
 ---
@@ -240,7 +240,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 
 | エラー | 原因候補 | 対処 |
 |--|--|--|
-| "3MF file corrupted" | zip package 破損、writer bug | Phase 5.7 pipeline 側 bambu_3mf.rs の bug report 要 |
+| "3MF file corrupted" | zip package 破損、writer bug | Phase 5.7 pipeline 側 3MF writer の bug report 要 |
 | "No printable object" | mesh 空、degenerate | file size < 10KB なら degenerate 疑い (C2 gridfinity と同型) |
 | "Non-manifold edges detected" | mesh 非多様体 | DC 経路のはず = Phase 3''.2 実測で 0 だったので新 bug、report 要 |
 | "Object out of build volume" | build volume 超過 (H2D 315mm) | K4 shelf_divider 560mm など、Cut tool で分割印刷 |

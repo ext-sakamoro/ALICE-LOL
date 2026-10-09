@@ -5,7 +5,7 @@
 //! | primitive | 用途 | 実装 |
 //! |-----------|------|------|
 //! | [`rib`] | 板裏の補強リブ | Box3d 単体 |
-//! | [`boss`] | ネジ穴周りボス | Cylinder outer + tap hole subtraction (Bamboo `screw_boss_od = screw_dia × 2.2`) |
+//! | [`boss`] | ネジ穴周りボス | Cylinder outer + tap hole subtraction (pipeline `screw_boss_od = screw_dia × 2.2`) |
 //! | [`fillet`] | 内角 R (2 `SdfNode` ブレンド) | `SdfNode::SmoothUnion` wrapper |
 //! | [`chamfer`] | edge 面取り (2 `SdfNode`) | `SdfNode::ChamferUnion` wrapper |
 //! | [`honeycomb_infill`] | 6 角形 infill 壁パターン | `RepeatFinite` + `HexPrism` を container から `Subtraction` |
@@ -19,17 +19,17 @@
 //! - `material_elastic_modulus_gpa` — `alice_physics::filament_db::MaterialProperties::pla/petg/abs`
 //! - `recommended_fillet_radius_mm` — `alice_physics::fillet_stress::recommended_fillet_radius_mm`
 //!
-//! Bamboo `src/safety.rs` の canonical material spec と SSOT を共有できる
+//! pipeline `safety module` の canonical material spec と SSOT を共有できる
 
 use alice_sdf::SdfNode;
 use glam::Vec3;
 use std::sync::Arc;
 
 // ────────────────────────────────────────────────────────
-// 定数 (Bamboo formulas 準拠、実プリント検証は Phase B.2 予定)
+// 定数 (pipeline formulas 準拠、実プリント検証は Phase B.2 予定)
 // ────────────────────────────────────────────────────────
 
-/// ネジ穴周りボスの外径係数 (Bamboo `formulas::PrintParams::screw_boss_od`)
+/// ネジ穴周りボスの外径係数 (pipeline `formulas::PrintParams::screw_boss_od`)
 ///
 /// boss 外径 = `screw_dia` × [`SCREW_BOSS_OD_RATIO`]、周囲肉厚を確保する経験式
 pub const SCREW_BOSS_OD_RATIO: f32 = 2.2;
@@ -268,7 +268,7 @@ pub fn gyroid_infill(container: SdfNode, cell_scale: f32, wall_thickness: f32) -
 
 /// 材料名から弾性率 (`GPa`) を取得 (`alice_physics::filament_db::MaterialProperties`)
 ///
-/// SSOT: Bamboo `safety.rs` と同じ `FilamentDb` を参照 hardcode 定数を置換
+/// SSOT: pipeline `safety module` と同じ `FilamentDb` を参照 hardcode 定数を置換
 /// 対応材料: `"pla"` / `"petg"` / `"abs"` (大文字小文字不問)
 ///
 /// # 使用例
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn boss_outer_diameter_uses_bamboo_screw_boss_od_ratio() {
+    fn boss_outer_diameter_uses_pipeline_screw_boss_od_ratio() {
         // M3 → 外径 = 3 * 2.2 = 6.6mm、外半径 3.3mm
         let node = boss(3.0, 8.0);
         match &node {
@@ -505,7 +505,7 @@ mod tests {
     fn physics_material_elastic_modulus_pla_matches_hardcode() {
         // Phase A.2 hardcode (3.5 GPa) と physics feature の FilamentDb 値が一致するか
         let e = material_elastic_modulus_gpa("pla").expect("PLA registered");
-        // Bamboo FilamentDb の PLA elastic_modulus は 3.5 GPa (実装値)
+        // pipeline FilamentDb の PLA elastic_modulus は 3.5 GPa (実装値)
         assert!((3.0..=4.0).contains(&e), "PLA elastic modulus = {e} GPa");
     }
 

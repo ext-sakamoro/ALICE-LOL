@@ -404,7 +404,7 @@ pub fn lol_to_fbx(
 
 /// `SdfNode` → mesh (dual contouring 経由、SDF 経路のまま watertight 保証)
 ///
-/// Marching Cubes は薄物 (≤ 5mm) で非多様体多発の原理的限界 (Bamboo 実測 6177 non-manifold edges)
+/// Marching Cubes は薄物 (≤ 5mm) で非多様体多発の原理的限界 (pipeline 実測 6177 non-manifold edges)
 /// **Dual Contouring は Hermite data (edge crossing position + normal) で sharp feature を保存**、
 /// 薄物 + 大量穴でも topology 保証、SDF 経路のまま Phase 2 Law 準拠
 ///

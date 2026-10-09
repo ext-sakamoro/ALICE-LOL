@@ -72,10 +72,10 @@ Slice → G-code → Print
 **現状**: Phase 3''.3.1 で hook 3 種は実装済、残り 4 accessory 未実装
 **実装対象**:
 
-| primitive | Bamboo canonical | 主要 shape 要素 |
+| primitive | pipeline canonical | 主要 shape 要素 |
 |--|--|--|
 | `skadis_container_sdf` | `skadis-container/generate.py` | container 板組 (底 + 4 側壁) + 2 peg + gusset 補強リブ |
-| `skadis_clip_sdf` | `skadis-clip/generate.py` | 二股構造 (2 板 + tip bulge、Bamboo 論理: 差込 slot 式) |
+| `skadis_clip_sdf` | `skadis-clip/generate.py` | 二股構造 (2 板 + tip bulge、pipeline 論理: 差込 slot 式) |
 | `skadis_shelf_sdf` | `skadis-shelf/generate.py` | 板 + rib 補強 + 2 peg |
 | `skadis_elastic_cord_sdf` | `skadis-elastic-cord/generate.py` | ring holder + peg + 弾性コード用凹み |
 
@@ -137,7 +137,7 @@ Slice → G-code → Print
 - text-to-print pipeline test で 12+ 品目 (LOL DSL text 経由) が全て 3MF 生成成功
 - 厚さ自動判定が MC/DC を正しく振り分ける (coin → DC、bracket → MC)
 
-### Phase 5.5: Bamboo 4 generator CLI 実行検証
+### Phase 5.5: pipeline 4 generator CLI 実行検証
 
 **現状**: Phase B.1.d で 4 generator を LOL pattern_sdf 呼出し wrapper に置換、しかし CLI 実行後の .3mf 生成成功は未確認
 **実装**:
@@ -221,7 +221,7 @@ Slice → G-code → Print
 2. `runtime_parser::parse_lol("primitive_name(args)")` が正しい SdfNode を返す (test)
 3. Phase 5.3 example `complete_pipeline_output.rs` が全 12+ 品目 `.3mf` を生成、全て `non_manifold_edges == 0`
 4. Phase 5.4 text-to-print pipeline test で 12+ 品目 3MF 生成成功
-5. Phase 5.5 Bamboo CLI script で 4 generator 実行成功
+5. Phase 5.5 pipeline CLI script で 4 generator 実行成功
 6. `cargo test` / `cargo clippy` / `cargo fmt --check` all green
 
 ### user 側 (Bambu Studio、Phase 5.6 手順書)
@@ -238,10 +238,10 @@ Slice → G-code → Print
 | 5.2 | SKADIS 残 4 accessory SDF | `stdlib/hardsurface/skadis_sdf.rs` 拡張 | 1 (LOL) |
 | 5.3 | 12+ 品目 3MF 生成 example | `examples/complete_pipeline_output.rs` + 実測 | 1 (LOL) |
 | 5.4 | text-to-print pipeline DC 統合 | `crates/core/src/pipeline.rs` | 1 (text-to-print) |
-| 5.5 | Bamboo CLI 検証 script | `scripts/verify_bamboo_generators.sh` | 1 (Bamboo) |
+| 5.5 | pipeline CLI 検証 script | `scripts/verify_bamboo_generators.sh` | 1 (pipeline) |
 | 5.6 | user Bambu Studio 検証手順書 | `docs/BAMBU_STUDIO_VERIFICATION.md` | 1 (LOL) |
 
-**合計**: 7 commit (LOL 5、Bamboo 1、text-to-print 1)、~2000+ 行実装 + ~800 行 docs
+**合計**: 7 commit (LOL 5、pipeline 1、text-to-print 1)、~2000+ 行実装 + ~800 行 docs
 
 ## 8. 依存 / 前提
 
@@ -253,7 +253,7 @@ Slice → G-code → Print
 ## 9. 除外項目 (Phase 5 scope 外)
 
 - alice-lol-humanoid の既存 compile error 修正 (別 crate)
-- SKADIS 追加設計 (新 accessory)、Bamboo Python `generate.py` の deprecate 完全実施
+- SKADIS 追加設計 (新 accessory)、pipeline Python `generate.py` の deprecate 完全実施
 - text-to-print CI (ALICE_ECO_TOKEN 未設定、Bambu private repo access): user 側 secret 登録要
 - 実プリント検証 (user 側で 3D プリンタ実行、Phase 5.6 手順書に従う)
 

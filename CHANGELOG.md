@@ -713,7 +713,7 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - **`LawReport` に `unresolved: Vec<Unresolved>` を追加、`all_passed()` は「違反なし かつ 判定不能なし」に変更** (silent 合格の廃止、struct literal で `LawReport` を組んでいる下流は field 追加で breaking) 新 API: `LawReport::has_unresolved()` / `Unresolved { law_name, priority, point, region, reason }` / `UnresolvedReason` (`SurfaceProximity { radius }` / `SignUndecided` / `GapUnbracketed { upper }`、`#[non_exhaustive]`) / `format_report` に `[UNDECIDED]` 行
 - `Contact` の residual: 近すぎは `上界 − min_distance`、遠すぎは `max_distance − 上界` (上界を取れなければ `−∞`)、gap > m の証明は各 cell を m/2 広げた箱の区間で行う (中点が検査 AABB 内にある前提)
 
-- **`rust-version = "1.90"` を全 workspace crate に宣言** — clippy `incompatible_msrv` が `from_f32_snap` 等の const fn で `f32::round` (const 化 1.90) と `Vec::is_empty` (1.87) を指摘、1.85 (alice-sdf の MSRV) を宣言すると偽 MSRV になる 下流 (Manga / Foundry / Print / Kinematics 1.92.0、Bamboo / LLM 1.98.1) の toolchain pin は全て上回る `cargo +1.90.0 check --workspace --all-targets --all-features` 通過
+- **`rust-version = "1.90"` を全 workspace crate に宣言** — clippy `incompatible_msrv` が `from_f32_snap` 等の const fn で `f32::round` (const 化 1.90) と `Vec::is_empty` (1.87) を指摘、1.85 (alice-sdf の MSRV) を宣言すると偽 MSRV になる 下流 (Manga / Foundry / Print / Kinematics 1.92.0、pipeline / LLM 1.98.1) の toolchain pin は全て上回る `cargo +1.90.0 check --workspace --all-targets --all-features` 通過
 - **ci.yml clippy を `-D warnings -D clippy::pedantic -D clippy::nursery` + `--workspace --all-targets --all-features` に昇格** (旧: lib のみ `--features llm-bridge` で `-W`) 昇格に伴い example 2 本の raw string hash / doc backtick を修正
 - ci.yml の manifest-only stub (`alice-physics` 空 lib + 参照されていない Codec / Streaming / Cache / Foundry) を real `ALICE-Physics` checkout に置換 (`--all-features` で `physics` feature が実 compile されるため)
 - `alice-sdf` 要件 `2.0.0` → `3.0.0` (`ShaderLang` seal のみ breaking、LOL は trait を実装していない)
@@ -730,7 +730,7 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 
 `cavity` / `mount` / `skadis_sdf` に閉形式 / 文書の寸法と突き合わせる oracle 35 本を足し、`eval` の符号変化の二分法で出来上がりの形を測ったところ、
 `cavity` は全項目が正しく (穴の半径・位置・±5mm の余裕・blind の底・皿の 90 度円錐)、`mount` / `skadis_sdf` に欠陥が見つかった 既存の単体 test には
-修正前の誤った値をそのまま固定したもの (`skadis_peg_dimensions_match_bamboo_spec` の内側寸法、`bracket_l` の `k == R`) があったので、出来上がりの形を測る形に直した
+修正前の誤った値をそのまま固定したもの (`skadis_peg_dimensions_match_pipeline_spec` の内側寸法、`bracket_l` の `k == R`) があったので、出来上がりの形を測る形に直した
 
 **`mount`**
 - `rack_shelf`: ALICE-SDF の `RepeatFinite` は「`count` 個のセルを `±count/2` にクランプ」するので `notch_count` をそのまま渡すと
@@ -751,7 +751,7 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - `skadis_shelf_sdf`: 背面ペグの向きを同様に直した (2.4mm → 板厚 5mm 突き出す)
 - `capsule_polyline_sdf` (hook L / J / S と elastic cord): 3D の `Capsule` 管 (断面が直径 2R の円、`hook_width` は管より狭くしか効かず幅 8 の hook が直径 7 の管)
   から、Z 軸の円柱を edge の向きに `Elongate` した平らな帯 (面内 2R x Z 方向 `hook_width`、端は面内で丸い) に直した
-  (Bamboo の `LineString.buffer(R)` + 押出に相当)
+  (pipeline の `LineString.buffer(R)` + 押出に相当)
 - 変異 47 種 (cavity / mount / skadis の既存実装 31 種と、修正側 16 種) が red になることを実測した
 
 #### `roblox_export` の 3 プリセットが水密でなく三角形上限を守れなかった (2026-10-02)

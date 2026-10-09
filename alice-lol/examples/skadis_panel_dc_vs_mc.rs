@@ -3,7 +3,7 @@
 //! 同じ SKADIS panel SDF (`skadis_panel_sdf`) を MC / DC 両 algorithm で mesh 化し、
 //! triangle 数 / vertex 数 / 実行時間 / watertight 判定を比較する
 //!
-//! **目的**: ALICE 三相原理 Phase 2 Law 経路 (SDF+DC) が Bamboo 実測「MC で 1.7mm → 5.1mm、
+//! **目的**: ALICE 三相原理 Phase 2 Law 経路 (SDF+DC) が pipeline 実測「MC で 1.7mm → 5.1mm、
 //! 6177 non-manifold edges」問題を回避できるかの実証
 //!
 //! ```bash
@@ -29,7 +29,7 @@ fn output_path(name: &str) -> PathBuf {
 fn main() {
     println!("=== ALICE-LOL Phase 3'' — SKADIS panel MC vs DC 実測比較 ===\n");
 
-    // SKADIS panel SDF (300×300×5mm、Bamboo canonical spec)
+    // SKADIS panel SDF (300×300×5mm、pipeline canonical spec)
     let panel = skadis_panel_sdf(300.0, SKADIS_PANEL_THICKNESS, 5.0);
     // Bounding box (300×300 板、Y 方向 5mm)
     let bounds_min = Vec3::new(-155.0, -3.0, -155.0);
@@ -134,5 +134,5 @@ fn main() {
     println!("=== Done ===");
     println!("output dir: {}", output_path("").display());
     println!("観察点: DC の non_manifold_edges が MC より劇的に少なければ ALICE way 回帰の裏付け");
-    println!("Bamboo 実測「MC で 6177 non-manifold edges」と本 example の DC 実測値を比較");
+    println!("pipeline 実測「MC で 6177 non-manifold edges」と本 example の DC 実測値を比較");
 }

@@ -1642,7 +1642,7 @@ impl<'a> Parser<'a> {
             }
             "skadis_panel" => {
                 // Variadic 0/1/2/3-arg 対応 defaults は SKADIS canonical
-                // (300×5×5、pipeline 側の `models/wall-organizer/skadis-300x300/`)
+                // (300×5×5、pipeline 側の `python generator`)
                 // LLM 側で「SKADISパネル 10✖10」等の曖昧入力を parse fail させず
                 // canonical に丸める β UX 用の forgiving 動作 (2026-09-04 追加)
                 let (size, thickness, corner_r) = self.parse_skadis_panel_args()?;
@@ -1688,7 +1688,7 @@ impl<'a> Parser<'a> {
             }
 
             // ── Phase B.1.b 高階 primitive (stdlib::hardsurface::pattern_sdf) ──
-            // Bamboo Rust generator 由来の 4 pattern (wall_hook / gridfinity_bin /
+            // pipeline Rust generator 由来の 4 pattern (wall_hook / gridfinity_bin /
             // drawer_organizer / shelf_divider) を DSL syntax に expose
             // wall_hook / drawer_organizer / shelf_divider は param なし = spec default
             // gridfinity_bin は 3 param (units_x, units_y, height_u) basic 版

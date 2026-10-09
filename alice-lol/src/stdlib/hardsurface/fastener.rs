@@ -17,9 +17,9 @@
 //! 板から穴を掘る時は `SdfNode::Subtraction { a: plate, b: fastener_hole }` として使う
 //! 板中心が Y=0 の場合、貫通穴はそのまま Subtraction すれば板厚方向に完全貫通する
 //!
-//! ## Bamboo 実プリント公式との整合
+//! ## pipeline 実プリント公式との整合
 //!
-//! [`tap_hole`] は `alice_bamboo::formulas::PrintParams::tap_hole()` と同式
+//! [`tap_hole`] は `formulas::PrintParams::tap_hole()` と同式
 //! [`heat_set_insert_hole`] は `heat_insert_hole()` と同式 (`+ 0.2` 熱膨張余裕)
 
 use alice_sdf::SdfNode;
@@ -288,7 +288,7 @@ pub fn screw_hole(size: MetricSize, depth: f32) -> SdfNode {
     }
 }
 
-/// タップ下穴 (セルフタッピング用、Bamboo `PrintParams::tap_hole()` と同式)
+/// タップ下穴 (セルフタッピング用、pipeline `PrintParams::tap_hole()` と同式)
 ///
 /// 直径 = `screw_dia * 0.85 + 2 * accuracy` (`accuracy` は default [`DEFAULT_ACCURACY`] 推奨)
 ///
@@ -432,7 +432,7 @@ pub fn bolt(size: MetricSize, shank_length: f32) -> SdfNode {
     }
 }
 
-/// ヒートセットインサート下穴 (Voxel8 / `McMaster` 準拠、Bamboo `heat_insert_hole()` と同式)
+/// ヒートセットインサート下穴 (Voxel8 / `McMaster` 準拠、pipeline `heat_insert_hole()` と同式)
 ///
 /// 直径 = insert 外径 + 0.2mm (熱膨張余裕)、深さ = insert 埋込深さ + [`HEAT_SET_SINK_MARGIN`]
 /// はんだごてで挿入する時に樹脂が沈むための余裕を確保する
@@ -532,8 +532,8 @@ mod tests {
     }
 
     #[test]
-    fn tap_hole_m3_matches_bamboo_formula() {
-        // Bamboo formulas.rs: tap = screw_dia * 0.85 + 2 * accuracy
+    fn tap_hole_m3_matches_pipeline_formula() {
+        // pipeline formulas module: tap = screw_dia * 0.85 + 2 * accuracy
         // M3 with accuracy 0.1 → 3.0 * 0.85 + 0.2 = 2.75mm 直径
         let node = tap_hole(MetricSize::M3, 4.0, DEFAULT_ACCURACY);
         match node {

@@ -69,9 +69,9 @@ fn main() {
             "skadis_elastic_cord()",
             PatternRoute::DualContouring,
         ),
-        // ── 厚物 (MC 経路、Bamboo 4 generator は pattern_sdf 経由でも呼べるが LOL DSL text からは
-        //    直接呼べない (0-arg primitive 化していない、Bamboo CLI 経由が canonical)) ──
-        // ("wall_hook_default", "...", PatternRoute::MarchingCubes),    // LOL DSL 未登録、Bamboo CLI
+        // ── 厚物 (MC 経路、pipeline 4 generator は pattern_sdf 経由でも呼べるが LOL DSL text からは
+        //    直接呼べない (0-arg primitive 化していない、pipeline CLI 経由が canonical)) ──
+        // ("wall_hook_default", "...", PatternRoute::MarchingCubes),    // LOL DSL 未登録、pipeline CLI
         // ("gridfinity_bin_2x2", "...", PatternRoute::MarchingCubes),   // 同上
         // ("drawer_organizer", "...", PatternRoute::MarchingCubes),     // 同上
         // ("shelf_divider_560x250x120", "...", PatternRoute::MarchingCubes), // 同上
@@ -108,7 +108,7 @@ fn main() {
     );
     println!(
         "\n厚物 4 品目 (wall_hook / gridfinity / drawer / shelf_divider) は LOL DSL text から\n\
-         直接呼べない (0-arg primitive 未登録) Bamboo CLI 経由が canonical:\n\
+         直接呼べない (0-arg primitive 未登録) pipeline CLI 経由が canonical:\n\
          cargo run --release --bin <pipeline-cli> -- hook --load 3 --output ./thick/hook.3mf\n\
          cargo run --release --bin <pipeline-cli> -- gridfinity --units 2x2 --output ./thick/gridfinity.3mf\n\
          cargo run --release --bin <pipeline-cli> -- drawer --width 250 --depth 200 --height 40 --slots \"chopsticks:2\" --output ./thick/drawer.3mf\n\

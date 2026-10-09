@@ -132,13 +132,13 @@ Phase 3''/3''.2/3''.3.1 で stdlib::hardsurface::{skadis_sdf, thin_sdf} に実�
 ALICE 三相原理 Phase 2 Law 経路 (SDF+Dual Contouring)、mesh 化は
 `alice_lol::print_export::node_to_3mf_dual_contouring` 推奨
 
-| primitive | 引数 | 意味 | Bamboo canonical |
+| primitive | 引数 | 意味 | pipeline canonical |
 |-----------|------|------|-----------------|
-| `shopping_cart_coin(dia, thickness)` | 直径 mm、厚 mm | 100 円硬貨型キーホルダーコイン (Cylinder 単純) | `models/accessories/shopping-cart-coin/generate.py` |
-| `skadis_panel(size, thickness, corner_r)` | 一辺 mm、厚 mm、角丸 R mm | IKEA SKADIS 互換ペグボード + 千鳥ペグ穴 | `models/wall-organizer/skadis-300x300/generate.py` |
-| `skadis_hook_l()` | (0 args) | 2-peg 水平フック (5kgf、reach 75mm) | `models/wall-organizer/skadis-hook-l/generate.py` |
-| `skadis_hook_j()` | (0 args) | 1-peg J 字深フック (3kgf、reach 25 + drop 70mm) | `models/wall-organizer/skadis-hook-j/generate.py` |
-| `skadis_hook_s()` | (0 args) | 1-peg S 字汎用フック (1kgf、reach 22 + drop 45mm) | `models/wall-organizer/skadis-hook-s/generate.py` |
+| `shopping_cart_coin(dia, thickness)` | 直径 mm、厚 mm | 100 円硬貨型キーホルダーコイン (Cylinder 単純) | `python generator` |
+| `skadis_panel(size, thickness, corner_r)` | 一辺 mm、厚 mm、角丸 R mm | IKEA SKADIS 互換ペグボード + 千鳥ペグ穴 | `python generator` |
+| `skadis_hook_l()` | (0 args) | 2-peg 水平フック (5kgf、reach 75mm) | `python generator` |
+| `skadis_hook_j()` | (0 args) | 1-peg J 字深フック (3kgf、reach 25 + drop 70mm) | `python generator` |
+| `skadis_hook_s()` | (0 args) | 1-peg S 字汎用フック (1kgf、reach 22 + drop 45mm) | `python generator` |
 
 **Usage 例**:
 ```
@@ -147,7 +147,7 @@ shopping_cart_coin(22.8, 1.7)
 skadis_hook_l()
 ```
 
-これらは実プリント合格 baseline (Bamboo canonical Python 版と同 spec) を LOL DSL で
+これらは実プリント合格 baseline (pipeline canonical Python 版と同 spec) を LOL DSL で
 1 word で呼び出せる形にしたもの mesh 化経路は必ず Dual Contouring 経由
 (polygon_extrude Phase 4 で削除済)
 
@@ -1091,7 +1091,7 @@ assert mesh.is_watertight, "Mesh must be watertight for 3D printing"
 | Print | 192 | ~1M | ~80MB |
 | High quality | 256 | ~2M | ~170MB |
 
-## Parametric Design Formulas (pipeline 側 formulas.rs)
+## Parametric Design Formulas (pipeline 側 formulas module)
 
 All dimensions derive from nozzle diameter (N), layer height (L), and material.
 
@@ -1157,7 +1157,7 @@ Kt ≈ 1 + 2 × sqrt(notch_depth / fillet_radius)
 
 **Rule**: R ≥ 3mm at load-bearing junctions (hook root, peg-to-body, container corner).
 
-### Material Properties (formulas.rs)
+### Material Properties (formulas module)
 
 | Material | Tensile (MPa) | Adhesion | σ_eff (MPa) | E (MPa) | Best for |
 |----------|--------------|----------|-------------|---------|----------|

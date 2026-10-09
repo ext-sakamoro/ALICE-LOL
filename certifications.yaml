@@ -1,21 +1,21 @@
 # certifications.yaml — LOL pattern の実地テスト record (Phase B.2 代替 + D.3、2026-08-07 rev.2)
 #
 # Purpose: alice_lol::stdlib::pattern::registry の各 pattern に紐づく実プリント
-# 実測記録を YAML 形式で管理 Bamboo simulation で code 側完全 unblock、
+# 実測記録を YAML 形式で管理 pipeline simulation で code 側完全 unblock、
 # user 実プリント記録 (date/material/printer) 埋込のみ pending
 #
 # 2026-08-07 rev.2 更新: tight_aabb 修正 + skadis_panel Union 明示化で真の bbox 取得、
 # 全 13 pattern の PrintabilityScore 再計算 (5 SDF bug 全完全 fix、13/13 pre-verify PASS)
 #
 # 参照:
-#   pipeline 側の `pattern_scores.json` (Bamboo simulation 実測 dump)
+#   pipeline 側の `pattern_scores.json` (pipeline simulation 実測 dump)
 #   pipeline 側の `tests/bambu_pre_verify.rs` (自動 9 items pre-verify、13/13 PASS)
 #   `docs/BAMBU_STUDIO_VERIFICATION.md` (Phase 5.6 user 目視 8 items 手順書)
 
 # ─── 薄物 (Phase 3''-3''.3.1、DC 経路) ───
 
 - pattern_name: shopping_cart_coin_100yen
-  field_test: {date: TBD, material: PLA, printer: Bambu H2D, notes: "Φ22.8 × 1.7mm、Bamboo canonical"}
+  field_test: {date: TBD, material: PLA, printer: Bambu H2D, notes: "Φ22.8 × 1.7mm、pipeline canonical"}
   printability_score: 88
   certified_by: Both
   sim_axes: {overhang: 70, min_thickness: 100, warp: 100, support: 100, stress: 70}

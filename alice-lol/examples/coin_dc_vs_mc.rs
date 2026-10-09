@@ -1,6 +1,6 @@
 //! # `coin_dc_vs_mc` — 極薄物 (1.7mm coin) の MC vs DC 決定的実測 (Phase 3''.2)
 //!
-//! Bamboo 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を
+//! pipeline 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を
 //! 本 example で再現し、同 SDF を Dual Contouring で mesh 化した結果と比較する
 //!
 //! **目的**: 極薄物 (< 2mm) で DC が MC の破綻を回避できることを実測で確定させ、
@@ -34,10 +34,10 @@ fn output_path(name: &str) -> PathBuf {
 
 fn main() {
     println!("=== ALICE-LOL Phase 3''.2 — coin (1.7mm 極薄) MC vs DC 決定的実測 ===\n");
-    println!("Bamboo 実測: SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges");
+    println!("pipeline 実測: SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges");
     println!("本 example で MC 再現 + DC の watertight 実現を実測\n");
 
-    // Coin SDF (100 円型、Φ22.8 × 1.7mm、Bamboo 実プリント合格 spec)
+    // Coin SDF (100 円型、Φ22.8 × 1.7mm、pipeline 実プリント合格 spec)
     let coin = shopping_cart_coin_sdf(COIN_100YEN_DIAMETER, COIN_100YEN_THICKNESS);
     // Bounding box (Φ22.8 → hx=hz=13、Y=1.7 → hy=1.5)
     let bounds_min = Vec3::new(-13.0, -1.5, -13.0);
@@ -45,7 +45,7 @@ fn main() {
 
     // ────────────────────────────────
     // Marching Cubes (resolution 128 / 256 / 512)
-    //   Bamboo 実測は resolution 256 で 6177 non-manifold と厚さ 5.1mm
+    //   pipeline 実測は resolution 256 で 6177 non-manifold と厚さ 5.1mm
     //   本 example で resolution 128/256/512 の 3 段階で MC の破綻を確認
     // ────────────────────────────────
     for &resolution in &[128_usize, 256, 512] {

@@ -1,30 +1,30 @@
-//! # `pattern_sdf` — Bamboo Rust generator を LOL に移設した完成 pattern (Phase B.1.b)
+//! # `pattern_sdf` — pipeline Rust generator を LOL に移設した完成 pattern (Phase B.1.b)
 //!
-//! Bamboo `src/generators/{hook,gridfinity,drawer,shelf_divider}.rs` の LOL DSL
+//! pipeline `rust generator` の LOL DSL
 //! 文字列生成ロジックを LOL 側で **`SdfNode` 直接構築 API** に翻訳した完成 pattern
 //! 4 種を提供する `parse_lol()` 経由を skip し性能向上、型安全性確保
 //!
 //! ## Pattern
 //!
-//! | pattern | Bamboo canonical | 用途 |
+//! | pattern | pipeline canonical | 用途 |
 //! |---------|-----------------|-----|
-//! | [`wall_hook`] | `src/generators/hook.rs` | 壁掛けフック (荷重逆算済寸法) |
-//! | [`gridfinity_bin`] | `src/generators/gridfinity.rs` | Gridfinity 42mm grid bin |
-//! | [`drawer_organizer`] | `src/generators/drawer.rs` | 引出し仕切り (chopsticks/fork/knife/spoon 等) |
-//! | [`shelf_divider`] | `src/generators/shelf_divider.rs` | U 字棚仕切り (hex cutout 底板 + 2 側板) |
+//! | [`wall_hook`] | `rust generator` | 壁掛けフック (荷重逆算済寸法) |
+//! | [`gridfinity_bin`] | `rust generator` | Gridfinity 42mm grid bin |
+//! | [`drawer_organizer`] | `rust generator` | 引出し仕切り (chopsticks/fork/knife/spoon 等) |
+//! | [`shelf_divider`] | `rust generator` | U 字棚仕切り (hex cutout 底板 + 2 側板) |
 //!
 //! ## 設計方針
 //!
 //! - **material 非依存**: pattern 関数は dimensional parameter のみ受け取る
-//!   material 依存の応力逆算 (`hook.rs` の `required_area` 計算等) は user 側で事前に完了、
+//!   material 依存の応力逆算 (`rust generator` の `required_area` 計算等) は user 側で事前に完了、
 //!   LOL には finalized geometry を渡す
 //! - **[`crate::stdlib::pattern`] registry の実装対**: `registry::WALL_HOOK` / `GRIDFINITY_BIN`
 //!   / `DRAWER_ORGANIZER` / `SHELF_DIVIDER_560X250X120` の metadata と対を成す関数
-//! - **Bamboo との互換**: Bamboo Python `models/*/generate.py` は本 module の対象外 (薄物専用)
+//! - **pipeline との互換**: pipeline Python `python generator` は本 module の対象外 (薄物専用)
 //!   本 module は **`SdfMarchingCubes` 経路のみ** (`SdfNode::sdf_to_mesh` 経由)
 
 // 幾何寸法の慣習命名 (hx / hy / hz、dx / dy、cx / cy 等) が 240 箇所以上あり、
-// rename すると Bamboo canonical generator との対応が追えなくなるため module 単位で許容
+// rename すると pipeline canonical generator との対応が追えなくなるため module 単位で許容
 #![allow(clippy::similar_names)]
 
 use alice_sdf::SdfNode;
@@ -133,7 +133,7 @@ fn subtract(a: SdfNode, b: SdfNode) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 1. wall_hook (Bamboo generators/hook.rs 翻訳)
+// 1. wall_hook (pipeline rust generator 翻訳)
 // ────────────────────────────────────────────────────────
 
 /// 壁掛けフックの寸法仕様 (荷重逆算済、material 非依存)
@@ -162,7 +162,7 @@ pub struct WallHookSpec {
 }
 
 impl WallHookSpec {
-    /// PLA 標準寸法 (荷重 1kgf 相当、Bamboo hook.rs default 相当)
+    /// PLA 標準寸法 (荷重 1kgf 相当、pipeline rust generator default 相当)
     #[must_use]
     pub const fn pla_1kgf() -> Self {
         Self {
@@ -180,9 +180,9 @@ impl WallHookSpec {
     }
 }
 
-/// 壁掛けフック (Bamboo `hook.rs` LOL DSL 生成と等価な `SdfNode` を返す)
+/// 壁掛けフック (pipeline `rust generator` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
-/// 構造 (Bamboo `hook.rs:49-60` `format!` を `SdfNode` 直接構築に翻訳):
+/// 構造 (pipeline `rust generator:49-60` `format!` を `SdfNode` 直接構築に翻訳):
 /// - backplate `RoundedBox` (中心 X=0, Y=0, Z=0)
 /// - hook arm `RoundedBox` (`Y=bp_hy` - `arm_hy、Z=+bp_hz` + `arm_hz`)
 /// - hook tip `RoundedBox` (`Y=bp_hy` - `opening/2、Z=+bp_hz` + `hook_depth`)
@@ -222,7 +222,7 @@ pub fn wall_hook(spec: &WallHookSpec) -> SdfNode {
         ),
     );
 
-    // 3-way SmoothUnion (Bamboo `smooth_union(2.0, backplate, arm, tip)` と等価)
+    // 3-way SmoothUnion (pipeline `smooth_union(2.0, backplate, arm, tip)` と等価)
     let bp_arm = smooth_union(backplate, arm_placed, 2.0);
     let hook_body = smooth_union(bp_arm, tip_placed, 2.0);
 
@@ -242,10 +242,10 @@ pub fn wall_hook(spec: &WallHookSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 2. gridfinity_bin (Bamboo generators/gridfinity.rs 翻訳)
+// 2. gridfinity_bin (pipeline rust generator 翻訳)
 // ────────────────────────────────────────────────────────
 
-/// Gridfinity spec 定数 (Bamboo `formulas::gridfinity` と同期)
+/// Gridfinity spec 定数 (pipeline `formulas::gridfinity` と同期)
 pub mod gridfinity_spec {
     /// grid unit 幅 (mm、Gridfinity 標準)
     pub const GRID_UNIT: f32 = 42.0;
@@ -293,7 +293,7 @@ impl GridfinitySpec {
     }
 }
 
-/// Gridfinity bin (Bamboo `gridfinity.rs` LOL DSL 生成と等価な `SdfNode` を返す)
+/// Gridfinity bin (pipeline `gridfinity.rs` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
 /// 構造:
 /// - 外形 `RoundedBox` (`units × GRID_UNIT - 2 × BIN_CLEARANCE` 幅)
@@ -375,10 +375,10 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 3. drawer_organizer (Bamboo generators/drawer.rs 翻訳)
+// 3. drawer_organizer (pipeline rust generator 翻訳)
 // ────────────────────────────────────────────────────────
 
-/// slot type (Bamboo `drawer.rs::SlotDef` と同期)
+/// slot type (pipeline `drawer.rs::SlotDef` と同期)
 #[derive(Debug, Clone, Copy)]
 pub struct DrawerSlotSpec {
     /// slot 幅 (mm)
@@ -443,12 +443,12 @@ impl DrawerSpec {
     }
 }
 
-/// drawer organizer (Bamboo `drawer.rs` LOL DSL 生成と等価な `SdfNode` を返す)
+/// drawer organizer (pipeline `drawer.rs` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
 /// 構造:
 /// - 外形 tray `RoundedBox` (`width × depth × height`)
 /// - 内側 cavities を Union で組立て、Subtraction で outer から刳り抜く
-/// - slot 幅は `total_width` 超過時 scale (Bamboo `drawer.rs::scale` 相当)
+/// - slot 幅は `total_width` 超過時 scale (pipeline `drawer.rs::scale` 相当)
 ///
 /// # 使用例
 ///
@@ -491,7 +491,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
             .min_depth
             .min(2.0f32.mul_add(-spec.wall_thickness, spec.depth));
         let sd_half = sd * 0.5;
-        let sw_half = sw * 0.5 - 0.5; // Bamboo drawer.rs の inset 相当
+        let sw_half = sw * 0.5 - 0.5; // pipeline drawer.rs の inset 相当
         for i in 0..slot.count {
             let slot_cx = x_cursor + sw * 0.5;
             let cav = translate(
@@ -519,10 +519,10 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 4. shelf_divider (Bamboo generators/shelf_divider.rs 翻訳)
+// 4. shelf_divider (pipeline rust generator 翻訳)
 // ────────────────────────────────────────────────────────
 
-/// shelf divider の寸法仕様 (U 字、Bamboo `shelf_divider.rs::generate` 相当)
+/// shelf divider の寸法仕様 (U 字、pipeline `shelf_divider.rs::generate` 相当)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShelfDividerSpec {
     /// 全幅 (`mm、half_width` × 2 = 2 パーツ結合時の合計幅)
@@ -542,7 +542,7 @@ pub struct ShelfDividerSpec {
 }
 
 impl ShelfDividerSpec {
-    /// Bamboo `models/shelf/divider-560x250x120/` と同 spec (実プリント合格)
+    /// pipeline `python generator` と同 spec (実プリント合格)
     #[must_use]
     pub const fn field_tested_560x250x120() -> Self {
         Self {
@@ -557,9 +557,9 @@ impl ShelfDividerSpec {
     }
 }
 
-/// shelf divider (Bamboo `shelf_divider.rs` LOL DSL 生成と等価な `SdfNode` を返す)
+/// shelf divider (pipeline `shelf_divider.rs` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
-/// 構造 (Bamboo コメント準拠、逆さ印刷想定で天板 Z=0 に配置):
+/// 構造 (pipeline コメント準拠、逆さ印刷想定で天板 Z=0 に配置):
 /// - 天板 `Box3d` (Z=+t、hx × depth × thickness)
 /// - 左右 側板 `Box3d` (X=±(hx-t)、Y=depth `中央、Z=wall+wall_hz`)
 /// - 上記 3 面を `SmoothUnion` (k = wall × 0.5)
@@ -569,7 +569,7 @@ impl ShelfDividerSpec {
 /// # 引数
 ///
 /// [`ShelfDividerSpec`] で全パラメータ指定 [`ShelfDividerSpec::field_tested_560x250x120`]
-/// で Bamboo 実プリント合格 spec を利用可
+/// で pipeline 実プリント合格 spec を利用可
 ///
 /// # 使用例
 ///
@@ -597,7 +597,7 @@ pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
     let wall_r = translate(box3d(t, hy, wall_hz), Vec3::new(side_right_x, 0.0, wall_cz));
     let structure = smooth_union(smooth_union(plate, wall_l, fillet_k), wall_r, fillet_k);
 
-    // Hex cutout (千鳥、Bamboo `shelf_divider.rs::71-100` と等価)
+    // Hex cutout (千鳥、pipeline `shelf_divider.rs::71-100` と等価)
     let grid_hx = hx - spec.hex_border;
     let grid_hy = hy - spec.hex_border;
     #[allow(clippy::cast_possible_truncation)]

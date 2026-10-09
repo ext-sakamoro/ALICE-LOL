@@ -127,7 +127,7 @@ fn peg_and_shoulder_has_the_documented_blade_and_shoulder() {
 
 #[test]
 fn polyline_strip_is_the_exact_flat_strip_distance() {
-    // 閉形式: Bamboo の `LineString.buffer(R)` + 押出 = 面内で polyline への距離 - R、Z は ±w/2 の帯
+    // 閉形式: pipeline の `LineString.buffer(R)` + 押出 = 面内で polyline への距離 - R、Z は ±w/2 の帯
     // 場は円柱の厳密な距離 g(d1, d2) = (max(d1, d2) < 0 なら max(d1, d2)、さもなくば |max(d1, 0), max(d2, 0)|)
     // d1 = min_i dist2D(p, seg_i) - R、d2 = |z| - w/2
     let pts = [
@@ -391,7 +391,7 @@ fn panel_has_no_peg_hole_inside_the_edge_margin() {
 #[test]
 fn panel_peg_hole_pattern_is_point_symmetric() {
     // 穴の格子 (base + stagger) は原点について点対称 (p が穴なら -p も穴)
-    // connector / mount 穴は Bamboo canonical の固定位置なので対象外 (peg 穴の中心だけを見る)
+    // connector / mount 穴は pipeline canonical の固定位置なので対象外 (peg 穴の中心だけを見る)
     let p = panel();
     let mut asym = Vec::new();
     for ix in -4_i32..=4 {

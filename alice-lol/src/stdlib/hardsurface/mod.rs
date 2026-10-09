@@ -10,20 +10,20 @@
 //! - [`mount`] — 建築/取付 6 primitive (L 字ブラケット / 円形フランジ / ラック / SKADIS peg / 2020 profile / 3030 profile)
 //! - [`thin_sdf`] — 薄物 SDF primitive (shopping cart coin 単純 Cylinder、Phase 3''.2、Dual Contouring 経路推奨、旧 `thin` polygon 経路は Phase 4 で削除済)
 //! - [`skadis_sdf`] — SKADIS panel 純 SDF (Phase 3''、Dual Contouring 経路推奨)
-//! - [`pattern_sdf`] — Bamboo Rust generator を `SdfNode` 直接構築に翻訳した完成 pattern 4 種 (Phase `B.1.b、wall_hook` / `gridfinity_bin` / `drawer_organizer` / `shelf_divider`)
+//! - [`pattern_sdf`] — pipeline Rust generator を `SdfNode` 直接構築に翻訳した完成 pattern 4 種 (Phase `B.1.b、wall_hook` / `gridfinity_bin` / `drawer_organizer` / `shelf_divider`)
 //! - [`cavity`] — Subtract 系 helper (Phase C 根本 refactor 2026-09-01、cavity margin +5mm rule intrinsic 化、archetype 側の rule 忘却事故を primitive API で防ぐ)
 //!
-//! ## 準拠 formulas (pipeline 側 `src/formulas.rs`)
+//! ## 準拠 formulas (pipeline 側 `src/formulas module`)
 //!
 //! | 用途 | 式 | 出典 |
 //! |------|-----|-----|
-//! | タップ下穴径 | `screw_dia * 0.85 + 2 * accuracy` | Bamboo `PrintParams::tap_hole()` |
-//! | ヒートセットインサート下穴径 | `insert_od + 0.2` | Bamboo `heat_insert_hole()` |
+//! | タップ下穴径 | `screw_dia * 0.85 + 2 * accuracy` | pipeline `PrintParams::tap_hole()` |
+//! | ヒートセットインサート下穴径 | `insert_od + 0.2` | pipeline `heat_insert_hole()` |
 //! | クリアランス穴径 (H2D 0.4 nozzle FDM) | `screw_dia + 0.2` | H2D 実測 |
 //!
 //! ## 実プリント合格の baseline
 //!
-//! umbrella 削除後 (2026-08-06、Bamboo commit `6727f3f`) 残った 5 generator
+//! umbrella 削除後 (2026-08-06、pipeline commit `6727f3f`) 残った 5 generator
 //! (drawer / gridfinity / hook / `shelf_divider` / skadis) が本 module の骨格となる
 //! ハードサーフェス pattern の実プリント合格 baseline
 

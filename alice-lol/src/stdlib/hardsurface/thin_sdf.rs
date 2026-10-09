@@ -8,13 +8,13 @@
 //!
 //! ## primitive
 //!
-//! | primitive | Bamboo 対応 canonical | 用途 |
+//! | primitive | pipeline 対応 canonical | 用途 |
 //! |-----------|--------------------|-----|
-//! | [`shopping_cart_coin_sdf`] | `models/accessories/shopping-cart-coin/generate.py` | 100 円硬貨型キーホルダーコイン (Cylinder 単純) |
+//! | [`shopping_cart_coin_sdf`] | `python generator` | 100 円硬貨型キーホルダーコイン (Cylinder 単純) |
 //!
-//! ## Bamboo 実測 (対比検証項目)
+//! ## pipeline 実測 (対比検証項目)
 //!
-//! Bamboo 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を、
+//! pipeline 実測「SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges」を、
 //! 同 SDF を Dual Contouring で mesh 化した時に回避できるかを example
 //! `coin_dc_vs_mc.rs` で実測する 成功すれば Phase A.5 `polygon_extrude` を deprecate → 削除、
 //! ALICE 三相原理 Phase 2 Law 経路への完全回帰を達成
@@ -22,13 +22,13 @@
 use alice_sdf::SdfNode;
 
 // ────────────────────────────────────────────────────────
-// 定数 (Phase A.5.2 thin と同期、Bamboo `models/accessories/shopping-cart-coin/` 準拠)
+// 定数 (Phase A.5.2 thin と同期、pipeline `python generator` 準拠)
 // ────────────────────────────────────────────────────────
 
 /// 100 円硬貨型 shopping cart coin 直径 (mm、実測)
 pub const COIN_100YEN_DIAMETER: f32 = 22.8;
 
-/// 100 円硬貨型 shopping cart coin 厚 (mm、Bamboo 実プリント検証済、極薄物)
+/// 100 円硬貨型 shopping cart coin 厚 (mm、pipeline 実プリント検証済、極薄物)
 pub const COIN_100YEN_THICKNESS: f32 = 1.7;
 
 // ────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ pub const COIN_100YEN_THICKNESS: f32 = 1.7;
 ///
 /// # 検証
 ///
-/// 本 SDF を MC (`node_to_3mf`) で mesh 化すると Bamboo 実測相当 (「1.7mm → 5.1mm、
+/// 本 SDF を MC (`node_to_3mf`) で mesh 化すると pipeline 実測相当 (「1.7mm → 5.1mm、
 /// 6177 non-manifold edges」) が再現される想定
 /// DC (`node_to_3mf_dual_contouring`) で mesh 化すると Hermite data で watertight 保証
 /// example `coin_dc_vs_mc.rs` で実測比較

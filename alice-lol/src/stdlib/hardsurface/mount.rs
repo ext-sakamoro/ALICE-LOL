@@ -7,7 +7,7 @@
 //! | [`bracket_l`] | L 字 bracket (水平 + 垂直板、内角 fillet 統合) | 2 Box3d + `SmoothUnion` (fillet) |
 //! | [`flange_circular`] | 円形フランジ (PCD 上に bolt 穴 pattern) | Cylinder + `polar_repeat` bolt holes |
 //! | [`rack_shelf`] | 棚受けレール (等間隔 notch 列) | Box3d - `RepeatFinite` (Cylinder notches) |
-//! | [`skadis_peg_compat`] | IKEA SKADIS 互換 peg 単体 (Bamboo `PEG_W - FDM_CLEARANCE` 準拠) | `RoundedBox` 単体 |
+//! | [`skadis_peg_compat`] | IKEA SKADIS 互換 peg 単体 (pipeline `PEG_W - FDM_CLEARANCE` 準拠) | `RoundedBox` 単体 |
 //! | [`profile_2020`] | 20×20 アルミプロファイル外形 (4 面 T スロット + 中央 M5 穴) | Box + 4 rotate/translate T-slot + 中央 Cylinder |
 //! | [`profile_3030`] | 30×30 アルミプロファイル外形 (4 面 T スロット + 中央 M6 穴) | 同上、寸法違い |
 //!
@@ -17,10 +17,10 @@
 //!
 //! IKEA SKADIS hook 全体 (peg + 爪 + 引っかけ部) を実プリント可能な品質で
 //! 生成するには **2D polygon + extrude 方式** が canonical
-//! → pipeline 側の `src/generators/skadis.rs` (Python `generate.py` 経由) を使う
+//! → pipeline 側の `rust generator` (Python `generate.py` 経由) を使う
 //!
 //! 本 module では **peg tenon 単体のみ SDF 提供** ([`skadis_peg_compat`])
-//! hook 本体組立は Bamboo 側に委譲
+//! hook 本体組立は pipeline 側に委譲
 
 use alice_sdf::SdfNode;
 use glam::{Quat, Vec3};
@@ -30,16 +30,16 @@ use std::sync::Arc;
 // 定数 (SKADIS / 2020 / 3030 標準寸法)
 // ────────────────────────────────────────────────────────
 
-/// IKEA SKADIS peg 幅 (mm、Bamboo `formulas::skadis::PEG_W` 準拠)
+/// IKEA SKADIS peg 幅 (mm、pipeline `formulas::skadis::PEG_W` 準拠)
 pub const SKADIS_PEG_W: f32 = 5.0;
 
-/// IKEA SKADIS peg 高 (mm、Bamboo `PEG_H`)
+/// IKEA SKADIS peg 高 (mm、pipeline `PEG_H`)
 pub const SKADIS_PEG_H: f32 = 15.0;
 
-/// IKEA SKADIS peg 上下端の rounded 半径 (mm、Bamboo `PEG_R`)
+/// IKEA SKADIS peg 上下端の rounded 半径 (mm、pipeline `PEG_R`)
 pub const SKADIS_PEG_R: f32 = 2.5;
 
-/// FDM 実測 clearance (mm、Bamboo `FDM_CLEARANCE`)
+/// FDM 実測 clearance (mm、pipeline `FDM_CLEARANCE`)
 /// hook 側 peg 幅 = `SKADIS_PEG_W` - `FDM_CLEARANCE` = 4.8mm
 pub const FDM_CLEARANCE: f32 = 0.2;
 
@@ -269,16 +269,16 @@ pub fn rack_shelf(
 }
 
 // ────────────────────────────────────────────────────────
-// 4. SKADIS peg (単体、hook 全体は Bamboo に委譲)
+// 4. SKADIS peg (単体、hook 全体は pipeline に委譲)
 // ────────────────────────────────────────────────────────
 
-/// IKEA SKADIS 互換 peg 単体 (hook 側 tenon、Bamboo `PEG_W - FDM_CLEARANCE` 準拠)
+/// IKEA SKADIS 互換 peg 単体 (hook 側 tenon、pipeline `PEG_W - FDM_CLEARANCE` 準拠)
 ///
 /// 構造: `SdfNode::RoundedBox` 単体 (幅 `SKADIS_PEG_W - FDM_CLEARANCE` × 高 `SKADIS_PEG_H` ×
 /// 厚 `board_thickness`、上下端 R = `SKADIS_PEG_R`)
 ///
 /// **SDF 版は peg tenon のみ提供** hook 本体 (爪 + 引っかけ部) は 2D polygon + extrude 方式が
-/// canonical (Bamboo `src/generators/skadis.rs` 参照)
+/// canonical (pipeline `rust generator` 参照)
 ///
 /// # 引数
 ///
@@ -495,8 +495,8 @@ mod tests {
     }
 
     #[test]
-    fn skadis_peg_dimensions_match_bamboo_spec() {
-        // Bamboo skadis peg (PEG_W=5.0 - FDM_CLEARANCE=0.2 = 4.8mm 幅、PEG_H=15mm 高)
+    fn skadis_peg_dimensions_match_pipeline_spec() {
+        // pipeline skadis peg (PEG_W=5.0 - FDM_CLEARANCE=0.2 = 4.8mm 幅、PEG_H=15mm 高)
         // `RoundedBox` の外寸は half_extents + round_radius なので、出来上がった形 (外寸) で測る
         let p = skadis_peg_compat(5.0);
         let extent = |dir: Vec3| {

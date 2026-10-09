@@ -1,18 +1,18 @@
 //! # pattern — LOL pattern registry (Phase B.1.a、実プリント合格 baseline metadata)
 //!
-//! [`LolPattern`] 型で実プリント合格資産 (Bamboo `models/` 配下 10 品目) と
-//! 未実地検証の pattern (Bamboo Rust generator 3 種) の metadata を統一管理する
+//! [`LolPattern`] 型で実プリント合格資産 (pipeline `models/` 配下 10 品目) と
+//! 未実地検証の pattern (pipeline Rust generator 3 種) の metadata を統一管理する
 //!
 //! ## 目的
 //!
 //! LOL `stdlib::hardsurface::{fastener`, joint, reinforcement, mount, thin} の 27 primitive
 //! を組み合わせた「完成 pattern」を registry として登録し、certification level
-//! (実プリント検証済み / Bamboo simulation のみ / 未検証) を明示化する
+//! (実プリント検証済み / pipeline simulation のみ / 未検証) を明示化する
 //!
 //! ## `certified_by` 分類
 //!
-//! - **`UserFieldTest`**: user が実プリントして動作確認済 (Bamboo `models/` 配下)
-//! - **`BambooSimulation`**: Bamboo `alice_bamboo::safety::safety_validate` 通過のみ
+//! - **`UserFieldTest`**: user が実プリントして動作確認済 (pipeline `models/` 配下)
+//! - **`BambooSimulation`**: pipeline `safety::safety_validate` 通過のみ
 //! - **`Both`**: 上記両方
 //! - **`None`**: 未検証 (primitive 組立て段階、実プリント推奨せず)
 //!
@@ -56,9 +56,9 @@ impl PatternRoute {
 pub enum CertificationSource {
     /// 未検証 (primitive 組立て段階、実プリント推奨せず)
     None,
-    /// Bamboo `alice_bamboo::safety::safety_validate` 通過のみ、実プリント未実施
+    /// pipeline `safety::safety_validate` 通過のみ、実プリント未実施
     BambooSimulation,
-    /// user 実プリントで動作確認済 (Bamboo `models/` 配下に .3mf 記録あり)
+    /// user 実プリントで動作確認済 (pipeline `models/` 配下に .3mf 記録あり)
     UserFieldTest,
     /// 上記両方 (最高信頼度)
     Both,
@@ -70,9 +70,9 @@ impl CertificationSource {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::None => "uncertified",
-            Self::BambooSimulation => "Bamboo simulation only",
+            Self::BambooSimulation => "pipeline simulation only",
             Self::UserFieldTest => "user field test",
-            Self::Both => "user field test + Bamboo simulation",
+            Self::Both => "user field test + pipeline simulation",
         }
     }
 
@@ -83,7 +83,7 @@ impl CertificationSource {
     }
 }
 
-/// user 実地テスト成績 (Bamboo `models/` の実プリント記録)
+/// user 実地テスト成績 (pipeline `models/` の実プリント記録)
 ///
 /// フィールドはすべて `&'static str` で const 定義可能 (Phase B.2 で実データ埋め込み)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -109,8 +109,8 @@ pub struct LolPattern {
     pub route: PatternRoute,
     /// certification level
     pub certified_by: CertificationSource,
-    /// Bamboo `PrintabilityScore` (Phase D.1 で実装予定、0-100)
-    /// 現状 None、Phase D.1 で `alice_bamboo::rating` 経由で埋める
+    /// pipeline `PrintabilityScore` (Phase D.1 で実装予定、0-100)
+    /// 現状 None、Phase D.1 で `rating` 経由で埋める
     pub printability_score: Option<u8>,
     /// user 実測記録 (Phase B.2 で実データ埋め込み予定)
     pub field_test: Option<FieldTestRecord>,
@@ -118,8 +118,10 @@ pub struct LolPattern {
     pub source_crate: &'static str,
     /// pattern 実装 crate version (`env!("CARGO_PKG_VERSION")` の compile-time 値)
     pub source_version: &'static str,
-    /// Bamboo canonical 実装位置 (人間可読、例: `"models/accessories/shopping-cart-coin/generate.py"`)
-    /// 未実地検証 pattern の場合は `None`
+    /// canonical 実装の種別 (人間可読、`"python generator"` / `"rust generator"`)
+    ///
+    /// canonical 実装は公開していない crate にあるので、その中の位置は載せない
+    /// (以前は file path を持っていた) 未実地検証 pattern の場合は `None`
     pub bamboo_canonical: Option<&'static str>,
 }
 
@@ -131,24 +133,24 @@ pub struct LolPattern {
 pub mod registry {
     use super::{CertificationSource, LolPattern, PatternRoute};
 
-    // ── 実プリント合格 baseline (Bamboo models/ 配下 .3mf 記録あり + Bamboo simulation で追加検証済) ──
-    // Phase B.2 代替 (2026-08-06): Bamboo `examples/compute_pattern_scores.rs` で全 13 pattern の
+    // ── 実プリント合格 baseline (pipeline models/ 配下 .3mf 記録あり + pipeline simulation で追加検証済) ──
+    // Phase B.2 代替 (2026-08-06): pipeline `examples/compute_pattern_scores.rs` で全 13 pattern の
     // Simulation score 実測、UserFieldTest + Simulation Excellent の pattern は Both に昇格
 
-    /// 100yen 型 shopping cart coin (Bamboo `models/accessories/shopping-cart-coin/`)
+    /// 100yen 型 shopping cart coin (pipeline `python generator`)
     pub const SHOPPING_CART_COIN_100YEN: LolPattern = LolPattern {
         name: "shopping_cart_coin_100yen",
-        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (Bamboo 実プリント合格 + Sim Excellent 88)",
+        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (pipeline 実プリント合格 + Sim Excellent 88)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::Both,
         printability_score: Some(88),
         field_test: None, // Phase B.2 で date/material/printer/notes 埋め込み
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/accessories/shopping-cart-coin/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
-    /// IKEA SKADIS 300×300 panel (Bamboo `models/wall-organizer/skadis-300x300/`)
+    /// IKEA SKADIS 300×300 panel (pipeline `python generator`)
     pub const SKADIS_PANEL_300X300: LolPattern = LolPattern {
         name: "skadis_panel_300x300",
         description:
@@ -159,10 +161,10 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-300x300/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
-    /// U 字棚仕切り (Bamboo `models/shelf/divider-560x250x120/`、Rust generator canonical)
+    /// U 字棚仕切り (pipeline `python generator`、Rust generator canonical)
     ///
     /// Sim 60 Acceptable (warp Critical + overhang 40、560mm 幅で env open-air PLA warp 高判定)
     /// だが 30lbs 荷重実プリント合格 baseline のため `UserFieldTest` 維持 (CI gate は field test 経由通過)
@@ -176,50 +178,50 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("src/generators/shelf_divider.rs"),
+        bamboo_canonical: Some("rust generator"),
     };
 
-    // ── SKADIS アクセサリー 6 種 (Bamboo models/wall-organizer/、Phase B.1.c で primitive 実装予定) ──
+    // ── SKADIS アクセサリー 6 種 (pipeline python generator、Phase B.1.c で primitive 実装予定) ──
 
     /// SKADIS J 型 hook (Sim 79 Good、hook 形状 overhang 30%+ が主因、Field test で通過)
     pub const SKADIS_HOOK_J: LolPattern = LolPattern {
         name: "skadis_hook_j",
-        description: "IKEA SKADIS 互換 J 型 hook (Bamboo Python 2D+extrude canonical、Sim 79)",
+        description: "IKEA SKADIS 互換 J 型 hook (pipeline Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-hook-j/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS L 型 hook (Sim 79 Good、直角曲げの overhang が主因、Field test で通過)
     pub const SKADIS_HOOK_L: LolPattern = LolPattern {
         name: "skadis_hook_l",
         description:
-            "IKEA SKADIS 互換 L 型 hook (直角曲げ、Bamboo Python 2D+extrude canonical、Sim 79)",
+            "IKEA SKADIS 互換 L 型 hook (直角曲げ、pipeline Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::UserFieldTest,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-hook-l/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS S 型 hook (Sim 88 Excellent)
     pub const SKADIS_HOOK_S: LolPattern = LolPattern {
         name: "skadis_hook_s",
         description:
-            "IKEA SKADIS 互換 S 型 hook (S 字曲げ、Bamboo Python 2D+extrude canonical、Sim 88)",
+            "IKEA SKADIS 互換 S 型 hook (S 字曲げ、pipeline Python 2D+extrude canonical、Sim 88)",
         route: PatternRoute::SdfDualContouring,
         certified_by: CertificationSource::Both,
         printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-hook-s/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS container (小物入れ、2 peg、Sim 76 Good、Field test で通過)
@@ -233,7 +235,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-container/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS clip (単 peg、Sim 88 Excellent)
@@ -246,7 +248,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-clip/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS shelf (2 peg 棚、Sim 70 Good、Field test で通過)
@@ -261,7 +263,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-shelf/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
     /// SKADIS elastic cord holder (伸縮ホルダー、Sim 88 Excellent)
@@ -274,30 +276,30 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("models/wall-organizer/skadis-elastic-cord/generate.py"),
+        bamboo_canonical: Some("python generator"),
     };
 
-    // ── Bamboo simulation certified (未実地検証、Sim score のみで CI gate 判定) ──
+    // ── pipeline simulation certified (未実地検証、Sim score のみで CI gate 判定) ──
     // gridfinity_bin: Sim 97 Excellent → gate 通過、wall_hook / drawer_organizer は
     // Sim < 85 なので gate 未通過 (実プリント baseline or 設計 revise 必要)
 
-    /// 壁掛けフック (Bamboo `generators/hook.rs`、Sim 79 Good、CI gate 未通過)
+    /// 壁掛けフック (pipeline `rust generator`、Sim 79 Good、CI gate 未通過)
     /// `tight_aabb` 修正で真の bbox (26×82×50mm) 取得、overhang 40 (前 10 誤値) から改善
     /// gate 通過には (a) spec 見直し (angle 45deg 制約) / (b) user field test で 85+ 判定
     pub const WALL_HOOK: LolPattern = LolPattern {
         name: "wall_hook",
         description:
-            "壁掛けフック (荷重指定 kgf で応力逆算、Bamboo Rust generator canonical、Sim 79)",
+            "壁掛けフック (荷重指定 kgf で応力逆算、pipeline Rust generator canonical、Sim 79)",
         route: PatternRoute::SdfMarchingCubes,
         certified_by: CertificationSource::BambooSimulation,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("src/generators/hook.rs"),
+        bamboo_canonical: Some("rust generator"),
     };
 
-    /// Gridfinity bin (Bamboo `generators/gridfinity.rs`、Sim 79 Good、CI gate 未通過)
+    /// Gridfinity bin (pipeline `rust generator`、Sim 79 Good、CI gate 未通過)
     ///
     /// `tight_aabb` 修正で真の bbox (92×92×41mm) 取得、mesh 生成成功 (前 mesh 0 の bug 解消)
     /// overhang 40 (前 100 誤値) で score 降格、gate 通過には field test で 85+ 判定必要
@@ -310,10 +312,10 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("src/generators/gridfinity.rs"),
+        bamboo_canonical: Some("rust generator"),
     };
 
-    /// Drawer organizer (Bamboo `generators/drawer.rs`、Sim 72 Good、CI gate 未通過)
+    /// Drawer organizer (pipeline `rust generator`、Sim 72 Good、CI gate 未通過)
     /// warp High + overhang 30%+ (252×202×42mm 大型 flat) `が主因、tight_aabb` 修正で真の
     /// bbox 取得後 score 変動 gate 通過には field test で 85+ 判定必要
     pub const DRAWER_ORGANIZER: LolPattern = LolPattern {
@@ -325,7 +327,7 @@ pub mod registry {
         field_test: None,
         source_crate: "alice-lol",
         source_version: env!("CARGO_PKG_VERSION"),
-        bamboo_canonical: Some("src/generators/drawer.rs"),
+        bamboo_canonical: Some("rust generator"),
     };
 
     /// registry 全 pattern (12 件、iterate 用)
@@ -352,12 +354,12 @@ pub mod registry {
 
 /// pattern の CI merge gate 判定
 ///
-/// 通過条件 (OR): `printability_score >= 85` (Bamboo `PrintabilityScore::Excellent`)
+/// 通過条件 (OR): `printability_score >= 85` (pipeline `PrintabilityScore::Excellent`)
 /// または `certified_by` が `UserFieldTest` を含む (実プリント合格 baseline)
 ///
 /// 未検証 (score None + `certified_by = None`) の pattern は **通過しない**
 ///
-/// Phase D.1 の `alice_bamboo::rating::PrintabilityScore` で計算した score を
+/// Phase D.1 の `rating::PrintabilityScore` で計算した score を
 /// registry の `printability_score` field に埋めた前提、Phase B.2 で
 /// `field_test` を埋めた前提で機能する
 #[must_use]
@@ -429,14 +431,14 @@ mod tests {
 
     #[test]
     fn field_tested_patterns_count() {
-        // 実プリント合格 = 10 品目 (Bamboo models/ 配下)
+        // 実プリント合格 = 10 品目 (pipeline models/ 配下)
         let ft = field_tested_patterns();
         assert_eq!(ft.len(), 10);
     }
 
     #[test]
     fn uncertified_patterns_count() {
-        // Phase B.2 代替 (2026-08-06): Bamboo simulation 反映後、全 13 pattern が
+        // Phase B.2 代替 (2026-08-06): pipeline simulation 反映後、全 13 pattern が
         // UserFieldTest / Both / BambooSimulation のいずれかで certified、None は 0
         let uncertified = registry::ALL
             .iter()
@@ -470,13 +472,13 @@ mod tests {
     fn find_shopping_cart_coin() {
         let p = find_by_name("shopping_cart_coin_100yen").expect("registered");
         assert_eq!(p.route, PatternRoute::SdfDualContouring);
-        // Phase B.2 代替 (2026-08-06): Bamboo Sim Excellent 88 + UserFieldTest = Both 昇格
+        // Phase B.2 代替 (2026-08-06): pipeline Sim Excellent 88 + UserFieldTest = Both 昇格
         assert_eq!(p.certified_by, CertificationSource::Both);
         assert_eq!(p.printability_score, Some(88));
     }
 
     #[test]
-    fn find_wall_hook_bamboo_sim_certified() {
+    fn find_wall_hook_simulation_certified() {
         // Phase B.2 代替 (2026-08-07): tight_aabb 修正で真 bbox 取得、Sim 70 → 79 改善
         // 依然 Sim < 85 で CI gate 未通過 (user field test 待ち or spec 見直し必要)
         let p = find_by_name("wall_hook").expect("registered");

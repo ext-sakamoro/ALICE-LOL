@@ -29,7 +29,7 @@ User Request
     │   │   - skadis_panel_2d(size, corner_r) → IKEA SKADIS wall panel
     │   │   - thin_plate(w, h, corner_r, holes) → generic thin plate with holes
     │   │   Reason: SDF+MC on <= 5mm generates non-manifold edges + thickness
-    │   │   inflation (Bamboo real print: 1.7mm design → 5.1mm output,
+    │   │   inflation (pipeline real print: 1.7mm design → 5.1mm output,
     │   │   6177 non-manifold edges) earcutr-based extrude guarantees watertight
     │   │
     │   └── Thick (> 5mm):
@@ -326,7 +326,7 @@ subtract(
 | Shelf without bottom ribs | 3kgf center load → deflection depends on I = w×t³/12 | Add 3+ longitudinal ribs (1.2mm thick, 3mm tall) to increase second moment of area |
 | Hook same width as peg blade (4.5mm) for heavy loads | 3kgf on 4.5mm width → 9.9mm thickness needed (too thick to print) | **Widen hook body** beyond peg blade: 8mm width → 7.5mm thickness (feasible). Peg blade stays 4.5mm |
 | Flat panel with holes via SDF marching cubes | Non-manifold edges (7,000-17,000) — SDF can't resolve thin walls between holes at grid resolution | Use **2D polygon (Shapely) + extrude** for pegboard panels. Reserve SDF for solid 3D shapes |
-| Thin object (<= 5mm) generated via `node_to_3mf(SdfNode, ...)` | SDF+MC on thin geometry produces 6000+ non-manifold edges + thickness inflation (Bamboo real print evidence: 1.7mm design → 5.1mm output) | Use `stdlib::hardsurface::thin::{shopping_cart_coin_2d / skadis_panel_2d / thin_plate}` primitive + `polygon_to_3mf(polygon, half_height, path)` API earcutr triangulation guarantees watertight top/bottom/side walls (Phase A.5.2、alice-sdf mesh-extrude feature) |
+| Thin object (<= 5mm) generated via `node_to_3mf(SdfNode, ...)` | SDF+MC on thin geometry produces 6000+ non-manifold edges + thickness inflation (pipeline real print evidence: 1.7mm design → 5.1mm output) | Use `stdlib::hardsurface::thin::{shopping_cart_coin_2d / skadis_panel_2d / thin_plate}` primitive + `polygon_to_3mf(polygon, half_height, path)` API earcutr triangulation guarantees watertight top/bottom/side walls (Phase A.5.2、alice-sdf mesh-extrude feature) |
 
 ## Mandatory Code Structure for Multi-Part Scripts
 

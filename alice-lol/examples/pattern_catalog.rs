@@ -35,8 +35,8 @@ fn main() {
     let ft = field_tested_patterns();
     println!("\n--- Field-tested baseline ({} patterns) ---", ft.len());
     for p in &ft {
-        let bamboo = p.bamboo_canonical.unwrap_or("(none)");
-        println!("  {:<32} → {bamboo}", p.name);
+        let pipeline = p.bamboo_canonical.unwrap_or("(none)");
+        println!("  {:<32} → {pipeline}", p.name);
     }
 
     // ────────────────────────────────
@@ -78,5 +78,5 @@ fn main() {
     println!(
         "field_test 実データ (date/material/printer/notes) は Phase B.2 で user 実測記録を登録"
     );
-    println!("printability_score は Phase D.1 で alice_bamboo::rating 経由で埋める");
+    println!("printability_score は Phase D.1 で rating 経由で埋める");
 }

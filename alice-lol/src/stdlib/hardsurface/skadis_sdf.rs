@@ -8,7 +8,7 @@
 //! mesh 化は `alice_lol::print_export::node_to_3mf_dual_contouring` (SDF+DC) 経由
 //! Marching Cubes の非多様体多発問題は Dual Contouring の Hermite data で解決
 //!
-//! ## SKADIS panel SDF spec (Bamboo `formulas::skadis` 準拠)
+//! ## SKADIS panel SDF spec (pipeline `formulas::skadis` 準拠)
 //!
 //! - 外形: `RoundedBox { size × size × thickness, corner_r }`
 //! - peg 穴 (千鳥): base grid + stagger grid の 2 系統
@@ -21,14 +21,14 @@
 //! example `skadis_panel_dc_vs_mc.rs` で:
 //! - 同 SDF を MC / DC 両方で mesh 化
 //! - triangle 数 / vertex 数 比較
-//! - Bamboo 実測「SDF+MC で 6177 non-manifold edges」を DC が回避できるか実証
+//! - pipeline 実測「SDF+MC で 6177 non-manifold edges」を DC が回避できるか実証
 //!
 //! ## Phase 3''.3.1 追加 (hook 3 種)
 //!
-//! Bamboo Python `models/wall-organizer/skadis-hook-{l,j,s}/generate.py` の shape を
+//! pipeline Python `python generator` の shape を
 //! Rust SDF に翻訳:
 //!
-//! | primitive | Bamboo canonical | reach | load | `root_t` |
+//! | primitive | pipeline canonical | reach | load | `root_t` |
 //! |-----------|-----------------|-------|------|--------|
 //! | [`skadis_hook_l_sdf`] | `skadis-hook-l/generate.py` | 75mm | 5kgf (2-peg 分散) | 7mm |
 //! | [`skadis_hook_j_sdf`] | `skadis-hook-j/generate.py` | 25mm (reach) + 70mm (drop) | 3kgf | 7.5mm |
@@ -43,22 +43,22 @@ use glam::Vec3;
 use std::sync::Arc;
 
 // ────────────────────────────────────────────────────────
-// SKADIS hook 定数 (Bamboo `PEG_BLADE_W/T`, `SHOULDER_DEPTH/H` 準拠)
+// SKADIS hook 定数 (pipeline `PEG_BLADE_W/T`, `SHOULDER_DEPTH/H` 準拠)
 // ────────────────────────────────────────────────────────
 
-/// SKADIS peg blade 幅 (mm、Bamboo `PEG_BLADE_W`)
+/// SKADIS peg blade 幅 (mm、pipeline `PEG_BLADE_W`)
 pub const PEG_BLADE_W: f32 = 5.0;
 
-/// SKADIS peg blade 厚 (mm、Bamboo `PEG_BLADE_T`)
+/// SKADIS peg blade 厚 (mm、pipeline `PEG_BLADE_T`)
 pub const PEG_BLADE_T: f32 = 4.5;
 
-/// SKADIS 板厚 (mm、Bamboo `BOARD_T`)
+/// SKADIS 板厚 (mm、pipeline `BOARD_T`)
 pub const BOARD_T: f32 = 5.0;
 
-/// SKADIS shoulder 追加深 (mm、Bamboo `SHOULDER_DEPTH`)
+/// SKADIS shoulder 追加深 (mm、pipeline `SHOULDER_DEPTH`)
 pub const SHOULDER_DEPTH: f32 = 2.0;
 
-/// SKADIS shoulder 高 (mm、Bamboo `SHOULDER_H`)
+/// SKADIS shoulder 高 (mm、pipeline `SHOULDER_H`)
 pub const SHOULDER_H: f32 = 8.0;
 
 // ────────────────────────────────────────────────────────
@@ -67,12 +67,12 @@ pub const SHOULDER_H: f32 = 8.0;
 
 /// SKADIS peg blade + shoulder の `SdfNode` (hook 系 3 accessory 共通の peg 部)
 ///
-/// 座標系: Bamboo Python と同期
+/// 座標系: pipeline Python と同期
 /// - X 軸方向 = 板厚方向 (peg は X = -`BOARD_T` から 0 まで)
-/// - Y 軸方向 = 上下 (Bamboo Python では Y up / down)
+/// - Y 軸方向 = 上下 (pipeline Python では Y up / down)
 /// - Z 軸方向 = hook 幅方向 (extrude direction、Python では `extrude_polygon` が Z 押出)
 ///
-/// Bamboo Python:
+/// pipeline Python:
 /// - `blade = box(-BOARD_T, -PEG_BLADE_T/2, 0, PEG_BLADE_T/2)` (X-Y 平面 rect)
 /// - `shoulder = box(-BOARD_T-SHOULDER_DEPTH, -SHOULDER_H/2, -BOARD_T, SHOULDER_H/2)`
 ///
@@ -124,7 +124,7 @@ fn peg_facing_back(hook_width: f32) -> SdfNode {
 
 /// 2D polyline `pts` を、面内の半径 `tube_radius`・厚み (Z) `hook_width` の平らな帯で SDF 表現
 ///
-/// Bamboo Python `LineString.buffer(R, cap_style='round')` + `extrude_polygon` の SDF 相当:
+/// pipeline Python `LineString.buffer(R, cap_style='round')` + `extrude_polygon` の SDF 相当:
 /// 断面は面内で 2R、Z 方向に `hook_width` の長方形で、端は面内で丸い (stadium の押出)
 /// 各 edge `(pts[i], pts[i+1])` を、Z 軸の円柱 (半径 R、高さ `hook_width`) を edge の向きに
 /// `Elongate` した stadium 押出にし、全て `Union` で結合する (円柱は厳密な距離場で、
@@ -180,7 +180,7 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
 // hook 3 種 (Phase 3''.3.1)
 // ────────────────────────────────────────────────────────
 
-/// SKADIS L 型 hook (2 peg、水平 arm + 上向き 1/4 円 tip、Bamboo `skadis-hook-l`)
+/// SKADIS L 型 hook (2 peg、水平 arm + 上向き 1/4 円 tip、pipeline `skadis-hook-l`)
 ///
 /// 想定荷重: 5kgf (2-peg 分散)、reach `75mm、root_t` 7mm
 ///
@@ -219,7 +219,7 @@ pub fn skadis_hook_l_sdf() -> SdfNode {
     }
 }
 
-/// SKADIS J 型 hook (1 peg、深い J 字、Bamboo `skadis-hook-j`)
+/// SKADIS J 型 hook (1 peg、深い J 字、pipeline `skadis-hook-j`)
 ///
 /// 想定荷重: 3kgf、reach 25mm + drop `70mm、root_t` `7.5mm、hook_width` 8mm
 #[must_use]
@@ -265,7 +265,7 @@ pub fn skadis_hook_j_sdf() -> SdfNode {
     }
 }
 
-/// SKADIS S 型 hook (1 peg、汎用フック、Bamboo `skadis-hook-s`)
+/// SKADIS S 型 hook (1 peg、汎用フック、pipeline `skadis-hook-s`)
 ///
 /// 想定荷重: 1kgf、reach 22mm + drop `45mm、root_t` `5.5mm、hook_width` 5mm (peg 幅と同)
 /// テーパー root→tip (5.5→3mm) は本 SDF では省略 (等幅 Capsule で近似、DC 実測で誤差確認予定)
@@ -307,22 +307,22 @@ pub fn skadis_hook_s_sdf() -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// SKADIS 定数 (Bamboo `formulas::skadis` と同期)
+// SKADIS 定数 (pipeline `formulas::skadis` と同期)
 // ────────────────────────────────────────────────────────
 
-/// SKADIS peg 幅 (mm、Bamboo `PEG_W`)
+/// SKADIS peg 幅 (mm、pipeline `PEG_W`)
 pub const SKADIS_PEG_W: f32 = 5.0;
 
-/// SKADIS peg 高 (mm、Bamboo `PEG_H`)
+/// SKADIS peg 高 (mm、pipeline `PEG_H`)
 pub const SKADIS_PEG_H: f32 = 15.0;
 
-/// SKADIS grid pitch (mm、Bamboo `GRID_PITCH`)
+/// SKADIS grid pitch (mm、pipeline `GRID_PITCH`)
 pub const SKADIS_GRID_PITCH: f32 = 40.0;
 
-/// SKADIS grid offset (mm、千鳥、Bamboo `GRID_OFFSET`)
+/// SKADIS grid offset (mm、千鳥、pipeline `GRID_OFFSET`)
 pub const SKADIS_GRID_OFFSET: f32 = 20.0;
 
-/// SKADIS edge margin (mm、Bamboo `EDGE_MARGIN`)
+/// SKADIS edge margin (mm、pipeline `EDGE_MARGIN`)
 pub const SKADIS_EDGE_MARGIN: f32 = 20.0;
 
 /// SKADIS panel 標準厚 (mm、実プリント検証済)
@@ -331,19 +331,19 @@ pub const SKADIS_PANEL_THICKNESS: f32 = 5.0;
 /// 貫通穴 depth margin (mm、subtract 用に peg 穴を板より少し長く取る)
 pub const HOLE_THROUGH_MARGIN: f32 = 0.5;
 
-/// SKADIS connector ネジ穴径 (mm、M2.5 = Ø2.7mm、Bamboo `CONN_SCREW_D`)
+/// SKADIS connector ネジ穴径 (mm、M2.5 = Ø2.7mm、pipeline `CONN_SCREW_D`)
 /// production `skadis_connector_2x2.3mf` で 2 枚 panel を連結するネジ用
 pub const SKADIS_CONN_SCREW_D: f32 = 2.7;
 
-/// SKADIS connector/mount 穴の縁からの inset 距離 (mm、Bamboo `CONN_INSET`)
+/// SKADIS connector/mount 穴の縁からの inset 距離 (mm、pipeline `CONN_INSET`)
 /// = `OUTER_FRAME` / 2 = 6.0mm (frame 中央、板の縁から 6mm 内側)
 pub const SKADIS_CONN_INSET: f32 = 6.0;
 
-/// SKADIS 壁掛けマウント穴半径 (mm、Ø5mm、Bamboo `MOUNT_HOLE_R`)
+/// SKADIS 壁掛けマウント穴半径 (mm、Ø5mm、pipeline `MOUNT_HOLE_R`)
 /// 上下辺に 3 穴ずつ、壁ネジ用
 pub const SKADIS_MOUNT_HOLE_R: f32 = 2.5;
 
-/// SKADIS 外周フレーム幅 (mm、Bamboo `OUTER_FRAME`)
+/// SKADIS 外周フレーム幅 (mm、pipeline `OUTER_FRAME`)
 /// peg 穴が侵入しない reserved 領域 (`EDGE_MARGIN ≥ 18mm` 制約と対)
 pub const SKADIS_OUTER_FRAME: f32 = 12.0;
 
@@ -370,7 +370,7 @@ pub const SKADIS_OUTER_FRAME: f32 = 12.0;
 ///
 /// # 検証
 ///
-/// 本 SDF を MC (`node_to_3mf`) で mesh 化すると Bamboo 実測相当の非多様体エッジが発生
+/// 本 SDF を MC (`node_to_3mf`) で mesh 化すると pipeline 実測相当の非多様体エッジが発生
 /// DC (`node_to_3mf_dual_contouring`) で mesh 化すると Hermite data により watertight 保証
 /// example `skadis_panel_dc_vs_mc.rs` で実測比較
 #[must_use]
@@ -379,7 +379,7 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 外形 (原点中心の RoundedBox、Y 軸方向 = 板厚)
     // 2026-08-08 fix: RoundedBox は 6 面全てに round_radius を追加する仕様のため、
     // 素朴に使うと Y 方向にも corner_radius が加算されて板厚が (thickness + 2*corner_radius)
-    // になる (例: thickness=5, corner_radius=6 で Y=17mm、Bamboo production 5mm と 3.4x 齟齬)
+    // になる (例: thickness=5, corner_radius=6 で Y=17mm、pipeline production 5mm と 3.4x 齟齬)
     // 対策: Y 方向のみ Box3d で cut して真の thickness に強制 (X/Z の 4 corner fillet は保持)
     // `RoundedBox` の外寸は `half_extents + round_radius` なので、X/Z は内側の寸法
     // `size/2 - R` を渡して外寸をちょうど `size` にする (旧実装は `size/2` を渡して一辺が
@@ -405,7 +405,7 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         b: Arc::new(y_cutter),
     };
 
-    // Peg 穴 = Stadium 形状 (Bamboo `SKADIS_SPEC.md` §1 準拠、5×15mm、round 2.5mm 半円 ends)
+    // Peg 穴 = Stadium 形状 (pipeline `SKADIS_SPEC.md` §1 準拠、5×15mm、round 2.5mm 半円 ends)
     // 2026-08-08 fix: 旧実装は Box3d rectangle だったが production は stadium (semicircular ends)
     // Stadium 構成 = 中央 Box (5 × T+2m × 10、Z 方向 10mm) + 端 Cylinder 2 個 (radius 2.5、Y 軸)
     let t_pass = 2.0f32.mul_add(HOLE_THROUGH_MARGIN, thickness);
@@ -468,8 +468,8 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         }
     }
 
-    // 2026-08-08 add: Connector holes (M2.5 Ø2.7mm、4 辺 + 4 角、Bamboo canonical 準拠)
-    // production `models/wall-organizer/skadis-300x300/generate.py::get_conn_positions`
+    // 2026-08-08 add: Connector holes (M2.5 Ø2.7mm、4 辺 + 4 角、pipeline canonical 準拠)
+    // production `python generator::get_conn_positions`
     // 板 origin=中央のため、Python `(x, y)` (板 origin 左下) を Rust `(cx, cz)` に座標変換:
     // cx = x - size/2、cz = y - size/2 (Python Y-up plane = Rust X-Z plane)
     let conn_cyl = SdfNode::Cylinder {
@@ -522,7 +522,7 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         });
     }
 
-    // 2026-08-08 add: Mount holes (Ø5mm 壁掛け、上下辺 3 穴、Bamboo canonical 準拠)
+    // 2026-08-08 add: Mount holes (Ø5mm 壁掛け、上下辺 3 穴、pipeline canonical 準拠)
     // production `get_mount_positions`: X=60/150/220 (peg X=20+40k と非重複)、Y=CONN_INSET/PANEL_H-CONN_INSET
     // 板 origin=中央: cx = x - size/2 (Python origin 左下)
     let mount_cyl = SdfNode::Cylinder {
@@ -559,12 +559,12 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
 // ────────────────────────────────────────────────────────
 // Phase 5.2: SKADIS 残 4 accessory SDF (container/clip/shelf/elastic_cord)
 //
-// Bamboo Python `models/wall-organizer/skadis-{container,clip,shelf,elastic-cord}/generate.py`
+// pipeline Python `python generator`
 // の実プリント合格 spec を SDF に近似移植 装飾 (fillet / 肉抜き穴 / テーパー) は省略、
 // DC の Hermite で自然滑らか化 実プリント品質は Phase 5.6 user 検証で判定
 // ────────────────────────────────────────────────────────
 
-// ── container 定数 (Bamboo skadis-container/generate.py 準拠) ──
+// ── container 定数 (pipeline skadis-container/generate.py 準拠) ──
 /// container 内幅 (mm)
 pub const CONTAINER_W: f32 = 65.0;
 /// container 内奥行 (mm)
@@ -576,7 +576,7 @@ pub const CONTAINER_WALL_T: f32 = 1.6;
 /// container 底厚 (mm)
 pub const CONTAINER_BOTTOM_T: f32 = 1.6;
 
-/// SKADIS container SDF (小物入れ、2 peg、Bamboo `skadis-container` 実プリント合格 spec)
+/// SKADIS container SDF (小物入れ、2 peg、pipeline `skadis-container` 実プリント合格 spec)
 ///
 /// 構造: 外形 Box3d - 内部 Box3d + 底 Box3d + 背面 ペグ 2 個
 /// 装飾 (肉抜き穴 4 個 / R フィレット / ガセット補強) は省略 (近似実装)
@@ -635,17 +635,17 @@ pub fn skadis_container_sdf() -> SdfNode {
     }
 }
 
-// ── clip 定数 (Bamboo skadis-clip/generate.py 準拠) ──
-/// clip 横幅 (mm、Bamboo `CLIP_WIDTH`)
+// ── clip 定数 (pipeline skadis-clip/generate.py 準拠) ──
+/// clip 横幅 (mm、pipeline `CLIP_WIDTH`)
 pub const CLIP_WIDTH: f32 = 15.0;
-/// clip 全長 (mm、ペグ下、Bamboo `CLIP_LENGTH`)
+/// clip 全長 (mm、ペグ下、pipeline `CLIP_LENGTH`)
 pub const CLIP_LENGTH: f32 = 55.0;
 /// clip 本体厚 (片側 mm)
 pub const CLIP_BODY_T: f32 = 3.0;
 /// clip スロット幅 (mm、紙 1-3 枚)
 pub const CLIP_SLOT_W: f32 = 1.2;
 
-/// SKADIS clip SDF (単 peg、差込 slot 式クリップ、Bamboo `skadis-clip` 実プリント合格 spec)
+/// SKADIS clip SDF (単 peg、差込 slot 式クリップ、pipeline `skadis-clip` 実プリント合格 spec)
 ///
 /// 構造: 前板 + 背板 (`SLOT_W` 離間) + root 結合部 + 先端凸 + ペグ
 /// PLA 弾性限界内で使う想定 (0.1kgf メモ・写真、バネなし)
@@ -706,7 +706,7 @@ pub fn skadis_clip_sdf() -> SdfNode {
     }
 }
 
-// ── shelf 定数 (Bamboo skadis-shelf/generate.py 準拠) ──
+// ── shelf 定数 (pipeline skadis-shelf/generate.py 準拠) ──
 /// shelf 幅 (mm、W 方向、6 grid × 40mm)
 pub const SHELF_W: f32 = 260.0;
 /// shelf 奥行 (mm)
@@ -720,7 +720,7 @@ pub const SHELF_BOTTOM_T: f32 = 2.0;
 /// shelf ペグ間隔 (mm、6 × `GRID_PITCH`)
 pub const SHELF_PEG_SPACING: f32 = 240.0;
 
-/// SKADIS shelf SDF (2 peg 棚、Bamboo `skadis-shelf` 実プリント合格 spec)
+/// SKADIS shelf SDF (2 peg 棚、pipeline `skadis-shelf` 実プリント合格 spec)
 ///
 /// 構造: U 字断面 (底 + 背 + 前リップ) を W 方向に extrude + 2 peg (両端)
 /// 底面リブ 3 本は省略 (近似実装、DC で watertight 保証)
@@ -778,14 +778,14 @@ pub fn skadis_shelf_sdf() -> SdfNode {
 // ── elastic_cord 定数 ──
 /// `elastic_cord` 本体厚 (mm、曲げ計算 2.3 + マージン)
 pub const ELASTIC_CORD_BODY_T: f32 = 3.0;
-/// `elastic_cord` peg 間隔 (mm、Bamboo `GRID_PITCH`)
+/// `elastic_cord` peg 間隔 (mm、pipeline `GRID_PITCH`)
 pub const ELASTIC_CORD_PEG_PITCH: f32 = 40.0;
 /// `elastic_cord` フック突出 (mm)
 pub const ELASTIC_CORD_HOOK_REACH: f32 = 12.0;
 /// `elastic_cord` フック R (mm、折れ防止)
 pub const ELASTIC_CORD_HOOK_R: f32 = 3.0;
 
-/// SKADIS elastic cord holder SDF (2 peg 上下、Bamboo `skadis-elastic-cord` 実プリント合格 spec)
+/// SKADIS elastic cord holder SDF (2 peg 上下、pipeline `skadis-elastic-cord` 実プリント合格 spec)
 ///
 /// 構造: 上下 2 ペグ (`GRID_PITCH` 離間) + 縦背骨 + 2 hook (上下対称、R カーブ)
 /// バンド溝は省略 (近似実装)
