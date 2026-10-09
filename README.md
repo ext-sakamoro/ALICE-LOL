@@ -353,6 +353,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | the ideal-gas law in SI and in (kPa, L): re-evaluation, comparison, oracles, new evidence |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | writing a check as an audit law and reaching the six verdicts |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | what a law's identifier is derived from, and what changes it |
+| [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |
 | [`compiled_demo`](alice-lol/examples/compiled_demo.rs) | compiled evaluation (single point, SIMD batch, normals) |

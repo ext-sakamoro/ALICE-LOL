@@ -52,14 +52,8 @@ unwired alice-lol/src/lib.rs::to_glsl_full
 unwired alice-lol/src/lib.rs::to_hlsl
 unwired alice-lol/src/lib.rs::to_hlsl_dynamic
 unwired alice-lol/src/lib.rs::to_wgsl_dynamic
-unwired alice-lol/src/print_export.rs::lol_to_3mf
-unwired alice-lol/src/print_export.rs::lol_to_fbx
-unwired alice-lol/src/print_export.rs::node_to_fbx
 unwired alice-lol/src/print_export.rs::node_to_stl_dual_contouring
-unwired alice-lol/src/print_export.rs::preview
-unwired alice-lol/src/print_export.rs::ultra
 unwired alice-lol/src/roblox_export.rs::lol_to_obj_roblox
-unwired alice-lol/src/roblox_export.rs::preview
 unwired alice-lol/src/roblox_export.rs::with_max_size_studs
 unwired alice-lol/src/roblox_export.rs::with_max_triangles
 unwired alice-lol/src/roblox_export.rs::with_scale_studs

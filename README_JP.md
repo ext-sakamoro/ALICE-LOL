@@ -324,6 +324,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | 理想気体の式を SI と (kPa, L) で書き、再計算・比較・oracle・新しい証拠の判定 |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | 検査を監査 Law として書き、6 値の判定に到達させる |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
+| [`export_formats`](alice-lol/examples/export_formats.rs) | 同じ mesh を STL / 3MF / FBX に書き、解像度 preset を並べる |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | 区間演算による格子セルごとの枝刈り |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | 勾配、曲率、ヘッセ行列 |
 | [`compiled_demo`](alice-lol/examples/compiled_demo.rs) | コンパイル済み評価 (1 点、SIMD バッチ、法線) |
