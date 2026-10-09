@@ -1005,3 +1005,97 @@ fn coincident_vertices_are_welded_by_exact_position_only() {
         "torus の χ が 0 でない (統合で位相が変わった)"
     );
 }
+
+/// 同位置の頂点の統合を **res 依存の規模**で固定する
+///
+/// ⚠️ 上の `coincident_vertices_are_welded_by_exact_position_only` は torus を使うが、
+/// **torus の余剰は res 32/64/128/256 すべてで 8 の定数**なので res を振っても情報が
+/// 増えない 実測 (2026-10-09): `box3d 2×2×2` と `sphere 1.0` は面や半径が格子に
+/// 厳密に載っても **余剰 0**、`octahedron(0.7)` も 0 ⇒ 余剰が出るかは形状の族でなく
+/// **半径が格子点を厳密に通るか**で決まり、`octahedron(1.0)` だけが res² で増える
+/// (420 / 1,860 / 7,812 / 32,004)
+///
+/// ⚠️⚠️ **この scene でしか見えない性質が 1 つある**: 生 mesh の
+/// **index が重複した三角形は 0** なのに **幾何面積 0 の三角形は 64,008** ある
+/// (res 256) ⇒ weld 前の面積 0 は**幾何的にしか見えない**ので、index で潰れたものを
+/// 落とす filter は **remap の後**に走らなければならない 生 mesh を index で数える
+/// 試験ではこれを観測できない
+#[test]
+fn the_weld_scales_with_the_grid_and_the_closed_form_holds_at_every_resolution() {
+    let node = SdfNode::octahedron(1.0);
+    let mut previous_surplus = 0usize;
+    for res in [32usize, 64, 128, 256] {
+        let c = PrintConfig {
+            resolution: res,
+            scale_mm: 1.0,
+            ..PrintConfig::default()
+        };
+        let raw = alice_sdf::mesh::sdf_to_mesh(
+            &node,
+            c.bounds_min,
+            c.bounds_max,
+            &alice_sdf::mesh::MarchingCubesConfig {
+                resolution: res,
+                compute_normals: true,
+                ..alice_sdf::mesh::MarchingCubesConfig::default()
+            },
+        );
+        let exported = node_to_mesh(&node, &c);
+
+        // 生 mesh 側: index では見えないが幾何的には面積 0 がある
+        let dup_index = raw
+            .indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .filter(|t| t[0] == t[1] || t[1] == t[2] || t[0] == t[2])
+            .count();
+        assert_eq!(
+            dup_index, 0,
+            "res {res}: 生 mesh に index の重複がある — 前提 (重複は remap が作る) が崩れた"
+        );
+        assert!(
+            degenerate_triangles(&raw) > 0,
+            "res {res}: 生 mesh に幾何面積 0 が無い — この scene が畳む対象を持っていない"
+        );
+
+        // 統合の規模が格子と一緒に増える (少数しか畳めない実装を捕まえる)
+        let distinct: std::collections::HashSet<[u32; 3]> = raw
+            .vertices
+            .iter()
+            .map(|v| v.position.to_array().map(f32::to_bits))
+            .collect();
+        let surplus = raw.vertices.len() - distinct.len();
+        assert!(
+            surplus > previous_surplus,
+            "res {res}: 余剰 {surplus} が前の res の {previous_surplus} を超えていない \
+             (この scene は res で増えるはず)"
+        );
+        previous_surplus = surplus;
+
+        // 閉形式: 落ちた三角形 = 2 × 畳んだ頂点
+        let dropped = raw.indices.len() / 3 - exported.indices.len() / 3;
+        assert_eq!(
+            dropped,
+            2 * surplus,
+            "res {res}: 落ちた三角形が 2 × 余剰 と一致しない"
+        );
+
+        // 出口では面積 0 が消え、水密性は保たれる
+        assert_eq!(
+            degenerate_triangles(&exported),
+            0,
+            "res {res}: 出力に幾何面積 0 が残っている"
+        );
+        assert_eq!(open_edges(&exported), 0, "res {res}: 境界 edge がある");
+        assert_eq!(
+            non_manifold_edges(&exported),
+            0,
+            "res {res}: 非多様体 edge がある"
+        );
+    }
+    assert!(
+        previous_surplus > 10_000,
+        "最大 res の余剰 {previous_surplus} が小さすぎる — scene が退化した"
+    );
+}
