@@ -14,6 +14,7 @@ REF_BUG=9: audit evidence read as "not 0" over every non-array value (a negative
 REF_BUG=10: audit ranges compared with their duplicates (multisets, not sets)
 REF_BUG=11: a number that is not finite after parsing (1e400) is read as a number
 REF_BUG=12: identifier audit reads a build of the wrong shape as an empty feature set
+REF_BUG=13: a request without the inputs key is a request error (exit 2) instead of inputs {}
 
 An unknown law or a missing input exits with status 2 and writes nothing on stdout.
 """
@@ -304,7 +305,9 @@ def main():
         print(f"unknown law: {req.get('law')!r}", file=sys.stderr)
         sys.exit(2)
     try:
-        out = {"outputs": law(req["inputs"])}
+        # no inputs key = inputs {}: an audit measures nothing, a quantitative law
+        # then misses its inputs (exit 2 below)
+        out = {"outputs": law(req["inputs"] if BUG == "13" else req.get("inputs", {}))}
     except Reject as e:
         out = {"rejected": str(e)}
     except KeyError as e:

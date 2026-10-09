@@ -320,6 +320,8 @@ DESIGN["gate_compares_nonzero"]["cases"] = [(i, n) for i, n in [
     ({"compared": INF, "mismatches": 0, "known-mismatches": K42}, "overflowing count is not evidence"),
     ({"compared": 5, "mismatches": INF, "known-mismatches": K42}, "overflowing mismatches is not measured"),
     ({"compared": 5, "mismatches": -INF, "known-mismatches": K42}, "negative overflow is not measured"),
+    # a request without the inputs key is the same as inputs {}: nothing measured
+    (None, "inputs key absent"),
 ]]
 B = lambda feats, i: {"features": feats, "id": i} if i is not None else {"features": feats}
 DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"builds": b}, n) for b, n in [
@@ -385,7 +387,8 @@ def vector(law, inputs, note):
     """Expected outcome of one request, from the law file"""
     v = {"law": law["name"], "inputs": inputs, "note": note}
     if law["kind"] == "audit":
-        nums, ranges = x_metrics(law, inputs)
+        # inputs None: the request has no inputs key, read as an empty object
+        nums, ranges = x_metrics(law, {} if inputs is None else inputs)
         verdict, subject = audit_verdict(law, nums, ranges)
         v.update(kind="verdict", expected={"verdict": verdict, "subject": subject}, tolerance=None)
         return v

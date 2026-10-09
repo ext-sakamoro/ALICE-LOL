@@ -136,4 +136,4 @@ The verdict is found by checking in this fixed order, whatever the order of the 
    - The subject is the metric.
 4. Otherwise the verdict is `supports`, and the subject is `null`.
 
-Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error.
+Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error. A request to an audit law without the `inputs` key is the same as `"inputs": {}`: nothing is measured.

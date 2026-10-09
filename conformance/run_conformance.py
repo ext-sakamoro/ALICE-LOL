@@ -54,7 +54,8 @@ def wire(obj):
 
 
 def call(cmd, law, inputs, timeout):
-    req = wire({"law": law, "inputs": inputs})
+    # inputs None in the corpus: the request carries no inputs key at all
+    req = wire({"law": law} if inputs is None else {"law": law, "inputs": inputs})
     try:
         p = subprocess.run(cmd, input=req, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
