@@ -39,6 +39,7 @@ jobs:
   audit:
     name: cargo audit (RustSec CVE scan)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ALICE-LOL
@@ -88,6 +89,7 @@ jobs:
   deny:
     name: cargo-deny (license + advisories + bans + sources)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ALICE-LOL
@@ -136,6 +138,7 @@ jobs:
   unused-deps:
     name: cargo-machete (unused dependencies)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ALICE-LOL
@@ -183,6 +186,7 @@ jobs:
   stub-guard:
     name: Stub / mock / dbg guard (grep)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -250,6 +254,7 @@ jobs:
   coverage:
     name: Coverage (cargo-llvm-cov、informational)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     continue-on-error: true
     defaults:
       run:
@@ -310,6 +315,7 @@ jobs:
   semver-checks:
     name: cargo-semver-checks (API compat、informational)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # ALICE-LOL は crates.io publish 予定 (現状 pending)、
     # publish 済 version があれば default baseline (crates.io) 使用
     # 未 publish なら --baseline-rev fallback

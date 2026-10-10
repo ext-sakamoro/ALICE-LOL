@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 全 workflow の job に実行時間の上限 (`scripts/workflow_timeouts.py`)
+
+- 全 workflow の全 job に `timeout-minutes` を置いた (直近の success の最長の約 3 倍、cache が無い時の build の余裕を含む: test 45 分 / clippy・msrv・gpu-parity 30 分 / fmt・docs・wiring-guard 15 分 / actionlint 10 分 / fuzz 20 分 / coverage 45 分 ほか) 上限が無いと、後片付けの step (`actions/checkout` の post) で止まった job が 6 時間 runner を占有する
+- `scripts/workflow_timeouts.py`: `.github/workflows/` の全 job が job 単位の `timeout-minutes` を持つことを検査する (再利用 workflow を呼ぶ job は除く、step 単位の上限は数えない、job が 0 件なら fail) 試験 `scripts/test_workflow_timeouts.py` CI の docs job と `scripts/preflight.sh` で走らせる
+
 #### 試験が repo の履歴を読まないことの検査 (`scripts/history_free_tests.py`)
 
 - `scripts/test_*.py`、`conformance/*.py`、`tests/` 下の `*.rs` を走査し、`git show` / `git log` / `git rev-list` などの履歴を読む呼び出しと `<rev>~1:<path>` の形の参照を見つけたら fail、走査 0 件でも fail CI の clone は浅く (commit 1 つ)、履歴を読む試験は手元で通り CI で落ちる 試験 `scripts/test_history_free_tests.py` CI の docs job と `scripts/preflight.sh` で走らせる

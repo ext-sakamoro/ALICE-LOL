@@ -14,6 +14,10 @@ jobs:
   test:
     name: Test (${{ matrix.os }}${{ matrix.label }})
     runs-on: ${{ matrix.os }}
+    # job 全体の上限 (後片付けの step を含む) 直近 15 回の success は最長 16 分、
+    # cache が無い時の build の余裕を見て約 3 倍 後片付けの step で止まった run は
+    # これが無いと 6 時間 runner を占有する
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -148,6 +152,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -203,6 +208,7 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -255,6 +261,7 @@ jobs:
   gpu-parity:
     name: GPU parity (lavapipe)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       ALICE_SDF_REQUIRE_GPU: "1"
       WGPU_BACKEND: vulkan
@@ -311,6 +318,7 @@ jobs:
   msrv:
     name: MSRV (rust-version = 1.90)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -363,6 +371,7 @@ jobs:
   wiring-guard:
     name: Wiring guard (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -391,6 +400,7 @@ jobs:
   docs:
     name: Docs gates (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -412,6 +422,10 @@ jobs:
         run: python scripts/test_law_corners.py
       - name: law_corners (laws/spike の全 law file から corner を列挙、0 件は fail)
         run: python scripts/law_corners.py laws/spike
+      - name: workflow_timeouts oracle (検査器自身の試験)
+        run: python scripts/test_workflow_timeouts.py
+      - name: workflow_timeouts (全 workflow の全 job に timeout-minutes、0 件は fail)
+        run: python scripts/workflow_timeouts.py
       - name: history_free_tests oracle (検査器自身の試験)
         run: python scripts/test_history_free_tests.py
       - name: history_free_tests (試験が repo の履歴を読まない、走査 0 件は fail)
@@ -430,6 +444,7 @@ jobs:
   actionlint:
     name: actionlint (workflow YAML 検証)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - name: Run actionlint
