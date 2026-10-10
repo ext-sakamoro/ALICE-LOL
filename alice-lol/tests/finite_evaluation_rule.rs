@@ -22,53 +22,89 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-/// the probe law from its file: `input`, `let` and `output` lines (the `let` written into
-/// the output, as `ResearchLaw` takes one expression)
-fn probe_law() -> ResearchLaw {
-    let text =
-        std::fs::read_to_string(root().join("laws/spike/finite_evaluation_probe.law")).unwrap();
-    let mut input: Option<(String, f64, f64)> = None;
+/// an `input` line: name, unit and range (if any)
+type Input = (String, String, Option<(f64, f64)>);
+
+/// `expr` with each identifier that names a `let` replaced by its parenthesised definition
+/// (whole identifiers only: `d` is replaced in `d^2`, not in `dx`)
+fn expand(expr: &str, lets: &BTreeMap<String, String>) -> String {
+    let bytes = expr.as_bytes();
+    let (mut out, mut at) = (String::new(), 0);
+    while at < bytes.len() {
+        if bytes[at].is_ascii_alphabetic() || bytes[at] == b'_' {
+            let start = at;
+            while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_') {
+                at += 1;
+            }
+            let id = &expr[start..at];
+            match lets.get(id) {
+                Some(def) => {
+                    out.push('(');
+                    out.push_str(def);
+                    out.push(')');
+                }
+                None => out.push_str(id),
+            }
+        } else {
+            out.push(char::from(bytes[at]));
+            at += 1;
+        }
+    }
+    out
+}
+
+/// a quantitative law from its file under `laws/spike/`: `input` lines (name, unit, range),
+/// `let` and `output` lines (each `let` written into the expressions after it, as
+/// `ResearchLaw` takes one expression); other lines are not needed here
+fn law_from_file(name: &str) -> ResearchLaw {
+    let path = format!("laws/spike/{name}.law");
+    let text = std::fs::read_to_string(root().join(&path)).unwrap();
+    let mut inputs: Vec<Input> = Vec::new();
     let mut lets: BTreeMap<String, String> = BTreeMap::new();
-    let mut output: Option<String> = None;
+    let mut output: Option<(String, String)> = None;
     for line in text.lines().map(|l| l.split('#').next().unwrap().trim()) {
         let mut w = line.split_whitespace();
         match w.next() {
             Some("input") => {
                 let v: Vec<&str> = w.collect();
-                input = Some((
-                    v[0].to_owned(),
-                    v[3].parse::<f64>().unwrap(),
-                    v[4].parse::<f64>().unwrap(),
-                ));
+                let range = (v.get(2) == Some(&"range"))
+                    .then(|| (v[3].parse::<f64>().unwrap(), v[4].parse::<f64>().unwrap()));
+                inputs.push((v[0].to_owned(), v[1].to_owned(), range));
             }
             Some(kw @ ("let" | "output")) => {
                 let (lhs, expr) = line.split_once('=').unwrap();
-                let name = lhs.split_whitespace().nth(1).unwrap().to_owned();
-                let mut e = expr.trim().to_owned();
-                for (n, def) in &lets {
-                    e = e.replace(n.as_str(), &format!("({def})"));
-                }
+                let head: Vec<&str> = lhs.split_whitespace().collect();
+                let e = expand(expr.trim(), &lets);
                 if kw == "let" {
-                    lets.insert(name, e);
+                    lets.insert(head[1].to_owned(), e);
                 } else {
-                    output = Some(e);
+                    output = Some((head[2].to_owned(), e));
                 }
             }
             _ => {}
         }
     }
-    let (name, lo, hi) = input.unwrap();
+    let (unit, expr) = output.unwrap();
+    let vars: Vec<Var> = inputs.iter().map(|(n, u, _)| Var::new(n, u)).collect();
+    let ranges: Vec<(&str, ValidRange)> = inputs
+        .iter()
+        .filter_map(|(n, _, r)| r.map(|(lo, hi)| (n.as_str(), ValidRange { lo, hi })))
+        .collect();
     let no_params: [Param; 0] = [];
     ResearchLaw::new(
-        "finite_evaluation_probe",
-        &output.unwrap(),
-        Var::new("y", "1"),
-        &[Var::new(&name, "1")],
+        name,
+        &expr,
+        Var::new("out", &unit),
+        &vars,
         &no_params,
-        &[(name.as_str(), ValidRange { lo, hi })],
-        Provenance::new("laws/spike/finite_evaluation_probe.law", "spike law file"),
+        &ranges,
+        Provenance::new(&path, "spike law file"),
     )
-    .unwrap()
+    .unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+fn probe_law() -> ResearchLaw {
+    law_from_file("finite_evaluation_probe")
 }
 
 fn field<'a>(o: &'a Json, key: &str) -> Option<&'a Json> {
@@ -157,4 +193,32 @@ fn each_kind_of_non_finite_intermediate_is_refused() {
             .unwrap()
             > 0.0
     );
+}
+
+/// `four_bar_rocker_angle` at a Grashof margin of about 1e-13: the radicand of `across` is -1.8e-12 in
+/// double and +1.2e-12 exactly; there is no clamping, so the evaluation is not finite
+/// (`conformance/TASK.md`; the same vector is in `conformance/probes.json`)
+#[test]
+fn a_negative_radicand_by_rounding_is_not_clamped() {
+    let law = law_from_file("four_bar_rocker_angle");
+    let at = [
+        ("lc", 1.793_999_999_999_898_8),
+        ("lco", 94.027),
+        ("lr", 5.407),
+        ("lg", 90.414),
+        ("theta2", 0.0),
+    ];
+    assert_eq!(law.evaluate(&at), Err(ResearchLawError::NonFinite));
+    // the source linkage evaluates (the reference implementation gives the same angle)
+    let ok = [
+        ("lc", 1.0),
+        ("lco", 2.0),
+        ("lr", 1.5),
+        ("lg", 2.3),
+        ("theta2", 1.0),
+    ];
+    // the reference implementation's angle (`conformance/ref_impl.py`); the law's tolerance
+    // is 0.01, and the two compute the same expression, so they agree far closer
+    let got = law.evaluate(&ok).unwrap();
+    assert!((got - 1.483_512_684_293_831_3).abs() <= 1e-9, "{got}");
 }

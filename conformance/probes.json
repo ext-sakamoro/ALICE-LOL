@@ -1576,5 +1576,74 @@
    "x": 1.0
   },
   "expect": "rejected"
+ },
+ {
+  "note": "x-at-least before evidence: 1 distinct feature set is below the floor 2, read as 0",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [
+      "a"
+     ],
+     "id": "x"
+    },
+    {
+     "features": [
+      "a"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "feature_sets"
+  }
+ },
+ {
+  "note": "x-at-least before expect: n = 2 is below the floor 3, read as 0, so expect n == 0 holds",
+  "law": "floor_probe",
+  "law_text": "law floor_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 3\nbegin audit\naudit floor-probe\nexpect n == 0 within 0\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "a"
+     ]
+    },
+    {
+     "f": [
+      "b"
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "x-at-least on a metric that is not measured: it is read as a measured 0",
+  "law": "floor_probe",
+  "law_text": "law floor_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 3\nbegin audit\naudit floor-probe\nexpect n == 0 within 0\nend audit\n",
+  "inputs": {},
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "four_bar: the radicand of `across` is -1.8e-12 in double (+1.2e-12 exactly); no clamping, rejected",
+  "law": "four_bar_rocker_angle",
+  "inputs": {
+   "lc": 1.7939999999998988,
+   "lco": 94.027,
+   "lr": 5.407,
+   "lg": 90.414,
+   "theta2": 0
+  },
+  "expect": "rejected"
  }
 ]

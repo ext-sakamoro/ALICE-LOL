@@ -155,7 +155,7 @@ jobs:
         if: matrix.label == ''
         working-directory: ALICE-LOL
         shell: bash
-        run: python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe -- target/debug/examples/audit_conformance
+        run: python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe,floor_probe -- target/debug/examples/audit_conformance
 
       # 宣言の行を崩した law file (空白の種類と位置、unicode、大文字小文字、改行、NUL、長い行) を
       # Rust (law_input) と参照実装の両方に読ませ、受理・拒否と判定が一致することを確かめる

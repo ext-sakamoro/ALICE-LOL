@@ -276,7 +276,11 @@ DESIGN = {
         + [({"lc": 0.5, "lco": 3.0, "lr": 2.0, "lg": 2.8, "theta2": 2.0}, "long coupler"),
            ({"lc": 10, "lco": 40, "lr": 30, "lg": 35, "theta2": 3.5}, "scaled"),
            ({"lc": 1, "lco": 2, "lr": 1.5, "lg": 2.5, "theta2": 1.0}, "shortest + longest = sum of the others"),
-           ({"lc": 1, "lco": 2, "lr": 1.2, "lg": 3.0, "theta2": 1.0}, "shortest + longest > sum of the others")],
+           ({"lc": 1, "lco": 2, "lr": 1.2, "lg": 3.0, "theta2": 1.0}, "shortest + longest > sum of the others"),
+           # Grashof margin about 1e-13: the radicand of `across` is -1.8e-12 in double and
+           # +1.2e-12 exactly; no clamping, so the double rule (finite_in_double) rejects it
+           ({"lc": 1.7939999999998988, "lco": 94.027, "lr": 5.407, "lg": 90.414, "theta2": 0.0},
+            "negative radicand by rounding: rejected")],
         "edges": {"crank_margin@>0": {"lc": 1, "lco": 1.01, "lr": 2.0, "lg": 2.0, "theta2": 1.0},
                   "grashof_margin@>0": {"lc": 1, "lco": 1.01, "lr": 2.0, "lg": 2.0, "theta2": 1.0},
                   "crank_margin<=0": {"lc": 2, "lco": 1, "lr": 2.5, "lg": 2.3, "theta2": 1.0},
