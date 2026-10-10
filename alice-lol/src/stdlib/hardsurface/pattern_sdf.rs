@@ -5196,7 +5196,8 @@ pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
     let upright_hx = spec.width * 0.5;
     let upright_hy = spec.upright_height * 0.5;
     let upright_hz = spec.upright_thickness * 0.5;
-    let tilt_rad = spec.tilt_angle_deg.to_radians();
+    // huge degree values reduced before to_radians() (crate::angle doc)
+    let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
     let upright_rotation = Quat::from_rotation_x(-tilt_rad);
     let upright_offset_y = base_hy + upright_hy * tilt_rad.cos();
     let upright_offset_z = -base_hz + upright_hz + upright_hy * tilt_rad.sin();
@@ -5410,7 +5411,8 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let tear_hz = 2.0;
     let tear_offset_y = spec.wall_thickness + outer_r * 2.0 - 1.0;
     let tear_offset_z = base_hz - 2.0;
-    let tear_rad = spec.tear_angle_deg.to_radians();
+    // huge degree values reduced before to_radians() (crate::angle doc)
+    let tear_rad = crate::angle::canon_angle_deg(spec.tear_angle_deg).to_radians();
     let tear_rotation = Quat::from_rotation_x(tear_rad);
     let tear_raw = box3d(tear_hx, tear_hy, tear_hz);
     let tear = translate(
@@ -5856,7 +5858,8 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let mut result = union(union(side_l, side_r), back);
 
     // N tilted shelves + front lips
-    let tilt_rad = spec.tilt_angle_deg.to_radians();
+    // huge degree values reduced before to_radians() (crate::angle doc)
+    let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
     let shelf_hx = shelf_width * 0.5;
     let shelf_hy = spec.shelf_thickness * 0.5;
     let shelf_hz = shelf_depth * 0.5;

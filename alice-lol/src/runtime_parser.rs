@@ -1062,13 +1062,15 @@ impl<'a> Parser<'a> {
             }
             "rotate" => {
                 let (rx, ry, rz, child) = self.parse_3f_child()?;
+                // huge degree literals reduced before to_radians(): sin/cos is not
+                // accurate-at-any-magnitude the way rem_euclid is (crate::angle doc)
                 Ok(SdfNode::Rotate {
                     child: Arc::new(child),
                     rotation: Quat::from_euler(
                         EulerRot::XYZ,
-                        rx.to_radians(),
-                        ry.to_radians(),
-                        rz.to_radians(),
+                        crate::angle::canon_angle_deg(rx).to_radians(),
+                        crate::angle::canon_angle_deg(ry).to_radians(),
+                        crate::angle::canon_angle_deg(rz).to_radians(),
                     ),
                 })
             }

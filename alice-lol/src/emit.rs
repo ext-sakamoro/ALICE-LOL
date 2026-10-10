@@ -93,24 +93,154 @@ fn canon(v: f32) -> f32 {
     }
 }
 
-/// Euler 角 (度) の正規形: 1e-3 度に丸め、`(-180, 180]` に wrap、`±180` は `+180`
+/// `v` shifted `k` ulps along IEEE 754's total order (handles the sign crossing
+/// correctly, unlike adding/subtracting an epsilon)
+fn ulp_step(v: f32, k: i64) -> f32 {
+    let to_key = |x: f32| -> u32 {
+        let bits = x.to_bits();
+        if bits & 0x8000_0000 == 0 {
+            bits | 0x8000_0000
+        } else {
+            !bits
+        }
+    };
+    let from_key = |key: u32| -> f32 {
+        let bits = if key & 0x8000_0000 != 0 {
+            key & 0x7FFF_FFFF
+        } else {
+            !key
+        };
+        f32::from_bits(bits)
+    };
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let key = (i64::from(to_key(v)) + k) as u32;
+    from_key(key)
+}
+
+/// Half the per-axis search radius, in ulps, for [`stabilize_euler_deg`]'s
+/// neighbourhood of the initial extraction: searches `(2*K+1)^3` candidates.
 ///
-/// 度 → rad → `Quat` → rad → 度 の往復は 1 ulp ずつ流れる (`1.0 → 1.0000001 →
-/// 1.0000002`) ので、丸めないと `emit ∘ parse` が固定点にならない 1e-3 度
-/// (1.7e-5 rad) は round-trip の eval tolerance (1e-4) より小さい
-/// `(-180, ε, -180)` と `(180, ε, 180)` は同じ回転で `Quat::to_euler` は
-/// どちらも返しうるため片側に寄せる
-fn canon_deg(a: f32) -> f32 {
-    let mut a = (a * 1000.0).round() / 1000.0;
-    a = a.rem_euclid(360.0);
-    if a > 180.0 {
-        a -= 360.0;
+/// Measured (`can_rack_dense_tilt_sweep_is_idempotent_and_agrees` in
+/// `tests/emit_roundtrip.rs`, a single-nonzero-axis sweep): for a rotation
+/// built around a single nonzero axis (`rx`, `ry`, or `rz` alone -- every
+/// current caller: `can_rack` / `phone_dock` / `tape_dispenser`, and most
+/// grammar-corpus `rotate` snippets), the true preimage is within 3 ulps of
+/// the initial extraction; `K=8` is a 2.5x margin over that. A rotation with
+/// more than one simultaneously nonzero axis near the `ry` gimbal
+/// (`EulerRot::XYZ`'s middle axis, +-90 deg) has no *nearby* exact preimage
+/// at all (measured ulp distance up to ~2.2e9, i.e. an unrelated region of
+/// float space -- not a "K too small" problem, an inherent Euler
+/// decomposition ambiguity at gimbal: see the module doc's "Known gap").
+const EULER_PREIMAGE_SEARCH_K: i64 = 8;
+
+/// `Rotate` の quaternion から、`emit ∘ parse ∘ emit` が固定点になる
+/// Euler 角 (度、`EulerRot::XYZ`、各成分は `(-180, 180]` に wrap 済) を求める
+///
+/// `to_euler` → 度 → rad → `from_euler` → `to_euler` の往復は 1 ulp 級の誤差を
+/// 持ちうる (`every_grammar_construct_round_trips` が `skadis_hook_l` で実測:
+/// 1 回目の emit `3.7499788`、2 回目 `3.7499783`) 1e-3 度への丸めで吸収する旧
+/// 実装は、丸め自体が lever arm (`can_rack` 71 段、高さ約 1700mm) で増幅され eval
+/// tolerance 1e-4 を破る (5c 実測: dense sample で 14/1440、random [-720,720]
+/// sweep で 280/1000 失敗) ⇒ **丸めない** 抽出・再構築を反復して固定点を探す
+/// 案も試したが、反復自体が真の preimage から遠ざかる方向へ動くことがあり
+/// (同じ `skadis_hook_l` の例が反復では 64 回かけて別の固定点 `3.7499516` に
+/// 収束する一方、直接探索では**最初の抽出値の 2 ulp 内に** `3.7499788`
+/// 自身が exact preimage として見つかる) 反復ベースの設計は採らなかった
+///
+/// 採る設計: eval は quaternion `q` のみに依存するので、emit は
+/// `from_euler(e) == q` を **bit 一致**で満たす Euler 角 `e` を書けばよい
+/// 最初の抽出値 `e0` の近傍 (`EULER_PREIMAGE_SEARCH_K` ulp 以内、全軸)
+/// を総当たりし、`from_euler(e) == q` な `e` を全部集める 候補が 1 つ以上
+/// あれば、`e0` からの最大軸 ulp 距離が最小のもの (同点なら bit pattern の
+/// 辞書順) を選ぶ -- 選び方が `q` だけの関数なので、2 回目の emit も同じ `q`
+/// から同じ候補集合・同じ選択を再現する (= idempotent、反復に伴う drift が無い)
+///
+/// 候補が 1 つも無い場合 (Rust API 直接呼び出しで組んだ quat が、text から
+/// 作れる値のどれとも bit 一致しない、または gimbal 近傍で近傍探索が原理的に
+/// 届かない場合): panic/Err にせず、探索した中で `q` に (quaternion 成分の
+/// 二乗距離で、二重被覆 `-q` も含め) 最も近い候補を書く 次に emit される時には
+/// その候補 **から再構築した** quat が相手になるので、その回は確実に exact
+/// preimage (距離 0) が見つかり、2 回目以降は安定する (fail-closed にしない
+/// 理由: fuzz harness は emit の Err を「この構造に正規形が無い」として
+/// parity 対象外にする既存規約を持つが、ここで Err にすると**できたはずの
+/// 構造ですら書けなくなる**、既存 `Unsupported` variant の意味とズレる)
+///
+/// # Known gap (pre-existing, tracked separately, not fixed here)
+///
+/// 2 軸以上が同時に非零で、どちらかが `ry` の gimbal (±90°) 近傍にある回転は
+/// 近傍探索が届かない範囲に真の preimage を持つ (実測: pitch 89.98° 付近で
+/// 4012 件中 7 件が非 idempotent) 本 commit の scope 外 (`tests/emit_roundtrip.rs`
+/// の `known_defect_gimbal_adjacent_rotate_is_not_always_idempotent` に記録)
+fn stabilize_euler_deg(rotation: glam::Quat) -> (f32, f32, f32) {
+    type ExactKey = (i64, u32, u32, u32);
+    type DegTriple = (f32, f32, f32);
+
+    let extract0 = |q: glam::Quat| -> (f32, f32, f32) {
+        let (rx, ry, rz) = q.to_euler(EulerRot::XYZ);
+        (
+            crate::angle::canon_angle_deg(rx.to_degrees()),
+            crate::angle::canon_angle_deg(ry.to_degrees()),
+            crate::angle::canon_angle_deg(rz.to_degrees()),
+        )
+    };
+    let rebuild = |(x, y, z): (f32, f32, f32)| -> glam::Quat {
+        glam::Quat::from_euler(
+            EulerRot::XYZ,
+            x.to_radians(),
+            y.to_radians(),
+            z.to_radians(),
+        )
+    };
+    let quat_dist2 = |a: glam::Quat, b: glam::Quat| -> f64 {
+        // the double cover: q and -q are the same rotation, take whichever is closer
+        let d = |a: glam::Quat, b: glam::Quat| -> f64 {
+            let dx = f64::from(a.x) - f64::from(b.x);
+            let dy = f64::from(a.y) - f64::from(b.y);
+            let dz = f64::from(a.z) - f64::from(b.z);
+            let dw = f64::from(a.w) - f64::from(b.w);
+            dx.mul_add(dx, dy.mul_add(dy, dz.mul_add(dz, dw * dw)))
+        };
+        d(a, b).min(d(a, -b))
+    };
+
+    let e0 = extract0(rotation);
+    let k = EULER_PREIMAGE_SEARCH_K;
+
+    let mut best_exact: Option<(ExactKey, DegTriple)> = None;
+    let mut best_nearest: Option<(f64, DegTriple)> = None;
+
+    for dx in -k..=k {
+        for dy in -k..=k {
+            for dz in -k..=k {
+                let cand = (ulp_step(e0.0, dx), ulp_step(e0.1, dy), ulp_step(e0.2, dz));
+                let built = rebuild(cand);
+                let max_ulp = dx.abs().max(dy.abs()).max(dz.abs());
+
+                if built == rotation {
+                    let key = (
+                        max_ulp,
+                        cand.0.to_bits(),
+                        cand.1.to_bits(),
+                        cand.2.to_bits(),
+                    );
+                    if best_exact.is_none_or(|(bk, _)| key < bk) {
+                        best_exact = Some((key, cand));
+                    }
+                }
+                if best_exact.is_none() {
+                    let dist = quat_dist2(built, rotation);
+                    if best_nearest.is_none_or(|(bd, _)| dist < bd) {
+                        best_nearest = Some((dist, cand));
+                    }
+                }
+            }
+        }
     }
-    if (a.abs() - 180.0).abs() < 1e-3 {
-        180.0
-    } else {
-        a
-    }
+
+    best_exact
+        .map(|(_, cand)| cand)
+        .or_else(|| best_nearest.map(|(_, cand)| cand))
+        .unwrap_or(e0)
 }
 
 fn u(v: u32) -> String {
@@ -573,14 +703,8 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         // ── Transforms ──
         SdfNode::Translate { child, offset } => modif!("translate", child, v3(*offset)),
         SdfNode::Rotate { child, rotation } => {
-            let (rx, ry, rz) = rotation.to_euler(EulerRot::XYZ);
-            modif!(
-                "rotate",
-                child,
-                f(canon_deg(rx.to_degrees())),
-                f(canon_deg(ry.to_degrees())),
-                f(canon_deg(rz.to_degrees()))
-            )
+            let (rx, ry, rz) = stabilize_euler_deg(*rotation);
+            modif!("rotate", child, f(rx), f(ry), f(rz))
         }
         SdfNode::Scale { child, factor } => modif!("scale", child, f(*factor)),
         SdfNode::ScaleNonUniform { child, factors } => {
@@ -905,5 +1029,30 @@ mod tests {
             to_lol(&node),
             Err(EmitError::Unsupported { variant: "IFS", .. })
         ));
+    }
+
+    /// white-box pin for `stabilize_euler_deg`'s canonical pick (not just the
+    /// text `canonical_pick_is_the_nearest_exact_match_not_the_first_one_found`
+    /// in `tests/emit_roundtrip.rs`, whose two candidates both format to `0.0`
+    /// via `fmt_f32`'s near-zero snap -- masking the actual difference the
+    /// pick logic must get right): the second/third axis of a rotation this
+    /// close to the second/third axis both being exactly zero has hundreds of
+    /// exact bit-for-bit preimage matches within the search radius (every
+    /// subnormal near `0.0` round-trips through `from_euler`/`to_euler`
+    /// unchanged for a near-trivial axis), and the FIRST one the search loop
+    /// visits (`dx=0, dy=-8, dz=-8`) is not the nearest one (`dx=dy=dz=0`)
+    #[test]
+    #[allow(clippy::float_cmp)] // comparing the canonical pick against an exact expected value
+    fn stabilize_euler_deg_picks_the_nearest_exact_match() {
+        let rotation = glam::Quat::from_euler(
+            EulerRot::XYZ,
+            crate::angle::canon_angle_deg(-85.46687).to_radians(),
+            0.0,
+            0.0,
+        );
+        let (ex, ey, ez) = stabilize_euler_deg(rotation);
+        assert_eq!(ex, -85.46687);
+        assert_eq!(ey.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(ez.to_bits(), 0.0_f32.to_bits());
     }
 }

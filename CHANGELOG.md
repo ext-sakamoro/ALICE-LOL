@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Behavior change:** 回転角 (`rotate(x, y, z, ...)` の度数引数、`can_rack` / `phone_dock` / `tape_dispenser` の傾斜角 field) が `alice_lol::angle::canon_angle_deg` で `(-180, 180]` に reduce されてから radian 変換される 既定域 (`|deg|` が概ね `1e4` 以下) の値は変わらないが、それを超える値は `sin`/`cos` の有効桁を失う前に reduce されるため、reduce 前と比べて結果が変わる
+
 ## [0.4.0] - 未公開 (公開日を入れる)
 
 `alice-lol-macro` 0.2.1 と同時に公開する (公開の順は macro 0.2.1 → `alice-lol` 0.4.0)
