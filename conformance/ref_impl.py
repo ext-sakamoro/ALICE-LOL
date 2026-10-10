@@ -302,8 +302,23 @@ def audit(clauses, nums, ranges, raw=None):
     return "supports", None
 
 
-LAW_DIR = os.environ.get("LOL_LAW_DIR") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), os.pardir, "laws", "spike")
+def law_dir():
+    """The directory of the law files (TASK.md: "the checks always set it").
+
+    Read lazily (at the point a law file is actually needed), not once at
+    import time: a silent fallback to this file's own `laws/spike` here
+    made a real bug invisible -- a harness that forgets to pass
+    `LOL_LAW_DIR` to this process happened to produce the exact same
+    directory the fallback would have, so every comparison still passed
+    and the missing wiring was never noticed. Refusing instead of falling
+    back means a harness that forgets the environment variable fails
+    immediately, not silently.
+    """
+    d = os.environ.get("LOL_LAW_DIR")
+    if not d:
+        print("LOL_LAW_DIR is not set (the checks always set it; see TASK.md)", file=sys.stderr)
+        sys.exit(2)
+    return d
 
 
 # -- types of x-input (written here, not imported: this file is an independent implementation)
@@ -385,7 +400,7 @@ def allowed_char(c):
 
 def read_audit_law(name):
     """the audit block, x-input types, x-metric expressions and x-at-least lines of a law file"""
-    path = os.path.join(LAW_DIR, f"{name}.law")
+    path = os.path.join(law_dir(), f"{name}.law")
     if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.exists(path):
         return None
     # read without newline translation, split only on LF; a CR is a line end only directly
@@ -540,7 +555,7 @@ def generic_audit(law):
 
 def declared_inputs(name):
     """the input names a quantitative law's file declares (`input <name> ...` lines)"""
-    path = os.path.join(LAW_DIR, f"{name}.law")
+    path = os.path.join(law_dir(), f"{name}.law")
     with open(path, encoding="utf-8") as fh:
         return [w[1] for w in (line.split("#", 1)[0].split() for line in fh) if w[:1] == ["input"]]
 

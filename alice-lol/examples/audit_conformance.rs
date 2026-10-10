@@ -26,14 +26,21 @@ fn request_error(msg: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// The directory of the law files: `LOL_LAW_DIR` when set, else `laws/spike/` of this repository
+/// The directory of the law files: `LOL_LAW_DIR` (TASK.md: "the checks always set it").
+///
+/// Read lazily (at the point a law file is actually needed), not once at
+/// startup: a silent fallback to this crate's own `laws/spike` here made a
+/// real bug invisible -- a harness that forgets to pass `LOL_LAW_DIR` to
+/// this process happened to produce the exact same directory the fallback
+/// would have, so every comparison still passed and the missing wiring was
+/// never noticed. Refusing instead of falling back means a harness that
+/// forgets the environment variable fails immediately, not silently.
 fn law_file(name: &str) -> PathBuf {
-    std::env::var_os("LOL_LAW_DIR")
-        .map_or_else(
-            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../laws/spike"),
-            PathBuf::from,
-        )
-        .join(format!("{name}.law"))
+    let dir = std::env::var_os("LOL_LAW_DIR").unwrap_or_else(|| {
+        eprintln!("LOL_LAW_DIR is not set (the checks always set it; see conformance/TASK.md)");
+        std::process::exit(2);
+    });
+    PathBuf::from(dir).join(format!("{name}.law"))
 }
 
 fn subject_of(v: &Verdict) -> Option<String> {
