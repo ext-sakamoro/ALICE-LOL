@@ -108,17 +108,31 @@ jobs:
           fi
           echo "seconds=$DURATION" >> "$GITHUB_OUTPUT"
 
-      # run は informational: crash 発見は block せず artifact で triage
+      # crash は red: 以前は continue-on-error で crash が warning だけになり run は success だった
+      # (main の直近 4 run で 4 target 中 2〜4 target が crash していた)
       - name: Run fuzz target (time-boxed)
         id: run
-        continue-on-error: true
+        shell: bash
         run: |
+          set -o pipefail
           cd ALICE-LOL/fuzz
           cargo +nightly fuzz run "${{ matrix.target }}" -- \
-            -max_total_time=${{ steps.dur.outputs.seconds }}
+            -max_total_time=${{ steps.dur.outputs.seconds }} 2>&1 | tee "$RUNNER_TEMP/fuzz.log"
 
-      - name: Upload crash artifacts (if any)
-        if: steps.run.outcome == 'failure'
+      # 実行回数を log から読む: crash も、1 回も走らなかった run も red
+      # (target ごとの runs / 秒 / 結果を job summary に出す)
+      - name: Check the runs (crash or 0 runs = fail)
+        if: always() && steps.run.outcome != 'skipped'
+        shell: bash
+        run: |
+          {
+            echo "| target | runs | seconds | result |"
+            echo "|---|---|---|---|"
+            python3 ALICE-LOL/scripts/fuzz_runs.py "${{ matrix.target }}" "$RUNNER_TEMP/fuzz.log"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload crash artifacts
+        if: failure() && steps.run.outcome == 'failure'
         uses: actions/upload-artifact@v6
         with:
           name: fuzz-crash-${{ matrix.target }}
@@ -126,6 +140,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Report crash (informational)
-        if: steps.run.outcome == 'failure'
-        run: echo "::warning::fuzz target ${{ matrix.target }} found a crash — see fuzz-crash-${{ matrix.target }} artifact"
+      - name: Report crash
+        if: failure() && steps.run.outcome == 'failure'
+        run: echo "::error::fuzz target ${{ matrix.target }} found a crash — see fuzz-crash-${{ matrix.target }} artifact"
