@@ -80,6 +80,30 @@ class LicenseCheck(unittest.TestCase):
                 self.write("b/README.md", line)
                 self.assertEqual(lc.main([]), 1)
 
+    def test_full_width_letters_count(self):
+        wide = "".join(chr(ord(c) + 0xFEE0) for c in OLD)
+        for line in [f"license = \"{wide}\"", f"{wide.lower()} terms"]:
+            with self.subTest(line=line):
+                self.write("b/README.md", line)
+                self.assertEqual(lc.main([]), 1)
+
+    def test_letters_broken_by_other_characters_are_not_searched_for(self):
+        # stated in the checker's doc: dots or spaces between the letters pass
+        for line in [".".join(OLD) + ".", " ".join(low)]:
+            with self.subTest(line=line):
+                self.write("b/README.md", line)
+                self.assertEqual(lc.main([]), 0)
+
+    def test_a_copy_of_an_allowed_line_in_the_same_file_fails(self):
+        line = f"0.3.x was {OLD} OR Apache-2.0"
+        lc.ALLOWED = [("b/README.md", lc.line_hash(line), 1, "an earlier version")]
+        (self.root / "b" / "README.md").write_text(f"{line}\nother\n{line}\n", encoding="utf-8")
+        self.assertEqual(lc.main([]), 1)
+        lc.ALLOWED = [("b/README.md", lc.line_hash(line), 2, "an earlier version, twice")]
+        self.assertEqual(lc.main([]), 0)
+        (self.root / "b" / "README.md").write_text(f"{line}\n", encoding="utf-8")
+        self.assertEqual(lc.main([]), 1)
+
     def test_the_grant_sentence_fails_without_the_name(self):
         self.write("b/docs.txt", f"{GRANT}, to any person obtaining a copy")
         self.assertEqual(lc.main([]), 1)
@@ -93,7 +117,7 @@ class LicenseCheck(unittest.TestCase):
     def test_an_entry_allows_only_its_exact_line(self):
         line = f"0.3.x was {OLD} OR Apache-2.0"
         self.write("b/README.md", line)
-        lc.ALLOWED = [("b/README.md", lc.line_hash(line), "an earlier version")]
+        lc.ALLOWED = [("b/README.md", lc.line_hash(line), 1, "an earlier version")]
         self.assertEqual(lc.main([]), 0)
         for other in [line + " (now)", " " + line, line.lower()]:
             with self.subTest(other=other):
@@ -104,20 +128,20 @@ class LicenseCheck(unittest.TestCase):
         line = f"0.3.x was {OLD} OR Apache-2.0"
         self.write("b/README.md", line)
         self.write("b/OTHER.md", line)
-        lc.ALLOWED = [("b/README.md", lc.line_hash(line), "an earlier version")]
+        lc.ALLOWED = [("b/README.md", lc.line_hash(line), 1, "an earlier version")]
         self.assertEqual(lc.main([]), 1)
 
     def test_lines_appended_next_to_an_allowed_line_fail(self):
         # an entry names one line: what is appended to the same file needs its own entry
         line = f"see the {OLD} terms of 0.3.x"
-        lc.ALLOWED = [("b/README.md", lc.line_hash(line), "an earlier version")]
+        lc.ALLOWED = [("b/README.md", lc.line_hash(line), 1, "an earlier version")]
         for appended in [f'license = "{OLD}"', f"stacker is {OLD} OR Apache-2.0", f"{low} = '{OLD}'"]:
             with self.subTest(appended=appended):
                 (self.root / "b" / "README.md").write_text(f"{line}\n{appended}\n", encoding="utf-8")
                 self.assertEqual(lc.main([]), 1)
 
     def test_an_entry_that_matches_no_line_fails(self):
-        lc.ALLOWED = [("b/README.md", lc.line_hash("gone"), "nothing there")]
+        lc.ALLOWED = [("b/README.md", lc.line_hash("gone"), 1, "nothing there")]
         self.assertEqual(lc.main([]), 1)
 
     def test_no_line_read_fails(self):

@@ -73,8 +73,8 @@ allow-git = []
 
 [sources.allow-org]
 
-# Sibling ALICE crates are AGPL-3.0-or-later. CI builds them as MIT stubs
-# (alice-stubs), the local preflight sees the real crates: allow both spellings.
+# Sibling ALICE crates are AGPL-3.0-or-later. CI (security-audit.yml) and the local
+# preflight both check out the real crates next to this repo; allow the AGPL spellings.
 [[licenses.exceptions]]
 name = "alice-physics"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
