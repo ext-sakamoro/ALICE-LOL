@@ -27,6 +27,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test test_field_law_oracle|"
   "alice-lol|--test analytic_research_law|"
   "alice-lol|--test research_law_bit_exact|"
+  "alice-lol|--test analytic_research_functions|"
   "alice-lol|--test interior_lipschitz_bound_probe|"
   "alice-lol|--test print_tests|"
   "alice-lol|--test spike_law_files_parse|"

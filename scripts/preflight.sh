@@ -226,6 +226,10 @@ else
   echo "skip: nightly / cargo-fuzz not installed" >&2
 fi
 
+# every law test file is listed in scripts/law_tests.sh (cheap: no test runs)
+step "ci.yml / test: law test files are listed"
+scripts/law_tests.sh list
+
 if [[ $quick -eq 1 ]]; then
   echo; echo "preflight --quick OK (test / bench suites skipped)"; exit 0
 fi
