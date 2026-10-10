@@ -19,7 +19,7 @@ alice-sdf = { path = "../../ALICE-SDF", version = "5.1", default-features = fals
 glam = "0.29"
 # `research_law` が成立範囲 / 残差統計 / 出典 / 判定閾値の型を共有する
 # (no_std の `law` module だけを使うので default feature の zlib は引かない)
-alice-zip = { path = "../../ALICE-Zip", version = "0.8", default-features = false }
+alice-zip = { path = "../../ALICE-Zip", version = "0.9", default-features = false }
 # research_law: transcendental functions evaluated bit-identically on every platform
 # `alice-zip` (law を保存・復元する経路) と同じ世代を要求して、保存した法則と
 # 評価する法則が同じ算術になるようにする

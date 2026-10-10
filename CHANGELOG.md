@@ -67,7 +67,7 @@ law file は他の言語の実装も読む公開の仕様なので、読み方�
 
 - `alice-sdf` `1.9.0` → `5.1` (途中の 5.0 で `wide::f32x8` の field を持つ型に変わった、5.1 で `alice-det-math` 0.4 に揃う)
 - `alice-physics` (`physics` feature) `0.14.0-preview.4` → `2.0`
-- 新しい依存: `alice-zip` `0.8`、`alice-det-math` `0.4`
+- 新しい依存: `alice-zip` `0.9`、`alice-det-math` `0.4`
 - `alice-lol-macro` `0.2.0` → `0.2.1` (公開版の 0.2.0 は `alice-sdf` 5.x と `glam` に直接依存しない crate で compile できない keyword があった)
 - `rust-version = "1.90"` を宣言 (0.3.0 は宣言なし)
 
@@ -666,6 +666,11 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - tests: `tests/program_parser_tests.rs` (11、全 verb parse + round-trip + error) / `tests/lol_gbnf_test.rs` に program / intent golden 3 件追加
 
 ### Changed
+
+#### `alice-zip` の要求を `0.8` から `0.9` に上げる
+
+- 0.9.0 の破壊的変更は Python package・libalice・container の読み方で、この crate が使う `law` (`IngestPolicy` / `Provenance` / `ResidualStats` / `ValidRange` / `SignalLaw` / `LAW_ID_DOMAIN`) は 0.8.0 から変わっていない (`src/law.rs` の差分なし)
+- `law_id::LOL_SEMANTICS_ID` と監査 Law の識別子は不変
 
 #### `alice-sdf` の要求を `5.0` から `5.1` に上げ、`alice-det-math` を 1 版にした
 
