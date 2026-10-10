@@ -95,7 +95,8 @@ jobs:
                 if (in_section) { exit }
               }
             }
-            in_section { print }
+            # the link definitions at the end of the file are not part of the notes of a version
+            in_section && !/^\[[^]]+\]: / { print }
           ' "$FILE" > release_notes.md || true
           if [[ ! -s release_notes.md ]]; then
             echo "See CHANGELOG.md for details." > release_notes.md
