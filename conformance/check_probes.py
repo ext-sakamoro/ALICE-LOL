@@ -5,7 +5,8 @@ Each probe in conformance/probes.json is an input on which independent implement
 of the same law files gave different answers before TASK.md decided it. The expected
 outcome is written by hand from TASK.md (not produced by the reference implementation):
 `{"verdict", "subject"}` for an audit, "rejected", or "exit 2" (an error of the request).
-The string "__INF__" in inputs is sent as the overflowing literal 1e400.
+The string "__INF__" in inputs is sent as the overflowing literal 1e400. A probe with "raw"
+sends that text as the whole request (for JSON edge cases).
 
 usage: check_probes.py [--probes conformance/probes.json] [--laws a,b,...] -- <command...>
 --laws limits the check to the probes of those laws (for an implementation of a subset).
@@ -19,6 +20,9 @@ from pathlib import Path
 
 
 def request_text(p):
+    if "raw" in p:
+        # the request text exactly as written (JSON edge cases that json.dumps cannot spell)
+        return p["raw"]
     req = {"law": p["law"]} if p.get("omit_inputs") else {"law": p["law"], "inputs": p["inputs"]}
     return json.dumps(req).replace('"__INF__"', "1e400")
 

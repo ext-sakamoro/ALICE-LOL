@@ -56,12 +56,12 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 
 #### 入力の読み方を LOL が持つ (`law_input`)
 
-- `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞、同じ key は後の方、入れ子は 512 段まで)
+- `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞ (400 桁の整数も)、`NaN` / `Infinity` は誤り、同じ key は後の方、入れ子は request の object を 1 段目として 512 段まで、孤立した surrogate の escape は誤り) この読み方を `conformance/TASK.md` に書き、参照実装 (`conformance/ref_impl.py`) を揃えた JSON の端の request 32 件を `conformance/probes.json` に足した (Rust と Python の答えの違いは 0 件、旧い読み方の参照実装では 13 件が違う)
 - `law_input::InputType`: `x-input` の型 (`number` / `integer` / `text` / `list of <型>` / `record(<名前>: <型>, …)`、欠けてよい field は `optional`) の構文・正規形 (`canonical`)・照合 (`matches`) 型に合わない部分が 1 つでもあれば入力全体が合わない `null` は欠けていない
 - `law_input::read`: `x-input` を 1 つ読む 型に合わない値は監査では測られていない、量の法則では拒否
 - `law_input::audit_law_from_file`: law file を監査の Law として読む (audit block の項と `x-input` の型) `AuditLaw::with_input` / `AuditLaw::inputs` を足した
 - `examples/audit_conformance.rs`: `conformance/TASK.md` の契約を監査の law 2 本について本 crate で実装した CLI CI (macOS の既定 feature) と `scripts/preflight.sh` が `conformance/probes.json` の該当 probe に通す (Python の参照実装と同じ答え、corpus の監査 57 件も一致)
-- **識別子の変更:** `AuditLaw::law_id` は `x-input` の型 (正規形の text) を含む 型を持つ入力が無い Law の識別子は変わらない `LOL_SEMANTICS_PINS` に「入力の読み方」(`law_input::input_reading_fingerprint`、固定の型と値の組に対する照合結果の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `bc2befdc…` から `7e4cb24e…` に再記録した 理由: 入力の読み方が識別子の外にあると、同じ識別子と同じ request で判定が変わる (型に合わない build の判定を入力全体で読むように変えた変更がそれに当たる) 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が pin の fold であることを試験する
+- **識別子の変更:** `AuditLaw::law_id` は `x-input` の型 (正規形の text) を含む (型を持つ入力が無い Law では、同じ `LOL_SEMANTICS_ID` のもとで入力の型を入れる前と同じ値になる) `LOL_SEMANTICS_PINS` に「入力の読み方」(`law_input::input_reading_fingerprint`、固定の request text 32 件を JSON の読み・型の照合・監査と量の法則の扱いの経路で読んだ結果の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `bc2befdc…` から `e1b05c47…` に再記録した **挙動変更:** 識別子は `LOL_SEMANTICS_ID` を含むので、監査の Law の識別子はすべて動く `laws/spike/` の監査の Law 2 本: `gate_compares_nonzero` `618141ea…` → `88a5b038…`、`identifier_feature_independent` `659c668b…` → `b599ff77…` (残り 7 本は量の法則で、識別子をまだ持たない) 理由: 入力の読み方が識別子の外にあると、同じ識別子と同じ request で判定が変わる (型に合わない build の判定を入力全体で読むように変えた変更がそれに当たる) 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が pin の fold であることを試験する
 
 #### 監査 Law — 検査を「何が成立すべきか」として書く (`audit_law` + `parse_law`)
 

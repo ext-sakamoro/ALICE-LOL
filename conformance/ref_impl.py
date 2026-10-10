@@ -320,11 +320,44 @@ def request_error(msg):
     sys.exit(2)
 
 
-def main():
+MAX_DEPTH = 512  # arrays and objects, the request object is level 1
+
+
+def _no_constant(name):
+    raise ValueError(f"{name} is not JSON")
+
+
+def _number(text):
+    # every number is a double; a literal too large for one is +-infinity (float() of
+    # the text gives that, int() of a long integer would not)
+    return int(text) if len(text.lstrip("-")) <= 15 else float(text)
+
+
+def read_request(text):
+    """JSON text as TASK.md reads it: no NaN / Infinity literals, numbers as doubles,
+    the last of a repeated key, at most MAX_DEPTH levels, no lone surrogate"""
     try:
-        req = json.load(sys.stdin)
-    except ValueError as e:
+        req = json.loads(text, parse_constant=_no_constant, parse_int=_number)
+    except (ValueError, RecursionError) as e:
         request_error(f"request is not JSON: {e}")
+    stack = [(req, 1)]
+    while stack:
+        v, depth = stack.pop()
+        if isinstance(v, (list, dict)):
+            if depth > MAX_DEPTH:
+                request_error(f"request nests more than {MAX_DEPTH} levels")
+            items = v.items() if isinstance(v, dict) else enumerate(v)
+            for k, x in items:
+                if isinstance(k, str):
+                    stack.append((k, depth))
+                stack.append((x, depth + 1))
+        elif isinstance(v, str) and any("\ud800" <= c <= "\udfff" for c in v):
+            request_error("request has a lone surrogate")
+    return req
+
+
+def main():
+    req = read_request(sys.stdin.read())
     if not isinstance(req, dict):
         request_error("request is not a JSON object")
     law = LAWS.get(req.get("law")) if isinstance(req.get("law"), str) else None

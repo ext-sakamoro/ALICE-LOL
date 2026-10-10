@@ -1,30 +1,682 @@
 [
- {"note": "evidence -1 is not evidence", "law": "gate_compares_nonzero", "inputs": {"compared": -1, "mismatches": 0, "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "no_evidence", "subject": "compared"}},
- {"note": "evidence 0.5 is evidence", "law": "gate_compares_nonzero", "inputs": {"compared": 0.5, "mismatches": 0, "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "supports", "subject": null}},
- {"note": "evidence given as text", "law": "gate_compares_nonzero", "inputs": {"compared": "3", "mismatches": 0, "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "no_evidence", "subject": "compared"}},
- {"note": "evidence 1e400 (infinity)", "law": "gate_compares_nonzero", "inputs": {"compared": "__INF__", "mismatches": 0, "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "no_evidence", "subject": "compared"}},
- {"note": "expect 1e400 (infinity)", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": "__INF__", "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "undecided", "subject": "mismatches"}},
- {"note": "expect given as text", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": "0", "known-mismatches": ["case-17", "case-42"]}, "expect": {"verdict": "undecided", "subject": "mismatches"}},
- {"note": "range given as text", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": 0, "known-mismatches": "case-17"}, "expect": {"verdict": "out_of_range", "subject": "known-mismatches"}},
- {"note": "range given as null", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": 0, "known-mismatches": null}, "expect": {"verdict": "out_of_range", "subject": "known-mismatches"}},
- {"note": "range with a number", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": 0, "known-mismatches": ["case-17", 42]}, "expect": {"verdict": "out_of_range", "subject": "known-mismatches"}},
- {"note": "range with duplicates is the same set", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": 0, "known-mismatches": ["case-42", "case-17", "case-17"]}, "expect": {"verdict": "supports", "subject": null}},
- {"note": "range empty is a measured set", "law": "gate_compares_nonzero", "inputs": {"compared": 3, "mismatches": 0, "known-mismatches": []}, "expect": {"verdict": "parameter_update", "subject": "known-mismatches"}},
- {"note": "no inputs key", "law": "gate_compares_nonzero", "omit_inputs": true, "expect": {"verdict": "no_evidence", "subject": "compared"}},
- {"note": "inputs null", "law": "gate_compares_nonzero", "inputs": null, "expect": {"verdict": "no_evidence", "subject": "compared"}},
- {"note": "inputs an array", "law": "gate_compares_nonzero", "inputs": [], "expect": "exit 2"},
- {"note": "builds well formed", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": ["a"], "id": "x"}, {"features": ["b"], "id": "x"}]}, "expect": {"verdict": "supports", "subject": null}},
- {"note": "build without features", "law": "identifier_feature_independent", "inputs": {"builds": [{"id": "x"}, {"features": ["b"], "id": "x"}, {"features": ["c"], "id": "x"}]}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "features given as text", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": "a", "id": "x"}, {"features": ["b"], "id": "x"}, {"features": ["c"], "id": "x"}]}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "build that is not an object", "law": "identifier_feature_independent", "inputs": {"builds": [7, {"features": ["b"], "id": "x"}, {"features": ["c"], "id": "x"}]}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "id given as a number", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": ["a"], "id": 5}, {"features": ["b"], "id": 5}]}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "id given as null", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": ["a"], "id": null}, {"features": ["b"], "id": "x"}]}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "id absent in one build", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": ["a"]}, {"features": ["b"], "id": "x"}]}, "expect": {"verdict": "undecided", "subject": "distinct_identifiers"}},
- {"note": "empty features is a feature set", "law": "identifier_feature_independent", "inputs": {"builds": [{"features": [], "id": "x"}, {"features": ["b"], "id": "x"}]}, "expect": {"verdict": "supports", "subject": null}},
- {"note": "builds given as text", "law": "identifier_feature_independent", "inputs": {"builds": "std"}, "expect": {"verdict": "no_evidence", "subject": "builds"}},
- {"note": "x-list given a scalar", "law": "first_order_decay", "inputs": {"c0": 1.0, "k": 1.0, "t": 1.0}, "expect": "rejected"},
- {"note": "x-list with a null element", "law": "first_order_decay", "inputs": {"c0": 1.0, "k": 1.0, "t": [1.0, null]}, "expect": "rejected"},
- {"note": "quantitative input 1e400", "law": "isa1976_lower_atmosphere", "inputs": {"hh": "__INF__"}, "expect": "rejected"},
- {"note": "quantitative input missing", "law": "isa1976_lower_atmosphere", "inputs": {}, "expect": "exit 2"},
- {"note": "unknown law", "law": "no_such_law", "inputs": {}, "expect": "exit 2"}
+ {
+  "note": "evidence -1 is not evidence",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": -1,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "evidence 0.5 is evidence",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 0.5,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "evidence given as text",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": "3",
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "evidence 1e400 (infinity)",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": "__INF__",
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "expect 1e400 (infinity)",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": "__INF__",
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "undecided",
+   "subject": "mismatches"
+  }
+ },
+ {
+  "note": "expect given as text",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": "0",
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "undecided",
+   "subject": "mismatches"
+  }
+ },
+ {
+  "note": "range given as text",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": "case-17"
+  },
+  "expect": {
+   "verdict": "out_of_range",
+   "subject": "known-mismatches"
+  }
+ },
+ {
+  "note": "range given as null",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": null
+  },
+  "expect": {
+   "verdict": "out_of_range",
+   "subject": "known-mismatches"
+  }
+ },
+ {
+  "note": "range with a number",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    42
+   ]
+  },
+  "expect": {
+   "verdict": "out_of_range",
+   "subject": "known-mismatches"
+  }
+ },
+ {
+  "note": "range with duplicates is the same set",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-42",
+    "case-17",
+    "case-17"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "range empty is a measured set",
+  "law": "gate_compares_nonzero",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": []
+  },
+  "expect": {
+   "verdict": "parameter_update",
+   "subject": "known-mismatches"
+  }
+ },
+ {
+  "note": "no inputs key",
+  "law": "gate_compares_nonzero",
+  "omit_inputs": true,
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "inputs null",
+  "law": "gate_compares_nonzero",
+  "inputs": null,
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "inputs an array",
+  "law": "gate_compares_nonzero",
+  "inputs": [],
+  "expect": "exit 2"
+ },
+ {
+  "note": "builds well formed",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [
+      "a"
+     ],
+     "id": "x"
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "build without features",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "id": "x"
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    },
+    {
+     "features": [
+      "c"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "features given as text",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": "a",
+     "id": "x"
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    },
+    {
+     "features": [
+      "c"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "build that is not an object",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    7,
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    },
+    {
+     "features": [
+      "c"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "id given as a number",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [
+      "a"
+     ],
+     "id": 5
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": 5
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "id given as null",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [
+      "a"
+     ],
+     "id": null
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "id absent in one build",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [
+      "a"
+     ]
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "undecided",
+   "subject": "distinct_identifiers"
+  }
+ },
+ {
+  "note": "empty features is a feature set",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": [
+    {
+     "features": [],
+     "id": "x"
+    },
+    {
+     "features": [
+      "b"
+     ],
+     "id": "x"
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "builds given as text",
+  "law": "identifier_feature_independent",
+  "inputs": {
+   "builds": "std"
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "builds"
+  }
+ },
+ {
+  "note": "x-list given a scalar",
+  "law": "first_order_decay",
+  "inputs": {
+   "c0": 1.0,
+   "k": 1.0,
+   "t": 1.0
+  },
+  "expect": "rejected"
+ },
+ {
+  "note": "x-list with a null element",
+  "law": "first_order_decay",
+  "inputs": {
+   "c0": 1.0,
+   "k": 1.0,
+   "t": [
+    1.0,
+    null
+   ]
+  },
+  "expect": "rejected"
+ },
+ {
+  "note": "quantitative input 1e400",
+  "law": "isa1976_lower_atmosphere",
+  "inputs": {
+   "hh": "__INF__"
+  },
+  "expect": "rejected"
+ },
+ {
+  "note": "quantitative input missing",
+  "law": "isa1976_lower_atmosphere",
+  "inputs": {},
+  "expect": "exit 2"
+ },
+ {
+  "note": "unknown law",
+  "law": "no_such_law",
+  "inputs": {},
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: NaN literal",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":NaN,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: Infinity literal",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":Infinity,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: -Infinity literal",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":-Infinity,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: 400-digit integer count",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "json: 400-digit integer expect",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "undecided",
+   "subject": "mismatches"
+  }
+ },
+ {
+  "note": "json: negative 400-digit integer",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":-1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "json: 1e400 count",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":1e400,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "json: 1E+400 expect",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":1E+400,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "undecided",
+   "subject": "mismatches"
+  }
+ },
+ {
+  "note": "json: tiny number underflows to 0 (finite)",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":1e-400,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: 19-digit integer is a double",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":1234567890123456789,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: duplicate key, last is read",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":0,\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: duplicate key, last is 0",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"compared\":0,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
+ },
+ {
+  "note": "json: duplicate inputs key",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":[],\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: depth 512",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"],\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: depth 513",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"],\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: depth 600",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"],\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: depth 1500",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"],\"deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: escaped case name",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"\\u0063ase-17\",\"case\\u002d42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: escaped key",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"\\u0063ompared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: surrogate pair in a case name",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"\\ud83d\\ude00\"]}}",
+  "expect": {
+   "verdict": "parameter_update",
+   "subject": "known-mismatches"
+  }
+ },
+ {
+  "note": "json: lone high surrogate",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"\\ud800\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: lone low surrogate",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"\\udc00\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: reversed surrogate pair",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"\\ude00\\ud83d\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: trailing comma",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"],}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: leading zero",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":03,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: single quotes",
+  "law": "gate_compares_nonzero",
+  "raw": "{'law':'gate_compares_nonzero','inputs':{}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: comment",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\" /* c */,\"inputs\":{}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: text after the request",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{}} {}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: empty request",
+  "law": "gate_compares_nonzero",
+  "raw": "",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: control character in a string",
+  "law": "gate_compares_nonzero",
+  "raw": "{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\u0001\",\"case-42\"]}}",
+  "expect": "exit 2"
+ },
+ {
+  "note": "json: whitespace around the request",
+  "law": "gate_compares_nonzero",
+  "raw": " \n\t{\"law\":\"gate_compares_nonzero\",\"inputs\":{\"compared\":3,\"mismatches\":0,\"known-mismatches\":[\"case-17\",\"case-42\"]}} \n",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "json: identifier with a lone surrogate id",
+  "law": "identifier_feature_independent",
+  "raw": "{\"law\":\"identifier_feature_independent\",\"inputs\":{\"builds\":[{\"features\":[\"a\"],\"id\":\"\\ud800\"},{\"features\":[\"b\"],\"id\":\"x\"}]}}",
+  "expect": "exit 2"
+ }
 ]

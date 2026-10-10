@@ -573,20 +573,50 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     Ok(law)
 }
 
-/// 入力の読み方の指紋 — **振る舞いから計算する**
+/// 値を hash に書く (型の tag と中身、数は bit、文字列と列は長さ付き)
+fn encode_json(h: &mut Sha256, v: &Json) {
+    match v {
+        Json::Null => h.update([0]),
+        Json::Bool(b) => h.update([1, u8::from(*b)]),
+        Json::Number(x) => {
+            h.update([2]);
+            h.update(x.to_bits().to_le_bytes());
+        }
+        Json::Text(t) => {
+            h.update([3]);
+            h.update((t.len() as u64).to_le_bytes());
+            h.update(t.as_bytes());
+        }
+        Json::Array(xs) => {
+            h.update([4]);
+            h.update((xs.len() as u64).to_le_bytes());
+            for x in xs {
+                encode_json(h, x);
+            }
+        }
+        Json::Object(kv) => {
+            h.update([5]);
+            h.update((kv.len() as u64).to_le_bytes());
+            for (k, x) in kv {
+                h.update((k.len() as u64).to_le_bytes());
+                h.update(k.as_bytes());
+                encode_json(h, x);
+            }
+        }
+    }
+}
+
+/// 入力の読み方の指紋の case: `(型, request の inputs の JSON text, law の種類)`
 ///
-/// 固定の (型, 値) の組に対する [`InputType::matches`] の結果を hash する
-/// ⚠️ 読み方 (入力全体で判定する / `null` は欠けていない / ∞ は数でない) を変えると
-/// 結果の並びが変わり、この値も変わる
-///
-/// # Panics
-///
-/// 固定の case が読めない時 (case は定数なので起きない、試験が確かめる)
-#[must_use]
-pub fn input_reading_fingerprint() -> [u8; 32] {
+/// inputs の key `v` を読む 型の照合だけでなく、JSON の読み (同じ key は後の方 / 桁あふれは
+/// ±∞ / `NaN` `Infinity` は誤り / 入れ子は 512 段まで / escape / 孤立した surrogate は誤り)
+/// と、監査と量の法則の扱いの違いを含む
+fn input_reading_cases() -> Vec<(&'static str, String, LawKind)> {
+    use LawKind::{Audit, Quantitative};
     const BUILDS: &str = "list of record(features: list of text, id: optional text)";
-    // (型, 値の JSON text) — identifier の判定が変わった 5 件を含む
-    const CASES: &[(&str, &str)] = &[
+    let v = |value: &str| format!("{{\"v\":{value}}}");
+    let mut cases: Vec<(&'static str, String, LawKind)> = [
+        // identifier の判定が変わった 5 件と、その周り
         (
             BUILDS,
             r#"[{"features":["a"],"id":"x"},{"features":["b"]}]"#,
@@ -619,18 +649,69 @@ pub fn input_reading_fingerprint() -> [u8; 32] {
         ("number", "true"),
         ("integer", "3.0"),
         ("integer", "2.5"),
-    ];
+        // escape と surrogate
+        ("text", r#""\u0063ase-17\/\n""#),
+        ("text", r#""\ud83d\ude00""#),
+        ("text", r#""\ud800""#),
+        // JSON に無い literal
+        ("number", "Infinity"),
+        ("number", "NaN"),
+    ]
+    .iter()
+    .map(|(t, value)| (*t, v(value), Audit))
+    .collect();
+    // 400 桁の整数は ±∞ (数として読み、double に収まらない)
+    cases.push(("number", v(&format!("1{}", "0".repeat(399))), Audit));
+    // 同じ key は後の方を読む
+    cases.push(("text", r#"{"v":1,"v":"x"}"#.to_owned(), Audit));
+    cases.push(("text", r#"{"v":"x","v":1}"#.to_owned(), Audit));
+    // 型に合わない値: 監査は測られていない、量の法則は拒否
+    for kind in [Audit, Quantitative] {
+        cases.push(("number", v(r#""2.5""#), kind));
+        cases.push(("number", v("2.5"), kind));
+    }
+    // 入れ子: request の object を 1 段目として 512 段までは読む、513 段は誤り
+    for depth in [MAX_DEPTH, MAX_DEPTH + 1] {
+        let inner = depth - 1;
+        cases.push(("text", v(&("[".repeat(inner) + &"]".repeat(inner))), Audit));
+    }
+    cases
+}
+
+/// 入力の読み方の指紋 — **振る舞いから計算する**
+///
+/// 固定の case ([`input_reading_cases`]) を request と同じ経路 ([`parse_json`] → key の
+/// 値 → [`read`]) で読み、読めたか・どう読んだか (読んだ値そのもの) を hash する
+/// ⚠️ 読み方 (入力全体で判定する / `null` は欠けていない / ∞ は数でない / 同じ key は
+/// 後の方 / 監査は測られていない・量の法則は拒否 / 入れ子の上限 / escape) のどれを
+/// 変えても結果の並びが変わり、この値も変わる
+///
+/// # Panics
+///
+/// 固定の型が読めない時 (型は定数なので起きない、試験が確かめる)
+#[must_use]
+pub fn input_reading_fingerprint() -> [u8; 32] {
     let mut h = Sha256::new();
-    h.update(b"lol.input-reading");
-    for (ty, value) in CASES {
+    h.update(b"lol.input-reading.2");
+    for (ty, text, kind) in input_reading_cases() {
         let t = InputType::parse(ty).expect("fingerprint type parses");
-        let v = parse_json(value).expect("fingerprint value parses");
         let canon = t.canonical();
         h.update((canon.len() as u64).to_le_bytes());
         h.update(canon.as_bytes());
-        h.update((value.len() as u64).to_le_bytes());
-        h.update(value.as_bytes());
-        h.update([u8::from(t.matches(&v))]);
+        h.update((text.len() as u64).to_le_bytes());
+        h.update(text.as_bytes());
+        h.update([u8::from(kind == LawKind::Quantitative)]);
+        match parse_json(&text) {
+            Err(_) => h.update([0]),
+            Ok(req) => match read("v", &t, req.get("v"), kind) {
+                Read::Value(x) => {
+                    h.update([1]);
+                    encode_json(&mut h, x);
+                }
+                Read::NotMeasured => h.update([2]),
+                Read::Rejected(_) => h.update([3]),
+            },
+        }
     }
     h.finalize().into()
 }
@@ -751,6 +832,35 @@ mod tests {
         }
         let deep = "[".repeat(MAX_DEPTH + 1) + &"]".repeat(MAX_DEPTH + 1);
         assert!(parse_json(&deep).is_err());
+    }
+
+    #[test]
+    fn each_fingerprint_case_reads_as_decided() {
+        // 期待は TASK.md の規則から手で書いた (読み方を変えるとここと pin の両方が red)
+        let expected = [
+            "value", "not", "not", "not", "not", "not", "not", "value", "not", // builds
+            "value", "not", "not", // list of text
+            "not", "not", "not", "value", "not", // number / integer
+            "value", "value", "error", // escape / surrogate pair / lone surrogate
+            "error", "error", // Infinity / NaN literal
+            "not",   // 400-digit integer is infinite
+            "value", "not", // duplicate key: the last one
+            "not", "value", "rejected",
+            "value", // audit / quantitative on a bad and a good value
+            "not", "error", // depth 512 is read (and a list is not text), 513 is an error
+        ];
+        let got: Vec<&str> = input_reading_cases()
+            .into_iter()
+            .map(|(ty, text, kind)| {
+                let t = InputType::parse(ty).expect("type");
+                parse_json(&text).map_or("error", |req| match read("v", &t, req.get("v"), kind) {
+                    Read::Value(_) => "value",
+                    Read::NotMeasured => "not",
+                    Read::Rejected(_) => "rejected",
+                })
+            })
+            .collect();
+        assert_eq!(got, expected);
     }
 
     #[test]

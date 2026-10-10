@@ -85,13 +85,13 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     // 同じ request に対する判定を変えるので意味論
     (
         "input reading: whole-input typed x-input",
-        hex32("e3c8808c2e478a35c1824c36f063148f53a2a64c84b2b617c30f4c3d125d02f7"),
+        hex32("1bf362f10e2fff2a3a620df006515f08940c4770037cfe70ee3354a5c1466f50"),
     ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("7e4cb24ee4e58f5bcdefd08dfff51a7f52f4bf778a118675672f1c5f5a9b8d7d");
+    hex32("e1b05c475eaa4209264d7e74211baa68f8d5e550359bfa05f812d645af9a6e3c");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -300,8 +300,9 @@ impl AuditLaw {
     ///
     /// 名前と項 (順序を含む) と型を持つ入力と算術の世代から決まる
     ///
-    /// 型を持つ入力が無い Law の識別子は、入力の型を入れる前と同じ (入力の列は項の後に、
-    /// 1 つ以上ある時だけ tag 3 で書く 項の数を先に書いているので境界は曖昧にならない)
+    /// 型を持つ入力が無い Law では、同じ `semantics_id` のもとで入力の型を入れる前と同じ値
+    /// (入力の列は項の後に、1 つ以上ある時だけ tag 3 で書く 項の数を先に書いているので
+    /// 境界は曖昧にならない) ⚠️ `semantics_id` が変われば、どの Law の識別子も変わる
     #[must_use]
     pub fn law_id(&self, semantics_id: &[u8; 32]) -> [u8; 32] {
         let mut e = LawIdHasher::new(AUDIT_LAW_KIND, semantics_id).str(self.name());
