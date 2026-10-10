@@ -7,15 +7,15 @@
 # script mutates is `git checkout --`-restored after each mutant, including
 # on an interrupted run (trap), so the working tree ends clean either way.
 #
-# A separate worktree is deliberately NOT used: this crate's sibling path
-# dependencies (`alice-kinematics`'s `../ALICE-LOL/alice-lol`, among others)
-# hardcode the literal directory name "ALICE-LOL", so a second worktree under
-# any other name collides with it in the lockfile ("package collision...
-# different, but only one can be written to lockfile unambiguously") before
-# a single mutant's test ever runs -- every mutant "passing" that way would
-# be a false positive from the collision, not from the mutation. Mutating
-# this tree directly, immediately restoring it, is the only form that
-# actually exercises what it claims to.
+# A separate checkout at another path is deliberately NOT used: this crate's
+# sibling path dependencies (`alice-kinematics`'s `../ALICE-LOL/alice-lol`,
+# among others) hardcode the literal directory name "ALICE-LOL", so a second
+# checkout under any other name collides with it in the lockfile ("package
+# collision... different, but only one can be written to lockfile
+# unambiguously") before a single mutant's test ever runs -- every mutant
+# "passing" that way would be a false positive from the collision, not from
+# the mutation. Mutating this tree directly, immediately restoring it, is
+# the only form that actually exercises what it claims to.
 #
 # Run weekly in CI / on demand, NOT on every push: each mutant rebuilds the
 # probe binary and reruns ~35,000 grid cases (~90s-150s), so 5 mutants is

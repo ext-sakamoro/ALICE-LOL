@@ -1,7 +1,7 @@
 name: Grid teeth check
 
 # Weekly, not per-push: scripts/grid_teeth_check.sh reintroduces 5 historical
-# regressions as mutants (one at a time, in an isolated worktree) and asserts
+# regressions as mutants (one at a time, directly in this checkout) and asserts
 # the degenerate-parameter grid test or a named unit test turns red for each
 # -- each mutant rebuilds the probe binary and reruns the full grid (~90s),
 # so 5 mutants is roughly 10 minutes, far more than a per-push gate should cost.

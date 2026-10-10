@@ -353,6 +353,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`verify_customizers`](alice-lol/examples/verify_customizers.rs) | customizer の原型が期待した形になることの確認 |
 | [`llm_bench`](alice-lol/examples/llm_bench.rs) | 文法制約デコードと think→文法の pass 率の比較 (feature `llm-bridge`) |
 | [`gridfinity_untrusted_input`](alice-lol/examples/gridfinity_untrusted_input.rs) | dividers の個数が退化している時、panic でなく `try_gridfinity_bin` が拒否で返す例 |
+| [`parse_one_lol`](alice-lol/examples/parse_one_lol.rs) | メモリ上限つき allocator を持つ単発の `parse_lol` probe、`tests/degenerate_grid.rs` が生成した各 case をこれ 1 回ずつの別 process で走らせる |
 
 実行は `cargo run -p alice-lol --example <name>`
 
