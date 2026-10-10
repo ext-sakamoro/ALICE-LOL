@@ -531,6 +531,10 @@ jobs:
         run: python scripts/macro_kinds.py --check
       - name: fuzz-runs oracle (fuzz の log の検査器自身の試験)
         run: python scripts/test_fuzz_runs.py
+      - name: release-roster oracle (検査器自身の試験)
+        run: python scripts/test_release_roster.py
+      - name: release-roster (公開できる crate は alice-lol-macro と alice-lol だけ)
+        run: python scripts/release_roster.py
       - name: license-check oracle (検査器自身の試験)
         run: python scripts/test_license_check.py
       - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)

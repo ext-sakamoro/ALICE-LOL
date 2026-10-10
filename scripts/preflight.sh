@@ -104,6 +104,8 @@ step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入って�
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py
 python3 scripts/macro_kinds.py --check
+python3 scripts/test_release_roster.py
+python3 scripts/release_roster.py
 python3 scripts/test_license_check.py
 python3 scripts/test_fuzz_runs.py
 python3 scripts/license_check.py
