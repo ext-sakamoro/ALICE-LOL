@@ -37,6 +37,30 @@ class Gate(unittest.TestCase):
         )
         self.assertEqual(gate.find_violations(text), [])
 
+    def test_an_aliased_use_import_is_a_violation(self):
+        # the direct-call check alone cannot see this: `gb(&spec)` is neither
+        # `gridfinity_bin(` nor `::gridfinity_bin(` once imported under an alias
+        text = (
+            "use crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin as gb;\n"
+            "fn f() { Ok(gb(&spec)) }\n"
+        )
+        violations = gate.find_violations(text)
+        self.assertEqual(len(violations), 1)
+        self.assertIn("use import", violations[0][0])
+
+    def test_a_plain_use_import_without_an_alias_is_also_a_violation(self):
+        text = "use crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin;\n"
+        violations = gate.find_violations(text)
+        self.assertEqual(len(violations), 1)
+        self.assertIn("use import", violations[0][0])
+
+    def test_importing_the_try_variant_is_not_a_violation(self):
+        # `\b` must not match inside "try_gridfinity_bin" as if it were a bare
+        # "gridfinity_bin" suffix -- "_" is a word character, so there is no
+        # boundary there
+        text = "use crate::stdlib::hardsurface::pattern_sdf::try_gridfinity_bin;\n"
+        self.assertEqual(gate.find_violations(text), [])
+
     def test_a_lol_text_string_literal_with_the_keyword_name_is_not_a_violation(self):
         # test fixtures write `.lol` source text like "gridfinity_bin(2, 2, 6)" as a
         # Rust string literal -- the keyword name there is not a Rust function call

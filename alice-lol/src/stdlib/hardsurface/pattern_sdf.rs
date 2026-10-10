@@ -7899,7 +7899,7 @@ mod tests {
         let e = spec.validate().unwrap_err();
         assert_eq!(
             e.to_string(),
-            "resource limit exceeded: kind=pitch limit=0.01mm value=0mm"
+            "resource limit exceeded: kind=pitch limit=0.01 mm value=0 mm"
         );
     }
 

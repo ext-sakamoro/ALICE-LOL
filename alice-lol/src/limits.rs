@@ -153,7 +153,7 @@ impl std::fmt::Display for FloatLimitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "resource limit exceeded: kind={} limit={}{} value={}{}",
+            "resource limit exceeded: kind={} limit={} {} value={} {}",
             self.kind, self.limit, self.unit, self.value, self.unit
         )
     }

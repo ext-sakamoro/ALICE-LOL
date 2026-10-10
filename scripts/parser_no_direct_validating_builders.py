@@ -27,6 +27,15 @@ TARGET = Path(__file__).resolve().parents[1] / "alice-lol" / "src" / "runtime_pa
 VALIDATING_BUILDERS = ["gridfinity_bin", "skadis_panel_sdf", "shelf_divider"]
 
 
+def _line_at(text: str, pos: int) -> tuple[int, str]:
+    line_no = text.count("\n", 0, pos) + 1
+    line_start = text.rfind("\n", 0, pos) + 1
+    line_end = text.find("\n", pos)
+    if line_end == -1:
+        line_end = len(text)
+    return line_no, text[line_start:line_end].strip()
+
+
 def find_violations(text: str) -> list[tuple[str, int, str]]:
     violations: list[tuple[str, int, str]] = []
     for name in VALIDATING_BUILDERS:
@@ -36,13 +45,21 @@ def find_violations(text: str) -> list[tuple[str, int, str]]:
         # として扱うので、try_gridfinity_bin( の内側の "gridfinity_bin(" には
         # \b が立たず正しく除外される
         for m in re.finditer(rf"::{re.escape(name)}\(", text):
-            line_no = text.count("\n", 0, m.start()) + 1
-            line_start = text.rfind("\n", 0, m.start()) + 1
-            line_end = text.find("\n", m.start())
-            line = text[line_start:line_end].strip()
+            line_no, line = _line_at(text, m.start())
             if line.startswith("//"):
                 continue
             violations.append((name, line_no, line))
+
+        # `use ... name` / `use ... name as alias` も禁止: 別名で import されると
+        # 呼出側は `name(` でも `::name(` でもない識別子になり、上の直接呼出検査を
+        # すり抜ける (`use ...::gridfinity_bin as gb; gb(&spec)` 等) この file は
+        # 既に全ての stdlib 呼出を完全修飾 path で書いているので、validating な
+        # builder を import すること自体を禁止しても現状のコードに制約は増えない
+        for m in re.finditer(rf"\buse\b[^;]*\b{re.escape(name)}\b", text):
+            line_no, line = _line_at(text, m.start())
+            if line.startswith("//"):
+                continue
+            violations.append((f"{name} (use import)", line_no, line))
     return violations
 
 
