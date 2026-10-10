@@ -68,4 +68,4 @@ is reachable in finite time, so `Violated` never comes from search.
 | **Commercial License** | [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) — paid, removes the copyleft | Closed-source product, proprietary SaaS, edge / firmware distribution, or a platform NDA that forbids source disclosure |
 
 `alice-world-auditor-types` (the vocabulary-only sibling crate) is
-`MIT OR Apache-2.0` and carries no copyleft obligation on its own.
+`Apache-2.0` and carries no copyleft obligation on its own.

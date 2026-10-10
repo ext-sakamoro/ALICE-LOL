@@ -4,7 +4,7 @@
 //! law checker (`alice-lol`) and a planner (`alice-world-auditor`) agree on.
 //! It proves nothing and searches nothing — see `alice-world-auditor` for
 //! that. Kept as a separate, permissively-licensed crate so that consuming
-//! `alice-lol`'s MIT/Apache-2.0 terms never pulls in the AGPL-3.0-or-later
+//! `alice-lol`'s Apache-2.0 terms never pulls in the AGPL-3.0-or-later
 //! dual license carried by the planner (dependency inversion:
 //! `alice-lol → alice-world-auditor-types`, the
 //! planner also depends on this crate but `alice-lol` never depends on the

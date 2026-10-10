@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/alice-lol-macro.svg)](https://crates.io/crates/alice-lol-macro)
 [![docs.rs](https://img.shields.io/docsrs/alice-lol-macro)](https://docs.rs/alice-lol-macro)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/alice-lol-macro.svg)](#license)
+[![License: Apache-2.0](https://img.shields.io/crates/l/alice-lol-macro.svg)](#license)
 
 **Proc-macro backend for [`alice-lol`](https://crates.io/crates/alice-lol) — parses the Law-Oriented Language DSL and emits `SdfNode` construction code.**
 
@@ -32,7 +32,8 @@ let scene = lol! {
 
 ## License
 
-Licensed under either of **MIT** or **Apache-2.0** at your option.
+Apache-2.0 from 0.2.1 (see LICENSE-APACHE and NOTICE); 0.2.0 and earlier were
+released under MIT OR Apache-2.0 and keep those terms.
 
 ## Links
 

@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 詳細と移行は各節
 
+#### ライセンス
+
+- 0.4.0 (と `alice-lol-macro` 0.2.1) から **Apache-2.0** のみ 0.3.x 以前 (`alice-lol` 0.3.0、`alice-lol-macro` 0.2.0) は MIT OR Apache-2.0 で公開しており、その版の条件は変わらない
+- workspace の他の crate (`alice-lol-humanoid` / `alice-lol-robot` / `alice-lol-ui` / `alice-lol-datagen` / `alice-world-auditor-types`) も Apache-2.0 `alice-world-auditor` は AGPL-3.0-or-later OR LicenseRef-Commercial のまま
+- `LICENSE-MIT` を削除し、`NOTICE` (著作権表示と帰属表示) と `TRADEMARK_NOTICE` (ALICE の商標、license に依らない) を置いた 公開する crate は package に `LICENSE-APACHE` / `NOTICE` / `TRADEMARK_NOTICE` を含む (これまでの package は license の text を含んでいなかった、下の Fixed)
+- `skills/lol-sdf/LICENSE` は ALICE-SDF から写した MIT の text (適用範囲も ALICE-SDF の directory を挙げていた) だったので、root の `LICENSE-APACHE` / `NOTICE` を指す text に置き換えた
+- `scripts/license_check.py`: 各 crate の `license` の値、`LICENSE-MIT` が無いこと、tracked file のどこにも MIT の license text が無いこと (第三者の code の path だけ除く、現在は無し)、公開する crate の 3 file が root と同じ byte であること、`--package` で package の一覧に 3 file があることを検査する (読めた crate や file が 0 件なら fail、ci.yml の `wiring-guard` / `registry-consumer` job と preflight) `scripts/test_license_check.py` (11 本) が歯を確かめる
+
 #### 公開 API
 
 - `Law::hard` は `Result<Self, NotProvable>` を返す (証明も反例も持たない法則に `Priority::Hard` を名乗らせない)
@@ -911,6 +919,10 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - `rust-toolchain.toml` pin `1.92.0` → `1.98.1` (6 release 遅れで `cargo-semver-checks@latest` の MSRV に追い抜かれていた)、`cargo-semver-checks` を `0.50.0` に明示 pin
 
 ### Fixed
+
+#### crate の package に license の text が入っていなかった
+
+- `alice-lol` 0.3.0 と `alice-lol-macro` 0.2.0 の package は license の text を 1 つも含んでいなかった (license の file は repository の root にあり、package は crate の directory の file だけを含む) 0.4.0 / 0.2.1 からは各 crate の directory に `LICENSE-APACHE` / `NOTICE` / `TRADEMARK_NOTICE` を置き、`scripts/license_check.py --package` が package の一覧で確かめる
 
 #### `alice-lol-macro` 0.2.1: 公開版の macro が生成する code を `alice-sdf` 5.x と利用側の crate に合わせる
 

@@ -4,7 +4,7 @@
 [![docs.rs](https://img.shields.io/docsrs/alice-lol)](https://docs.rs/alice-lol)
 [![MSRV](https://img.shields.io/crates/msrv/alice-lol)](#msrv)
 [![CI](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#license)
+[![License: Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#license)
 
 English | [日本語](README_JP.md)
 
@@ -421,9 +421,16 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 
 ## License
 
-MIT OR Apache-2.0 ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)),
-except `alice-world-auditor` (AGPL-3.0-or-later or commercial). The `physics`
+Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE), with [NOTICE](NOTICE) and
+[TRADEMARK_NOTICE](TRADEMARK_NOTICE)) from 0.4.0; 0.3.x and earlier were released
+under MIT OR Apache-2.0 and keep those terms. The exception is
+`alice-world-auditor` (AGPL-3.0-or-later or commercial). The `physics`
 and `llm-bridge` features pull in AGPL-3.0-or-later dependencies.
+
+A redistribution (source or binary) must include [LICENSE-APACHE](LICENSE-APACHE) and
+[NOTICE](NOTICE); the notice can sit with the other licence texts and does not need
+to appear in a user interface. The names "ALICE" and "ALICE-*" are trademarks: see
+[TRADEMARK_NOTICE](TRADEMARK_NOTICE), which applies whatever the licence.
 
 The DSL exposes the ALICE-SDF primitive set, so that crate's attribution carries
 over: many distance-function forms follow Inigo Quilez's published articles,

@@ -277,6 +277,10 @@ jobs:
         working-directory: ALICE-LOL
         run: python3 scripts/published_source_check.py
 
+      - name: license-check (package の一覧に LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+        working-directory: ALICE-LOL
+        run: python3 scripts/license_check.py --package
+
       - name: registry consumer (macro の全 keyword を crates.io の依存で compile)
         working-directory: ALICE-LOL
         run: scripts/registry_consumer.sh
@@ -471,6 +475,10 @@ jobs:
         run: python scripts/det_math_guard.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
+      - name: license-check oracle (検査器自身の試験)
+        run: python scripts/test_license_check.py
+      - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+        run: python scripts/license_check.py
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py) と、公開文書と全 tracked file の語彙 (scripts/docs_lint.py)

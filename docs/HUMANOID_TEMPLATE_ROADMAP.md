@@ -28,7 +28,7 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 **scope**: workspace member 追加 + crate 骨格
 
 - `alice-lol-humanoid/` 新規 dir
-- `Cargo.toml` (name / version 0.1.0 / license MIT OR Apache-2.0 / dep: alice-lol path)
+- `Cargo.toml` (name / version 0.1.0 / license Apache-2.0 / dep: alice-lol path)
 - `src/lib.rs` (module tree + placeholder `HumanoidTemplate` struct)
 - workspace `Cargo.toml` の `members` に追加
 - smoke test 1 個 (`cargo build -p alice-lol-humanoid` green)
@@ -148,13 +148,13 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 
 ## 依存関係と license
 
-- 本 crate: MIT OR Apache-2.0 (LOL 本体と揃える)
+- 本 crate: Apache-2.0 (LOL 本体と揃える)
 - `alice-lol` path dep (必須)
 - `gltf` 1.x (optional、feature `vrm` 経由、Apache-2.0 OR MIT)
 - `serde_json` (optional、feature `vrm` 経由、Apache-2.0 OR MIT)
 - BVH parser は pure Rust 内蔵 (dep 追加なし)
 
-`llm-bridge` 等の AGPL propagate なし、default で MIT OR Apache-2.0 のまま
+`llm-bridge` 等の AGPL propagate なし、default で Apache-2.0 のまま
 
 ## 三相原理 Milestone との対応
 

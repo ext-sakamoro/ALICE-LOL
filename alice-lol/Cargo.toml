@@ -4,7 +4,7 @@ version = "0.4.0"
 edition = "2021"
 rust-version = "1.90"
 description = "ALICE-LOL: Law-Oriented Language — proc_macro + runtime DSL compiling to SdfNode (GLSL/WGSL/HLSL transpile), print export (STL/3MF/OBJ/FBX), law checker, laser pattern generator, and optional LLM Guided Generation bridge."
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 repository = "https://github.com/ext-sakamoro/ALICE-LOL"
 homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
@@ -35,7 +35,7 @@ stacker = "0.1"
 # grammar-constrained decoding without depending on alice-llm directly.
 # NOTE: alice-llm is AGPL-3.0-or-later; enabling `llm-bridge` propagates
 # that license to downstream. Leave the feature off (default) to stay on
-# MIT-or-Apache-2.0 terms.
+# Apache-2.0 terms.
 alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
 # Optional; only pulled in when `physics` feature is enabled Provides
 # FilamentDb / fillet_stress / beam_stress / layer_adhesion / thermal_stress
@@ -43,7 +43,7 @@ alice-llm = { path = "../../ALICE-LLM", version = "1.3.0", default-features = fa
 # can replace hardcoded const fallbacks
 # NOTE: alice-physics is AGPL-3.0 enabling `physics` feature propagates that
 # license to downstream Leave the feature off (default) to stay on
-# MIT-or-Apache-2.0 terms
+# Apache-2.0 terms
 alice-physics = { path = "../../ALICE-Physics", version = "2.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]

@@ -147,11 +147,11 @@ template.apply_intent(&intent);
 
 | dep | version | 種別 | feature gate | license |
 |--|--|--|--|--|
-| `alice-lol` | path 0.1 | 必須 | — | MIT OR Apache-2.0 |
+| `alice-lol` | path 0.1 | 必須 | — | Apache-2.0 (0.4.0 から) |
 | `glam` | 0.29 | 必須 | — | MIT OR Apache-2.0 |
 | `gltf` | 1.x | optional | `vrm` | Apache-2.0 OR MIT |
 | `serde_json` | 1.x | optional | `vrm` | Apache-2.0 OR MIT |
-| BVH parser | pure Rust 内蔵 | 必須 | — | 本 crate と同 (MIT OR Apache-2.0) |
+| BVH parser | pure Rust 内蔵 | 必須 | — | 本 crate と同 (Apache-2.0) |
 
 `llm-bridge` 等 AGPL propagate なし
 default features: なし (`vrm` は opt-in、pure な static + BVH のみで動く最小構成を default に)
@@ -191,7 +191,7 @@ default features: なし (`vrm` は opt-in、pure な static + BVH のみで動�
 
 ## 7. License
 
-- crate: MIT OR Apache-2.0
+- crate: Apache-2.0
 - LOL 本体と揃える (dual license の下、下流に選択権を与える)
 - AGPL propagate は default features では発生させない
 

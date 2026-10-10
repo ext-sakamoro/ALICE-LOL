@@ -24,7 +24,7 @@ glam = "0.29"
 # Optional; only pulled in when `physics` is enabled. NOTE: alice-physics is
 # AGPL-3.0-or-later OR LicenseRef-Commercial — enabling `physics` keeps the
 # same license family this crate already carries (unlike alice-lol, which is
-# MIT/Apache-2.0 and must leave this feature off to stay permissive).
+# Apache-2.0 and must leave this feature off to stay permissive).
 # Both ALICE-SDF and ALICE-Physics are already checked out by ALICE-LOL's
 # existing CI (alice-lol itself has identical path deps to these siblings),
 # so no new CI checkout step is needed.

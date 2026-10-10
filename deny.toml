@@ -1,7 +1,8 @@
 # cargo-deny 設定 (v0.14+ schema)
 # ALICE-* 共通の CI 構成
-# ALICE-LOL は MIT OR Apache-2.0、optional sibling deps (alice-llm / alice-physics) は
-# AGPL-3.0 (実 crate)、ただし alice-stubs で CI 内は MIT OR Apache-2.0 として stub 化
+# ALICE-LOL は 0.4.0 から Apache-2.0 (alice-world-auditor は AGPL-3.0-or-later OR LicenseRef-Commercial)
+# optional sibling deps (alice-llm / alice-physics) は AGPL-3.0 (実 crate)
+# allow の MIT 等は依存 crate のための行で、本 crate の license とは別
 
 [graph]
 all-features = false

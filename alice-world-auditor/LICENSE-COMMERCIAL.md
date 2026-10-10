@@ -46,7 +46,7 @@ alice-world-auditor is dual-licensed:
 ## What the Commercial License does NOT grant
 
 - Rights to **third-party dependencies**. `alice-world-auditor-types`
-  keeps its own `MIT OR Apache-2.0` licence independently of this one.
+  keeps its own `Apache-2.0` licence independently of this one.
   The optional `physics` feature pulls in `alice-physics`, which carries
   the same `AGPL-3.0-or-later OR LicenseRef-Commercial` terms — a
   Commercial License for `alice-physics` is obtained separately.

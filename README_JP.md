@@ -4,7 +4,7 @@
 [![docs.rs](https://img.shields.io/docsrs/alice-lol)](https://docs.rs/alice-lol)
 [![MSRV](https://img.shields.io/crates/msrv/alice-lol)](#msrv)
 [![CI](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#ライセンス)
+[![License: Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#ライセンス)
 
 [English](README.md) | 日本語
 
@@ -390,9 +390,14 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 
 ## ライセンス
 
-MIT OR Apache-2.0 ([LICENSE-MIT](LICENSE-MIT)、[LICENSE-APACHE](LICENSE-APACHE))
+0.4.0 から Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)、[NOTICE](NOTICE)、[TRADEMARK_NOTICE](TRADEMARK_NOTICE))
+0.3.x 以前は MIT OR Apache-2.0 で公開しており、その版の条件はそのまま
 ただし `alice-world-auditor` は AGPL-3.0-or-later または商用 feature `physics` と
 `llm-bridge` は AGPL-3.0-or-later の依存を引き込む
+
+再配布 (source でも binary でも) には [LICENSE-APACHE](LICENSE-APACHE) と [NOTICE](NOTICE) を含める
+NOTICE は他の license の text と同じ場所に置けばよく、画面に表示する必要はない
+「ALICE」と「ALICE-*」の名前は商標で、license に依らず [TRADEMARK_NOTICE](TRADEMARK_NOTICE) に従う
 
 DSL は ALICE-SDF のプリミティブ一式を公開しているので、その crate の帰属表示を引き継ぐ
 距離関数の形の多くは Inigo Quilez の公開記事に、stairs / columns / chamfer 演算は

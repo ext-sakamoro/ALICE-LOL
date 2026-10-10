@@ -96,6 +96,8 @@ step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入って�
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py
 python3 scripts/macro_kinds.py --check
+python3 scripts/test_license_check.py
+python3 scripts/license_check.py
 python3 scripts/test_published_source_check.py
 
 step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越関数が無い"
@@ -273,6 +275,7 @@ step "security-audit.yml / audit: Run cargo audit"
 
 step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
 python3 scripts/published_source_check.py
+python3 scripts/license_check.py --package
 REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
 
 echo; echo "preflight OK"
