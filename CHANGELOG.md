@@ -56,7 +56,7 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 
 #### 入力の読み方を LOL が持つ (`law_input`)
 
-- `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞ (400 桁の整数も)、`NaN` / `Infinity` は誤り、同じ key は後の方、入れ子は request の object を 1 段目として 512 段まで、孤立した surrogate の escape は誤り) この読み方を `conformance/TASK.md` に書き、参照実装 (`conformance/ref_impl.py`) を揃えた JSON の端の request 32 件を `conformance/probes.json` に足した (Rust と Python の答えの違いは 0 件、旧い読み方の参照実装では 13 件が違う)
+- `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞ (400 桁の整数も)、`NaN` / `Infinity` は誤り、同じ key は後の方、入れ子は request の object を 1 段目として 512 段まで、孤立した surrogate の escape は誤り) この読み方を `conformance/TASK.md` に書き、参照実装 (`conformance/ref_impl.py`) を揃えた JSON の端の request 32 件を `conformance/probes.json` に足した (Rust と Python の答えの違いは 0 件、旧い読み方の参照実装では 13 件が違う) request は UTF-8 で、UTF-8 として読めない byte は request の誤り (exit status 2) 参照実装は標準入力を byte で読み、誤りの経路の中で UTF-8 として解く `conformance/check_probes.py` は byte で request を送り (`raw_hex`)、実装が標準エラーに traceback か panic を出したら終了 status によらず不一致とする (比べた件数が 0 なら exit 2)
 - `law_input::InputType`: `x-input` の型 (`number` / `integer` / `text` / `list of <型>` / `record(<名前>: <型>, …)`、欠けてよい field は `optional`) の構文・正規形 (`canonical`)・照合 (`matches`) 型に合わない部分が 1 つでもあれば入力全体が合わない `null` は欠けていない
 - `law_input::read`: `x-input` を 1 つ読む 型に合わない値は監査では測られていない、量の法則では拒否
 - `law_input::audit_law_from_file`: law file を監査の Law として読む (audit block の項と `x-input` の型) `AuditLaw::with_input` / `AuditLaw::inputs` を足した

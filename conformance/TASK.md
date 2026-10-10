@@ -25,7 +25,7 @@ One command-line program that implements every law you are given. The programmin
 - Numbers are JSON numbers in the units the law states. JSON has no NaN or infinity literal, but a number literal too large for a double (for example `1e400`) parses to infinity. A number that is not finite after parsing is not a number: an input of a quantitative law that is not finite is rejected, and an audit measurement that is not finite is not measured. A list input is a JSON array. A list output is a JSON array with one entry per input element, in the same order. The input list may repeat values and may be unsorted.
 - Do not print anything else on standard output. Use standard error for diagnostics.
 - A request for an unknown law, or a request in which an input of a quantitative law is missing, is an error of the request, not a rejection: exit with status 2 and write nothing on standard output.
-- The request is JSON text as RFC 8259 defines it. Text that is not JSON is an error of the request (exit with status 2, write nothing on standard output). In detail:
+- The request is JSON text as RFC 8259 defines it, encoded in UTF-8. Bytes that are not valid UTF-8, and text that is not JSON, are an error of the request (exit with status 2, write nothing on standard output). In detail:
   - A number is read as a double. A literal too large for a double, whatever its spelling (`1e400`, an integer of 400 digits), reads as infinity, and then the rules for numbers that are not finite apply.
   - `NaN`, `Infinity` and `-Infinity` are not JSON: a request that contains them is an error of the request.
   - When an object has the same key more than once, the last one is read.

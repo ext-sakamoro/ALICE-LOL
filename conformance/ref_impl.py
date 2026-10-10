@@ -357,7 +357,14 @@ def read_request(text):
 
 
 def main():
-    req = read_request(sys.stdin.read())
+    data = sys.stdin.buffer.read()
+    # the request is UTF-8; bytes that are not are an error of the request, decided
+    # here and not by the text layer of sys.stdin (which raises outside this path)
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as e:
+        request_error(f"request is not UTF-8: {e}")
+    req = read_request(text)
     if not isinstance(req, dict):
         request_error("request is not a JSON object")
     law = LAWS.get(req.get("law")) if isinstance(req.get("law"), str) else None

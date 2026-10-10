@@ -678,5 +678,26 @@
   "law": "identifier_feature_independent",
   "raw": "{\"law\":\"identifier_feature_independent\",\"inputs\":{\"builds\":[{\"features\":[\"a\"],\"id\":\"\\ud800\"},{\"features\":[\"b\"],\"id\":\"x\"}]}}",
   "expect": "exit 2"
+ },
+ {
+  "note": "bytes: invalid UTF-8 byte in a key",
+  "law": "gate_compares_nonzero",
+  "raw_hex": "7b226c6177223a22676174655f636f6d70617265735f6e6f6e7a65726f222c22696e70757473223a7b22636f6d7061726564223a332c226d69736d617463686573223a302c226b6e6f776e2d6d69736d617463686573223a5b22636173652d3137222c22636173652d3432225d2c2278ff223a317d7d",
+  "expect": "exit 2"
+ },
+ {
+  "note": "bytes: truncated multibyte character in a string",
+  "law": "gate_compares_nonzero",
+  "raw_hex": "7b226c6177223a22676174655f636f6d70617265735f6e6f6e7a65726f222c22696e70757473223a7b22636f6d7061726564223a332c226d69736d617463686573223a302c226b6e6f776e2d6d69736d617463686573223a5b22636173652d3137222c22636173652d3432225d2c2278223a22e381227d7d",
+  "expect": "exit 2"
+ },
+ {
+  "note": "bytes: valid multibyte character in a string",
+  "law": "gate_compares_nonzero",
+  "raw_hex": "7b226c6177223a22676174655f636f6d70617265735f6e6f6e7a65726f222c22696e70757473223a7b22636f6d7061726564223a332c226d69736d617463686573223a302c226b6e6f776e2d6d69736d617463686573223a5b22636173652d3137222c22636173652d3432225d2c2278223a22e38182227d7d",
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
  }
 ]
