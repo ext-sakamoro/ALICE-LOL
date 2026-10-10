@@ -98,12 +98,17 @@ open(p, 'w', encoding='utf-8').write(t.replace(old, new, 1))
   "alice-lol/src/runtime_parser.rs"
 
 # ── M2: the skadis panel size guard removed from BOTH the fallible and
-# infallible entry points (the original hang: NaN never terminates the
-# connector-hole loop) -- expected red via the grid's one-at-a-time
-# generator timing out (a real hang this time, not a panic: unlike M1,
-# nothing downstream still guards it)
+# infallible entry points (the original bug: an unguarded huge/non-finite
+# size) -- expected red via the grid. Measured mechanism (not a hang: a
+# literal "NaN" in .lol text is rejected earlier, at the lexer's token
+# dispatch, regardless of this guard -- only a numeric-looking value reaches
+# this code at all): a huge-but-finite size (e.g. 65536) makes the
+# connector-hole loop enumerate far more holes than intended, and
+# `balanced_union_fold`-ing that many into one SdfNode tree overflows the
+# stack (observed: "thread 'main' has overflowed its stack", SIGABRT,
+# reproduced directly by running the mutated probe binary by hand)
 run_mutant "M2" \
-  "skadis_panel_sdf's size guard removed from both entry points (hang)" \
+  "skadis_panel_sdf's size guard removed from both entry points (unbounded hole count -> stack overflow)" \
   "
 p = 'alice-lol/src/stdlib/hardsurface/skadis_sdf.rs'
 t = open(p, encoding='utf-8').read()
@@ -173,10 +178,15 @@ open(p, 'w', encoding='utf-8').write(t.replace(old, new, 1))
 
 # ── M5: GridfinitySpec::validate() itself deleted (not bypassed at the
 # parser like M1 -- the check is GONE, so nothing downstream still guards
-# it either) -- expected red via the grid's allocation cap (exit 42, not a
-# panic this time: construction actually proceeds and tries to build the
-# ~474 MB eager Vec, hitting the probe's 256 MB counting-allocator limit
-# before it finishes)
+# it either) -- expected red via the grid. Measured mechanism: construction
+# actually proceeds this time (unlike M1, where validate() itself still
+# exists and panics), and either the probe's 256 MB counting-allocator cap
+# fires (exit 42) or the runtime allocator/OS aborts the process outright
+# for a single oversized request before the cap's own per-allocation check
+# ever runs (observed for 1024x1024: a crash, not exit 42 -- the system
+# allocator failing a request this large is itself the finding, same class
+# as M2's stack overflow: unbounded construction hits SOME hard limit, which
+# one depends on the platform and the exact shape of the construction)
 run_mutant "M5" \
   "GridfinitySpec::validate() deleted entirely (unbounded eager allocation)" \
   "
