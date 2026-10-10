@@ -3,16 +3,18 @@
 
 Each rule gets a dedicated must-red fixture (a small synthetic law violating
 only that rule) and a must-green check that the same law passes once fixed.
-The historical laws/spike/kepler_energy_bounded.law (git show 8d92276~1, before
-it was split into _kdk.law / _dkd.law) is the real-world case the method-scope
-and range-provenance rules exist for: it stated no method scope and no range
-provenance, and its single max-ratio criterion silently covered every method
-and the whole input range at once.
+scripts/testdata/kepler_energy_bounded_pre_split.law is a committed copy of
+the historical laws/spike/kepler_energy_bounded.law (as it read before commit
+8d92276 split it into _kdk.law / _dkd.law) -- the real-world case the
+method-scope and range-provenance rules exist for: it stated no method scope
+and no range provenance, and its single max-ratio criterion silently covered
+every method and the whole input range at once. Committed as a file rather
+than read with `git show` at test time: a shallow CI checkout does not have
+that commit's history.
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -216,17 +218,13 @@ class LanguageNeutralRule(unittest.TestCase):
 
 class HistoricalKeplerLaw(unittest.TestCase):
     """The real law this lint exists for: laws/spike/kepler_energy_bounded.law
-    before commit 8d92276 split it. git show 8d92276~1 is the designated
-    must-red fixture for the method-scope and range-provenance rules."""
+    before commit 8d92276 split it (scripts/testdata/kepler_energy_bounded_pre_split.law,
+    a committed copy) is the designated must-red fixture for the method-scope
+    and range-provenance rules."""
 
     def test_the_pre_split_law_fails_both_rules(self):
-        out = subprocess.run(
-            ["git", "show", "8d92276~1:laws/spike/kepler_energy_bounded.law"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
-        ).stdout
-        with tempfile.TemporaryDirectory() as d:
-            p = write(Path(d), "kepler_energy_bounded.law", out)
-            errs = lint.lint([p])
+        fixture = ROOT / "scripts" / "testdata" / "kepler_energy_bounded_pre_split.law"
+        errs = lint.lint([fixture])
         kinds = {"method" if "method" in e else "range" for e in errs}
         self.assertEqual(len(errs), 2, errs)
         self.assertEqual(kinds, {"method", "range"})
