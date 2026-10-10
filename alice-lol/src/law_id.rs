@@ -97,13 +97,13 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     // request から読まない) 導出は同じ request に対する判定を変える
     (
         "audit derivations: count / distinct / set, x-at-least",
-        hex32("07cdf6079fd001eebf74e925a3e23e75355aec58b3d8c77afe2033cff539a21c"),
+        hex32("4ad8aec627d25fe2512d66cdff5827f2c384a596b074b0e339cda37954ee9fc3"),
     ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("70afdc5484cedc28e78c84e9aac29bcae7bfa8df32f074e98df0664730d91a8c");
+    hex32("0734b285d6725ebd1a8f064e2b38e6365abb9ed10689809954dc3034e911fb85");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -336,13 +336,22 @@ impl AuditLaw {
                 }
             };
         }
-        for (name, ty) in self.inputs() {
+        // x-input / x-metric / x-at-least are declarations, not a sequence: their order in the
+        // file cannot change a measurement, so they are hashed sorted by name (the clauses
+        // above keep their order, which decides the verdict)
+        let mut inputs: Vec<_> = self.inputs().iter().collect();
+        inputs.sort_by(|a, b| a.0.cmp(&b.0));
+        for (name, ty) in inputs {
             e = e.u32(3).str(name).str(&ty.canonical());
         }
-        for (name, expr) in self.metrics() {
+        let mut metrics: Vec<_> = self.metrics().iter().collect();
+        metrics.sort_by(|a, b| a.0.cmp(&b.0));
+        for (name, expr) in metrics {
             e = e.u32(4).str(name).str(&expr.canonical());
         }
-        for (name, n) in self.at_least() {
+        let mut floors: Vec<_> = self.at_least().iter().collect();
+        floors.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        for (name, n) in floors {
             e = e.u32(5).str(name).f64(*n);
         }
         e.finish()

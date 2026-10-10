@@ -639,6 +639,9 @@ impl MetricExpr {
 }
 
 /// 値を比べるための key (型の tag と中身、数は `+0.0` を足した bit = 0 の符号を読まない)
+///
+/// 型の tag は今の型の文法では区別に効かない (union 型が無く、1 つの field の値はすべて同じ型)
+/// ので、tag を外す変異は試験で red にならない 型の文法に union を足す時に効く
 fn value_key(v: &Json) -> Vec<u8> {
     let mut out = Vec::new();
     match v {
@@ -840,6 +843,9 @@ pub fn derivation_fingerprint() -> [u8; 32] {
                 Clause::Range { key, .. } => names.push(key),
             }
         }
+        // the measured values, by name (the order of the declarations is not a semantics)
+        names.sort_unstable();
+        names.dedup();
         for name in names {
             h.update((name.len() as u64).to_le_bytes());
             h.update(name.as_bytes());

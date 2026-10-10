@@ -450,3 +450,29 @@ fn the_derivations_of_a_law_are_part_of_the_law() {
         MetricExpr::parse("count(b)").expect("expr")
     );
 }
+
+#[test]
+fn the_order_of_declarations_is_not_part_of_the_law_but_the_order_of_clauses_is() {
+    use alice_lol::law_input::audit_law_from_file;
+    let law = |metrics: &str, clauses: &str| {
+        audit_law_from_file(&format!(
+            "x-input a list of record(f: list of text, g: optional text)\nx-input k list of text\n{metrics}x-at-least m 2\nx-at-least n 1\nbegin audit\naudit o\n{clauses}end audit\n"
+        ))
+        .expect("law")
+        .law_id(&LOL_SEMANTICS_ID)
+    };
+    let m = "x-metric m = count(a)\nx-metric n = distinct(a[].g)\n";
+    let m_swapped = "x-metric n = distinct(a[].g)\nx-metric m = count(a)\n";
+    let c = "evidence m\nexpect n == 1\n";
+    let c_swapped = "expect n == 1\nevidence m\n";
+    // swapping two x-metric lines (or x-input / x-at-least lines) is the same law
+    assert_eq!(law(m, c), law(m_swapped, c));
+    let reordered = audit_law_from_file(
+        "x-input k list of text\nx-input a list of record(f: list of text, g: optional text)\nx-metric n = distinct(a[].g)\nx-metric m = count(a)\nx-at-least n 1\nx-at-least m 2\nbegin audit\naudit o\nevidence m\nexpect n == 1\nend audit\n",
+    )
+    .expect("law")
+    .law_id(&LOL_SEMANTICS_ID);
+    assert_eq!(law(m, c), reordered);
+    // swapping two clauses is another law (the clause order decides which failure is reported)
+    assert_ne!(law(m, c), law(m, c_swapped));
+}
