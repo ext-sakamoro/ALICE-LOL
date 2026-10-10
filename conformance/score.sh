@@ -11,6 +11,7 @@
 #        LAWS       directory of *.law files (default laws/spike of this repository)
 #        LAW_TOOLS  directory with law_corners.py / law_corpus_cover.py (default scripts/ of this repository)
 #        JOBS       parallel jobs for the corpus generator (default 8)
+#        MIN_VECTORS  fail when the corpus has fewer vectors (default 1: an empty corpus fails)
 set -euo pipefail
 usage() { echo "usage: $0 --kind static|reader <command...>" >&2; exit 2; }
 [[ "${1:-}" == "--kind" && ( "${2:-}" == "static" || "${2:-}" == "reader" ) ]] || usage
@@ -26,7 +27,7 @@ TOOLS="${LAW_TOOLS:-$root/scripts}"
   echo "$PYTHON has no mpmath: $PYTHON -m pip install -r $here/requirements.txt" >&2; exit 2; }
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/law_score.XXXXXX")
 trap 'rm -rf "${tmp:?}"' EXIT
-"$PYTHON" "$here/gen_corpus.py" --laws "$LAWS" --tools "$TOOLS" --out "$tmp/corpus.json" --jobs "${JOBS:-8}"
+"$PYTHON" "$here/gen_corpus.py" --laws "$LAWS" --tools "$TOOLS" --out "$tmp/corpus.json" --jobs "${JOBS:-8}" --min-vectors "${MIN_VECTORS:-1}"
 python3 "$TOOLS/law_corpus_cover.py" --laws "$LAWS" --corpus "$tmp/corpus.json"
 status=0
 python3 "$here/run_conformance.py" --corpus "$tmp/corpus.json" -- "$@" || status=$?

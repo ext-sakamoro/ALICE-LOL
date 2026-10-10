@@ -288,4 +288,9 @@ python3 scripts/published_source_check.py
 python3 scripts/license_check.py --package
 REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
 
+step "conformance.yml / corpus: score the reference implementation (corpus + probes) and the controls"
+( export PYTHON="$conf_py" MIN_VECTORS="$(sed -n 's/^ *MIN_VECTORS: *//p' .github/workflows/conformance.yml)"
+  conformance/score.sh --kind reader "$conf_py" conformance/ref_impl.py
+  conformance/controls.sh )
+
 echo; echo "preflight OK"

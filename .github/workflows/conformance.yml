@@ -1,0 +1,57 @@
+name: Conformance
+
+# The conformance corpus, end to end: generate it from laws/spike (mpmath), check that it
+# covers every corner, score the reference implementation on it and on every probe
+# (score.sh --kind reader), then run the must-red controls (controls.sh). The corpus has a
+# floor of vectors (MIN_VECTORS): an empty or shrunken corpus fails instead of scoring
+# nothing.
+
+on:
+  push:
+    branches: [main, 'ci/**']
+    paths:
+      - 'conformance/**'
+      - 'laws/**'
+      - 'scripts/law_*.py'
+      - '.github/workflows/conformance.yml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'conformance/**'
+      - 'laws/**'
+      - 'scripts/law_*.py'
+      - '.github/workflows/conformance.yml'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (a cancelled main commit is unverified)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  corpus:
+    name: Conformance corpus (score + controls)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # 391 vectors on 2026-10-11; raise it when laws or cases are added
+      MIN_VECTORS: 391
+      JOBS: 4
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: conformance requirements (mpmath, pinned)
+        run: python -m pip install -r conformance/requirements.txt
+      - name: score the reference implementation (corpus + probes, kind reader)
+        run: conformance/score.sh --kind reader python conformance/ref_impl.py
+        env:
+          PYTHON: python
+      - name: must-red controls
+        run: conformance/controls.sh
+        env:
+          PYTHON: python

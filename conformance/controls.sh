@@ -24,7 +24,7 @@ TOOLS="${LAW_TOOLS:-$root/scripts}"
   echo "$PYTHON has no mpmath: $PYTHON -m pip install -r $here/requirements.txt" >&2; exit 2; }
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/law_controls.XXXXXX")
 trap 'rm -rf "${tmp:?}"' EXIT
-"$PYTHON" "$here/gen_corpus.py" --laws "$LAWS" --tools "$TOOLS" --out "$tmp/corpus.json" --jobs "${JOBS:-8}"
+"$PYTHON" "$here/gen_corpus.py" --laws "$LAWS" --tools "$TOOLS" --out "$tmp/corpus.json" --jobs "${JOBS:-8}" --min-vectors "${MIN_VECTORS:-1}"
 python3 "$TOOLS/law_corpus_cover.py" --laws "$LAWS" --corpus "$tmp/corpus.json" >/dev/null
 total=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$tmp/corpus.json")
 kepler_in=$(python3 -c 'import json,sys; print(sum(v["kind"] == "invariant" for v in json.load(open(sys.argv[1]))))' "$tmp/corpus.json")

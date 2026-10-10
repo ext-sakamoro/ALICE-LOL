@@ -517,6 +517,8 @@ def main():
     ap.add_argument("--tools", default=str(root / "scripts"), help="directory with law_corners.py")
     ap.add_argument("--out", required=True)
     ap.add_argument("--jobs", type=int, default=8)
+    ap.add_argument("--min-vectors", type=int, default=1,
+                    help="fail when the corpus has fewer vectors (0 vectors always fails)")
     a = ap.parse_args()
     load_tools(a.tools)
     files = sorted(Path(a.laws).glob("*.law"))
@@ -545,6 +547,8 @@ def main():
     for k in c:
         print(f"{k}: {c[k]} vectors ({r[k]} rejections)", file=sys.stderr)
     print("total", len(V), file=sys.stderr)
+    if len(V) < max(1, a.min_vectors):
+        raise SystemExit(f"error: {len(V)} vectors, fewer than {max(1, a.min_vectors)}")
 
 
 if __name__ == "__main__":
