@@ -27,6 +27,7 @@
 // rename すると pipeline canonical generator との対応が追えなくなるため module 単位で許容
 #![allow(clippy::similar_names)]
 
+use crate::limits::{checked_product, SpecError, MAX_NODE_EXPANSION};
 use alice_sdf::SdfNode;
 use glam::{Quat, Vec3};
 use std::sync::Arc;
@@ -291,6 +292,21 @@ impl GridfinitySpec {
             floor_thickness: 1.5,
         }
     }
+
+    /// `self.dividers` の積 (cols × rows、`gridfinity_bin` が eager に確保する
+    /// `SdfNode` の総数) が [`MAX_NODE_EXPANSION`] 以下であることを確かめる
+    ///
+    /// `dividers` が `None` の時は検査すべき積が無いので常に成立する
+    ///
+    /// # Errors
+    ///
+    /// [`SpecError`] (積が [`MAX_NODE_EXPANSION`] を超える時)
+    pub fn validate(&self) -> Result<(), SpecError> {
+        if let Some((cols, rows)) = self.dividers {
+            checked_product(cols, rows, MAX_NODE_EXPANSION, "grid_expansion")?;
+        }
+        Ok(())
+    }
 }
 
 /// Gridfinity bin (pipeline `gridfinity.rs` LOL DSL 生成と等価な `SdfNode` を返す)
@@ -306,8 +322,19 @@ impl GridfinitySpec {
 /// use alice_lol::stdlib::hardsurface::pattern_sdf::{gridfinity_bin, GridfinitySpec};
 /// let bin = gridfinity_bin(&GridfinitySpec::default_2x2());
 /// ```
+///
+/// # Panics
+///
+/// `spec.validate()` が `Err` を返す時 (`spec.dividers` の積が
+/// [`crate::limits::MAX_NODE_EXPANSION`] を超える) untrusted な値を渡す呼び出し側は
+/// [`try_gridfinity_bin`] を使うこと (`spec` は `.lol` のテキストを経由せず直接組んでいるので、
+/// このパニックを取り除くには `validate()` を呼ぶ側が先に検査する)
 #[must_use]
 pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
+    spec.validate().expect(
+        "GridfinitySpec が検査を通らない (dividers の積が大きすぎる): \
+         untrusted な入力は try_gridfinity_bin を使うこと",
+    );
     #[allow(clippy::cast_precision_loss)]
     let ext_x = n_f32(spec.units_x) * gridfinity_spec::GRID_UNIT;
     #[allow(clippy::cast_precision_loss)]
@@ -372,6 +399,19 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
         Vec3::new(0.0, 0.0, cavity_offset_z),
     );
     subtract(outer, single_cavity)
+}
+
+/// [`gridfinity_bin`] の fallible 版 `spec` を確保の前に検査し、untrusted な入力
+/// (parse された `.lol` のテキストに限らず、呼び出し側が直接組んだ値も含む) に対して
+/// 決してパニックしない
+///
+/// # Errors
+///
+/// `spec.validate()` が返す [`SpecError`] (`spec.dividers` の積が
+/// [`crate::limits::MAX_NODE_EXPANSION`] を超える時)
+pub fn try_gridfinity_bin(spec: &GridfinitySpec) -> Result<SdfNode, SpecError> {
+    spec.validate()?;
+    Ok(gridfinity_bin(spec))
 }
 
 // ────────────────────────────────────────────────────────
@@ -7726,6 +7766,57 @@ mod tests {
         assert!(eval(&bin, Vec3::new(0.0, 0.0, -16.0)) < 0.0);
         // 外形外 (X=50) は空間
         assert!(eval(&bin, Vec3::new(50.0, 0.0, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn gridfinity_spec_validate_accepts_every_dividers_value_in_use_today() {
+        // the "0 regressions" check: every existing caller's dividers (see
+        // runtime_parser.rs's gridfinity_bin_ex and this file's own tests)
+        for (cols, rows) in [(0, 0), (2, 2)] {
+            let spec = GridfinitySpec {
+                dividers: Some((cols, rows)),
+                ..GridfinitySpec::default_2x2()
+            };
+            assert!(spec.validate().is_ok(), "{cols}x{rows}");
+        }
+    }
+
+    #[test]
+    fn gridfinity_spec_validate_refuses_a_dividers_product_over_the_limit() {
+        // MAX_STDLIB_COUNT (the per-axis bound the parser already applies) is
+        // 1024, so each axis alone passes the parser's own count_trunc, but
+        // their product (1024*1024 ~ 1M) is the hazard this check exists for
+        let spec = GridfinitySpec {
+            dividers: Some((1024, 1024)),
+            ..GridfinitySpec::default_2x2()
+        };
+        let e = spec.validate().unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "resource limit exceeded: kind=grid_expansion limit=10000 requested=1048576"
+        );
+    }
+
+    #[test]
+    fn try_gridfinity_bin_never_panics_on_a_degenerate_dividers_product() {
+        let spec = GridfinitySpec {
+            dividers: Some((1024, 1024)),
+            ..GridfinitySpec::default_2x2()
+        };
+        assert!(try_gridfinity_bin(&spec).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "GridfinitySpec が検査を通らない")]
+    fn gridfinity_bin_panics_with_its_documented_message_on_the_same_degenerate_spec() {
+        // the contract: the infallible builder still refuses a degenerate
+        // spec, but with the typed, documented panic message validate()
+        // produces -- not an uncontrolled Vec::with_capacity overflow/abort
+        let spec = GridfinitySpec {
+            dividers: Some((1024, 1024)),
+            ..GridfinitySpec::default_2x2()
+        };
+        let _ = gridfinity_bin(&spec);
     }
 
     #[test]

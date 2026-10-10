@@ -6,6 +6,7 @@ unwired alice-lol-humanoid/src/bvh.rs::frame_root_position
 unwired alice-lol-humanoid/src/bvh.rs::is_position
 unwired alice-lol-humanoid/src/lib.rs::from_params
 unwired alice-lol-humanoid/src/vrm.rs::bone_names
+unwired alice-lol-humanoid/src/vrm.rs::from_vrm_bones
 unwired alice-lol-ui/src/law.rs::strict_wcag_aaa
 unwired alice-lol-ui/src/layout.rs::padding
 unwired alice-lol-ui/src/layout.rs::stack
@@ -35,6 +36,7 @@ unwired alice-lol/src/laser_pattern.rs::guilloche
 unwired alice-lol/src/laser_pattern.rs::halftone
 unwired alice-lol/src/laser_pattern.rs::hatch
 unwired alice-lol/src/laser_pattern.rs::lissajous
+unwired alice-lol/src/laser_pattern.rs::new
 unwired alice-lol/src/laser_pattern.rs::phyllotaxis
 unwired alice-lol/src/laser_pattern.rs::rose
 unwired alice-lol/src/laser_pattern.rs::turing
@@ -54,10 +56,12 @@ unwired alice-lol/src/lib.rs::to_hlsl_dynamic
 unwired alice-lol/src/lib.rs::to_wgsl_dynamic
 unwired alice-lol/src/print_export.rs::node_to_stl_dual_contouring
 unwired alice-lol/src/roblox_export.rs::lol_to_obj_roblox
+unwired alice-lol/src/roblox_export.rs::preview
 unwired alice-lol/src/roblox_export.rs::with_max_size_studs
 unwired alice-lol/src/roblox_export.rs::with_max_triangles
 unwired alice-lol/src/roblox_export.rs::with_scale_studs
 unwired alice-lol/src/stdlib/hardsurface/cavity.rs::through_hole_cylinder
+unwired alice-lol/src/stdlib/hardsurface/fastener.rs::from_f32_snap
 unwired alice-lol/src/stdlib/hardsurface/joint.rs::ANNULAR_BULGE_STANDARD_HEIGHT
 unwired alice-lol/src/stdlib/hardsurface/joint.rs::PETG_ELASTIC_MODULUS_GPA
 unwired alice-lol/src/stdlib/hardsurface/joint.rs::is_safe_for_pla
@@ -70,7 +74,6 @@ unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::b608_slip_fit
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::b688_press_fit
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::cartridge_razor
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::compact_desk
-unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::default_2x2
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::desktop_400x200
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::dice_4
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::dual_bottle_l200
@@ -165,7 +168,3 @@ unwired alice-lol/src/stdlib/hardsurface/skadis_sdf.rs::SKADIS_OUTER_FRAME
 unwired alice-lol/src/stdlib/pattern.rs::find_by_name
 unwired alice-lol/src/stdlib/pattern.rs::pattern_passes_ci_gate
 unwired alice-lol/src/stdlib/pattern.rs::patterns_failing_ci_gate
-unwired alice-lol/src/laser_pattern.rs::new
-unwired alice-lol/src/roblox_export.rs::preview
-unwired alice-lol/src/stdlib/hardsurface/fastener.rs::from_f32_snap
-unwired alice-lol-humanoid/src/vrm.rs::from_vrm_bones

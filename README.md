@@ -382,6 +382,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`skadis_panel_dc_vs_mc`](alice-lol/examples/skadis_panel_dc_vs_mc.rs) | marching cubes against dual contouring on a perforated panel |
 | [`verify_customizers`](alice-lol/examples/verify_customizers.rs) | the customizer archetypes render the expected shape |
 | [`llm_bench`](alice-lol/examples/llm_bench.rs) | pass rate of grammar-constrained decoding against a think-then-grammar prompt (feature `llm-bridge`) |
+| [`gridfinity_untrusted_input`](alice-lol/examples/gridfinity_untrusted_input.rs) | the fallible `try_gridfinity_bin` entry point refusing a degenerate dividers count instead of panicking |
 
 Run one with `cargo run -p alice-lol --example <name>`.
 

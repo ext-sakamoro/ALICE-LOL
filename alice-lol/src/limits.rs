@@ -67,6 +67,7 @@ pub const MAX_NODE_EXPANSION: u64 = 10_000;
 /// it, this floor only rejects the *degenerate* (zero/negative/tiny-enough-
 /// to-overflow) case at its source, per the module doc's "lazy repetition"
 /// case.
+// ALLOW-UNWIRED: pending the pitch-class Spec sites (hex_hole_pitch etc.), landed separately
 pub const MIN_PITCH_MM: f32 = 0.01;
 
 /// A user-controlled parameter refused a named resource limit before any
@@ -103,6 +104,34 @@ impl std::fmt::Display for ResourceLimitError {
 
 impl std::error::Error for ResourceLimitError {}
 
+/// A `Spec` struct's `validate()` refused its fields, and the matching
+/// `try_*` builder refused to construct an `SdfNode` from them.
+///
+/// `#[non_exhaustive]`: a `Spec` may grow new validated fields with their
+/// own reasons to refuse, without that being a breaking change to this enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SpecError {
+    /// A named resource limit was exceeded; see [`ResourceLimitError`].
+    ResourceLimit(ResourceLimitError),
+}
+
+impl From<ResourceLimitError> for SpecError {
+    fn from(e: ResourceLimitError) -> Self {
+        Self::ResourceLimit(e)
+    }
+}
+
+impl std::fmt::Display for SpecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ResourceLimit(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for SpecError {}
+
 /// `a * b <= limit`.
 ///
 /// Checked without ever forming the product in a width that could overflow
@@ -112,7 +141,12 @@ impl std::error::Error for ResourceLimitError {}
 /// # Errors
 ///
 /// [`ResourceLimitError`] (`kind` as given) if the product exceeds `limit`.
-pub fn checked_product(a: u32, b: u32, limit: u64, kind: &'static str) -> Result<u64, ResourceLimitError> {
+pub fn checked_product(
+    a: u32,
+    b: u32,
+    limit: u64,
+    kind: &'static str,
+) -> Result<u64, ResourceLimitError> {
     let product = u64::from(a) * u64::from(b);
     if product > limit {
         return Err(ResourceLimitError {
@@ -139,7 +173,12 @@ pub fn checked_product(a: u32, b: u32, limit: u64, kind: &'static str) -> Result
 ///
 /// [`ResourceLimitError`] (`kind` as given) if `v` is not finite or is below
 /// `floor`.
-pub fn checked_positive_finite(v: f32, floor: f32, kind: &'static str) -> Result<f32, ResourceLimitError> {
+// ALLOW-UNWIRED: pending the pitch-class Spec sites (hex_hole_pitch etc.), landed separately
+pub fn checked_positive_finite(
+    v: f32,
+    floor: f32,
+    kind: &'static str,
+) -> Result<f32, ResourceLimitError> {
     if !v.is_finite() || v < floor {
         let requested = if v.is_nan() || v < 0.0 {
             0
@@ -164,16 +203,24 @@ pub fn checked_positive_finite(v: f32, floor: f32, kind: &'static str) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_positive_finite, checked_product, MAX_NODE_EXPANSION, MIN_PITCH_MM};
+    use super::{
+        checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
+    };
 
     #[test]
     fn checked_product_within_limit_is_ok() {
-        assert_eq!(checked_product(2, 2, MAX_NODE_EXPANSION, "grid_expansion"), Ok(4));
+        assert_eq!(
+            checked_product(2, 2, MAX_NODE_EXPANSION, "grid_expansion"),
+            Ok(4)
+        );
     }
 
     #[test]
     fn checked_product_at_the_limit_is_ok() {
-        assert_eq!(checked_product(100, 100, 10_000, "grid_expansion"), Ok(10_000));
+        assert_eq!(
+            checked_product(100, 100, 10_000, "grid_expansion"),
+            Ok(10_000)
+        );
     }
 
     #[test]
@@ -188,18 +235,25 @@ mod tests {
     fn checked_product_cannot_overflow_even_at_u32_max() {
         // the whole point of promoting to u64 before multiplying: this must
         // not wrap around to a small, falsely-passing value
-        let e = checked_product(u32::MAX, u32::MAX, MAX_NODE_EXPANSION, "grid_expansion").unwrap_err();
+        let e =
+            checked_product(u32::MAX, u32::MAX, MAX_NODE_EXPANSION, "grid_expansion").unwrap_err();
         assert_eq!(e.requested, u64::from(u32::MAX) * u64::from(u32::MAX));
     }
 
     #[test]
     fn checked_positive_finite_above_floor_is_ok() {
-        assert_eq!(checked_positive_finite(20.0, MIN_PITCH_MM, "pitch"), Ok(20.0));
+        assert_eq!(
+            checked_positive_finite(20.0, MIN_PITCH_MM, "pitch"),
+            Ok(20.0)
+        );
     }
 
     #[test]
     fn checked_positive_finite_exactly_at_floor_is_ok() {
-        assert_eq!(checked_positive_finite(MIN_PITCH_MM, MIN_PITCH_MM, "pitch"), Ok(MIN_PITCH_MM));
+        assert_eq!(
+            checked_positive_finite(MIN_PITCH_MM, MIN_PITCH_MM, "pitch"),
+            Ok(MIN_PITCH_MM)
+        );
     }
 
     #[test]
@@ -231,6 +285,13 @@ mod tests {
     fn checked_positive_finite_just_below_floor_errs() {
         let below = MIN_PITCH_MM - 0.001;
         assert!(checked_positive_finite(below, MIN_PITCH_MM, "pitch").is_err());
+    }
+
+    #[test]
+    fn spec_error_from_resource_limit_error_displays_the_same_text() {
+        let e = checked_product(1000, 1000, MAX_NODE_EXPANSION, "grid_expansion").unwrap_err();
+        let spec_err: SpecError = e.into();
+        assert_eq!(spec_err.to_string(), e.to_string());
     }
 
     #[test]

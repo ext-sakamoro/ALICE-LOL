@@ -33,11 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
 - `EmitError` に `NonFinite` を追加し、`EmitError` / `ExportError` / `LawFileError` / `BridgeError` を `#[non_exhaustive]` にした (外の crate の `match` は `_` の腕が要る 次に variant を足す時は破壊的変更にならない)
 - `limits` module を追加: `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` (`runtime_parser` から re-export、既存の import path は変わらない) に加え、`MAX_NODE_EXPANSION` (eager に `SdfNode` を複製して確保する箇所の総数上限) と `MIN_PITCH_MM` (pitch/spacing 引数の下限、度数でなく幾何的な根拠: 市販 FDM の解像度より十分小さい) / `ResourceLimitError { kind, limit, requested }` と検査 helper `checked_product` / `checked_positive_finite`
+- `GridfinitySpec::validate()` と `try_gridfinity_bin` を追加 (untrusted な値を確保の前に検査し、決してパニックしない fallible な入口) / `SpecError` (`#[non_exhaustive]`、`ResourceLimitError` を包む)
 
 #### 挙動
 
 - LOL の数は有限: 桁あふれの literal (`1e39` ほか、f32 で ±∞ になるもの) は parse error になる (0.3.0 は ±∞ として読んでいた) `to_lol` は NaN / ±∞ を書かず `EmitError::NonFinite` を返す
 - `skadis_panel` の一辺は 0 より大きくなければならない (0.3.0 は負の一辺から負の寸法の板を作っていた)
+- `gridfinity_bin`: `dividers` の積 (cols × rows) が `limits::MAX_NODE_EXPANSION` を超える `spec` では、確保の前に検査して typed なメッセージでパニックする (`.lol` text 経由の `gridfinity_bin_ex` は各軸を個別に `MAX_STDLIB_COUNT` (1024) まで検査していたが、積は検査しておらず、1024×1024 の `Vec::with_capacity` が制御されない overflow / abort になり得た) untrusted な入力は `try_gridfinity_bin` を使うこと
 - 監査 Law (`audit_law`) の証拠は有限で 0 より大きい数だけ、成立範囲は集合として比べ、`expect` の実測が有限でなければ `Undecided`
 - `print_export::node_to_mesh` の破壊的修復は、修復の前後で `χ` が等しく孤立頂点が増えない時だけ採る
 
