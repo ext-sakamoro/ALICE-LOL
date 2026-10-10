@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 全 workflow の全 job に `timeout-minutes` を置いた (直近の success の最長の約 3 倍、cache が無い時の build の余裕を含む: test 45 分 / clippy・msrv・gpu-parity 30 分 / fmt・docs・wiring-guard 15 分 / actionlint 10 分 / fuzz 20 分 / coverage 45 分 ほか) 上限が無いと、後片付けの step (`actions/checkout` の post) で止まった job が 6 時間 runner を占有する
 - `scripts/workflow_timeouts.py`: `.github/workflows/` の全 job が job 単位の `timeout-minutes` を持つことを検査する (再利用 workflow を呼ぶ job は除く、step 単位の上限は数えない、job が 0 件なら fail) 試験 `scripts/test_workflow_timeouts.py` CI の docs job と `scripts/preflight.sh` で走らせる
+- `docs/CI_TIMEOUTS.md`: 各上限の根拠 (直近の success の件数と最長、上限) 上限が後片付けの step の停止を終わらせるかは未観測 (止まった job は通常の cancel では止まらず force-cancel が要った)
 
 #### 試験が repo の履歴を読まないことの検査 (`scripts/history_free_tests.py`)
 
