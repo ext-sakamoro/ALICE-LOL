@@ -266,6 +266,7 @@ fn record(
     }
 }
 
+#[allow(clippy::too_many_lines)] // one straight-line walk over 4 generators, splitting it would scatter the shared state
 fn run_grid() -> GridResult {
     let corpus = grammar_corpus();
     let covered_by_corpus: BTreeSet<String> = corpus.iter().map(|(n, _)| n.clone()).collect();
