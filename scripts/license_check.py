@@ -7,23 +7,29 @@ license and the NOTICE file go with every distribution, and a crate package cont
 the files under the crate's own directory, so each published Apache-2.0 crate keeps its own
 copies of `LICENSE-APACHE`, `NOTICE` and `TRADEMARK_NOTICE`, byte for byte the root ones.
 
+The permissive licence the crates were dual-licensed under up to 0.3.x is named `OLD` below
+(spelled from fragments, so that this file and its test never hold the word themselves).
+
 Checks:
 - the `license` field of every workspace member is the expected expression;
-- no `LICENSE-MIT` at the root or in a crate, and no MIT licence text in any tracked file
-  (the MIT terms ended with 0.3.x; the only exempt paths are third-party ones, `THIRD_PARTY`);
+- no `LICENSE-<OLD>` file at the root or in a crate;
 - each published Apache-2.0 crate has the three files, equal to the root copies;
 - with `--package`: `cargo package --list` of each published crate lists them;
-- no line of a tracked file states an MIT licence (`MIT_STATEMENTS`: an SPDX tag, a
-  "licensed under the MIT license" sentence, a `license = "...MIT..."` field, an
-  `MIT OR / AND ...` expression) unless an `ALLOWED` entry names the file, the line and the
-  reason (an earlier version's terms, a dependency's licence); an entry that matches no
-  line fails, so the list cannot outlive what it allows.
+- no line of any tracked file holds the word `OLD` in any case (as a word: a letter or a
+  digit next to it makes another word, `-` and `_` do not, so `LICENSE-<OLD>`,
+  `<OLD>-licensed` and `license = "<old>"` all count), unless `ALLOWED` names that exact
+  line: the file, the SHA-256 of the full line and the reason. An entry that matches no line
+  fails, and so does a scan that read no line. Forms are not enumerated: any mention of the
+  word needs an entry, so a new way of stating the licence cannot pass unseen. A line with
+  the grant sentence that opens the licence's text counts the same way.
 
-usage: license_check.py [--package]
-Exit 1 on a violation, 2 when no workspace crate was read.
+usage: license_check.py [--package] [--hits]
+`--hits` prints every line holding the word with its SHA-256 (to write an entry).
+Exit 1 on a violation, 2 when no workspace crate, no license file or no line was read.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -33,43 +39,35 @@ ROOT = Path(__file__).resolve().parent.parent
 APACHE = "Apache-2.0"
 EXPECTED = {"alice-world-auditor": "AGPL-3.0-or-later OR LicenseRef-Commercial"}
 TEXTS = ["LICENSE-APACHE", "NOTICE", "TRADEMARK_NOTICE"]
-# the opening of the MIT licence text (its grant sentence and its usual title line)
-# (split so that this file does not hold the sentence itself)
-MIT_TEXT = re.compile(r"Permission is hereby granted, free" r" of charge|^\s*MIT" r" License\s*$", re.M)
-# tracked paths that hold someone else's code under its own licence (none today)
-THIRD_PARTY: tuple[str, ...] = ()
-# a line that states an MIT licence, by form (literals split so this file does not match itself)
-MIT_STATEMENTS = {
-    "SPDX tag": re.compile(r"SPDX-License-" r"Identifier:[^\n]*\bMIT\b"),
-    "licence sentence": re.compile(r"(?i)licen[cs]ed under (the )?MIT\b|\bMIT" r" licen[cs]e\b"),
-    "license field": re.compile(r"\blicense\s*=\s*\"[^\"\n]*\bMIT" r"\b"),
-    "licence expression": re.compile(r"\bMIT\s+(OR|AND|or|and)\s+[A-Z]|\b[A-Z][\w.-]*\s+(OR|AND|or|and)\s+MIT" r"\b|\bMIT/[A-Z]|[\w.-]/MIT" r"\b"),
-}
-# (path, regex the line must match ("" = any line of the file), reason)
+OLD = "M" "I" "T"
+# the word in any case; a letter or a digit next to it makes another word (`submit`, `limit`)
+WORD = re.compile(rf"(?<![A-Za-z0-9]){OLD}(?![A-Za-z0-9])", re.IGNORECASE)
+# the grant sentence that opens the old licence's text (its body need not hold the name)
+GRANT = re.compile("Permission is hereby " "granted, free of " "charge", re.IGNORECASE)
+# (path, SHA-256 of the full line without its line end, reason)
 ALLOWED: list[tuple[str, str, str]] = [
-    ("CHANGELOG.md", r"0\.3\.x 以前", "the terms of the versions published before 0.4.0"),
-    ("CHANGELOG.md", r"stacker", "the licence of the dependency stacker"),
-    ("README.md", r"under MIT OR Apache-2\.0 and keep those terms", "the terms of the versions published before 0.4.0"),
-    ("README_JP.md", r"0\.3\.x 以前は MIT OR Apache-2\.0", "the terms of the versions published before 0.4.0"),
-    ("alice-lol-macro/README.md", r"released under MIT OR Apache-2\.0 and keep those terms", "the terms of macro 0.2.0 and earlier"),
-    ("alice-lol/Cargo.toml", r"rustc と同じ手法", "the licence of the dependency stacker"),
-    ("deny.toml", r"MIT AND ISC AND OpenSSL", "the licence expression of the dependency ring"),
-    ("docs/HUMANOID_TEMPLATE_DESIGN.md", r"`(glam|gltf|serde_json)`", "the licences of the dependencies"),
-    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", r"`(gltf|serde_json)`", "the licences of the dependencies"),
-    ("scripts/license_check.py", r"", "the checker names the forms it looks for"),
-    ("scripts/test_license_check.py", r"", "the checker's test writes each form into a fixture"),
+    ("CHANGELOG.md", "7d5afcfe2df58db06968ea3fba25bfb51add2f5ebd57283ea01b4535140fdb05", "0.4.0 notes the terms of the versions published before it"),
+    ("CHANGELOG.md", "05ed21a6fcf69466d5c3cf663edb2523dc6bc7bed5a293392c353934f63547cc", "0.4.0 records removing the old licence file"),
+    ("CHANGELOG.md", "b69f8af757a91d7930c94f9ca0d5c32d32cf7f443525c2b639976ff8583be218", "0.4.0 records replacing the copied licence text of lol-sdf"),
+    ("CHANGELOG.md", "b979a59120edda4899cd66ee123dc4dc2a181463a065811a7ab527e93651812c", "the licence of the dependency stacker"),
+    ("README.md", "54776439734207219626c3388a1634ad5f0c5a723657aaed80e26d09aeba5521", "the terms of the versions published before 0.4.0"),
+    ("README_JP.md", "ff8cf7c40374b409b9595889243fac7752319481c18f2800218e421759798ce0", "the terms of the versions published before 0.4.0"),
+    ("alice-lol-macro/README.md", "64280fe10dc3192dd90c0439e83e7115b13f4d9d6e2011bd24ab6b6c8555c583", "the terms of macro 0.2.0 and earlier"),
+    ("alice-lol/Cargo.toml", "4c153f064b25aa89cd8a9f7bafdf563b65347f8bfec9ec95025fbe1cf2e690a2", "the licence of the dependency stacker"),
+    ("deny.toml", "1f357a16a4708e089d0ef8a455a36aa8c2a2dd73ffc127d5b826dd013d0d2c2a", "states that the allow list is for dependencies"),
+    ("deny.toml", "f776c7c98bcbd52f8a6cede872b0ca38f9fd04516b954a5a1379cd00d0f8b2ad", "a licence allowed for dependencies"),
+    ("deny.toml", "fab278bf6bdd6a44a300ed01bf8e7d3e7ffc539139b92aac83e42c54aa044438", "the licence expression of the dependency ring"),
+    ("deny.toml", "e27a4ed1e8a00120de9e1cedad90f29ee0363af41ece1ffdf6c17a698e911b87", "the licence the CI stubs of sibling crates declare"),
+    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "1a1bf2065efc9506e455999b982f6a666c1c96f0df44cb0f37b83ab47e4b4f2e", "the licence of the dependency glam"),
+    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "c0948e26f4509eb964e6c151bbf55604995546adb847a9d6ba36e1b76ce0436b", "the licence of the dependency gltf"),
+    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "cd0e344fc6c99e3e83d85739efa4d53b161a7b870d3415b6ab63766d3d98ee61", "the licence of the dependency serde_json"),
+    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", "9d808dd29288008ace2e0b477020fc2360273ee01632b5f643cd854cd648f28d", "the licence of the dependency gltf"),
+    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", "5e7c19a2ae48c91177b7f3984c16830e240803d9041b23b5a2300c915f11c669", "the licence of the dependency serde_json"),
 ]
 
 
-def statements(rel: str, text: str) -> list[tuple[int, str, str]]:
-    """(line number, form, line) for each line of `text` that states an MIT licence"""
-    out = []
-    for i, line in enumerate(text.splitlines(), 1):
-        for form, rx in MIT_STATEMENTS.items():
-            if rx.search(line):
-                out.append((i, form, line))
-                break
-    return out
+def line_hash(line: str) -> str:
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()
 
 
 def tracked() -> list[str]:
@@ -89,10 +87,46 @@ def members() -> list[tuple[str, Path, str, bool]]:
     return out
 
 
+def hits(paths: list[str]) -> tuple[int, list[tuple[str, int, str]]]:
+    """(lines read, (path, line number, line) for each line holding the word)"""
+    lines, out = 0, []
+    for rel in paths:
+        p = ROOT / rel
+        if not p.is_file():
+            continue
+        for i, line in enumerate(p.read_bytes().decode("utf-8", "replace").splitlines(), 1):
+            lines += 1
+            if WORD.search(line) or GRANT.search(line):
+                out.append((rel, i, line))
+    return lines, out
+
+
+def scan(paths: list[str]) -> tuple[int, list[str]]:
+    """(lines read, violations): every line holding the word must be an ALLOWED line"""
+    lines, found = hits(paths)
+    allowed = {(p, h): k for k, (p, h, _) in enumerate(ALLOWED)}
+    bad, used = [], set()
+    for rel, i, line in found:
+        k = allowed.get((rel, line_hash(line)))
+        if k is None:
+            bad.append(f"{rel}:{i}: names the old licence and no ALLOWED entry names this line "
+                       f"(sha256 {line_hash(line)}): {line.strip()[:80]}")
+        else:
+            used.add(k)
+    for k, (path, h, reason) in enumerate(ALLOWED):
+        if k not in used:
+            bad.append(f"ALLOWED entry ({path}, {h[:12]}…: {reason}) matches no line: remove it")
+    return lines, bad
+
+
 def main(argv: list[str]) -> int:
+    if argv == ["--hits"]:
+        for rel, i, line in hits(tracked())[1]:
+            print(f"{rel}:{i}: {line_hash(line)} {line.strip()[:100]}")
+        return 0
     package = argv == ["--package"]
     if argv and not package:
-        print(__doc__.strip().splitlines()[-2], file=sys.stderr)
+        print(__doc__.strip().splitlines()[-3], file=sys.stderr)
         return 2
     crates = members()
     if not crates:
@@ -102,31 +136,14 @@ def main(argv: list[str]) -> int:
     for f in TEXTS:
         if not (ROOT / f).is_file():
             bad.append(f"{f} is missing at the root")
-    for p in [ROOT / "LICENSE-MIT", *(d / "LICENSE-MIT" for _, d, _, _ in crates)]:
+    for p in [ROOT / f"LICENSE-{OLD}", *(d / f"LICENSE-{OLD}" for _, d, _, _ in crates)]:
         if p.exists():
-            bad.append(f"{p.relative_to(ROOT)} exists (the crates are no longer MIT)")
-    paths = tracked()
-    if not paths:
-        print("error: read 0 tracked files", file=sys.stderr)
+            bad.append(f"{p.relative_to(ROOT)} exists (the crates are Apache-2.0 from 0.4.0)")
+    lines, found = scan(tracked())
+    if lines == 0:
+        print("error: read 0 lines of tracked files", file=sys.stderr)
         return 2
-    used: set[int] = set()
-    for rel in paths:
-        if rel.startswith(THIRD_PARTY) if THIRD_PARTY else False:
-            continue
-        p = ROOT / rel
-        if not p.is_file():
-            continue
-        text = p.read_bytes().decode("utf-8", "replace")
-        if MIT_TEXT.search(text):
-            bad.append(f"{rel} holds an MIT licence text")
-        for i, form, line in statements(rel, text):
-            hits = [k for k, (path, rx, _) in enumerate(ALLOWED) if path == rel and re.search(rx, line)]
-            used.update(hits)
-            if not hits:
-                bad.append(f"{rel}:{i}: states an MIT licence ({form}) and no ALLOWED entry names it: {line.strip()[:80]}")
-    for k, (path, rx, reason) in enumerate(ALLOWED):
-        if k not in used:
-            bad.append(f"ALLOWED entry ({path}, {rx!r}: {reason}) matches no line: remove it")
+    bad += found
     for name, d, lic, published in crates:
         want = EXPECTED.get(name, APACHE)
         if lic != want:
@@ -151,7 +168,7 @@ def main(argv: list[str]) -> int:
         return 2
     for b in bad:
         print(f"error: {b}", file=sys.stderr)
-    print(f"licenses: read {len(crates)} crates and {len(paths)} tracked files, checked {files} license files"
+    print(f"licenses: read {len(crates)} crates and {lines} lines, checked {files} license files"
           f"{' and the package lists' if package else ''}, {len(bad)} violation(s)")
     return 1 if bad else 0
 
