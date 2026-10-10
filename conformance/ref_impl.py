@@ -30,6 +30,54 @@ class Reject(Exception):
     pass
 
 
+# Elementary functions, correctly rounded: computed by mpmath at 60 digits and rounded once
+# to double. The platform libm may be an ulp away (macOS sin is 1 ulp above at
+# x = 0.7891896992570689, where 1000 sin(x) crosses the overflow of exp), and a verdict near
+# a finiteness crossing would then depend on the platform; correctly rounded values are the
+# same everywhere (and equal alice-det-math). A result that is not finite in double raises
+# OverflowError, as math.exp does, and the request is rejected (main). mpmath is loaded only
+# when a quantitative law is evaluated (conformance/requirements.txt).
+_MP = None
+
+
+def _mp():
+    global _MP
+    if _MP is None:
+        import mpmath
+        mpmath.mp.dps = 60
+        _MP = mpmath
+    return _MP
+
+
+def _cr(v):
+    x = float(v)
+    if not math.isfinite(x):
+        raise OverflowError("not finite in double")
+    return x
+
+
+def cr_exp(x):
+    return _cr(_mp().exp(x))
+
+
+def cr_sin(x):
+    return _cr(_mp().sin(x))
+
+
+def cr_cos(x):
+    return _cr(_mp().cos(x))
+
+
+def cr_atan2(y, x):
+    # the sign of a zero argument is ignored (TASK.md): mpmath has no signed zero anyway
+    return _cr(_mp().atan2(y, x))
+
+
+def cr_pow(x, y):
+    """x^y for x > 0 (the laws raise a positive base to a non-integer power)"""
+    return _cr(_mp().power(_mp().mpf(x), y))
+
+
 def rng(name, x, lo, hi):
     if not isinstance(x, (int, float)) or isinstance(x, bool) or not math.isfinite(x) or x < lo or x > hi:
         raise Reject(f"{name}={x} outside [{lo}, {hi}]")
@@ -181,15 +229,15 @@ def four_bar(i):
         raise Reject("crank is not the shortest link")
     if not sum(others) - lc - 2 * max(others) > 0:
         raise Reject("not a Grashof crank-rocker")
-    ax, ay = lc * math.cos(th), lc * math.sin(th)
+    ax, ay = lc * cr_cos(th), lc * cr_sin(th)
     dx, dy = lg - ax, -ay
-    d = math.hypot(dx, dy)
+    d = math.sqrt(dx * dx + dy * dy)  # as written in the law: sqrt(dx^2 + dy^2)
     a = (d * d + lco * lco - lr * lr) / (2 * d)
     hh = math.sqrt(lco * lco - a * a)
     bx = ax + a * dx / d - hh * dy / d
     by = ay + a * dy / d + hh * dx / d
     # the sign of a zero argument is ignored (-0 reads as +0), so the angle is in (-pi, pi]
-    return {"theta4": math.atan2(by + 0.0, (bx - lg) + 0.0)}
+    return {"theta4": cr_atan2(by + 0.0, (bx - lg) + 0.0)}
 
 
 def isa(i):
@@ -202,13 +250,13 @@ def isa(i):
     t0, p0, lapse, g0, mm, rr = 288.15, 101325.0, 0.0065, 9.80665, 0.0289644, 8.31432
     k = g0 * mm / (rr * lapse)
     t11 = t0 - lapse * 11000
-    p11 = p0 * (t11 / t0) ** k
+    p11 = p0 * cr_pow(t11 / t0, k)
     if hh <= 11000:
         t = t0 - lapse * hh
-        p = p0 * (t / t0) ** k
+        p = p0 * cr_pow(t / t0, k)
     else:
         t = t11
-        p = p11 * math.exp(-g0 * mm * (hh - 11000) / (rr * t11))
+        p = p11 * cr_exp(-g0 * mm * (hh - 11000) / (rr * t11))
     return {"temperature": t, "pressure": p, "density": p * mm / (rr * t)}
 
 
@@ -490,9 +538,9 @@ def generic_audit(law):
 def finite_probe(i):
     x = i["x"]
     rng("x", x, 0, math.pi)
-    # math.exp raises OverflowError past ~709.78: the intermediate is not finite, and the
+    # exp raises OverflowError past ~709.78: the intermediate is not finite, and the
     # request is rejected (main) although 1/exp(...) would be 0 under IEEE overflow
-    e = math.exp(1000 * math.sin(x))
+    e = cr_exp(1000 * cr_sin(x))
     return {"y": 1 / e}
 
 

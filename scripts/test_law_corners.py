@@ -157,6 +157,37 @@ class StrictDouble(unittest.TestCase):
         self.assertTrue(lc.finite_in_double(law, {"x": 700}))
         self.assertFalse(lc.finite_in_double(law, {"x": 1000}))
 
+    def test_a_verdict_beside_a_crossing_is_in_the_band(self):
+        law = lc.load(ROOT / "laws" / "spike" / "finite_evaluation_probe.law")
+        x1 = float("0.78918969925706884277")  # 1000 sin(x) at the overflow of exp
+        self.assertTrue(lc.near_a_finiteness_crossing(law, {"x": x1}))
+        self.assertTrue(lc.near_a_finiteness_crossing(law, {"x": math.nextafter(x1, 9)}))
+        for x in (0.5, 0.7, 1.0, math.pi / 2, 2.6):
+            self.assertFalse(lc.near_a_finiteness_crossing(law, {"x": x}), x)
+        # a crossing through basic operations only (and cos 0 = 1, sin 0 = 0, exact in every
+        # libm) is the same in every implementation: not in the band
+        four_bar = lc.load(ROOT / "laws" / "spike" / "four_bar_rocker_angle.law")
+        self.assertFalse(lc.near_a_finiteness_crossing(
+            four_bar, {"lc": 1.7939999999998988, "lco": 94.027, "lr": 5.407, "lg": 90.414, "theta2": 0.0}))
+
+    def test_no_quantitative_probe_is_in_the_band(self):
+        probes = json.loads((ROOT / "conformance" / "probes.json").read_text(encoding="utf-8"))
+        checked = 0
+        for p in probes:
+            f = ROOT / "laws" / "spike" / f"{p['law']}.law"
+            if "law_text" in p or not f.exists():
+                continue
+            law = lc.load(f)
+            inputs = p.get("inputs") or {}
+            if law["kind"] != "research" or not all(
+                    isinstance(inputs.get(v["name"]), (int, float)) and not isinstance(inputs.get(v["name"]), bool)
+                    for v in law["inputs"] if v["name"] not in law["lists"]):
+                continue
+            with self.subTest(probe=p["note"]):
+                self.assertFalse(lc.near_a_finiteness_crossing(law, inputs))
+            checked += 1
+        self.assertGreater(checked, 0)
+
     def test_the_other_laws_are_finite_at_their_corners(self):
         # the rule adds no rejection to a law whose range keeps every value finite
         for f in sorted((ROOT / "laws" / "spike").glob("*.law")):

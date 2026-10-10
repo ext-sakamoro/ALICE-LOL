@@ -422,6 +422,11 @@ def vector(law, inputs, note):
         verdict, subject = audit_verdict(law, nums, ranges)
         v.update(kind="verdict", expected={"verdict": verdict, "subject": subject}, tolerance=None)
         return v
+    # a request within CROSSING_ULPS of a finiteness crossing has no verdict that every libm
+    # gives (TASK.md: not scored), so the design must keep away from one
+    if valid(law, inputs) and lc.near_a_finiteness_crossing(law, inputs):
+        raise SystemExit(f"{law['name']}: {inputs} is within {lc.CROSSING_ULPS} ulp of a finiteness "
+                         f"crossing; move the case away from it")
     # in range, but an intermediate value is not finite in double: rejected as well
     # (conformance/TASK.md: every intermediate value of an expression is finite)
     if not valid(law, inputs) or not lc.finite_in_double(law, inputs):

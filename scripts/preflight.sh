@@ -129,8 +129,15 @@ python3 scripts/law_ambiguity_lint.py laws/spike
 step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
 python3 scripts/test_law_schema.py
 python3 scripts/law_schema.py laws/spike
-python3 conformance/test_ref_finite.py
-python3 conformance/check_probes.py -- python3 conformance/ref_impl.py
+# the reference implementation needs mpmath (correctly rounded elementary functions):
+# a venv under target/ with conformance/requirements.txt, made once
+conf_py=target/conformance-venv/bin/python
+if ! "$conf_py" -c "import mpmath" 2>/dev/null; then
+  python3 -m venv target/conformance-venv
+  "$conf_py" -m pip install -q -r conformance/requirements.txt
+fi
+"$conf_py" conformance/test_ref_finite.py
+"$conf_py" conformance/check_probes.py -- "$conf_py" conformance/ref_impl.py
 cargo build -q -p alice-lol --example audit_conformance
 python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe,floor_probe -- target/debug/examples/audit_conformance
 python3 conformance/law_line_fuzz.py --pairs 150 -- python3 conformance/ref_impl.py -- target/debug/examples/audit_conformance

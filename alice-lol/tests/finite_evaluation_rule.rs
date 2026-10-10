@@ -222,3 +222,42 @@ fn a_negative_radicand_by_rounding_is_not_clamped() {
     let got = law.evaluate(&ok).unwrap();
     assert!((got - 1.483_512_684_293_831_3).abs() <= 1e-9, "{got}");
 }
+
+/// within 41 ulp of both crossings of `1000 sin(x)` over the overflow of `exp`, the verdict is
+/// the correctly rounded one (`conformance/finite_probe_crossings.json`, written by the
+/// reference implementation with correctly rounded `sin` / `exp`; alice-det-math is correctly
+/// rounded, so the two agree at every point)
+#[test]
+fn the_verdict_at_the_crossings_agrees_with_the_reference() {
+    let law = probe_law();
+    let doc = parse_json(
+        &std::fs::read_to_string(root().join("conformance/finite_probe_crossings.json")).unwrap(),
+    )
+    .unwrap();
+    let Some(Json::Array(points)) = field(&doc, "points") else {
+        panic!("points")
+    };
+    assert_eq!(points.len(), 166);
+    let mut rejected = 0;
+    for row in points {
+        let Some(Json::Number(x)) = field(row, "x") else {
+            panic!("x")
+        };
+        let Some(Json::Bool(want)) = field(row, "rejected") else {
+            panic!("rejected")
+        };
+        let got = law.evaluate(&[("x", *x)]);
+        assert_eq!(
+            got == Err(ResearchLawError::NonFinite),
+            *want,
+            "x = {x:e}: {got:?}"
+        );
+        rejected += usize::from(*want);
+    }
+    // both sides of both crossings are in the grid
+    assert!(
+        rejected > 0 && rejected < points.len(),
+        "{rejected} of {}",
+        points.len()
+    );
+}

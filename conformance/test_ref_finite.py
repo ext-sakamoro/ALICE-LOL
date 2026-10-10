@@ -18,6 +18,7 @@ import os
 import sys
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -63,6 +64,19 @@ class NonFinite(unittest.TestCase):
                         ref_impl.finite_probe({"x": x})
                 else:
                     self.assertTrue(math.isfinite(out["y"]))
+
+    def test_the_verdict_at_the_crossings_is_the_correctly_rounded_one(self):
+        # the fixture is shared with alice-lol/tests/finite_evaluation_rule.rs (Rust must agree)
+        doc = json.loads((Path(__file__).with_name("finite_probe_crossings.json")).read_text(encoding="utf-8"))
+        self.assertEqual(len(doc["points"]), 166)
+        for row in doc["points"]:
+            with self.subTest(x=row["x"]):
+                try:
+                    ref_impl.finite_probe({"x": row["x"]})
+                    rejected = False
+                except OverflowError:
+                    rejected = True
+                self.assertEqual(rejected, row["rejected"])
 
     def test_an_audit_keeps_the_error(self):
         # an audit never rejects: a domain error inside it is an error, not a rejection

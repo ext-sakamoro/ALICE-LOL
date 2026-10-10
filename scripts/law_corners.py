@@ -192,22 +192,40 @@ class NonFinite(ArithmeticError):
     """an intermediate value of an expression is not finite in double"""
 
 
-def strict_double(tree, env: dict) -> float:
+# functions whose double value is not fixed by IEEE: implementations may differ by an ulp
+# (sqrt, + - * / are correctly rounded everywhere; min / max and x^2 are exact)
+ELEMENTARY = ("exp", "ln", "sin", "cos", "atan2")
+
+
+def _shift(v: float, ulps: int) -> float:
+    for _ in range(abs(ulps)):
+        v = math.nextafter(v, math.inf if ulps > 0 else -math.inf)
+    return v
+
+
+def strict_double(tree, env: dict, shift: int = 0) -> float:
     """`evaluate` in double with the contract of quantitative laws (conformance/TASK.md):
     every intermediate value must be finite. Python raises for some overflows (`exp`,
     `**`) and returns an infinity for others (`*`, `+`); both are NonFinite here, as are a
-    domain error (`ln` of a negative number) and a division by zero"""
+    domain error (`ln` of a negative number) and a division by zero.
+    `shift` moves the value of each elementary function (and of a power other than `^2`) by
+    that many ulps, to see whether a verdict depends on how a libm rounds; a function of 0
+    is exact in every implementation and is not moved"""
     try:
         if tree[0] in ("num", "var"):
             v = float(evaluate(tree, env, math))
         elif tree[0] == "neg":
-            v = -strict_double(tree[1], env)
+            v = -strict_double(tree[1], env, shift)
         elif tree[0] == "call":
-            args = [strict_double(a, env) for a in tree[2]]
+            args = [strict_double(a, env, shift) for a in tree[2]]
             v = float(evaluate(("call", tree[1], [("num", a) for a in args]), {}, math))
+            if shift and tree[1] in ELEMENTARY and args[0] != 0:
+                v = _shift(v, shift)
         else:
-            a, b = strict_double(tree[1], env), strict_double(tree[2], env)
+            a, b = strict_double(tree[1], env, shift), strict_double(tree[2], env, shift)
             v = float(evaluate((tree[0], ("num", a), ("num", b)), {}, math))
+            if shift and tree[0] == "pow" and b != 2 and a != 0:
+                v = _shift(v, shift)
     except ExprError:
         raise  # a name with no value here (a ValueError too): not a non-finite value
     except (OverflowError, ValueError, ZeroDivisionError) as e:
@@ -217,7 +235,7 @@ def strict_double(tree, env: dict) -> float:
     return v
 
 
-def finite_in_double(law: dict, inputs: dict) -> bool:
+def finite_in_double(law: dict, inputs: dict, shift: int = 0) -> bool:
     """Whether every `let`, `x-expr` and output of the law evaluates with finite
     intermediate values in double (False: the request is rejected). A name with no value
     here (a list element, a simulated state) leaves its expression out, as `env_for` does"""
@@ -229,12 +247,23 @@ def finite_in_double(law: dict, inputs: dict) -> bool:
                     if isinstance(v, (int, float)) and not isinstance(v, bool)})
         for name, tree in law["lets"] + law["x_exprs"] + law["outputs"]:
             try:
-                env[name] = strict_double(tree, env)
+                env[name] = strict_double(tree, env, shift)
             except ExprError:
                 continue
             except NonFinite:
                 return False
     return True
+
+
+CROSSING_ULPS = 64
+
+
+def near_a_finiteness_crossing(law: dict, inputs: dict, ulps: int = CROSSING_ULPS) -> bool:
+    """Whether the finiteness verdict changes when every elementary function value moves by
+    `ulps` ulps either way: such a request is within the band where implementations whose
+    libms round differently may disagree, and is not scored (conformance/TASK.md)"""
+    verdict = finite_in_double(law, inputs)
+    return any(finite_in_double(law, inputs, s) != verdict for s in (ulps, -ulps))
 
 
 # ---------------------------------------------------------------- law files

@@ -1,0 +1,669 @@
+{
+ "note": "finite_evaluation_probe within 41 ulp of both crossings of 1000 sin(x) over the overflow of exp, with correctly rounded sin and exp (conformance/ref_impl.py, mpmath at 60 digits); research_law (alice-det-math) must give the same verdict at every point",
+ "points": [
+  {
+   "x": 0.7891896992570643,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570644,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570645,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570646,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570647,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570648,
+   "rejected": false
+  },
+  {
+   "x": 0.789189699257065,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570651,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570652,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570653,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570654,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570655,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570656,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570657,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570658,
+   "rejected": false
+  },
+  {
+   "x": 0.789189699257066,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570661,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570662,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570663,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570664,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570665,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570666,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570667,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570668,
+   "rejected": false
+  },
+  {
+   "x": 0.789189699257067,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570671,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570672,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570673,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570674,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570675,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570676,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570677,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570678,
+   "rejected": false
+  },
+  {
+   "x": 0.789189699257068,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570681,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570682,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570683,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570684,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570685,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570686,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570687,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570688,
+   "rejected": false
+  },
+  {
+   "x": 0.7891896992570689,
+   "rejected": false
+  },
+  {
+   "x": 0.789189699257069,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570692,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570693,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570694,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570695,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570696,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570697,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570698,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570699,
+   "rejected": true
+  },
+  {
+   "x": 0.78918969925707,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570702,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570703,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570704,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570705,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570706,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570707,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570708,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570709,
+   "rejected": true
+  },
+  {
+   "x": 0.789189699257071,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570712,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570713,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570714,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570715,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570716,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570717,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570718,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570719,
+   "rejected": true
+  },
+  {
+   "x": 0.789189699257072,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570722,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570723,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570724,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570725,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570726,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570727,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570728,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570729,
+   "rejected": true
+  },
+  {
+   "x": 0.789189699257073,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570732,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570733,
+   "rejected": true
+  },
+  {
+   "x": 0.7891896992570734,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327063,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327067,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332707,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327076,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332708,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327085,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332709,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327094,
+   "rejected": true
+  },
+  {
+   "x": 2.35240295433271,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327103,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327107,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332711,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327116,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332712,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327125,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332713,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327134,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332714,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327143,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327147,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332715,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327156,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332716,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327165,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332717,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327174,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332718,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327183,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327187,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332719,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327196,
+   "rejected": true
+  },
+  {
+   "x": 2.35240295433272,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327205,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332721,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327214,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332722,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327223,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327227,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332723,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327236,
+   "rejected": true
+  },
+  {
+   "x": 2.352402954332724,
+   "rejected": true
+  },
+  {
+   "x": 2.3524029543327245,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332725,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327254,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332726,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327263,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327267,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332727,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327276,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332728,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327285,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332729,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327294,
+   "rejected": false
+  },
+  {
+   "x": 2.35240295433273,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327303,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327307,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332731,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327316,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332732,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327325,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332733,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327334,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332734,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327343,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327347,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332735,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327356,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332736,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327365,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332737,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327374,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332738,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327383,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327387,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332739,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327396,
+   "rejected": false
+  },
+  {
+   "x": 2.35240295433274,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327405,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332741,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327414,
+   "rejected": false
+  },
+  {
+   "x": 2.352402954332742,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327423,
+   "rejected": false
+  },
+  {
+   "x": 2.3524029543327427,
+   "rejected": false
+  }
+ ]
+}
