@@ -284,8 +284,10 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
         "識別子が旧世代のまま"
     );
     // 旧 ID は旧 pin の fold であること (定数の写し間違いで assert_ne が空振りしない歯)
+    // 入力の読み方の pin はその世代には無かった
     let previous_pins: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
+        .filter(|(name, _)| !name.contains("input reading"))
         .map(|&(name, id)| {
             if name.contains("audit verdict order") {
                 (name, PREVIOUS_AUDIT_ORDER_PIN)
@@ -297,5 +299,65 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
     assert_eq!(
         alice_lol::law_id::fold_semantics_pins(&previous_pins),
         PREVIOUS_SEMANTICS_ID
+    );
+}
+
+/// 入力の読み方の pin を足す前の `LOL_SEMANTICS_ID`
+///
+/// 残す理由: x-input に型を持たせ、型に合わない値を入力全体として読むように変えた時に、
+/// 識別子が**本当に動いた**ことを固定するため (読み方は識別子の外にあると、同じ識別子・
+/// 同じ request で判定が変わる)
+const SEMANTICS_ID_BEFORE_INPUT_READING: [u8; 32] =
+    alice_lol::law_id::hex32("bc2befdcd5c0e1e190a145eb3f0e15c5f5698886e946dd6aecf33e406c39b71a");
+
+#[test]
+fn the_input_reading_pin_is_the_measured_behaviour() {
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| name.contains("input reading"))
+        .expect("入力の読み方の pin が無い");
+    assert_eq!(*pinned, alice_lol::law_input::input_reading_fingerprint());
+}
+
+#[test]
+fn typing_the_inputs_moved_the_identifier() {
+    assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_INPUT_READING);
+    // 旧 ID は入力の読み方の pin を除いた fold であること (写し間違いで空振りしない歯)
+    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+        .iter()
+        .filter(|(name, _)| !name.contains("input reading"))
+        .copied()
+        .collect();
+    assert_eq!(
+        alice_lol::law_id::fold_semantics_pins(&before),
+        SEMANTICS_ID_BEFORE_INPUT_READING
+    );
+}
+
+#[test]
+fn the_type_of_an_input_is_part_of_the_law() {
+    use alice_lol::law_input::InputType;
+    let t = |s: &str| InputType::parse(s).expect("type");
+    let base = audit("audit a\nevidence builds\n");
+    let typed = base.clone().with_input("builds", t("list of text"));
+    let other = base.clone().with_input("builds", t("list of number"));
+    let rec = base
+        .clone()
+        .with_input("builds", t("record(a: text, b: optional number)"));
+    let rec_spaced = base
+        .clone()
+        .with_input("builds", t("record( a:text ,b:  optional number )"));
+    // 型を足すと動く、型が違えば動く、書き方の空白では動かない
+    assert_ne!(
+        base.law_id(&LOL_SEMANTICS_ID),
+        typed.law_id(&LOL_SEMANTICS_ID)
+    );
+    assert_ne!(
+        typed.law_id(&LOL_SEMANTICS_ID),
+        other.law_id(&LOL_SEMANTICS_ID)
+    );
+    assert_eq!(
+        rec.law_id(&LOL_SEMANTICS_ID),
+        rec_spaced.law_id(&LOL_SEMANTICS_ID)
     );
 }

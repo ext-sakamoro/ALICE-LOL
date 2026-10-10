@@ -81,11 +81,17 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         "audit verdict order: evidence -> ranges -> expectations",
         hex32("14e30eaa97ad76260f022b28f4fc15f06f9df779256439078289400b8ce11e64"),
     ),
+    // 入力の読み方 (型を持つ x-input、型に合わない値は入力全体が合わない) 読み方は
+    // 同じ request に対する判定を変えるので意味論
+    (
+        "input reading: whole-input typed x-input",
+        hex32("e3c8808c2e478a35c1824c36f063148f53a2a64c84b2b617c30f4c3d125d02f7"),
+    ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("bc2befdcd5c0e1e190a145eb3f0e15c5f5698886e946dd6aecf33e406c39b71a");
+    hex32("7e4cb24ee4e58f5bcdefd08dfff51a7f52f4bf778a118675672f1c5f5a9b8d7d");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -292,7 +298,10 @@ impl LawIdHasher {
 impl AuditLaw {
     /// この監査 Law の識別子
     ///
-    /// 名前と項 (順序を含む) と算術の世代から決まる
+    /// 名前と項 (順序を含む) と型を持つ入力と算術の世代から決まる
+    ///
+    /// 型を持つ入力が無い Law の識別子は、入力の型を入れる前と同じ (入力の列は項の後に、
+    /// 1 つ以上ある時だけ tag 3 で書く 項の数を先に書いているので境界は曖昧にならない)
     #[must_use]
     pub fn law_id(&self, semantics_id: &[u8; 32]) -> [u8; 32] {
         let mut e = LawIdHasher::new(AUDIT_LAW_KIND, semantics_id).str(self.name());
@@ -313,6 +322,9 @@ impl AuditLaw {
                     e
                 }
             };
+        }
+        for (name, ty) in self.inputs() {
+            e = e.u32(3).str(name).str(&ty.canonical());
         }
         e.finish()
     }

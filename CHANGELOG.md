@@ -54,6 +54,15 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 既存分は `scripts/det-math-baseline.txt` に理由付きで置くラチェットで、解消した行が残っていても
 検査は red になる 対象 file が読めない / 呼び出しを 1 件も見ていない場合も red
 
+#### 入力の読み方を LOL が持つ (`law_input`)
+
+- `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞、同じ key は後の方、入れ子は 512 段まで)
+- `law_input::InputType`: `x-input` の型 (`number` / `integer` / `text` / `list of <型>` / `record(<名前>: <型>, …)`、欠けてよい field は `optional`) の構文・正規形 (`canonical`)・照合 (`matches`) 型に合わない部分が 1 つでもあれば入力全体が合わない `null` は欠けていない
+- `law_input::read`: `x-input` を 1 つ読む 型に合わない値は監査では測られていない、量の法則では拒否
+- `law_input::audit_law_from_file`: law file を監査の Law として読む (audit block の項と `x-input` の型) `AuditLaw::with_input` / `AuditLaw::inputs` を足した
+- `examples/audit_conformance.rs`: `conformance/TASK.md` の契約を監査の law 2 本について本 crate で実装した CLI CI (macOS の既定 feature) と `scripts/preflight.sh` が `conformance/probes.json` の該当 probe に通す (Python の参照実装と同じ答え、corpus の監査 57 件も一致)
+- **識別子の変更:** `AuditLaw::law_id` は `x-input` の型 (正規形の text) を含む 型を持つ入力が無い Law の識別子は変わらない `LOL_SEMANTICS_PINS` に「入力の読み方」(`law_input::input_reading_fingerprint`、固定の型と値の組に対する照合結果の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `bc2befdc…` から `7e4cb24e…` に再記録した 理由: 入力の読み方が識別子の外にあると、同じ識別子と同じ request で判定が変わる (型に合わない build の判定を入力全体で読むように変えた変更がそれに当たる) 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が pin の fold であることを試験する
+
 #### 監査 Law — 検査を「何が成立すべきか」として書く (`audit_law` + `parse_law`)
 
 `law` (幾何の制約) と `research_law` (データに対する式) に続く 3 つ目の Law 一致を検査する対象が

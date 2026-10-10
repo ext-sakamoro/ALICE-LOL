@@ -90,6 +90,10 @@ pub mod research_law;
 // 上の 2 つとも別物: 一致を検査する対象が測定そのもので、判定は 6 値
 pub mod audit_law;
 
+// ── 入力の読み方 (型を持つ x-input と request の JSON) ──
+// 型に合わない値は入力全体が合わない: 監査は測られていない、量の法則は拒否
+pub mod law_input;
+
 // ── 構文名の一覧 (parser の dispatch と README の構文表を突き合わせる test 専用) ──
 #[cfg(test)]
 mod syntax_table;

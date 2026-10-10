@@ -7,7 +7,8 @@ outcome is written by hand from TASK.md (not produced by the reference implement
 `{"verdict", "subject"}` for an audit, "rejected", or "exit 2" (an error of the request).
 The string "__INF__" in inputs is sent as the overflowing literal 1e400.
 
-usage: check_probes.py [--probes conformance/probes.json] -- <command...>
+usage: check_probes.py [--probes conformance/probes.json] [--laws a,b,...] -- <command...>
+--laws limits the check to the probes of those laws (for an implementation of a subset).
 Exit 1 when any probe disagrees, 2 when no probe was compared.
 """
 import argparse
@@ -42,12 +43,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--probes", default=str(Path(__file__).with_name("probes.json")))
     ap.add_argument("--timeout", type=float, default=60)
+    ap.add_argument("--laws", help="comma separated law names; only their probes are checked")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
     if not cmd:
         ap.error("no implementation command given")
     probes = json.loads(Path(a.probes).read_text(encoding="utf-8"))
+    if a.laws:
+        keep = set(a.laws.split(","))
+        probes = [p for p in probes if p["law"] in keep]
     bad = 0
     for p in probes:
         got = outcome(cmd, p, a.timeout)

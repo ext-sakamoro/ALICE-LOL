@@ -234,9 +234,12 @@ with its type and its length, so `["ab", "c"]` and `["a", "bc"]`, `u32 5` and
 The arithmetic generation is part of the name: the same text evaluated with
 different arithmetic can answer differently, so it is a different law.
 `LOL_SEMANTICS_ID` is the fold of `LOL_SEMANTICS_PINS`, and the pins are
-computed from behaviour (`audit_verdict_order_fingerprint`) rather than written
-down, so changing the order in which verdicts are reached makes the pin
-disagree. Geometric and research laws do not have identifiers yet.
+computed from behaviour (`audit_verdict_order_fingerprint`,
+`law_input::input_reading_fingerprint`) rather than written down, so changing
+the order in which verdicts are reached, or how a request's inputs are read,
+makes a pin disagree. An audit law's identifier also covers the type of each
+`x-input` line (`law_input::audit_law_from_file`). Geometric and research laws
+do not have identifiers yet.
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs); oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs).
@@ -355,6 +358,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | the ideal-gas law in SI and in (kPa, L): re-evaluation, comparison, oracles, new evidence |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | writing a check as an audit law and reaching the six verdicts |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | what a law's identifier is derived from, and what changes it |
+| [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |

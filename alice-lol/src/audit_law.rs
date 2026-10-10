@@ -46,6 +46,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::law_input::InputType;
+
 /// 監査の判定 真偽 2 値では潰れる 4 つを別の値として持つ
 ///
 /// 値を増やすのは破壊的変更として扱う (module doc 参照)
@@ -163,13 +165,35 @@ pub enum Clause {
 pub struct AuditLaw {
     name: String,
     clauses: Vec<Clause>,
+    /// 型を持つ入力 (`x-input <名前> <型>`) 型は識別子に入る
+    inputs: Vec<(String, InputType)>,
 }
 
 impl AuditLaw {
     /// 名前と項から組み立てる (parser 用)
     #[must_use]
     pub(crate) const fn new(name: String, clauses: Vec<Clause>) -> Self {
-        Self { name, clauses }
+        Self {
+            name,
+            clauses,
+            inputs: Vec::new(),
+        }
+    }
+
+    /// 型を持つ入力を足す (law file の `x-input <名前> <型>` 行)
+    ///
+    /// 型は識別子 ([`AuditLaw::law_id`](crate::law_id)) に入る: 型が変われば、同じ request
+    /// に対する判定が変わりうるので別の Law
+    #[must_use]
+    pub fn with_input(mut self, name: &str, ty: InputType) -> Self {
+        self.inputs.push((name.to_owned(), ty));
+        self
+    }
+
+    /// 型を持つ入力 (足した順)
+    #[must_use]
+    pub fn inputs(&self) -> &[(String, InputType)] {
+        &self.inputs
     }
 
     /// Law の名前

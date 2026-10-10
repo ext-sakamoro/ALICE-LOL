@@ -137,6 +137,14 @@ jobs:
         working-directory: ALICE-LOL
         run: cargo build --examples ${{ matrix.features }}
 
+      # 入力の読み方を LOL 自身 (law_input) で実装した監査の CLI を、Python の参照実装と
+      # 同じ probe に通す (決めた答えとの違いが 1 件でも、比べた件数が 0 でも fail)
+      - name: Probes (audit laws, implemented with law_input)
+        if: matrix.label == ''
+        working-directory: ALICE-LOL
+        shell: bash
+        run: python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law -- target/debug/examples/audit_conformance
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest

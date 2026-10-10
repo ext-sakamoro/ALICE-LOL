@@ -219,8 +219,10 @@ NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol
 
 算術の世代は名前の一部 同じ text でも評価する算術が違えば答えが変わりうるので、
 別の Law として扱う `LOL_SEMANTICS_ID` は `LOL_SEMANTICS_PINS` の fold で、pin の値は
-書き下すのでなく振る舞いから計算する (`audit_verdict_order_fingerprint`) ので、
-判定の順序を変えると pin が合わなくなる 幾何法則と研究 Law の識別子はまだ無い
+書き下すのでなく振る舞いから計算する (`audit_verdict_order_fingerprint`、
+`law_input::input_reading_fingerprint`) ので、判定の順序や request の入力の読み方を
+変えると pin が合わなくなる 監査の Law の識別子は `x-input` の行の型も含む
+(`law_input::audit_law_from_file`) 幾何法則と研究 Law の識別子はまだ無い
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs)、oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs)
@@ -326,6 +328,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | 理想気体の式を SI と (kPa, L) で書き、再計算・比較・oracle・新しい証拠の判定 |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | 検査を監査 Law として書き、6 値の判定に到達させる |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
+| [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | 同じ mesh を STL / 3MF / FBX に書き、解像度 preset を並べる |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | 区間演算による格子セルごとの枝刈り |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | 勾配、曲率、ヘッセ行列 |

@@ -49,7 +49,11 @@ fn main() -> Result<(), ParseError> {
         "  判定順序を今ここで測り直した指紋 = {}",
         hex(&audit_verdict_order_fingerprint())
     );
-    println!("  ⚠️ 上の 3 つが揃わなければ、識別子が振る舞いを名乗れていない");
+    println!(
+        "  入力の読み方を今ここで測り直した指紋 = {}",
+        hex(&alice_lol::law_input::input_reading_fingerprint())
+    );
+    println!("  ⚠️ 上の pin と測り直した指紋が揃わなければ、識別子が振る舞いを名乗れていない");
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;

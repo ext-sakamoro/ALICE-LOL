@@ -170,6 +170,7 @@ fn split_def(rest: &str) -> (String, String, String) {
 /// State of one file while its lines are checked
 struct FileCheck<'a> {
     file: String,
+    text: &'a str,
     counts: &'a mut Counts,
     env: Env,
     law_name: Option<String>,
@@ -192,6 +193,16 @@ impl FileCheck<'_> {
             let expected = self.law_name.as_deref().unwrap().replace('_', "-");
             assert_eq!(law.name(), expected, "{file}: audit name");
             assert!(!law.clauses().is_empty());
+            // the whole file as an audit law: the clauses and the types of the x-input lines
+            let whole = alice_lol::law_input::audit_law_from_file(self.text)
+                .unwrap_or_else(|e| panic!("{file}: {e}"));
+            assert_eq!(whole.clauses(), law.clauses(), "{file}: clauses");
+            let declared = self
+                .text
+                .lines()
+                .filter(|l| l.starts_with("x-input "))
+                .count();
+            assert_eq!(whole.inputs().len(), declared, "{file}: x-input types");
             self.counts.audits += 1;
             self.audits_here += 1;
             self.audit = None;
@@ -452,6 +463,7 @@ fn check_file(path: &Path, counts: &mut Counts) {
     let text = std::fs::read_to_string(path).unwrap();
     let mut fc = FileCheck {
         file: file.clone(),
+        text: &text,
         counts,
         env: Env::default(),
         law_name: None,

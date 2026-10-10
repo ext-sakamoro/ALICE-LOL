@@ -119,6 +119,8 @@ step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
 python3 scripts/test_law_schema.py
 python3 scripts/law_schema.py laws/spike
 python3 conformance/check_probes.py -- python3 conformance/ref_impl.py
+cargo build -q -p alice-lol --example audit_conformance
+python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law -- target/debug/examples/audit_conformance
 
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
