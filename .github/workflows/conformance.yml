@@ -25,6 +25,10 @@ on:
       - '.github/workflows/ci.yml'
   workflow_dispatch:
 
+# the job reads the repository only
+permissions:
+  contents: read
+
 # a superseded run on a branch is cancelled; on main each commit has a group of its own
 # and is never cancelled (a cancelled main commit is unverified)
 concurrency:
