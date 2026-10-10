@@ -40,10 +40,13 @@
 //! Secondary generator (keyword-coverage fallback, not hazard-coverage): for
 //! any keyword the corpus does not generate a snippet for (its grammar
 //! bucket has no `snippet()` arm), a 0..=8-arg black-box sweep with every
-//! arg set to the same palette value -- this path existing and firing a
-//! nonzero number of times for real (not just existing in the code) is
-//! itself asserted, so a keyword silently skipped by both the corpus and
-//! the sweep would be visible rather than silently passing.
+//! arg set to the same palette value. Measured: it currently fires 0 times
+//! -- `grammar_corpus()` already has a `snippet()` arm for every one of the
+//! 237 names, so there is nothing left for it to cover today. It stays as
+//! a safety net for a keyword a future grammar bucket doesn't have a
+//! mapping for: `uncovered.is_empty()` (below) is the actual guarantee that
+//! every name in `sdf_syntax_names()` is reached by (corpus union sweep),
+//! regardless of how that union is split between the two.
 //!
 //! CI: ubuntu only (job on `linux` already runs `cargo test --test
 //! degenerate_grid`). macOS and Windows are not covered: killing a
@@ -198,28 +201,51 @@ fn sweep_call(name: &str, argc: usize, value: &str) -> String {
 /// (`scripts/runtime_keywords.py` の Python 版と同じ技法、こちらは Rust 版)
 fn sdf_syntax_names() -> BTreeSet<String> {
     let src = include_str!("../src/syntax_table.rs");
-    let start = src
+    let decl_start = src
         .find("const SDF_SYNTAX")
         .expect("syntax_table.rs has no SDF_SYNTAX");
+    // skip past the declaration line itself: `const SDF_SYNTAX: &[(&str,
+    // &[&str])] = &[` has its OWN `&[` occurrences in the type annotation
+    // (the outer slice, and the inner `&[&str]` tuple field) before the
+    // array literal's real opening bracket -- starting the search here
+    // instead of at `decl_start` means the only `&[` left to find is each
+    // group's own names list
+    let start = decl_start
+        + src[decl_start..]
+            .find('\n')
+            .expect("SDF_SYNTAX's declaration line has no newline")
+        + 1;
     let end = src[start..]
         .find("\n];\n")
         .expect("SDF_SYNTAX has no closing `];`")
         + start;
     let body = &src[start..end];
     let mut out = BTreeSet::new();
-    let mut chars = body.char_indices();
-    while let Some((i, c)) = chars.next() {
-        if c != '"' {
-            continue;
+    // each group is `("label", &[ "name", "name", ... ],),`: only the
+    // quoted strings strictly between `&[` and its matching `]` are actual
+    // keyword names. An earlier version of this function scanned every
+    // quoted string in the whole body, which also counted the 7 group
+    // labels (primitives/csg/transforms/modifiers/print/time/stdlib) as if
+    // they were keywords -- 244 instead of 237, with the 7 extras showing
+    // up as "covered by the sweep" (a sweep call like `primitives(...)` is
+    // not a real keyword and was never actually testing anything). A second
+    // attempt at this fix, scanning from `decl_start` instead of `start`,
+    // still miscounted (238): the declaration line's own `&[` occurrences
+    // (in `&[(&str, &[&str])]`) threw off the `&[`/`]` pairing for every
+    // group after the first, which is why the search starts after that
+    // line now instead.
+    let mut search_from = 0;
+    while let Some(rel) = body[search_from..].find("&[") {
+        let names_start = search_from + rel + "&[".len();
+        let names_end = names_start
+            + body[names_start..]
+                .find(']')
+                .expect("an `&[` in SDF_SYNTAX has no closing `]`");
+        let names_blob = &body[names_start..names_end];
+        for name in names_blob.split('"').skip(1).step_by(2) {
+            out.insert(name.to_string());
         }
-        let rest = &body[i + 1..];
-        if let Some(j) = rest.find('"') {
-            out.insert(rest[..j].to_string());
-            // skip past the closing quote so the next search starts after it
-            for _ in 0..=j {
-                chars.next();
-            }
-        }
+        search_from = names_end;
     }
     out
 }
@@ -271,9 +297,14 @@ fn run_grid() -> GridResult {
     let corpus = grammar_corpus();
     let covered_by_corpus: BTreeSet<String> = corpus.iter().map(|(n, _)| n.clone()).collect();
     let all_names = sdf_syntax_names();
-    assert!(
-        all_names.len() > 200,
-        "found only {} SDF names",
+    // the exact count, not just "more than a handful": this must agree with
+    // scripts/runtime_keywords.py's independent parse of the same two files
+    // (237, cross-validated against cargo test syntax_table::), a drift
+    // here means one of the two parsers broke, not that the language grew
+    assert_eq!(
+        all_names.len(),
+        237,
+        "expected 237 SDF names (scripts/runtime_keywords.py's independent count), got {}: {all_names:?}",
         all_names.len()
     );
     assert!(

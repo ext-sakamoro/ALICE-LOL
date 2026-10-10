@@ -38,6 +38,22 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 2
 fi
 
+# a plain `cargo build`/`cargo test` can itself rewrite Cargo.lock (sibling
+# path dependencies may resolve to a different set of versions in a fresh
+# checkout than whatever was last committed, e.g. in CI where the sibling
+# repos are checked out fresh every run) -- settle that HERE, before taking
+# the "clean" baseline the mutants are compared against, so the comparison
+# at the end separates "a mutant left a file dirty" from "cargo touched the
+# lock file as an ordinary side effect of building", which is not this
+# script's concern (and not `--locked`: a lockfile update here is expected,
+# not an error to refuse)
+echo "grid_teeth_check: pre-build (settles Cargo.lock before the baseline is taken)"
+cargo build -p alice-lol --test degenerate_grid >/tmp/grid_teeth_prebuild.log 2>&1 || {
+  echo "grid_teeth_check: pre-build failed -- see /tmp/grid_teeth_prebuild.log" >&2
+  exit 2
+}
+BASELINE_STATUS="$(git status --porcelain)"
+
 MUTATED_FILES=()
 
 cleanup() {
@@ -218,15 +234,29 @@ for r in "${RESULTS[@]}"; do
 done
 
 # each mutant already restores its own files right after its test run, but
-# assert the WHOLE tree is clean here too -- a mutant whose restore silently
-# missed a file (a typo in its file list, a mutation that touched something
-# not listed) would otherwise leave that file mutated with nothing to
-# notice it, defeating the trap's own purpose
-dirty="$(git status --porcelain)"
-if [ -n "$dirty" ]; then
+# assert the WHOLE tree matches the pre-mutant BASELINE here too -- a
+# mutant whose restore silently missed a file (a typo in its file list, a
+# mutation that touched something not listed) would otherwise leave that
+# file mutated with nothing to notice it, defeating the trap's own purpose.
+# Compared against BASELINE_STATUS, not against "nothing": cargo itself may
+# have touched Cargo.lock again while running a mutant's test command (the
+# same ordinary resolution behavior the pre-build already settled once),
+# which is not a mutant-restore failure.
+final_status="$(git status --porcelain)"
+if [ "$final_status" != "$BASELINE_STATUS" ]; then
   echo
-  echo "grid_teeth_check: the working tree is NOT clean after all mutants were restored:" >&2
-  echo "$dirty" >&2
+  echo "grid_teeth_check: the working tree does not match the pre-mutant baseline:" >&2
+  diff <(echo "$BASELINE_STATUS") <(echo "$final_status") >&2 || true
+  exit 1
+fi
+
+# a silent bug in run_mutant (an early return, a typo in a mutant's own
+# call) could leave RESULTS short without any mutant reporting GREEN --
+# that would read as "ok" above for the wrong reason, so the count itself
+# is asserted, not just its contents
+if [ "${#RESULTS[@]}" -ne 5 ]; then
+  echo
+  echo "grid_teeth_check: expected 5 mutant results, got ${#RESULTS[@]}" >&2
   exit 1
 fi
 

@@ -87,6 +87,24 @@ fn a_skadis_panel_side_must_be_greater_than_zero() {
     }
 }
 
+/// Same concern as the gridfinity threshold test below: a crash-freedom-only
+/// grid test would not notice `MAX_SKADIS_PANEL_MM` silently drifting.
+/// Pinning the exact Ok/Err boundary (2000 vs 2001) and the error's kind
+/// contains the constant to the value `limits.rs` documents.
+#[test]
+fn skadis_panel_size_threshold_is_pinned_not_just_crash_free() {
+    assert!(
+        parse_lol("skadis_panel(2000)").is_ok(),
+        "2000 (exactly MAX_SKADIS_PANEL_MM) must be Ok"
+    );
+    let e = parse_lol("skadis_panel(2001)").unwrap_err();
+    assert!(
+        e.message.contains("panel_size"),
+        "2001: expected a panel_size resource-limit error, got: {}",
+        e.message
+    );
+}
+
 /// 2026-10-10 real regression: `gridfinity_bin_ex` bounded each divider axis
 /// independently (`count_trunc`, `MAX_STDLIB_COUNT` = 1024) but never their
 /// *product*, so `gridfinity_bin_ex(1,1,1,101,100,0,0)` (10,100 dividers,
@@ -110,6 +128,34 @@ fn gridfinity_bin_ex_dividers_product_is_a_parse_error_not_a_panic() {
     ] {
         assert!(parse_lol(src).is_ok(), "{src}");
     }
+}
+
+/// A grid test (`tests/degenerate_grid.rs`) that only checks "no crash" does
+/// not notice `MAX_NODE_EXPANSION` silently drifting -- raising it from
+/// 10,000 to 1,000,000 leaves every crash-freedom check green, since the
+/// grid never asked what the *verdict* for a specific input should be, only
+/// whether the process survived. Pinning Ok/Err at specific products (not
+/// just "some huge product is eventually refused") is what actually
+/// contains the constant to the value limits.rs documents and justifies.
+#[test]
+fn gridfinity_bin_ex_dividers_product_threshold_is_pinned_not_just_crash_free() {
+    let ok = |cols: u32, rows: u32| {
+        parse_lol(&format!("gridfinity_bin_ex(1,1,1,{cols},{rows},0,0)")).is_ok()
+    };
+    let err_is_grid_expansion = |cols: u32, rows: u32| {
+        let e = parse_lol(&format!("gridfinity_bin_ex(1,1,1,{cols},{rows},0,0)")).unwrap_err();
+        assert!(
+            e.message.contains("grid_expansion"),
+            "{cols}x{rows}: expected a grid_expansion resource-limit error, got: {}",
+            e.message
+        );
+    };
+    assert!(
+        ok(100, 100),
+        "100x100 = 10,000 (exactly MAX_NODE_EXPANSION) must be Ok"
+    );
+    err_is_grid_expansion(101, 100); // 10,100: one over the limit
+    err_is_grid_expansion(200, 200); // 40,000: well over -- would wrongly pass if the limit were silently raised to 1,000,000
 }
 
 /// Same boundary, through the public `try_*` entry point directly (the
