@@ -159,7 +159,11 @@ def law_metrics(law_text: str):
                 raise SchemaError(f"x-metric `{name.strip()}` is declared twice")
             metrics.append((name.strip(), parse_metric(expr)))
         elif floor is not None:
-            name, n = floor.split()
+            parts = floor.split()
+            if len(parts) != 2 or not re.fullmatch(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?", parts[1]) \
+                    or not math.isfinite(float(parts[1])) or float(parts[1]) < 0:
+                raise SchemaError(f"`x-at-least <metric> <number>` with a number >= 0 expected: {w!r}")
+            name, n = parts
             if any(m == name for m, _ in at_least):
                 raise SchemaError(f"x-at-least for `{name}` is declared twice")
             at_least.append((name, float(n)))

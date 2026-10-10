@@ -377,13 +377,15 @@ def read_audit_law(name):
             elif not w:
                 continue
             elif w[0] == "audit" and len(w) == 2:
+                if "name" in law:
+                    raise ValueError("a second `audit <name>` line")
                 law["name"] = w[1]
             elif w[0] == "evidence" and len(w) == 2:
                 law["clauses"].append(("evidence", w[1]))
             elif w[0] == "expect" and len(w) in (4, 6) and w[2] == "==" and (len(w) == 4 or w[4] == "within"):
                 value = law_number(w[3])
                 tol = law_number(w[5]) if len(w) == 6 else 0.0
-                if value is None or tol is None:
+                if value is None or tol is None or tol < 0:
                     raise ValueError(f"expect: not a number of a law file: {l!r}")
                 law["clauses"].append(("expect", w[1], value, tol))
             elif w[0] == "range" and len(w) >= 3:
@@ -411,7 +413,7 @@ def read_audit_law(name):
             if any(n == w[1] for n, _ in law["at_least"]):
                 raise ValueError(f"x-at-least for `{w[1]}` is declared twice")
             floor = law_number(w[2]) if len(w) == 3 else None
-            if floor is None:
+            if floor is None or floor < 0:
                 raise ValueError(f"`x-at-least <metric> <number>` expected: {l!r}")
             law["at_least"].append((w[1], floor))
     if inside or not closed:

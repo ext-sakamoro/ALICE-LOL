@@ -98,11 +98,15 @@ def perturbations() -> list[tuple[str, list[str], str]]:
         ("unknown clause", "require n", 8),
         ("audit name missing", "audit", 7),
         ("audit two names", "audit a b", 7),
+        ("expect negative tolerance", "expect n == 2 within -0.5", EXPECT),
+        ("x-at-least negative floor", "x-at-least s -1", AT_LEAST),
+        ("x-at-least floor -0", "x-at-least s -0", AT_LEAST),
         ("range without values", "range k", 8),
     ]:
         out.append((label, _with(i, line), "\n"))
     out.append(("no end audit", BASE[:-1], "\n"))
     out.append(("two audit blocks", BASE + ["begin audit", "audit again", "evidence n", "end audit"], "\n"))
+    out.append(("two audit lines", BASE[:8] + ["audit again"] + BASE[8:], "\n"))
     for name, ending in [("crlf", "\r\n"), ("cr", "\r"), ("lf", "\n"), ("mixed", None), ("lf cr", "\n\r")]:
         out.append((f"file: line ending {name}", list(BASE), ending))
     # every separator used as the line end after one line (each reader must split the same)

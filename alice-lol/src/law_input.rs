@@ -1088,7 +1088,10 @@ fn metric_line(line: usize, rest: &str) -> Result<(String, MetricExpr), LawFileE
 fn floor_line(line: usize, rest: &str) -> Result<(String, f64), LawFileError> {
     let w: Vec<&str> = rest.split_whitespace().collect();
     match w.as_slice() {
-        [name, v] => crate::runtime_parser::law_number(v).map(|v| ((*name).to_owned(), v)),
+        // a floor counts things: not negative
+        [name, v] => crate::runtime_parser::law_number(v)
+            .filter(|v| *v >= 0.0)
+            .map(|v| ((*name).to_owned(), v)),
         _ => None,
     }
     .ok_or_else(|| LawFileError::InputType {
@@ -1569,6 +1572,12 @@ mod tests {
         };
         assert!(law(ok).is_ok());
         assert!(law(&format!("{ok}# x-foo in a comment\n   # X-Metric too\n")).is_ok());
+        // a floor is not negative (a malformed number, not a malformed declaration line)
+        assert!(matches!(
+            law(&ok.replace("x-at-least n 1", "x-at-least n -1")),
+            Err(LawFileError::InputType { .. })
+        ));
+        assert!(law(&ok.replace("x-at-least n 1", "x-at-least n -0")).is_ok());
         for bad in [
             ok.replace("x-metric n", "x-metric\tn"),
             ok.replace("x-input b", "x-input\tb"),

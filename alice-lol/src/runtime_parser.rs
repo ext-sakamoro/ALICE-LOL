@@ -3533,6 +3533,10 @@ pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
                 if rest.len() != 1 {
                     return Err(law_error("`audit` takes one name", at));
                 }
+                // the name is given once
+                if name.is_some() {
+                    return Err(law_error("a second `audit <name>` line", at));
+                }
                 name = Some(rest[0].to_owned());
             }
             "evidence" => {
@@ -3591,6 +3595,10 @@ fn law_error(message: &str, position: usize) -> ParseError {
 /// `2.`, `.5`, `2e0` are numbers; `inf`, `nan`, `1_0`, `0x2`, a full-width or non-ASCII
 /// digit and `1e400` are not
 ///
+/// In Rust the form check is a defence: every spelling `f64::from_str` reads as a finite
+/// number already has this form (an equivalent mutant: removing the check changes no
+/// result), while other languages' parsers read more (`1_0`, `２`, padded spaces)
+///
 /// The form is checked here, not left to a language's number parser (which accept
 /// different spellings: `inf`, `nan`, `infinity`, underscores, other digits)
 #[must_use]
@@ -3637,7 +3645,8 @@ fn law_expect(rest: &[&str]) -> Option<Clause> {
     let value = law_number(rest.get(2)?)?;
     let tolerance = match rest.len() {
         3 => 0.0,
-        5 if rest[3] == "within" => law_number(rest[4])?,
+        // a tolerance is an allowed deviation: not negative
+        5 if rest[3] == "within" => law_number(rest[4]).filter(|t| *t >= 0.0)?,
         _ => return None,
     };
     Some(Clause::Expect {
@@ -3679,9 +3688,18 @@ mod tests {
     }
 
     #[test]
+    fn the_name_of_an_audit_is_given_once() {
+        assert!(parse_law("audit a\naudit b\nevidence m\n").is_err());
+        assert!(parse_law("audit a\nevidence m\naudit a\n").is_err());
+    }
+
+    #[test]
     fn an_expect_clause_takes_only_law_numbers() {
         assert!(parse_law("audit a\nexpect m == 2 within 0.5\n").is_ok());
+        assert!(parse_law("audit a\nexpect m == -2 within 0\n").is_ok());
         for bad in [
+            "expect m == 2 within -1",
+            "expect m == 2 within -0.5",
             "expect m == nan",
             "expect m == inf",
             "expect m == 2 within inf",
