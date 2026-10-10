@@ -41,11 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `thermal(name, node, heat_sources, search_radius, min_surface_ratio)` → `thermal(name, weight, node, heat_sources, search_radius, min_surface_ratio)`
   - `continuity(name, node, seed_point)` → `continuity(name, weight, node, seed_point)`
   - `volume_conservation(name, before, after, relative_tolerance)` → `volume_conservation(name, weight, before, after, relative_tolerance)`
-  - `contact` / `gradient_bound` / `reachable` は `Hard` のまま
+  - `contact` は `Hard` のまま (`gradient_bound` / `reachable` は 0.4.0 で足したもので、`Hard` で積む)
 - `Constraint` に variant `GradientBound` / `Reachable` (`Continuity` の後) と `ThermalField` (末尾) を追加 `VolumeConservation` の discriminant は 7 → 9 になる (variant の並び順や番号に依る扱いは対応しなくなる `Constraint` は `Serialize` を持たないので直列化の互換には関わらない)
 - `LawReport` に field `unresolved` を追加し、`all_passed()` は「違反なし かつ 判定不能なし」 判定不能を合格として返さない
 - 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
-- pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
+- pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`LolPattern.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
 - `EmitError` に `NonFinite` を追加し、`EmitError` / `ExportError` / `LawFileError` / `BridgeError` を `#[non_exhaustive]` にした (外の crate の `match` は `_` の腕が要る 次に variant を足す時は破壊的変更にならない)
 - `limits` module を追加: `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` (`runtime_parser` から re-export、既存の import path は変わらない) に加え、`MAX_NODE_EXPANSION` (eager に `SdfNode` を複製して確保する箇所の総数上限) と `MIN_PITCH_MM` (pitch/spacing 引数の下限、度数でなく幾何的な根拠: 市販 FDM の解像度より十分小さい) / 整数個数の検査 helper `checked_product` と `ResourceLimitError { kind, limit, requested }` / float 値の検査 helper `checked_positive_finite` / `checked_bounded` と `FloatLimitError { kind, limit, value, unit }` (`value` は検査した `f32` をそのまま持つ、整数単位へ変換すると `NaN` と負値が同じ `requested=0` になり区別できなかったため)
 - `GridfinitySpec::validate()` と `try_gridfinity_bin` を追加 (untrusted な値を確保の前に検査し、決してパニックしない fallible な入口) / `SpecError` (`#[non_exhaustive]`、`ResourceLimit(ResourceLimitError)` / `FloatLimit(FloatLimitError)` を包む)
@@ -80,7 +80,7 @@ law file は他の言語の実装も読む公開の仕様なので、読み方�
 
 #### 公開版の修正
 
-- 0.3.0 の package は `lol.gbnf` を含まず (`include_str!` が package の外を指していた)、crates.io から取得すると compile できなかった 0.4.0 は crate 内の `alice-lol/lol.gbnf` を読む (下の Fixed)
+- 0.3.0 の package は `lol.gbnf` を含まず (`src/bridge/mod.rs` の `include_str!` が package の外を指していた)、crates.io から取得した 0.3.0 は `llm-bridge` feature を有効にすると compile できなかった (既定の feature では compile できる) 0.4.0 は crate 内の `alice-lol/lol.gbnf` を読む (下の Fixed)
 
 #### 依存と toolchain
 
@@ -734,7 +734,7 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 公開していない姉妹 crate の名前を含んでいた 2 項目を、何を表すかで名付け直した
 
 - `CertificationSource::BambooSimulation` → `CertificationSource::SimulationOnly`
-- `PatternSpec.bamboo_canonical` → `PatternSpec.canonical_kind`
+- `LolPattern.bamboo_canonical` → `LolPattern.canonical_kind`
 
 `canonical_kind` は値の意味も変わっている: 以前は非公開 crate 内の file path を持っていたが、
 canonical 実装の種別 (`"python generator"` / `"rust generator"`) を持つ
@@ -1200,9 +1200,10 @@ green のまま = 落ちるべきものだけが落ちる)。落ち方は「brac
 `cargo package` は package directory の外の file を `.crate` に含めないので、
 **crates.io から取得した crate は該当 file を持たず compile に失敗する**。
 
-`LOL_GBNF` は feature gate の無い `pub const` なので、影響は llm-bridge 利用者
-に限らず**全利用者**に及ぶ。実証: CI の `cargo-semver-checks` が baseline の
-**publish 済 0.3.0** の rustdoc build に失敗していた
+公開した 0.3.0 では `include_str!` が `llm-bridge` feature の `bridge` module の中にあり、影響は
+その feature を有効にした利用者 (既定の feature では compile できる) その後 `LOL_GBNF` を feature gate の無い
+`pub const` にしたので、移動しなければ 0.4.0 では全利用者に及んでいた 実証: CI の `cargo-semver-checks` が
+baseline の**公開済 0.3.0** の rustdoc build に失敗していた
 
 ```
 error: couldn't read `.../alice-lol-0.3.0/src/bridge/../../../lol.gbnf`:
