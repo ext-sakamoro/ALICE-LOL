@@ -1,0 +1,1 @@
+smooth_union(0.5, sphere(1.0), box3d(1.0, 2.0, 3.0))

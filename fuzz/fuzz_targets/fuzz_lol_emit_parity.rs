@@ -38,7 +38,7 @@ fuzz_target!(|data: &[u8]| {
         let p = Vec3::new(r(seed) * k, r(seed.rotate_left(11)) * k, r(seed.rotate_left(22)) * k);
         let (a, b) = (eval(&n1, p), eval(&n2, p));
         assert!(
-            (a.is_nan() && b.is_nan()) || (a - b).abs() <= 1e-4 * a.abs().max(1.0),
+            alice_lol::parity::agrees(a, b, 1e-4),
             "eval parity broken at {p:?}: {a} vs {b}\n{input}\n{text}"
         );
     }

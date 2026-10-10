@@ -55,6 +55,9 @@ pub mod runtime_parser;
 /// `SdfNode` → LOL text (runtime parser の逆変換、Track C0)
 pub mod emit;
 
+/// When two evaluations of a field agree (IEEE-total: ±∞ and NaN are results)
+pub mod parity;
+
 // ── 3Dプリント向けエクスポート ──
 // LOL → SdfNode → Mesh → STL/3MF のワンストップパイプライン
 pub mod print_export;

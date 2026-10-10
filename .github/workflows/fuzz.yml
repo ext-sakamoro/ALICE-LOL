@@ -116,7 +116,11 @@ jobs:
         run: |
           set -o pipefail
           cd ALICE-LOL/fuzz
-          cargo +nightly fuzz run "${{ matrix.target }}" -- \
+          # seeds/<target> holds the inputs of earlier crashes (read only); corpus/<target> is
+          # where libFuzzer writes what it finds
+          mkdir -p "corpus/${{ matrix.target }}"
+          cargo +nightly fuzz run "${{ matrix.target }}" \
+            "corpus/${{ matrix.target }}" "seeds/${{ matrix.target }}" -- \
             -max_total_time=${{ steps.dur.outputs.seconds }} 2>&1 | tee "$RUNNER_TEMP/fuzz.log"
 
       # 実行回数を log から読む: crash も、1 回も走らなかった run も red

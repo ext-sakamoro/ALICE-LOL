@@ -931,6 +931,8 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - 桁あふれの literal が ±∞ として読まれ (0.3.0 以前でも発生)、`to_lol` が `inf` と書き、書いた text が読み戻せなかった parser は有限でない literal を拒み、`to_lol` は有限でない数を書かずに `EmitError::NonFinite` を返す (stdlib の構成で有限の引数から ±∞ が出る場合も)
 - `to_lol` が 2 つの書き方の選択 (`capsule` / `capsule_ab`、可変長 op の平坦化) を丸める前の値で行い、`1e-30` のように 0 と書かれる値で書いた text を読み戻すと別の形になっていた (書く値で選ぶ)
 - `fuzz.yml`: 実行 step は失敗を無視しない (crash で red、artifact を上げて error を出す) `scripts/fuzz_runs.py` が libFuzzer の log から target ごとの実行回数と crash を読み、crash も 1 回も走らなかった run も red にし、target / runs / 秒 / 結果を job summary に出す `scripts/test_fuzz_runs.py` (6 本、CI 実物の log の形) 変異 6 件で red
+- 往復の一致判定が、両方 +∞ に評価される field (`capped_torus(5.1e23, 1, 748)`) を不一致としていた (`inf - inf` は NaN) 判定を `alice_lol::parity::agrees` 1 つにし (同じ bit / 両方 NaN / 両方有限で許容差内、∞ は同符号の ∞ とだけ一致)、fuzz target と `tests/emit_roundtrip.rs` が使う 許容差を有限の値だけに掛けるので、これまでの判定が `inf` と `-inf` を一致としていた穴も閉じる (表の試験 17 行、変異 3 件で red)
+- fuzz の crash 入力 4 件を `fuzz/seeds/<target>/` に置き、`fuzz.yml` は毎回それを読む
 - `tests/finite_numbers.rs` (6 本): crash 入力、literal の範囲、`NonFinite`、書き方の選択、grammar の全 construct の数を 13 種の値 (0、±1e30、±3e38、5e-7 ほか) に置き換えた入力で「読めたものは有限で書かれ、読み戻すと同じ text」(4,000 件以上を確かめ、拒否 (`NonFinite`) が 1 件以上あることも確かめる) 変異 7 件で red
 
 #### crate の package に license の text が入っていなかった

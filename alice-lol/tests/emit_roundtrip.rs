@@ -33,7 +33,7 @@ fn assert_parity(a: &SdfNode, b: &SdfNode, label: &str) {
         let da = eval(a, p);
         let db = eval(b, p);
         assert!(
-            (da.is_nan() && db.is_nan()) || (da - db).abs() <= 1e-4 * da.abs().max(1.0),
+            alice_lol::parity::agrees(da, db, 1e-4),
             "{label}: eval mismatch at {p:?}: {da} vs {db}"
         );
     }
@@ -99,4 +99,23 @@ fn emitted_text_is_accepted_by_llm_grammar_rules() {
     assert!(!text.contains("//"));
     assert!(!text.contains("  "));
     assert!(!text.contains('\n'));
+}
+
+/// a fuzz input whose field overflows: both sides of the round trip evaluate to +∞, and they
+/// agree (`inf - inf` is NaN, so a tolerance alone said they did not)
+#[test]
+fn a_field_that_overflows_round_trips_and_agrees() {
+    let src = "capped_torus(511111111111111111111111,1,748)";
+    let n1 = parse_lol(src).unwrap();
+    let text = to_lol(&n1).unwrap();
+    let n2 = parse_lol(&text).unwrap();
+    assert_eq!(to_lol(&n2).unwrap(), text);
+    let p = Vec3::new(-3.824_012_8, 0.421_419_14, 7.066_578);
+    let (a, b) = (eval(&n1, p), eval(&n2, p));
+    assert!(
+        a.is_infinite() && a > 0.0,
+        "the case no longer overflows: {a}"
+    );
+    assert!(alice_lol::parity::agrees(a, b, 1e-4), "{a} vs {b}");
+    assert_parity(&n1, &n2, src);
 }
