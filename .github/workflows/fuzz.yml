@@ -86,34 +86,8 @@ jobs:
         with:
           workspaces: ALICE-LOL/fuzz
 
-      # optional path dep の stub (ci.yml と同一、alice-sdf 側 bridge 含む)
-      - name: Create SDF dependency stubs
-        run: |
-          for crate_info in \
-            "ALICE-Physics:alice-physics:2.0.0" \
-            "ALICE-Codec:alice-codec:0.1.0" \
-            "ALICE-Streaming-Protocol:libasp:0.1.0" \
-            "ALICE-Cache:alice-cache:0.1.0" \
-            "ALICE-Foundry:alice-foundry:0.1.0"; do
-            dir=$(echo "$crate_info" | cut -d: -f1)
-            pkg=$(echo "$crate_info" | cut -d: -f2)
-            ver=$(echo "$crate_info" | cut -d: -f3)
-            mkdir -p "$dir/src"
-            cat > "$dir/Cargo.toml" << TOML
-          [package]
-          name = "$pkg"
-          version = "$ver"
-          edition = "2021"
-          [lib]
-          path = "src/lib.rs"
-          [features]
-          default = []
-          std = []
-          lol = []
-          TOML
-            echo "" > "$dir/src/lib.rs"
-          done
-
+      # optional path dep (alice-physics) の manifest は要らない: fuzz の lock は physics を含まず、
+      # sibling が無くても `cargo check --locked` が通る (以前の stub 作成 step は撤去)
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
 
