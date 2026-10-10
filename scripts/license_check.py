@@ -12,7 +12,12 @@ Checks:
 - no `LICENSE-MIT` at the root or in a crate, and no MIT licence text in any tracked file
   (the MIT terms ended with 0.3.x; the only exempt paths are third-party ones, `THIRD_PARTY`);
 - each published Apache-2.0 crate has the three files, equal to the root copies;
-- with `--package`: `cargo package --list` of each published crate lists them.
+- with `--package`: `cargo package --list` of each published crate lists them;
+- no line of a tracked file states an MIT licence (`MIT_STATEMENTS`: an SPDX tag, a
+  "licensed under the MIT license" sentence, a `license = "...MIT..."` field, an
+  `MIT OR / AND ...` expression) unless an `ALLOWED` entry names the file, the line and the
+  reason (an earlier version's terms, a dependency's licence); an entry that matches no
+  line fails, so the list cannot outlive what it allows.
 
 usage: license_check.py [--package]
 Exit 1 on a violation, 2 when no workspace crate was read.
@@ -33,6 +38,38 @@ TEXTS = ["LICENSE-APACHE", "NOTICE", "TRADEMARK_NOTICE"]
 MIT_TEXT = re.compile(r"Permission is hereby granted, free" r" of charge|^\s*MIT" r" License\s*$", re.M)
 # tracked paths that hold someone else's code under its own licence (none today)
 THIRD_PARTY: tuple[str, ...] = ()
+# a line that states an MIT licence, by form (literals split so this file does not match itself)
+MIT_STATEMENTS = {
+    "SPDX tag": re.compile(r"SPDX-License-" r"Identifier:[^\n]*\bMIT\b"),
+    "licence sentence": re.compile(r"(?i)licen[cs]ed under (the )?MIT\b|\bMIT" r" licen[cs]e\b"),
+    "license field": re.compile(r"\blicense\s*=\s*\"[^\"\n]*\bMIT" r"\b"),
+    "licence expression": re.compile(r"\bMIT\s+(OR|AND|or|and)\s+[A-Z]|\b[A-Z][\w.-]*\s+(OR|AND|or|and)\s+MIT" r"\b|\bMIT/[A-Z]|[\w.-]/MIT" r"\b"),
+}
+# (path, regex the line must match ("" = any line of the file), reason)
+ALLOWED: list[tuple[str, str, str]] = [
+    ("CHANGELOG.md", r"0\.3\.x 以前", "the terms of the versions published before 0.4.0"),
+    ("CHANGELOG.md", r"stacker", "the licence of the dependency stacker"),
+    ("README.md", r"under MIT OR Apache-2\.0 and keep those terms", "the terms of the versions published before 0.4.0"),
+    ("README_JP.md", r"0\.3\.x 以前は MIT OR Apache-2\.0", "the terms of the versions published before 0.4.0"),
+    ("alice-lol-macro/README.md", r"released under MIT OR Apache-2\.0 and keep those terms", "the terms of macro 0.2.0 and earlier"),
+    ("alice-lol/Cargo.toml", r"rustc と同じ手法", "the licence of the dependency stacker"),
+    ("deny.toml", r"MIT AND ISC AND OpenSSL", "the licence expression of the dependency ring"),
+    ("docs/HUMANOID_TEMPLATE_DESIGN.md", r"`(glam|gltf|serde_json)`", "the licences of the dependencies"),
+    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", r"`(gltf|serde_json)`", "the licences of the dependencies"),
+    ("scripts/license_check.py", r"", "the checker names the forms it looks for"),
+    ("scripts/test_license_check.py", r"", "the checker's test writes each form into a fixture"),
+]
+
+
+def statements(rel: str, text: str) -> list[tuple[int, str, str]]:
+    """(line number, form, line) for each line of `text` that states an MIT licence"""
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        for form, rx in MIT_STATEMENTS.items():
+            if rx.search(line):
+                out.append((i, form, line))
+                break
+    return out
 
 
 def tracked() -> list[str]:
@@ -72,12 +109,24 @@ def main(argv: list[str]) -> int:
     if not paths:
         print("error: read 0 tracked files", file=sys.stderr)
         return 2
+    used: set[int] = set()
     for rel in paths:
         if rel.startswith(THIRD_PARTY) if THIRD_PARTY else False:
             continue
         p = ROOT / rel
-        if p.is_file() and MIT_TEXT.search(p.read_bytes().decode("utf-8", "replace")):
+        if not p.is_file():
+            continue
+        text = p.read_bytes().decode("utf-8", "replace")
+        if MIT_TEXT.search(text):
             bad.append(f"{rel} holds an MIT licence text")
+        for i, form, line in statements(rel, text):
+            hits = [k for k, (path, rx, _) in enumerate(ALLOWED) if path == rel and re.search(rx, line)]
+            used.update(hits)
+            if not hits:
+                bad.append(f"{rel}:{i}: states an MIT licence ({form}) and no ALLOWED entry names it: {line.strip()[:80]}")
+    for k, (path, rx, reason) in enumerate(ALLOWED):
+        if k not in used:
+            bad.append(f"ALLOWED entry ({path}, {rx!r}: {reason}) matches no line: remove it")
     for name, d, lic, published in crates:
         want = EXPECTED.get(name, APACHE)
         if lic != want:

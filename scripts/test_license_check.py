@@ -27,12 +27,13 @@ class LicenseCheck(unittest.TestCase):
         for f in lc.TEXTS:
             (self.root / f).write_text(f"{f} text\n", encoding="utf-8")
             (self.root / "a" / f).write_text(f"{f} text\n", encoding="utf-8")
-        self.saved = lc.ROOT, lc.tracked
+        self.saved = lc.ROOT, lc.tracked, lc.ALLOWED
         lc.ROOT = self.root
+        lc.ALLOWED = []
         lc.tracked = lambda: sorted(p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if p.is_file())
 
     def tearDown(self):
-        lc.ROOT, lc.tracked = self.saved
+        lc.ROOT, lc.tracked, lc.ALLOWED = self.saved
         self.tmp.cleanup()
 
     def test_a_correct_workspace_passes(self):
@@ -57,9 +58,48 @@ class LicenseCheck(unittest.TestCase):
         (self.root / "b" / "COPYING").write_text("MIT" + " License\n\nCopyright\n", encoding="utf-8")
         self.assertEqual(lc.main([]), 1)
 
-    def test_an_mit_expression_in_prose_is_not_a_licence_text(self):
-        (self.root / "b" / "README.md").write_text("0.3.x was MIT OR Apache-2.0\n", encoding="utf-8")
+    def write(self, rel: str, line: str) -> None:
+        (self.root / rel).write_text(f"intro\n{line}\n", encoding="utf-8")
+
+    def test_each_form_of_an_mit_statement_fails(self):
+        mit = "MIT"
+        for line in [
+            f"// SPDX-License-Identifier: {mit}",
+            f"# SPDX-License-Identifier: Apache-2.0 OR {mit}",
+            f"This crate is licensed under the {mit} license.",
+            f"Released under the {mit} License",
+            f'license = "{mit}"',
+            f'license = "{mit} OR Apache-2.0"',
+            f"dual licensed {mit} OR Apache-2.0",
+            f"Apache-2.0 OR {mit}",
+            f"{mit}/Apache-2.0 terms",
+        ]:
+            with self.subTest(line=line):
+                self.write("b/README.md", line)
+                self.assertEqual(lc.main([]), 1)
+
+    def test_a_line_that_only_names_mit_is_not_a_statement(self):
+        mit = "MIT"
+        for line in [f"the {mit} terms ended with 0.3.x", f"LICENSE-{mit} was removed", f'    "{mit}",']:
+            with self.subTest(line=line):
+                self.write("b/README.md", line)
+                self.assertEqual(lc.main([]), 0)
+
+    def test_an_allowed_entry_lets_its_line_through(self):
+        self.write("b/README.md", "0.3.x was " + "MIT OR Apache-2.0")
+        lc.ALLOWED = [("b/README.md", r"0\.3\.x was", "an earlier version")]
         self.assertEqual(lc.main([]), 0)
+
+    def test_an_allowed_entry_does_not_cover_another_line_or_file(self):
+        self.write("b/README.md", "now " + "MIT OR Apache-2.0")
+        lc.ALLOWED = [("b/README.md", r"0\.3\.x was", "an earlier version"),
+                      ("b/OTHER.md", r"", "another file")]
+        (self.root / "b" / "OTHER.md").write_text("0.3.x was " + "MIT OR Apache-2.0\n", encoding="utf-8")
+        self.assertEqual(lc.main([]), 1)
+
+    def test_an_allowed_entry_that_matches_nothing_fails(self):
+        lc.ALLOWED = [("b/README.md", r"", "nothing there")]
+        self.assertEqual(lc.main([]), 1)
 
     def test_no_tracked_file_fails(self):
         lc.tracked = lambda: []
