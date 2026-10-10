@@ -99,6 +99,13 @@ class Separators(unittest.TestCase):
         with self.assertRaises(ls.SchemaError):
             ls.x_input_types(ok.replace("x-input b", "x-input\tb"))
 
+    def test_the_prefix_is_reserved(self):
+        ok = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n"
+        for bad in ["  " + ok, "\t" + ok, ok.replace("x-metric n", "X-metric n"), ok.replace("x-at-least", "X-AT-LEAST")]:
+            with self.assertRaises(ls.SchemaError, msg=repr(bad)):
+                ls.law_metrics(bad)
+                ls.x_input_types(bad)
+
 
 class Main(unittest.TestCase):
     def test_zero_lines_fail(self):

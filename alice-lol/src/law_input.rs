@@ -921,11 +921,19 @@ impl fmt::Display for LawFileError {
 
 impl std::error::Error for LawFileError {}
 
-/// An `x-` line is a known declaration whose keyword is followed by exactly one ASCII
-/// space; anything else is refused, never skipped (other lines pass)
-fn check_declaration(line_no: usize, line: &str) -> Result<(), LawFileError> {
-    if !line.starts_with("x-") {
+/// The `x-` prefix is reserved: a line whose text (trimmed, in any case) starts with `x-`
+/// must be a known declaration, written from the first column, in lowercase, with its
+/// keyword followed by exactly one ASCII space; anything else is refused, never skipped
+/// (other lines pass) `raw` is the line without its comment, `line` the same trimmed
+fn check_declaration(line_no: usize, raw: &str, line: &str) -> Result<(), LawFileError> {
+    if !line.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-")) {
         return Ok(());
+    }
+    if !raw.starts_with("x-") {
+        return Err(LawFileError::Declaration {
+            line: line_no,
+            reason: "a line starting with `x-` is a declaration: write it in lowercase from the first column".to_owned(),
+        });
     }
     let kw_end = line.find(char::is_whitespace).unwrap_or(line.len());
     let kw = &line[..kw_end];
@@ -974,7 +982,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
             }
             continue;
         }
-        check_declaration(n + 1, line)?;
+        check_declaration(n + 1, raw.split('#').next().unwrap_or(""), line)?;
         if line == "begin audit" {
             block = Some(String::new());
         } else if let Some(rest) = line.strip_prefix("x-metric ") {
@@ -1425,7 +1433,7 @@ mod tests {
             ))
         };
         assert!(law(ok).is_ok());
-        assert!(law(&format!("  {ok}# x-foo in a comment\n")).is_ok());
+        assert!(law(&format!("{ok}# x-foo in a comment\n   # X-Metric too\n")).is_ok());
         for bad in [
             ok.replace("x-metric n", "x-metric\tn"),
             ok.replace("x-input b", "x-input\tb"),
@@ -1436,6 +1444,12 @@ mod tests {
             format!("{ok}x-metrics t = count(b)\n"),
             format!("{ok}x-at-least t 2\n"),
             format!("{ok}x-metric\n"),
+            // the prefix is reserved: leading space, a tab indent, uppercase
+            format!("  {ok}"),
+            format!("\t{ok}"),
+            ok.replace("x-metric n", "X-metric n"),
+            ok.replace("x-at-least", "X-AT-LEAST"),
+            format!("{ok}X-foo 1\n"),
         ] {
             assert!(
                 matches!(law(&bad), Err(LawFileError::Declaration { .. })),

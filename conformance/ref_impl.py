@@ -299,14 +299,18 @@ def read_audit_law(name):
     path = os.path.join(LAW_DIR, f"{name}.law")
     if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.exists(path):
         return None
-    lines = [l.split("#", 1)[0].strip() for l in open(path, encoding="utf-8")]
+    raws = [l.split("#", 1)[0].rstrip("\r\n") for l in open(path, encoding="utf-8")]
+    lines = [r.strip() for r in raws]
     if "kind audit" not in lines:
         return None
     law = {"clauses": [], "types": {}, "metrics": [], "at_least": []}
     inside = False
-    for l in lines:
-        # every `x-` line is a known declaration whose keyword is followed by exactly one
-        # ASCII space; anything else is refused, never skipped
+    for raw, l in zip(raws, lines):
+        # the `x-` prefix is reserved: a line starting with it (trimmed, any case) is a known
+        # declaration written in lowercase from the first column, its keyword followed by
+        # exactly one ASCII space; anything else is refused, never skipped
+        if l[:2].lower() == "x-" and not raw.startswith("x-"):
+            raise ValueError("a line starting with `x-` is a declaration: lowercase, from the first column")
         if l.startswith("x-"):
             kw = re.match(r"\S*", l).group(0)
             if kw not in ("x-input", "x-metric", "x-at-least"):

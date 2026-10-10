@@ -129,12 +129,16 @@ def eval_metric(expr, value):
     return len(seen)
 
 
-def _declaration(line: str, kw: str):
+def _declaration(line: str, kw: str, raw: str | None = None):
     """the text after `kw` when the line declares it; None for another line.
-    The keyword is followed by exactly one ASCII space (a tab, two spaces or a
-    no-break space does not read)"""
-    if not line.startswith(kw) or (len(line) > len(kw) and not line[len(kw)].isspace()):
+    The keyword is lowercase, from the first column (`raw` is the line before trimming),
+    and followed by exactly one ASCII space (a tab, two spaces or a no-break space does
+    not read)"""
+    low = line.lower()
+    if not low.startswith(kw) or (len(line) > len(kw) and not line[len(kw)].isspace()):
         return None
+    if not line.startswith(kw) or (raw is not None and not raw.startswith(kw)):
+        raise SchemaError(f"`{kw}` is written in lowercase from the first column: {raw if raw is not None else line!r}")
     after = line[len(kw):]
     if not after.startswith(" ") or after[1:2].isspace() or not after.strip():
         raise SchemaError(f"`{kw}` must be followed by exactly one space: {line!r}")
@@ -145,9 +149,10 @@ def law_metrics(law_text: str):
     """[(name, expr)] of the x-metric lines and [(name, n)] of the x-at-least lines"""
     metrics, at_least = [], []
     for line in law_text.splitlines():
-        w = line.split("#", 1)[0].strip()
-        metric = _declaration(w, "x-metric")
-        floor = _declaration(w, "x-at-least")
+        raw = line.split("#", 1)[0]
+        w = raw.strip()
+        metric = _declaration(w, "x-metric", raw)
+        floor = _declaration(w, "x-at-least", raw)
         if metric is not None:
             name, _, expr = metric.partition("=")
             if any(n == name.strip() for n, _ in metrics):
@@ -167,8 +172,9 @@ def law_metrics(law_text: str):
 def x_input_types(law_text: str) -> dict:
     out = {}
     for line in law_text.splitlines():
-        w = line.split("#", 1)[0].strip()
-        decl = _declaration(w, "x-input")
+        raw = line.split("#", 1)[0]
+        w = raw.strip()
+        decl = _declaration(w, "x-input", raw)
         if decl is not None:
             name, _, text = decl.partition(" ")
             if name in out:
