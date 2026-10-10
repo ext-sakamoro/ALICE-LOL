@@ -1743,6 +1743,34 @@
   "expect": "exit 2"
  },
  {
+  "note": "law file: `kind audits` (not `kind audit`)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audits\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: `kind audit x`, a word after the kind (not `kind audit`)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit x\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
   "note": "law file: no `kind` line",
   "law": "decl_probe",
   "law_text": "law decl_probe\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
