@@ -251,7 +251,8 @@ def audit(clauses, nums, ranges, raw=None):
     return "supports", None
 
 
-LAW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "laws", "spike")
+LAW_DIR = os.environ.get("LOL_LAW_DIR") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "laws", "spike")
 
 
 # -- types of x-input (written here, not imported: this file is an independent implementation)
@@ -317,15 +318,21 @@ def read_audit_law(name):
         elif inside and w and w[0] == "range":
             law["clauses"].append(("range", w[1], w[2:]))
         elif w and w[0] == "x-input":
+            if w[1] in law["types"]:
+                raise ValueError(f"x-input `{w[1]}` is declared twice")
             law["types"][w[1]] = parse_type(l.split(None, 2)[2])
         elif w and w[0] == "x-metric":
             name_, _, expr = l[len("x-metric"):].partition("=")
             m = METRIC_RE.match("".join(expr.split()))
             if not m:
                 raise ValueError(f"x-metric: {expr!r}")
+            if any(n == name_.strip() for n, _ in law["metrics"]):
+                raise ValueError(f"x-metric `{name_.strip()}` is declared twice")
             law["metrics"].append((name_.strip(), ("count", m.group(2)) if m.group(1)
                                    else ("set" if m.group(3) else "distinct", m.group(4), m.group(5))))
         elif w and w[0] == "x-at-least":
+            if any(n == w[1] for n, _ in law["at_least"]):
+                raise ValueError(f"x-at-least for `{w[1]}` is declared twice")
             law["at_least"].append((w[1], float(w[2])))
     return law
 
@@ -454,7 +461,12 @@ def main():
     name = req.get("law")
     law = LAWS.get(name) if isinstance(name, str) else None
     if law is None and isinstance(name, str):
-        audit_law = read_audit_law(name)
+        # a law file that does not read (a malformed or repeated declaration) is an error
+        # of the request, like an unknown law
+        try:
+            audit_law = read_audit_law(name)
+        except (ValueError, IndexError) as e:
+            request_error(f"law file `{name}` does not read: {e}")
         law = generic_audit(audit_law) if audit_law else None
     if law is None:
         request_error(f"unknown law: {req.get('law')!r}")

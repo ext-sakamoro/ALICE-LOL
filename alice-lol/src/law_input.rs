@@ -879,6 +879,13 @@ pub enum LawFileError {
     NoAuditBlock,
     /// audit block が読めない
     Audit(String),
+    /// 同じ名前の宣言が 2 度ある (`x-input` / `x-metric`、または同じ量の `x-at-least`)
+    Duplicate {
+        /// 2 度目の行 (1 から)
+        line: usize,
+        /// 重なった名前
+        name: String,
+    },
     /// `x-input` の型が読めない (行番号は 1 から)
     InputType {
         /// 行
@@ -896,6 +903,9 @@ impl fmt::Display for LawFileError {
             }
             Self::Audit(e) => write!(f, "law file: audit block: {e}"),
             Self::InputType { line, error } => write!(f, "law file: line {line}: {error}"),
+            Self::Duplicate { line, name } => {
+                write!(f, "law file: line {line}: `{name}` is declared twice")
+            }
         }
     }
 }
@@ -908,7 +918,8 @@ impl std::error::Error for LawFileError {}
 ///
 /// # Errors
 ///
-/// audit block が無い・読めない時、`x-input` の型が読めない時
+/// audit block が無い・読めない時、`x-input` の型や `x-metric` の式が読めない時、同じ名前の
+/// `x-input` / `x-metric` や同じ量の `x-at-least` が 2 度ある時
 pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, LawFileError> {
     let mut block: Option<String> = None;
     let mut done: Option<String> = None;
@@ -937,7 +948,14 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
                 })?;
             let expr = MetricExpr::parse(expr)
                 .map_err(|error| LawFileError::InputType { line: n + 1, error })?;
-            metrics.push((name.trim().to_owned(), expr));
+            let name = name.trim().to_owned();
+            if metrics
+                .iter()
+                .any(|(m, _): &(String, MetricExpr)| *m == name)
+            {
+                return Err(LawFileError::Duplicate { line: n + 1, name });
+            }
+            metrics.push((name, expr));
         } else if let Some(rest) = line.strip_prefix("x-at-least ") {
             let w: Vec<&str> = rest.split_whitespace().collect();
             let n_val = match w.as_slice() {
@@ -948,12 +966,24 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
                 line: n + 1,
                 error: TypeError("`x-at-least <metric> <number>` expected".to_owned()),
             })?;
+            if at_least.iter().any(|(m, _): &(String, f64)| m == w[0]) {
+                return Err(LawFileError::Duplicate {
+                    line: n + 1,
+                    name: w[0].to_owned(),
+                });
+            }
             at_least.push((w[0].to_owned(), v));
         } else if let Some(rest) = line.strip_prefix("x-input ") {
             let rest = rest.trim();
             let (name, ty) = rest.split_once(' ').unwrap_or((rest, ""));
             let ty = InputType::parse(ty)
                 .map_err(|error| LawFileError::InputType { line: n + 1, error })?;
+            if inputs.iter().any(|(m, _): &(String, InputType)| m == name) {
+                return Err(LawFileError::Duplicate {
+                    line: n + 1,
+                    name: name.to_owned(),
+                });
+            }
             inputs.push((name.to_owned(), ty));
         }
     }
@@ -1310,6 +1340,28 @@ mod tests {
                 k,
             );
             assert_eq!(got, want, "{inputs}");
+        }
+    }
+
+    #[test]
+    fn a_declaration_made_twice_does_not_read() {
+        let law = |extra: &str| {
+            audit_law_from_file(&format!(
+                "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n{extra}begin audit\naudit a\nevidence n\nend audit\n"
+            ))
+        };
+        assert!(law("").is_ok());
+        for extra in [
+            "x-metric n = count(b)\n",
+            "x-metric n = distinct(set(b[].f))\n",
+            "x-at-least n 1\n",
+            "x-at-least n 2\n",
+            "x-input b list of text\n",
+        ] {
+            assert!(
+                matches!(law(extra), Err(LawFileError::Duplicate { .. })),
+                "{extra}"
+            );
         }
     }
 

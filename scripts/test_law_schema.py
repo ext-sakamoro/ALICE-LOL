@@ -73,6 +73,19 @@ class Metrics(unittest.TestCase):
             self.assertIsNone(ls.eval_metric(e, None))  # input not measured
 
 
+class Duplicates(unittest.TestCase):
+    def test_a_declaration_made_twice_does_not_read(self):
+        base = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n"
+        ls.law_metrics(base)
+        ls.x_input_types(base)
+        for extra in ["x-metric n = count(b)\n", "x-metric n = distinct(set(b[].f))\n",
+                      "x-at-least n 1\n", "x-at-least n 2\n"]:
+            with self.assertRaises(ls.SchemaError, msg=extra):
+                ls.law_metrics(base + extra)
+        with self.assertRaises(ls.SchemaError):
+            ls.x_input_types(base + "x-input b list of text\n")
+
+
 class Main(unittest.TestCase):
     def test_zero_lines_fail(self):
         with tempfile.TemporaryDirectory() as d:

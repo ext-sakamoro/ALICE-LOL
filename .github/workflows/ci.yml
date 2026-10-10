@@ -147,7 +147,7 @@ jobs:
         if: matrix.label == ''
         working-directory: ALICE-LOL
         shell: bash
-        run: python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law -- target/debug/examples/audit_conformance
+        run: python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe -- target/debug/examples/audit_conformance
 
   clippy:
     name: Clippy

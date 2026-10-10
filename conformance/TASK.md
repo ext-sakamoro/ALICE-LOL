@@ -150,6 +150,7 @@ The measurements are the request inputs:
 - A **range key** is an array of text. A value that is not an array of text, including `null`, counts as not measured, so the verdict for that key is `out_of_range`. An empty array is a measured, empty set.
 - Values are compared as text. Two values are the same only when their text is identical.
 - `x-metric` lines define derived metrics (below). A name defined by an `x-metric` line is never read from the request, even when the request has a key of that name.
+- A law file declares each `x-input` name and each `x-metric` name once, and gives at most one `x-at-least` line per metric. A law file that repeats one (even with the same text) does not read: a request to it is an error of the request, as for an unknown law.
 
 ### Derived metrics
 

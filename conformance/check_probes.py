@@ -6,7 +6,7 @@ of the same law files gave different answers before TASK.md decided it. The expe
 outcome is written by hand from TASK.md (not produced by the reference implementation):
 `{"verdict", "subject"}` for an audit, "rejected", or "exit 2" (an error of the request).
 The string "__INF__" in inputs is sent as the overflowing literal 1e400. A probe with "raw"
-sends that text as the whole request (for JSON edge cases), "raw_hex" sends those bytes.
+sends that text as the whole request (for JSON edge cases), "raw_hex" sends those bytes, and "law_text" is the law file read (through LOL_LAW_DIR).
 A traceback or a panic on standard error fails the probe whatever the exit status.
 
 usage: check_probes.py [--probes conformance/probes.json] [--laws a,b,...] -- <command...>
@@ -15,7 +15,9 @@ Exit 1 when any probe disagrees, 2 when no probe was compared.
 """
 import argparse
 import json
+import os
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -36,7 +38,14 @@ CRASH_MARKERS = ("Traceback (most recent call last)", "panicked at", "RUST_BACKT
 
 
 def outcome(cmd, p, timeout):
-    r = subprocess.run(cmd, input=request_bytes(p), capture_output=True, timeout=timeout)
+    env = None
+    if "law_text" in p:
+        # a law file of the probe's own (malformed declarations): written to a fresh
+        # directory that the implementation reads through LOL_LAW_DIR
+        d = tempfile.mkdtemp()
+        Path(d, f"{p['law']}.law").write_text(p["law_text"], encoding="utf-8")
+        env = dict(os.environ, LOL_LAW_DIR=d)
+    r = subprocess.run(cmd, input=request_bytes(p), capture_output=True, timeout=timeout, env=env)
     out = r.stdout.decode("utf-8", errors="replace")
     err = r.stderr.decode("utf-8", errors="replace")
     crash = next((m for m in CRASH_MARKERS if m in err), None)

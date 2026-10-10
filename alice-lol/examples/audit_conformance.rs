@@ -26,9 +26,13 @@ fn request_error(msg: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
+/// The directory of the law files: `LOL_LAW_DIR` when set, else `laws/spike/` of this repository
 fn law_file(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../laws/spike")
+    std::env::var_os("LOL_LAW_DIR")
+        .map_or_else(
+            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../laws/spike"),
+            PathBuf::from,
+        )
         .join(format!("{name}.law"))
 }
 

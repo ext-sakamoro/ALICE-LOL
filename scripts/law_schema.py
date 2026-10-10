@@ -136,9 +136,13 @@ def law_metrics(law_text: str):
         w = line.split("#", 1)[0].strip()
         if w.startswith("x-metric "):
             name, _, expr = w[len("x-metric "):].partition("=")
+            if any(n == name.strip() for n, _ in metrics):
+                raise SchemaError(f"x-metric `{name.strip()}` is declared twice")
             metrics.append((name.strip(), parse_metric(expr)))
         elif w.startswith("x-at-least "):
             name, n = w[len("x-at-least "):].split()
+            if any(m == name for m, _ in at_least):
+                raise SchemaError(f"x-at-least for `{name}` is declared twice")
             at_least.append((name, float(n)))
     return metrics, at_least
 
@@ -149,6 +153,8 @@ def x_input_types(law_text: str) -> dict:
         w = line.split("#", 1)[0].strip()
         if w.startswith("x-input "):
             name, _, text = w[len("x-input "):].partition(" ")
+            if name in out:
+                raise SchemaError(f"x-input `{name}` is declared twice")
             out[name] = parse(text)
     return out
 

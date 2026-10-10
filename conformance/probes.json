@@ -699,5 +699,148 @@
    "verdict": "supports",
    "subject": null
   }
+ },
+ {
+  "note": "law file: valid declarations",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: x-metric twice, same expression",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nx-metric n = count(b)\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-metric twice, another expression",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nx-metric s = count(b)\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-at-least twice, same floor",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-at-least twice, another floor",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nx-at-least s 3\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-input twice",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nx-input b list of text\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: malformed derivation",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = sum(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
  }
 ]
