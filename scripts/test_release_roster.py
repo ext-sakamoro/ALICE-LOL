@@ -72,6 +72,36 @@ class Roster(unittest.TestCase):
         self.set_publish("alice-lol-ui", 'publish = ["crates-io"]')
         self.assertEqual(self.run_check()[0], 1)
 
+    def test_publish_from_the_workspace_is_resolved(self):
+        ws = self.root / "Cargo.toml"
+        base = ws.read_text(encoding="utf-8")
+        # [workspace.package] publish = true: a member that inherits it can be published
+        ws.write_text(base + "\n[workspace.package]\npublish = true\n", encoding="utf-8")
+        self.set_publish("alice-lol-ui", "publish.workspace = true")
+        code, err = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("alice-lol-ui", err)
+        # publish = false there: the member that inherits it cannot
+        ws.write_text(base + "\n[workspace.package]\npublish = false\n", encoding="utf-8")
+        self.assertEqual(self.run_check()[0], 0)
+        # nothing in [workspace.package]: cargo's default, publishable
+        ws.write_text(base, encoding="utf-8")
+        self.assertEqual(self.run_check()[0], 1)
+
+    def test_a_publish_value_that_is_not_understood_is_an_error(self):
+        for line in ['publish = "yes"', "publish = 1", "publish.other = true"]:
+            with self.subTest(line=line):
+                self.setUp()
+                self.set_publish("alice-lol-ui", line)
+                self.assertEqual(self.run_check()[0], 2)
+
+    def test_a_member_path_that_is_not_there_is_an_error(self):
+        ws = self.root / "Cargo.toml"
+        ws.write_text(ws.read_text(encoding="utf-8").replace('members = [', 'members = ["crates/*", ', 1), encoding="utf-8")
+        code, err = self.run_check()
+        self.assertEqual(code, 2)
+        self.assertIn("crates/*", err)
+
     def test_no_member_read_fails(self):
         (self.root / "Cargo.toml").write_text("[workspace]\nmembers = []\n", encoding="utf-8")
         self.assertEqual(self.run_check()[0], 2)
