@@ -86,6 +86,16 @@ class Duplicates(unittest.TestCase):
             ls.x_input_types(base + "x-input b list of text\n")
 
 
+class Floors(unittest.TestCase):
+    def test_a_floor_is_not_negative(self):
+        base = "x-input b list of record(f: list of text)\nx-metric n = count(b)\n"
+        for ok in ["0", "-0", "+0", "0.5", "2"]:
+            ls.law_metrics(base + f"x-at-least n {ok}\n")
+        for bad in ["-1", "-0.5", "-1e-300"]:
+            with self.assertRaises(ls.SchemaError, msg=bad):
+                ls.law_metrics(base + f"x-at-least n {bad}\n")
+
+
 class Separators(unittest.TestCase):
     def test_a_keyword_is_followed_by_exactly_one_space(self):
         ok = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n"
