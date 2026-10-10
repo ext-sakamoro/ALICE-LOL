@@ -42,18 +42,19 @@ The law files and `TASK.md` are its whole specification.
 
 ## Order of work
 
-1. **Give the implementer only the law files and `TASK.md`.** Do not give them the rest of `conformance/`, the source tests cited on `source` lines, or any generated corpus.
+1. **Give the implementer only the law files and `TASK.md`, and state the kind wanted** (`static`: a program for these law files; `reader`: a program that reads law files when it runs; see `TASK.md`). Do not give them the rest of `conformance/`, the source tests cited on `source` lines, or any generated corpus.
 2. **Do not generate a corpus while any implementation is still being written.** No corpus file exists during that time.
 3. **When every implementation is finished, score each one:**
 
    ```sh
-   conformance/score.sh <command that runs the implementation>
+   conformance/score.sh --kind static|reader <command that runs the implementation>
    ```
 
-   `score.sh` does four things:
+   `score.sh` does five things:
    - generates the corpus into a temporary directory from `laws/spike/*.law`;
    - runs `scripts/law_corpus_cover.py`, which stops the run when a corner of a law is missing or nothing was compared;
    - scores with `run_conformance.py`;
+   - checks the probes with `check_probes.py --kind` (the kind the implementation was asked for: `static` skips the probes with a law file of their own and prints how many it skipped);
    - deletes the temporary directory.
 4. **After any change to the generator, the runner or the law files, run `conformance/controls.sh`.** It must report that every control behaves as expected (see `kepler_range.md` for its output).
 

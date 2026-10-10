@@ -6,7 +6,10 @@ You are given a set of law files, one law per file, written in the law-file layo
 
 One command-line program that implements every law you are given. The programming language is given with the task; nothing in this contract depends on it.
 
-The program may read the law files when it runs (an interpreter of law files) or be written for the laws it is given. The rules for reading a law file (the characters, lines, declarations and numbers below) are part of the contract for a program that reads law files when it runs: such a program refuses a law file that breaks them. A program written for the given laws gives the answers that the given files mean, and the checks that hand a program a law file of their own apply only to a program that reads law files.
+An implementation states its kind, `static` or `reader`; the task says which kind is wanted.
+
+- **`static`**: a program for the law files it is given. It answers for those laws only, giving the answers the files mean. It is checked on those laws; the checks that hand a program a law file of its own do not apply.
+- **`reader`**: a program that reads law files when it runs. It must read any law file by the reading rules below (the characters, lines, declarations and numbers) and refuse one that breaks them, and it is checked on everything, including law files of its own.
 
 ### Program contract
 

@@ -9,7 +9,11 @@ The string "__INF__" in inputs is sent as the overflowing literal 1e400. A probe
 sends that text as the whole request (for JSON edge cases), "raw_hex" sends those bytes, and "law_text" is the law file read (through LOL_LAW_DIR).
 A traceback or a panic on standard error fails the probe whatever the exit status.
 
-usage: check_probes.py [--probes conformance/probes.json] [--laws a,b,...] -- <command...>
+usage: check_probes.py --kind static|reader [--probes conformance/probes.json] [--laws a,b,...] -- <command...>
+--kind is the kind the implementation states (TASK.md): `static` is written for the given law
+files, so the probes that hand it a law file of their own (`law_text`) are skipped, counted and
+shown; `reader` reads law files when it runs, so every probe is checked. There is no default,
+so a reader cannot skip the law-file probes without saying so.
 --laws limits the check to the probes of those laws (for an implementation of a subset).
 Exit 1 when any probe disagrees, 2 when no probe was compared.
 """
@@ -71,6 +75,8 @@ def main(argv=None):
     ap.add_argument("--probes", default=str(Path(__file__).with_name("probes.json")))
     ap.add_argument("--timeout", type=float, default=60)
     ap.add_argument("--laws", help="comma separated law names; only their probes are checked")
+    ap.add_argument("--kind", required=True, choices=["static", "reader"],
+                    help="static: written for the given law files; reader: reads law files when it runs")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
@@ -80,13 +86,15 @@ def main(argv=None):
     if a.laws:
         keep = set(a.laws.split(","))
         probes = [p for p in probes if p["law"] in keep]
+    skipped = [p for p in probes if a.kind == "static" and "law_text" in p]
+    probes = [p for p in probes if p not in skipped]
     bad = 0
     for p in probes:
         got = outcome(cmd, p, a.timeout)
         if got != p["expect"]:
             bad += 1
             print(f"DIFF {p['law']}: {p['note']}: expected {p['expect']}, got {got}")
-    print(f"compared {len(probes)} probes, disagreements {bad}")
+    print(f"kind {a.kind}: compared {len(probes)} probes, skipped by kind {len(skipped)} (law_text), disagreements {bad}")
     if not probes:
         print("error: no probe compared", file=sys.stderr)
         return 2
