@@ -10,6 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workflow_concurrency as wc  # noqa: E402
 
 JOBS = "jobs:\n  a:\n    runs-on: x\n    timeout-minutes: 5\n"
+PER_SHA = "github.ref == 'refs/heads/main' && github.sha"
+GROUP = "x-${{ " + PER_SHA + " || github.ref }}"
+CANCEL = "${{ github.ref != 'refs/heads/main' }}"
+GOOD = "concurrency:\n  group: " + GROUP + "\n  cancel-in-progress: " + CANCEL + "\n"
 
 
 def run(*texts: str) -> int:
@@ -26,8 +30,18 @@ class Concurrency(unittest.TestCase):
     def test_a_push_without_filters_needs_a_group_too(self):
         self.assertEqual(run("name: x\non:\n  push:\n  pull_request:\n" + JOBS), 1)
 
-    def test_a_branch_push_with_a_group_passes(self):
-        self.assertEqual(run("name: x\non:\n  push:\n    branches: [main]\nconcurrency:\n  group: g\n" + JOBS), 0)
+    def test_a_branch_push_with_the_rule_passes(self):
+        self.assertEqual(run("name: x\non:\n  push:\n    branches: [main]\n" + GOOD + JOBS), 0)
+
+    def test_cancelling_on_main_fails(self):
+        self.assertEqual(run("name: x\non:\n  push:\n" + GOOD.replace(CANCEL, "true") + JOBS), 1)
+
+    def test_a_ref_only_group_fails(self):
+        self.assertEqual(run("name: x\non:\n  push:\n" + GOOD.replace(GROUP, "${{ github.ref }}") + JOBS), 1)
+
+    def test_no_cancel_key_with_a_per_commit_group_passes(self):
+        no_cancel = "concurrency:\n  group: x-${{ " + PER_SHA + " || github.ref }}\n"
+        self.assertEqual(run("name: x\non:\n  push:\n" + no_cancel + JOBS), 0)
 
     def test_a_tag_only_push_is_exempt(self):
         self.assertEqual(run("name: x\non:\n  push:\n    tags: ['v*']\n  workflow_dispatch:\n" + JOBS), 0)
@@ -36,7 +50,7 @@ class Concurrency(unittest.TestCase):
         self.assertEqual(run("name: x\non:\n  schedule:\n    - cron: '0 0 * * *'\n" + JOBS), 0)
 
     def test_one_bad_workflow_among_good_ones_fails(self):
-        good = "name: x\non:\n  push:\nconcurrency:\n  group: g\n" + JOBS
+        good = "name: x\non:\n  push:\n" + GOOD + JOBS
         bad = "name: y\non:\n  push:\n    branches: ['ci/**']\n" + JOBS
         self.assertEqual(run(good, bad), 1)
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Every workflow run by a push to a branch has a top-level `concurrency` group.
+"""Every workflow run by a push to a branch has a top-level `concurrency` group that
+cancels superseded runs on a branch but never a run on main (per-commit group on main).
 
 Without one, each push to a branch queues a full run of its own and a superseded run
 holds a shared runner until it finishes, delaying every other run in the account.
@@ -13,6 +14,12 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+
+
+# the forms this repository uses (a different spelling of the same rule fails and must
+# be added here deliberately)
+MAIN_EXCEPTED = "github.ref != 'refs/heads/main'"
+PER_SHA_ON_MAIN = "github.ref == 'refs/heads/main' && github.sha"
 
 
 def push_to_branches(text: str) -> bool:
@@ -48,8 +55,22 @@ def main(argv: list[str]) -> int:
         if not push_to_branches(text):
             continue
         checked += 1
-        if not re.search(r"^concurrency:", text, re.M):
+        m = re.search(r"^concurrency:\n((?:[ \t]+.*\n?)*)", text, re.M)
+        if not m:
             missing.append(f"{f.name}: runs on a push to a branch but has no top-level concurrency group")
+            continue
+        body = m.group(1)
+        group = re.search(r"^\s+group:\s*(.*)$", body, re.M)
+        cancel = re.search(r"^\s+cancel-in-progress:\s*(.*)$", body, re.M)
+        # main is never cancelled: a cancelled main commit has no conclusion (unverified)
+        cancel_ok = cancel is None or cancel.group(1).strip() == "false" or MAIN_EXCEPTED in cancel.group(1)
+        # on main each commit has a group of its own: a group keeps one pending run and
+        # cancels an older pending one whatever cancel-in-progress says
+        group_ok = group is not None and PER_SHA_ON_MAIN in group.group(1)
+        if not cancel_ok:
+            missing.append(f"{f.name}: cancel-in-progress can cancel a run on main")
+        if not group_ok:
+            missing.append(f"{f.name}: the concurrency group is not per commit on main")
     for m in missing:
         print(m)
     if not files:

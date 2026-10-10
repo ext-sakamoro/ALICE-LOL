@@ -76,9 +76,11 @@ on:
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
 
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (a cancelled main commit is unverified)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always

@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### branch の push で走る workflow に concurrency (`scripts/workflow_concurrency.py`)
 
 - `ci.yml` に concurrency を置いた 同じ branch の新しい push が古い run を打ち切る (置き換わった run は runner を占有するだけ) main では commit ごとに別の group なので、main の commit の run は打ち切られない (group は待ちの run を 1 つしか持たず、古い待ちの run は cancel-in-progress によらず打ち切られるため) 実測: concurrency が無く、1 branch への 3 回の push が 3 本とも待ち行列に並び、main の CI が 1 時間以上待った
-- `scripts/workflow_concurrency.py`: branch の push で走る workflow が top-level の concurrency を持つことを検査する (tag だけの push と push の無い workflow は除く、workflow が 0 件なら fail) 試験 `scripts/test_workflow_concurrency.py` CI の docs job と `scripts/preflight.sh` で走らせる
+- `fuzz.yml` / `security-audit.yml` / `quality-deep.yml` も同じ規則にした (これまでは main でも打ち切っていたので、main の commit が cancelled = 未検証で終わりえた quality-deep は main の commit ごとに 4 shard・約 19 分走るが、law の判定器を変える push だけで発火する)
+- `scripts/workflow_concurrency.py`: branch の push で走る workflow が top-level の concurrency を持ち、branch では置き換わった run を打ち切り、main では打ち切らない (main は commit ごとの group) ことを検査する (tag だけの push と push の無い workflow は除く、workflow が 0 件なら fail) 試験 `scripts/test_workflow_concurrency.py` CI の docs job と `scripts/preflight.sh` で走らせる
 
 #### 全 workflow の job に実行時間の上限 (`scripts/workflow_timeouts.py`)
 
