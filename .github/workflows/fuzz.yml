@@ -5,7 +5,8 @@ name: Fuzz
 
 on:
   push:
-    branches: [main]
+    # ci/** too, so that a branch runs the fuzz gate before it lands (the same paths filter)
+    branches: [main, 'ci/**']
     paths:
       - '**/src/**'
       - 'fuzz/**'
@@ -34,6 +35,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -44,6 +48,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # the runners are shared: a ci/** branch takes two at a time, main four
+      max-parallel: ${{ github.ref == 'refs/heads/main' && 4 || 2 }}
       matrix:
         target:
           - fuzz_lol_parse
