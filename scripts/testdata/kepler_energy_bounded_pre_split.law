@@ -1,0 +1,52 @@
+# Fixture: laws/spike/kepler_energy_bounded.law as of commit 8d92276~1, before the law
+# was split into kepler_energy_bounded_kdk.law and kepler_energy_bounded_dkd.law.
+# Kept verbatim (below this header) as the must-red case of scripts/law_ambiguity_lint.py;
+# the test reads this file instead of the repository history.
+# Two-body orbit integrated with a fixed step: the energy error stays bounded and is second order
+law kepler_energy_bounded
+kind research
+claim the relative orbit of two bodies with mu = 1 and semi-major axis a = 1 is integrated with the fixed step h = T / N
+claim the relative energy error does not grow from the first period to the last, and halving h divides it by 3 to 5
+source ALICE-Physics tests/analytic_nbody.rs:260 (e = 0.5, start at apoapsis), :294 (N = 500, 20 periods), :296 (last <= 1.2 first), :302 (first(N) / first(2N) in [3, 5])
+
+input e 1 range 0.2 0.8         # the order statement is not established for near-circular orbits
+input n 1 range 100 2000
+input periods 1 range 2 40
+x-integer n                   # integer counts
+x-integer periods
+
+param mu 1 0 m^3/s^2
+param a 1 0 m
+param pi 3.141592653589793 0 1
+
+let period s = 2*pi*sqrt(a^3/mu)
+let h s = period/n
+let r0 m = a*(1 + e)
+let v0 m/s = sqrt(mu*(2/r0 - 1/a))
+let e0 J/kg = -mu/(2*a)
+
+x-state x m
+x-state y m
+x-state vx m/s
+x-state vy m/s
+x-initial x = r0
+x-initial y = 0
+x-initial vx = 0
+x-initial vy = v0
+x-ode x m/s = vx
+x-ode y m/s = vy
+x-ode vx m/s^2 = -mu*x/(x^2 + y^2)^1.5
+x-ode vy m/s^2 = -mu*y/(x^2 + y^2)^1.5
+x-step fixed h                # exactly n * periods steps of size h, no substeps reported
+x-method free
+x-output states = list of [x, y, vx, vy] after each step (n * periods entries)
+
+let energy J/kg = (vx^2 + vy^2)/2 - mu/sqrt(x^2 + y^2)
+let rel_err 1 = sqrt(((energy - e0)/e0)^2)     # |.| written as sqrt of a square
+x-invariant first(n) = max of rel_err over steps 1 .. n
+x-invariant last(n) = max of rel_err over steps (periods - 1) n + 1 .. periods n
+x-invariant last(n) <= 1.2 first(n)
+x-invariant 3 <= first(n) / first(2 n) <= 5    # needs a second run with 2 n steps per period
+
+verdict conforms when both invariants hold for the reported states
+verdict an input outside its range, or a non-integer n or periods, is rejected

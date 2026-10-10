@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 試験が repo の履歴を読まないことの検査 (`scripts/history_free_tests.py`)
+
+- `scripts/test_*.py`、`conformance/*.py`、`tests/` 下の `*.rs` を走査し、`git show` / `git log` / `git rev-list` などの履歴を読む呼び出しと `<rev>~1:<path>` の形の参照を見つけたら fail、走査 0 件でも fail CI の clone は浅く (commit 1 つ)、履歴を読む試験は手元で通り CI で落ちる 試験 `scripts/test_history_free_tests.py` CI の docs job と `scripts/preflight.sh` で走らせる
+- `scripts/test_law_ambiguity_lint.py` の分割前の Kepler の law は `git show` で読んでいたので、その内容を `scripts/testdata/kepler_energy_bounded_pre_split.law` に置いて file から読むようにした
+
 #### law file の曖昧さ検査 (`scripts/law_ambiguity_lint.py`)
 
 - `x-invariant` を持つ law は、判定が特定の積分法に限定されることを `claim` に明記しなければならない
