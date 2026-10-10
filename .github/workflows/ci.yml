@@ -7,6 +7,14 @@ on:
   pull_request:
     branches: [main]
 
+# a newer push to the same branch cancels the older run (a superseded run only holds a
+# runner); on main each commit has a group of its own, so no main commit loses its run
+# (a group keeps one pending run and cancels an older pending one, whatever
+# cancel-in-progress says)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -422,6 +430,10 @@ jobs:
         run: python scripts/test_law_corners.py
       - name: law_corners (laws/spike の全 law file から corner を列挙、0 件は fail)
         run: python scripts/law_corners.py laws/spike
+      - name: workflow_concurrency oracle (検査器自身の試験)
+        run: python scripts/test_workflow_concurrency.py
+      - name: workflow_concurrency (branch の push で走る workflow に concurrency、0 件は fail)
+        run: python scripts/workflow_concurrency.py
       - name: workflow_timeouts oracle (検査器自身の試験)
         run: python scripts/test_workflow_timeouts.py
       - name: workflow_timeouts (全 workflow の全 job に timeout-minutes、0 件は fail)
