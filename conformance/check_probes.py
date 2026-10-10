@@ -41,8 +41,9 @@ def request_bytes(p):
 CRASH_MARKERS = ("Traceback (most recent call last)", "panicked at", "RUST_BACKTRACE")
 
 
-def outcome(cmd, p, timeout):
-    env = None
+def outcome(cmd, p, timeout, law_dir):
+    # every request is run with LOL_LAW_DIR set (TASK.md: a reader finds its law files there)
+    env = dict(os.environ, LOL_LAW_DIR=str(law_dir))
     if "law_text" in p:
         # a law file of the probe's own (malformed declarations): written to a fresh
         # directory that the implementation reads through LOL_LAW_DIR
@@ -74,6 +75,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--probes", default=str(Path(__file__).with_name("probes.json")))
     ap.add_argument("--timeout", type=float, default=60)
+    ap.add_argument("--law-dir", default=str(Path(__file__).resolve().parent.parent / "laws" / "spike"),
+                    help="directory of the law files, given to the implementation as LOL_LAW_DIR")
     ap.add_argument("--laws", help="comma separated law names; only their probes are checked")
     ap.add_argument("--kind", required=True, choices=["static", "reader"],
                     help="static: written for the given law files; reader: reads law files when it runs")
@@ -90,7 +93,7 @@ def main(argv=None):
     probes = [p for p in probes if p not in skipped]
     bad = 0
     for p in probes:
-        got = outcome(cmd, p, a.timeout)
+        got = outcome(cmd, p, a.timeout, a.law_dir)
         if got != p["expect"]:
             bad += 1
             print(f"DIFF {p['law']}: {p['note']}: expected {p['expect']}, got {got}")

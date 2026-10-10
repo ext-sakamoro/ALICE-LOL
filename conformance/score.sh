@@ -30,6 +30,6 @@ trap 'rm -rf "${tmp:?}"' EXIT
 "$PYTHON" "$here/gen_corpus.py" --laws "$LAWS" --tools "$TOOLS" --out "$tmp/corpus.json" --jobs "${JOBS:-8}" --min-vectors "${MIN_VECTORS:-1}"
 python3 "$TOOLS/law_corpus_cover.py" --laws "$LAWS" --corpus "$tmp/corpus.json"
 status=0
-python3 "$here/run_conformance.py" --corpus "$tmp/corpus.json" -- "$@" || status=$?
-python3 "$here/check_probes.py" --kind "$kind" -- "$@" || status=$?
+python3 "$here/run_conformance.py" --corpus "$tmp/corpus.json" --law-dir "$LAWS" -- "$@" || status=$?
+python3 "$here/check_probes.py" --kind "$kind" --law-dir "$LAWS" -- "$@" || status=$?
 exit "$status"

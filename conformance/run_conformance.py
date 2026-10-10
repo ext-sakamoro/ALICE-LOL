@@ -53,9 +53,14 @@ def wire(obj):
     return text.replace('"-' + json.dumps(_INF_TOKEN)[1:], "-1e400").replace(json.dumps(_INF_TOKEN), "1e400")
 
 
+# the directory of the law files, given to the implementation as LOL_LAW_DIR (TASK.md)
+LAW_DIR = str(Path(__file__).resolve().parent.parent / "laws" / "spike")
+
+
 def spawn(cmd, req, timeout):
     try:
-        return subprocess.run(cmd, input=wire(req), capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, input=wire(req), capture_output=True, text=True, timeout=timeout,
+                              env=dict(os.environ, LOL_LAW_DIR=LAW_DIR))
     except subprocess.TimeoutExpired:
         raise Fail("crash", f"timeout after {timeout}s")
     except OSError as e:
@@ -221,8 +226,12 @@ def main():
     ap.add_argument("--law")
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--show", type=int, default=3, help="failure details shown per law")
+    ap.add_argument("--law-dir", help="directory of the law files, given to the implementation as LOL_LAW_DIR")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
+    if a.law_dir:
+        global LAW_DIR
+        LAW_DIR = a.law_dir
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
     if not cmd:
         ap.error("no implementation command given")

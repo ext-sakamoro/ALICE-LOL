@@ -62,6 +62,19 @@ class Kinds(unittest.TestCase):
         self.assertIn("compared 2 probes, skipped by kind 0", out)
         self.assertIn("DIFF own", out)
 
+    def test_every_request_is_run_with_the_law_directory(self):
+        # the stand-in answers only when LOL_LAW_DIR names the directory it was given
+        law_dir = tempfile.mkdtemp()
+        reader = [sys.executable, "-c",
+                  "import json, os, sys\n"
+                  "if os.environ.get('LOL_LAW_DIR') != sys.argv[1]: sys.exit(3)\n"
+                  "print(json.dumps({'outputs': {'verdict': 'supports', 'subject': None}}))", law_dir]
+        path = probes([{"note": "plain", "law": "a", "inputs": {}, "expect": SUPPORTS}])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = cp.main(["--kind", "reader", "--law-dir", law_dir, "--probes", path, "--", *reader])
+        self.assertEqual(code, 0, out.getvalue())
+
     def test_the_kind_is_required(self):
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
                 open(os.devnull, "w") as null, unittest.mock.patch("sys.stderr", null):

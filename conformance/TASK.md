@@ -9,7 +9,7 @@ One command-line program that implements every law you are given. The programmin
 An implementation states its kind, `static` or `reader`; the task says which kind is wanted.
 
 - **`static`**: a program for the law files it is given. It answers for those laws only, giving the answers the files mean. It is checked on those laws; the checks that hand a program a law file of its own do not apply.
-- **`reader`**: a program that reads law files when it runs. It must read any law file by the reading rules below (the characters, lines, declarations and numbers) and refuse one that breaks them, and it is checked on everything, including law files of its own.
+- **`reader`**: a program that reads law files when it runs. It must read any law file by the reading rules below (the characters, lines, declarations and numbers) and refuse one that breaks them, and it is checked on everything, including law files of its own. The directory of the law files is given in the environment variable `LOL_LAW_DIR` (the checks always set it); the file of the law `<name>` is `<LOL_LAW_DIR>/<name>.law`, and a law with no such file is an unknown law (exit with status 2, as above).
 
 ### Program contract
 
