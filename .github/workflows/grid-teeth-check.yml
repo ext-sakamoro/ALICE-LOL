@@ -1,12 +1,31 @@
 name: Grid teeth check
 
-# Weekly, not per-push: scripts/grid_teeth_check.sh reintroduces 5 historical
-# regressions as mutants (one at a time, directly in this checkout) and asserts
-# the degenerate-parameter grid test or a named unit test turns red for each
-# -- each mutant rebuilds the probe binary and reruns the full grid (~90s),
-# so 5 mutants is roughly 10 minutes, far more than a per-push gate should cost.
+# Weekly on a schedule, not per-ordinary-push: scripts/grid_teeth_check.sh
+# reintroduces 5 historical regressions as mutants (one at a time, directly
+# in this checkout) and asserts the degenerate-parameter grid test or a
+# named unit test turns red for each -- each mutant rebuilds the probe
+# binary and reruns the full grid (~90s), so 5 mutants is roughly 10
+# minutes, far more than a per-push gate should cost for every push.
+#
+# A path-filtered push trigger covers the one case that actually needs
+# per-push confirmation: a change to the grid itself, the probe, the shared
+# corpus, this workflow, or the check script. `workflow_dispatch` can only
+# target a workflow that already exists on the default branch (confirmed:
+# dispatching this file from a feature branch before it lands 404s --
+# "workflow ... not found on the default branch"), so a push-triggered run
+# is the only way to prove this file's own teeth before landing it; a
+# push-triggered workflow runs the version of itself on the pushed branch,
+# unlike workflow_dispatch.
 
 on:
+  push:
+    branches: [main, 'ci/**']
+    paths:
+      - '.github/workflows/grid-teeth-check.yml'
+      - 'scripts/grid_teeth_check.sh'
+      - 'alice-lol/examples/parse_one_lol.rs'
+      - 'alice-lol/tests/degenerate_grid.rs'
+      - 'alice-lol/tests/common/corpus.rs'
   schedule:
     - cron: '30 3 * * 1' # Mondays 03:30 UTC
   workflow_dispatch:
@@ -14,9 +33,13 @@ on:
 permissions:
   contents: read
 
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (matches ci.yml's convention) the weekly/manual triggers aren't
+# ref-specific pushes, so they get their own group per run (github.run_id) rather than
+# colliding with -- or being cancelled by -- a push-triggered run on some branch
 concurrency:
-  group: grid-teeth-check
-  cancel-in-progress: false
+  group: grid-teeth-check-${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' && github.sha || github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' }}
 
 jobs:
   grid-teeth-check:

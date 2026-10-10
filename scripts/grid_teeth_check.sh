@@ -217,10 +217,23 @@ for r in "${RESULTS[@]}"; do
   [[ "$result" == GREEN* ]] && fail=1
 done
 
+# each mutant already restores its own files right after its test run, but
+# assert the WHOLE tree is clean here too -- a mutant whose restore silently
+# missed a file (a typo in its file list, a mutation that touched something
+# not listed) would otherwise leave that file mutated with nothing to
+# notice it, defeating the trap's own purpose
+dirty="$(git status --porcelain)"
+if [ -n "$dirty" ]; then
+  echo
+  echo "grid_teeth_check: the working tree is NOT clean after all mutants were restored:" >&2
+  echo "$dirty" >&2
+  exit 1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "grid_teeth_check: one or more mutants did not turn their target red (see table above)"
   exit 1
 fi
 echo
-echo "grid_teeth_check: ok (all 5 mutants turned their target red)"
+echo "grid_teeth_check: ok (all 5 mutants turned their target red, tree restored clean)"
