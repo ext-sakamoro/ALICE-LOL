@@ -132,6 +132,7 @@ semver 非互換な要求 (`^0.3` と `^0.4` 等) が混ざると cargo はど�
 third-party の重複 (`syn` / `thiserror` 等) は上流の都合で日常的に起きるので対象にしない
 `scripts/test_lock_single_version.py` (16 本) が各検査の歯を確かめる ci.yml の `wiring-guard` job (3 OS) と preflight で実行
 現在の baseline は `alice-det-math` の 1 行で、`alice-lol` 自身と `alice-zip` / `alice-physics` が `^0.4` を、`alice-sdf` が `^0.3.1` を要求するため
+(`alice-sdf` の要求を `5.1` に上げて解消、baseline は 0 行 下の Changed を参照)
 
 #### README とコードの一致を検査する gate (`scripts/readme_sync.py`)
 
@@ -590,6 +591,12 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 - tests: `tests/program_parser_tests.rs` (11、全 verb parse + round-trip + error) / `tests/lol_gbnf_test.rs` に program / intent golden 3 件追加
 
 ### Changed
+
+#### `alice-sdf` の要求を `5.0` から `5.1` に上げ、`alice-det-math` を 1 版にした
+
+- `alice-lol` と `alice-lol-ui` の `alice-sdf` の要求を `5.0` → `5.1` `alice-sdf` 5.0.0 は `alice-det-math` `^0.3.1` を、5.1.0 は `^0.4` を要求する `5.0` の要求では lock が 5.0.0 を解決し、`alice-det-math` 0.3.2 と 0.4.0 が 1 つの build に link されていた (同じ超越関数が 2 通りに評価されうる)
+- `Cargo.lock` の `alice-det-math` は 0.4.0 の 1 版になり、`scripts/lock-duplicates-baseline.txt` の行を消した (ラチェットの解消)
+- 同じ更新で lock の `alice-physics` は 2.0.0 → 2.1.0 (要求 `2.0` の範囲内)
 
 #### 監査 Law の証拠・成立範囲・期待値の読み方を固定する (2026-10-09)
 
