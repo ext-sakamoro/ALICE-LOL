@@ -1681,6 +1681,195 @@
   }
  },
  {
+  "note": "law file: the `law` line names another law (not read: the file name is the law name)",
+  "law": "decl_probe",
+  "law_text": "law another_law\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: no `law` line (not read: the file name is the law name)",
+  "law": "decl_probe",
+  "law_text": "kind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: `kind` and `audit` separated by two spaces (not `kind audit`)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind  audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: `kind Audit` (not `kind audit`)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind Audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: no `kind` line",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: `kind audit` indented and with trailing spaces (read)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\n  kind audit  \nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: lines with keywords not in the table (`source`, `oracle`) outside the audit block are not read",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nsource scripts/check.py:12\noracle compared=3 -> supports\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: an `input` line of an audit law is not read (its range would exclude the measurement)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared m range 5 9\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: clause tokens separated by a tab and by several spaces (read)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence\tcompared\nexpect  mismatches  ==  0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: `begin  audit` with two spaces opens no audit block",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin  audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: `end<TAB>audit` closes no audit block",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\nx-input known-mismatches list of text\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend\taudit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: a range key that no `x-input` line declares is not measured",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nclaim a check compared at least one item and found no mismatch\ninput compared 1\ninput mismatches 1\n\nbegin audit\naudit decl-probe\nevidence compared\nexpect mismatches == 0\nrange known-mismatches case-17 case-42\nend audit\n\nverdict the verdict of the audit block\n",
+  "inputs": {
+   "compared": 3,
+   "mismatches": 0,
+   "known-mismatches": [
+    "case-17",
+    "case-42"
+   ]
+  },
+  "expect": {
+   "verdict": "out_of_range",
+   "subject": "known-mismatches"
+  }
+ },
+ {
   "note": "four_bar: the radicand of `across` is -1.8e-12 in double (+1.2e-12 exactly); no clamping, rejected",
   "law": "four_bar_rocker_angle",
   "inputs": {

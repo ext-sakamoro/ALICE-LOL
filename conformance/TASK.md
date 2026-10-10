@@ -73,6 +73,13 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 | `verdict <text>` | when an implementation conforms, and what is rejected |
 | `begin audit` ... `end audit` | an audit block (see below) |
 
+How the lines are read:
+
+- **The `law` line is not read.** It names the law for people. The law name is the file name: a law file without a `law` line, with another name on it, or with a second `law` line is read the same.
+- **An audit law has the line `kind audit`.** A law file is an audit law when one of its lines, with its comment removed and the spaces at its two ends trimmed, is exactly `kind audit` (one ASCII space between the two words). `kind  audit`, `kind` and `audit` separated by a tab, and `kind Audit` are not that line. A law file of your own (a `reader` is given some, see "What to build") without the line `kind audit` is an unknown law: exit with status 2.
+- **A line whose keyword is not in the table above is not read** outside the audit block. Some law files carry such lines for people (`source <where the law was taken from>`, `oracle <a worked example>`). Inside the audit block every line must be a clause (see "Audit block").
+- **Tokens are separated by spaces or tabs.** Outside the `x-` declarations (below), the words of a line may be separated by one or more spaces or tabs, and spaces at the two ends of a line do not count. `begin audit` and `end audit` are exact: two words separated by one ASCII space. `begin  audit`, `begin` and `audit` separated by a tab, and the same forms of `end audit` open or close no audit block, and the law file then does not read: a request to it is an error of the request.
+
 ### Expressions
 
 - Numbers, names, `+ - * / ^`, unary minus, parentheses, and the functions `exp`, `ln`, `sqrt`, `sin`, `cos` (one argument each), `atan2(y, x)`, `min(a, b, ...)` and `max(a, b, ...)`.
@@ -103,7 +110,7 @@ These lines state things the core layout above cannot express.
 |------|---------|
 | `x-list <input>` | the input is a list of values. The law holds for every element. The output with a tolerance is a list aligned with it. A value that is not an array, or an array with an element that is not a number, is rejected. |
 | `x-integer <input>` | the input must be an integer. Otherwise it is rejected. A number with an integer value satisfies it whatever its JSON spelling (`100` and `100.0` are both integers). |
-| `x-range <name> <lo> <hi>` | the law applies only for `lo <= name <= hi`, where `name` is a `let` quantity. For a list input this applies to every element. |
+| `x-range <name> <lo> <hi>` | the law applies only for `lo <= name <= hi`, where `name` is a `let` quantity. For a list input this applies to every element: one element outside rejects the whole request. For an empty list it holds (there is no element), and the output is an empty list. The ranges of the other inputs apply whatever the list: an empty list does not make a request with another input outside its range valid. |
 | `x-range <name> > <value>` | the law applies only for `name > value` |
 | `x-state <name> <unit>` | a simulated state variable |
 | `x-initial <name> = <expr>` | the state at time 0 |
@@ -115,7 +122,7 @@ These lines state things the core layout above cannot express.
 | `x-reduce <name> = <text>` | the reported quantity is a reduction over the simulated trajectory |
 | `x-output <name> = <text>` | the reported output and its shape |
 | `x-invariant <text>` | a condition on the reported trajectory that the checker verifies (see below) |
-| `x-piece <name> <unit> <input> <lo> <hi> = <expr>` | a piecewise output. Use the piece whose `[lo, hi]` contains the input. Where two pieces meet, both give the same value. |
+| `x-piece <name> <unit> <input> <lo> <hi> = <expr>` | a piecewise output. Use the piece whose `[lo, hi]` contains the input. Where two pieces meet, both give the same value. Every name that has a `tolerance` line is an output of every request, so a law with several piecewise names (`isa1976_lower_atmosphere`: `temperature`, `pressure`, `density`) answers all of them, each from its own piece. |
 | `x-periodic <name> <period>` | the deviation of `<name>` is measured modulo the period, for example angles modulo 2 pi |
 | `x-input <name> <type>` | an input that is not a single number. Its type is written in the form below ("Types of `x-input`"). |
 | `x-metric <name> = <derivation>` | a measurement used by the audit block, derived from an `x-input` (see "Derived metrics" below) |
@@ -157,7 +164,8 @@ An audit block holds one clause per line:
 The measurements are the request inputs:
 
 - A **numeric metric** is a JSON number. A value that is not a number (text, `true` / `false`, `null`, an array, an object) counts as not measured, as if the key were missing. A number that is not finite after parsing (an overflowing literal such as `1e400`) is not a number, so it is not measured either.
-- A **range key** is an array of text. A value that is not an array of text, including `null`, counts as not measured, so the verdict for that key is `out_of_range`. An empty array is a measured, empty set.
+- A **range key** is an array of text, declared by an `x-input` line (`x-input known-mismatches list of text`). A value that does not match the type of that line, including `null`, counts as not measured, so the verdict for that key is `out_of_range`. A range key that no `x-input` line declares is never measured, whatever the request gives. An empty array is a measured, empty set.
+- In an audit law the `input` lines describe the measurements for people and are not read: a unit or a `range` on them has no effect. The numeric metrics are the request keys that the clauses name.
 - Values are compared as text. Two values are the same only when their text is identical.
 - `x-metric` lines define derived metrics (below). A name defined by an `x-metric` line is never read from the request, even when the request has a key of that name. An `x-input` and an `x-metric` may have the same name (`identifier_feature_independent` declares `x-input builds` and `x-metric builds = count(builds)`): the request key is read as the `x-input`, and the metric of that name is the value derived from it, not the value of the key.
 - A law file is UTF-8 text. Lines are split on LF only; a CR directly before an LF belongs to that line end. Among control characters only TAB, LF and the CR of a CR LF may appear. Every other control character (U+0000–U+001F except TAB / LF, U+007F–U+009F, a CR that is not directly before an LF, including at the very end of the file), every format character (U+00AD, U+0600–U+0605, U+061C, U+06DD, U+070F, U+0890–U+0891, U+08E2, U+180E, U+200B–U+200F, U+202A–U+202E, U+2060–U+2064, U+2066–U+206F, U+FEFF (a byte-order mark), U+FFF9–U+FFFB, U+110BD, U+110CD, U+13430–U+1343F, U+1BCA0–U+1BCA3, U+1D173–U+1D17A, U+E0001, U+E0020–U+E007F) and U+2028 / U+2029 make the file unreadable, wherever they are (also in a comment): otherwise two readers could split or see the text differently.
@@ -194,3 +202,14 @@ The verdict is found by checking in this fixed order, whatever the order of the 
 4. Otherwise the verdict is `supports`, and the subject is `null`.
 
 Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error. A request to an audit law without the `inputs` key, or with `"inputs": null`, is the same as `"inputs": {}`: nothing is measured.
+
+## Not specified (do not rely on it)
+
+The checks do not decide these points, and no rule is given for them yet. A program may answer them in any way, and nothing here is scored on them; a program that reads law files when it runs (`reader`) should not depend on any particular answer.
+
+- **The text after `=` on `x-reduce`, `x-output` and `x-step fixed` lines.** It is written for people (`max over t >= 0`, the shape of the reported output). There is no grammar for it yet: how a program would read it, and what it may contain, is open.
+- **Whether a program evaluates the `tolerance` lines.** They name the outputs (above). Whether a program computes the tolerance values, or leaves them to the checker, is open.
+- **How the reported output of a simulation is linked to its states.** Which `x-state`, at which times (each step of `x-step fixed`, or the times of a list input), forms the `x-output`, when the law does not say it in words, is open.
+- **A rate of change that depends on time.** An `x-ode` expression that uses the time itself (not only the states and inputs) is not used by any law, and its meaning is open.
+- **Whether the closed form of a simulated law must be finite.** The program reports its simulation, and the closed form is the reference it is judged against. Whether a request is rejected when the closed form is not finite there but the simulation is, is open.
+- **A law file of your own that is not an audit law.** A `reader` is given law files of its own only as audit laws. How it reads one with `kind research`, with no `kind` line or with another kind (for example its units, which no rule checks), is open.

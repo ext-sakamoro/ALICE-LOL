@@ -222,6 +222,10 @@ DESIGN = {
             (T(10, 10, 1, 2, 1, [3, 0.5, 3, 1]), "unsorted, repeated times"),
             (T(10, 10, 1, 2, 1, 1.0), "x-list given a number, not an array"),
             (T(10, 10, 1, 2, 1, [0.5, "1"]), "x-list with an element that is not a number"),
+            # an x-range on a list quantity holds for every element, so for an empty list it
+            # holds trivially; the ranges of the other inputs apply whatever the list
+            (T(10, 10, 1, 2, 1, []), "x-list empty under an x-range: an empty list of values"),
+            (T(0.01, 10, 1, 2, 1, []), "x-list empty, m below its range: rejected"),
         ],
         "edges": {
             "t_over_tau@lo": T(10, 10, 1, 2, 1, [0]), "t_over_tau@hi": T(10, 10, 1, 2, 1, [8]),

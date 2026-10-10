@@ -41,8 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # 391 vectors on 2026-10-11; raise it when laws or cases are added
-      MIN_VECTORS: 391
+      # 392 vectors on 2026-10-11; raise it when laws or cases are added
+      MIN_VECTORS: 392
       JOBS: 4
     steps:
       - uses: actions/checkout@v5
