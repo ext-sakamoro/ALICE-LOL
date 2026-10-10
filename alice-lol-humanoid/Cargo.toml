@@ -1,6 +1,8 @@
 [package]
 name = "alice-lol-humanoid"
 version = "0.1.0"
+# not published: the release of this workspace is alice-lol-macro and alice-lol only
+publish = false
 edition = "2021"
 rust-version = "1.90"
 description = "Humanoid template for ALICE-LOL DSL — VRM/BVH → parametric humanoid SdfNode. Phase H.3 VRM import."

@@ -1,6 +1,8 @@
 [package]
 name = "alice-world-auditor"
 version = "0.1.0"
+# not published: the release of this workspace is alice-lol-macro and alice-lol only
+publish = false
 edition = "2021"
 rust-version = "1.90"
 description = "ALICE World Auditor — deterministic planner over alice-physics worlds, IDA* search against a Law-checked Goal, 3-valued (proven/violated/undecided) verdicts"

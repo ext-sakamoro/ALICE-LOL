@@ -1,6 +1,8 @@
 [package]
 name = "alice-lol-robot"
 version = "0.1.0"
+# not published: the release of this workspace is alice-lol-macro and alice-lol only
+publish = false
 edition = "2021"
 rust-version = "1.90"
 description = "Robot template for ALICE-LOL DSL — Phase 3 Intent verb → humanoid FK + 8-byte Kinematics packet. Wires intent.rs + alice-lol-humanoid + alice-kinematics."
