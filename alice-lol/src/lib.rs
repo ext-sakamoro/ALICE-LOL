@@ -54,6 +54,9 @@ pub mod runtime_parser;
 
 pub mod limits;
 
+/// Canonicalizing a user-supplied angle before it is converted to radians
+pub mod angle;
+
 /// `SdfNode` → LOL text (runtime parser の逆変換、Track C0)
 pub mod emit;
 
