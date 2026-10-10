@@ -874,6 +874,7 @@ pub fn derivation_fingerprint() -> [u8; 32] {
 
 /// law file を監査の Law として読めなかった理由
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LawFileError {
     /// `begin audit` ... `end audit` が無い、または閉じていない
     NoAuditBlock,

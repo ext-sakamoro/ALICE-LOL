@@ -357,6 +357,7 @@ impl PrintConfig {
 
 /// エクスポートエラー
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ExportError {
     /// LOL パースエラー
     Parse(crate::runtime_parser::ParseError),

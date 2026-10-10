@@ -31,9 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LawReport` に field `unresolved` を追加し、`all_passed()` は「違反なし かつ 判定不能なし」 判定不能を合格として返さない
 - 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
 - pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
+- `EmitError` に `NonFinite` を追加し、`EmitError` / `ExportError` / `LawFileError` / `BridgeError` を `#[non_exhaustive]` にした (外の crate の `match` は `_` の腕が要る 次に variant を足す時は破壊的変更にならない)
 
 #### 挙動
 
+- LOL の数は有限: 桁あふれの literal (`1e39` ほか、f32 で ±∞ になるもの) は parse error になる (0.3.0 は ±∞ として読んでいた) `to_lol` は NaN / ±∞ を書かず `EmitError::NonFinite` を返す
+- `skadis_panel` の一辺は 0 より大きくなければならない (0.3.0 は負の一辺から負の寸法の板を作っていた)
 - 監査 Law (`audit_law`) の証拠は有限で 0 より大きい数だけ、成立範囲は集合として比べ、`expect` の実測が有限でなければ `Undecided`
 - `print_export::node_to_mesh` の破壊的修復は、修復の前後で `χ` が等しく孤立頂点が増えない時だけ採る
 
@@ -919,6 +922,15 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - `rust-toolchain.toml` pin `1.92.0` → `1.98.1` (6 release 遅れで `cargo-semver-checks@latest` の MSRV に追い抜かれていた)、`cargo-semver-checks` を `0.50.0` に明示 pin
 
 ### Fixed
+
+#### 利用者の text で panic しない、書いた text は必ず読み戻せる (fuzz の crash 3 件)
+
+`fuzz.yml` の実行 step が失敗を無視する設定だったので、fuzz が見つけた crash が CI では成功として表示されていた (main の直近 4 run で 4 target 中 2〜4 target が crash) 見つかった crash の根を直す
+
+- `skadis_panel(-130, 4, 4031)` が panic した: 角の半径を `clamp(0, size / 2)` で丸めており、一辺が負だと上限が下限より小さくなる (0.3.0 の後に入った寸法の修正で生じ、公開版には無い) parser は一辺が 0 以下なら parse error を返し、`skadis_panel_sdf` は一辺が 0 以下でも panic しない
+- 桁あふれの literal が ±∞ として読まれ (0.3.0 以前でも発生)、`to_lol` が `inf` と書き、書いた text が読み戻せなかった parser は有限でない literal を拒み、`to_lol` は有限でない数を書かずに `EmitError::NonFinite` を返す (stdlib の構成で有限の引数から ±∞ が出る場合も)
+- `to_lol` が 2 つの書き方の選択 (`capsule` / `capsule_ab`、可変長 op の平坦化) を丸める前の値で行い、`1e-30` のように 0 と書かれる値で書いた text を読み戻すと別の形になっていた (書く値で選ぶ)
+- `tests/finite_numbers.rs` (6 本): crash 入力、literal の範囲、`NonFinite`、書き方の選択、grammar の全 construct の数を 13 種の値 (0、±1e30、±3e38、5e-7 ほか) に置き換えた入力で「読めたものは有限で書かれ、読み戻すと同じ text」(4,000 件以上を確かめ、拒否 (`NonFinite`) が 1 件以上あることも確かめる) 変異 7 件で red
 
 #### crate の package に license の text が入っていなかった
 

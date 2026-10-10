@@ -116,6 +116,7 @@ pub fn lol_grammar() -> &'static Grammar {
 /// grammar-obeying LLM output; if it does, `lol.gbnf` and the runtime
 /// parser have diverged and the grammar needs updating.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum BridgeError {
     /// Grammar-constrained decoding failed inside `alice-llm`.
     ///

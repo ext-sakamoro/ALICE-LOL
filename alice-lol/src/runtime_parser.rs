@@ -181,6 +181,14 @@ impl<'a> Lexer<'a> {
             message: format!("invalid number: '{s}'"),
             position: start,
         })?;
+        // a literal past the f32 range reads as ±inf: refuse it, as `law_number` does
+        // (emit never writes inf, so an accepted inf could not be written back)
+        if !v.is_finite() {
+            return Err(ParseError {
+                message: format!("number out of range: '{s}'"),
+                position: start,
+            });
+        }
         Ok(Some(Token::Number(v)))
     }
 
@@ -3156,14 +3164,15 @@ impl Parser<'_> {
         Ok(lol_u32(self.bounded_count(v)?))
     }
 
-    /// SKADIS 板の一辺 \[mm\] を `MAX_SKADIS_PANEL_MM` 以下の有限値にする
+    /// SKADIS 板の一辺 \[mm\] を 0 より大きく `MAX_SKADIS_PANEL_MM` 以下の有限値にする
     ///
     /// 穴は (size / 40)² 個を生成する 旧実装は上限なしで、`skadis_panel(1e30, ..)` は数 GB 確保し、
-    /// `inf` は `loop { if pos >= size break }` が終わらなかった
+    /// `inf` は `loop { if pos >= size break }` が終わらなかった 下限も無く、負の一辺は
+    /// 角の半径の `clamp(0, size / 2)` で panic していた (`skadis_panel(-130, 4, 4031)`)
     fn skadis_size(&self, size: f32) -> Result<f32, ParseError> {
-        if !size.is_finite() || size > MAX_SKADIS_PANEL_MM {
+        if !(size > 0.0 && size <= MAX_SKADIS_PANEL_MM) {
             return Err(ParseError {
-                message: format!("SKADIS 板の一辺は有限で {MAX_SKADIS_PANEL_MM} mm 以下でなければならない: {size}"),
+                message: format!("SKADIS 板の一辺は 0 より大きく {MAX_SKADIS_PANEL_MM} mm 以下でなければならない: {size}"),
                 position: self.lexer.pos,
             });
         }

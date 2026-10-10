@@ -384,7 +384,8 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // `RoundedBox` の外寸は `half_extents + round_radius` なので、X/Z は内側の寸法
     // `size/2 - R` を渡して外寸をちょうど `size` にする (旧実装は `size/2` を渡して一辺が
     // `size + 2R` になっていた)  Y は下の cutter で `thickness` に切り戻す
-    let r = corner_radius.clamp(0.0, size * 0.5);
+    // `clamp` panics when its upper bound is below 0 (a size of 0 or less): bound it first
+    let r = corner_radius.clamp(0.0, (size * 0.5).max(0.0));
     let panel_infl = SdfNode::RoundedBox {
         half_extents: Vec3::new(
             size.mul_add(0.5, -r),

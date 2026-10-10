@@ -36,6 +36,7 @@ use glam::{EulerRot, Vec2, Vec3};
 
 /// [`to_lol`] のエラー
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EmitError {
     /// LOL text 構文を持たない variant
     Unsupported {
@@ -44,6 +45,8 @@ pub enum EmitError {
         /// 理由
         reason: &'static str,
     },
+    /// 数値に NaN か ±∞ がある (LOL の数は有限の literal だけなので、書いても読み戻せない)
+    NonFinite,
 }
 
 impl std::fmt::Display for EmitError {
@@ -51,6 +54,12 @@ impl std::fmt::Display for EmitError {
         match self {
             Self::Unsupported { variant, reason } => {
                 write!(f, "SdfNode::{variant} has no LOL text form: {reason}")
+            }
+            Self::NonFinite => {
+                write!(
+                    f,
+                    "the tree holds a number that is NaN or infinite (LOL numbers are finite)"
+                )
             }
         }
     }
@@ -63,14 +72,24 @@ impl std::error::Error for EmitError {}
 /// 正規形のため `|v| < 1e-6` (stdlib の product 展開で cos/sin から出る
 /// `-0.0` / `4e-7` 級のノイズ) は `0.0` に丸める mm / rad どちらの単位でも
 /// 実用上の差はなく、round-trip の冪等性 (`emit ∘ parse ∘ emit = emit`) に必要
-/// `NaN` / `inf` は parser が受理しないので呼び出し側の責任 (そのまま出す)
+/// `NaN` / `inf` はそのまま出す (parser は読まない) [`to_lol`] は書く前に [`EmitError::NonFinite`] で止める
 #[must_use]
 pub fn fmt_f32(v: f32) -> String {
-    let v = if v.abs() < 1e-6 { 0.0 } else { v };
+    let v = canon(v);
     if v.fract() == 0.0 && v.is_finite() && v.abs() < 1e15 {
         format!("{v:.1}")
     } else {
         format!("{v}")
+    }
+}
+
+/// the value [`fmt_f32`] writes: `|v| < 1e-6` is `0.0` (a choice between two text forms is
+/// made on this value too, or the form read back would differ from the one written)
+fn canon(v: f32) -> f32 {
+    if v.abs() < 1e-6 {
+        0.0
+    } else {
+        v
     }
 }
 
@@ -94,14 +113,6 @@ fn canon_deg(a: f32) -> f32 {
     }
 }
 
-fn v3(v: Vec3) -> String {
-    format!("{}, {}, {}", fmt_f32(v.x), fmt_f32(v.y), fmt_f32(v.z))
-}
-
-fn v2(v: Vec2) -> String {
-    format!("{}, {}", fmt_f32(v.x), fmt_f32(v.y))
-}
-
 fn u(v: u32) -> String {
     format!("{v}.0")
 }
@@ -110,7 +121,9 @@ fn u(v: u32) -> String {
 ///
 /// # Errors
 ///
-/// tree 内に LOL 構文のない variant があると [`EmitError::Unsupported`]
+/// tree 内に LOL 構文のない variant があると [`EmitError::Unsupported`]、
+/// NaN か ±∞ の数があると [`EmitError::NonFinite`] (parser は有限の数しか読まないので、
+/// 書いた text は必ず読み戻せる)
 pub fn to_lol(node: &SdfNode) -> Result<String, EmitError> {
     let mut out = String::new();
     write_node(node, &mut out)?;
@@ -157,9 +170,19 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             Ok(())
         }};
     }
-    let f = fmt_f32;
+    // every number goes through these: a NaN or an infinity is recorded and the node is
+    // refused below (fmt_f32 would write `inf` / `NaN`, which the parser does not read)
+    let non_finite = std::cell::Cell::new(false);
+    let f = |v: f32| {
+        if !v.is_finite() {
+            non_finite.set(true);
+        }
+        fmt_f32(v)
+    };
+    let v3 = |v: Vec3| format!("{}, {}, {}", f(v.x), f(v.y), f(v.z));
+    let v2 = |v: Vec2| format!("{}, {}", f(v.x), f(v.y));
 
-    match node {
+    let written = match node {
         // ── Primitives ──
         SdfNode::Sphere { radius } => prim!("sphere", f(*radius)),
         SdfNode::Box3d { half_extents } => prim!("box3d", v3(*half_extents)),
@@ -185,12 +208,14 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             radius,
         } => {
             // capsule(r, h) は Y 軸対称 (0,-h,0)-(0,h,0) の短縮形、それ以外は capsule_ab
-            let h = point_b.y;
-            let symmetric = point_a.x == 0.0
-                && point_a.z == 0.0
-                && point_b.x == 0.0
-                && point_b.z == 0.0
-                && (point_a.y + h).abs() <= f32::EPSILON * h.abs().max(1.0);
+            // 判定は書く値 (canon) で行う: 1e-30 のような 0 に丸める座標で判定すると、
+            // 書いた text を読み戻した時に別の形になる
+            let h = canon(point_b.y);
+            let symmetric = canon(point_a.x) == 0.0
+                && canon(point_a.z) == 0.0
+                && canon(point_b.x) == 0.0
+                && canon(point_b.z) == 0.0
+                && (canon(point_a.y) + h).abs() <= f32::EPSILON * h.abs().max(1.0);
             if symmetric {
                 prim!("capsule", f(*radius), f(h))
             } else {
@@ -668,7 +693,12 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             variant: "<unknown>",
             reason: "variant added in a newer alice-sdf than this emitter knows",
         }),
+    };
+    written?;
+    if non_finite.get() {
+        return Err(EmitError::NonFinite);
     }
+    Ok(())
 }
 
 /// 可変長 op の識別: (name, 数値引数, a, b) 同 name + 同引数の左 spine を平坦化する
@@ -697,13 +727,23 @@ fn write_variadic(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
     // 左 spine: 同 name・同数値引数の間だけ潰す (k が違う smooth_union は別 op)
     let mut rev_children: Vec<&SdfNode> = vec![b];
     while let Some((n2, args2, a2, b2)) = variadic_parts(a) {
-        if n2 != name || args2 != args {
+        // compare the values as written (canon), or two ops that print the same would be
+        // kept apart here and merged once the text is read back
+        let same = args2.len() == args.len()
+            && args2
+                .iter()
+                .zip(&args)
+                .all(|(x, y)| canon(*x).to_bits() == canon(*y).to_bits());
+        if n2 != name || !same {
             break;
         }
         rev_children.push(b2);
         a = a2;
     }
     rev_children.push(a);
+    if args.iter().any(|v| !v.is_finite()) {
+        return Err(EmitError::NonFinite);
+    }
     let _ = write!(out, "{name}(");
     for v in &args {
         let _ = write!(out, "{}, ", fmt_f32(*v));
