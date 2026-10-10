@@ -188,7 +188,8 @@ def four_bar(i):
     hh = math.sqrt(lco * lco - a * a)
     bx = ax + a * dx / d - hh * dy / d
     by = ay + a * dy / d + hh * dx / d
-    return {"theta4": math.atan2(by, bx - lg)}
+    # the sign of a zero argument is ignored (-0 reads as +0), so the angle is in (-pi, pi]
+    return {"theta4": math.atan2(by + 0.0, (bx - lg) + 0.0)}
 
 
 def isa(i):

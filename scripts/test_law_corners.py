@@ -95,6 +95,13 @@ class Expressions(unittest.TestCase):
         self.assertEqual(self.ev("max(a, 2, b) - min(a, b)", a=1, b=5), 4)
         self.assertAlmostEqual(self.ev("exp(ln(3))"), 3)
 
+    def test_atan2_ignores_the_sign_of_a_zero_argument(self):
+        # TASK.md: -0 reads as 0, so the negative x axis is +pi and the origin is +0
+        self.assertEqual(self.ev("atan2(y, -1)", y=-0.0), math.pi)
+        self.assertEqual(math.copysign(1, self.ev("atan2(y, 1)", y=-0.0)), 1)
+        self.assertEqual(math.copysign(1, self.ev("atan2(y, x)", y=-0.0, x=-0.0)), 1)
+        self.assertEqual(self.ev("atan2(1, x)", x=-0.0), math.pi / 2)
+
     def test_errors(self):
         for bad in ("1 +", "(1", "1 2", "a $ b"):
             with self.assertRaises(lc.ExprError, msg=bad):

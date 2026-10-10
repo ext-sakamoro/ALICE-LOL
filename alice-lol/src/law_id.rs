@@ -91,13 +91,13 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     // 関数の値と読める式が変われば、同じ law file の判定が変わる
     (
         "research expressions: functions and argument counts",
-        hex32("0533fef3f1798dad9d0920c4427799865cc0601d3b21d9061f3db5aeced59b2e"),
+        hex32("ee1b39dde2b1e577892f19daee2fb514a7b43f56be7d2211061de1ddac28fad3"),
     ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("f528500d91e823baf9a904108251b1693a3662d0311ada13181d3779a1c2021a");
+    hex32("764a737399d4a1eac0e390fed351fe731a8d537a8ed3c5b071b3cc0f1a3568fc");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///

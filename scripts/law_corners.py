@@ -167,6 +167,10 @@ def evaluate(tree, env: dict, lib=math):
         name = tree[1]
         if name in ("min", "max"):
             return (min if name == "min" else max)(args)
+        if name == "atan2":
+            # the sign of a zero argument is ignored (-0 reads as +0): atan2(-0, x < 0) is
+            # +pi and the result stays in (-pi, pi]
+            args = [a + 0 for a in args]
         fn = {"ln": "log"}.get(name, name)
         return getattr(lib, fn)(*args)
     a = evaluate(tree[1], env, lib)

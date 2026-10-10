@@ -62,9 +62,9 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 
 #### 研究 Law の式に `atan2` / `min` / `max` (`research_law`)
 
-- `LawExpr` が `atan2(y, x)` (点 `(x, y)` の角度、値域 (−π, π]、負の x 軸は +π)、`min(a, b, …)` と `max(a, b, …)` (2 個以上、等しい引数は先の方を返すので 0 の符号も決まる) を読む 評価は `alice-det-math` (`atan2_64`)、次元は `atan2` の 2 引数が同じで結果は無次元、`min` / `max` は全引数が同じでその次元 引数の数が合わない呼び出しは `ResearchLawError::ArgumentCount` 試験 `tests/analytic_research_functions.rs` (π の分数と定義から書いた期待値)
-- `laws/spike/four_bar_rocker_angle.law` の `x-expr` 3 行を `output` / `let` にし、`oracle` 4 行を足した (2 円の交点を 50 桁で別の式から計算した値) LOL 自身が four_bar の law を評価・次元検査できるようになった `conformance/TASK.md` の式の関数に 3 つを足し、`x-expr` の行を外した (使う law が無い)
-- **識別子の変更:** `LOL_SEMANTICS_PINS` に「研究 Law の式の関数と引数の数」(`research_law::expression_functions_fingerprint`、固定の式 24 件の読めたか・値の bit の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `e1b05c47…` から `f528500d…` に再記録した 監査の Law の識別子も動く 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が fold であることを試験する
+- `LawExpr` が `atan2(y, x)` (点 `(x, y)` の角度、値域 (−π, π]、負の x 軸は +π)、`min(a, b, …)` と `max(a, b, …)` (2 個以上、等しい引数は先の方を返すので 0 の符号も決まる) を読む 評価は `alice-det-math` (`atan2_64`)、0 の引数の符号は読まない (`-0` は `0`、負の x 軸は常に +π、原点は +0、表を `conformance/TASK.md` に書いた)、次元は `atan2` の 2 引数が同じで結果は無次元、`min` / `max` は全引数が同じでその次元 引数の数が合わない呼び出しは `ResearchLawError::ArgumentCount` 試験 `tests/analytic_research_functions.rs` (π の分数と定義から書いた期待値、`min` / `max` は 3〜5 引数で極値を先頭・途中・末尾に置き、等しい引数は 0 の符号で先の方を確かめる)
+- `laws/spike/four_bar_rocker_angle.law` の `x-expr` 3 行を `output` / `let` にし、`oracle` 4 行を足した (2 円の交点を 50 桁で別の式から計算した値、入力は law file の text を double として読んだ値) LOL 自身が four_bar の law を評価・次元検査できるようになった `conformance/TASK.md` の式の関数に 3 つを足し、`x-expr` の行を外した (使う law が無い)
+- **識別子の変更:** `LOL_SEMANTICS_PINS` に「研究 Law の式の関数と引数の数」(`research_law::expression_functions_fingerprint`、固定の式 42 件の読めたか・値の bit の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `e1b05c47…` から `764a7373…` に再記録した 監査の Law の識別子も動く 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が fold であることを試験する
 - `research_law` の module doc の「`exp` などは platform の数学 library」は誤りで、`alice-det-math` を使う (この変更の前から) 文を直した
 
 #### 入力の読み方を LOL が持つ (`law_input`)

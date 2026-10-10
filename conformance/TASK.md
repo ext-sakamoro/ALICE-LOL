@@ -69,7 +69,15 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 ### Expressions
 
 - Numbers, names, `+ - * / ^`, unary minus, parentheses, and the functions `exp`, `ln`, `sqrt`, `sin`, `cos` (one argument each), `atan2(y, x)`, `min(a, b, ...)` and `max(a, b, ...)`.
-- `atan2(y, x)` is the angle of the point `(x, y)`, in (-pi, pi]: on the negative x axis it is +pi. `y` and `x` have the same unit; the result is a pure number.
+- `atan2(y, x)` is the angle of the point `(x, y)`, in (-pi, pi]. `y` and `x` have the same unit; the result is a pure number. The sign of a zero argument is ignored (`-0` is read as `0`), so:
+
+  | y | x | atan2(y, x) |
+  |---|---|---|
+  | `0` or `-0` | `x < 0` | `+pi` (never `-pi`) |
+  | `0` or `-0` | `x > 0` | `0` |
+  | `0` or `-0` | `0` or `-0` | `0` |
+  | `y > 0` | `0` or `-0` | `+pi/2` |
+  | `y < 0` | `0` or `-0` | `-pi/2` |
 - `min` and `max` take two or more arguments, all with the same unit, and give that unit. Of equal arguments the first one is the result (this decides the sign of a zero).
 - A call with another number of arguments is not part of the language.
 - `^` binds tighter than unary minus (`-2^2 = -4`) and is right associative. Its exponent is a constant.

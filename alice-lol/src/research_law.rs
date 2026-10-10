@@ -22,7 +22,8 @@
 //!
 //! [`LawExpr::parse`] reads numbers, identifiers, `+ - * / ^`, unary minus,
 //! parentheses and the functions `exp`, `ln`, `sqrt`, `sin`, `cos` (one argument),
-//! `atan2(y, x)` (the angle of the point `(x, y)`, in (−π, π]) and `min` / `max`
+//! `atan2(y, x)` (the angle of the point `(x, y)`, in (−π, π]; the sign of a zero
+//! argument is ignored, so the negative x axis is +π and the origin is +0) and `min` / `max`
 //! (two or more arguments; of equal arguments the first is the result). `^` binds
 //! tighter than unary minus (`-2^2 = -4`) and is right associative
 //! (`2^3^2 = 512`); its exponent must be a constant. Expressions nest at most
@@ -733,8 +734,26 @@ const EXPRESSION_FUNCTION_CASES: &[&str] = &[
     "atan2(0, 1)",
     "atan2(0, -1)",
     "atan2(3, 4)",
+    "atan2(0*-1, -1)",
+    "atan2(0*-1, 1)",
+    "atan2(0, 0)",
+    "atan2(0*-1, 0)",
+    "atan2(0, 0*-1)",
+    "atan2(0*-1, 0*-1)",
+    "atan2(1, 0*-1)",
     "min(3, 1, 2)",
     "max(3, 1, 2)",
+    "min(3, 2, 1)",
+    "max(1, 2, 3)",
+    "min(1, 3, 2)",
+    "max(2, 3, 1)",
+    "min(5, 4, 3, 2, 1)",
+    "max(1, 2, 3, 4, 5)",
+    "min(4, 5, 1, 3, 2)",
+    "max(2, 1, 5, 4, 3)",
+    "min(2, 3, 1, 0*-1, 0)",
+    "min(2, 3, 1, 0, 0*-1)",
+    "max(-2, -3, 0, 0*-1)",
     "min(0*-1, 0)",
     "min(0, 0*-1)",
     "max(0*-1, 0)",
@@ -1159,7 +1178,10 @@ fn eval(code: &Code, inputs: &[f64], params: &[f64]) -> Result<f64> {
                 Func::Sqrt => alice_det_math::sqrt64(x),
                 Func::Sin => alice_det_math::sin64(x),
                 Func::Cos => alice_det_math::cos64(x),
-                Func::Atan2 => alice_det_math::atan2_64(x, xs[1]),
+                // the sign of a zero argument is ignored: `+ 0.0` turns −0 into +0 and leaves
+                // every other value as it is, so atan2(−0, x < 0) is +π and the result stays
+                // in (−π, π]
+                Func::Atan2 => alice_det_math::atan2_64(x + 0.0, xs[1] + 0.0),
                 // the first of equal arguments, so the sign of a zero is fixed by the order
                 Func::Min => xs[1..].iter().fold(x, |m, &v| if v < m { v } else { m }),
                 Func::Max => xs[1..].iter().fold(x, |m, &v| if v > m { v } else { m }),

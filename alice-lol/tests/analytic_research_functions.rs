@@ -62,6 +62,58 @@ fn min_and_max_take_two_or_more_arguments() {
 }
 
 #[test]
+fn min_and_max_read_every_argument_wherever_the_extreme_is() {
+    // the extreme first, in the middle and last, with 3, 4 and 5 arguments
+    for (text, want) in [
+        ("min(1, 2, 3)", 1.0),
+        ("min(2, 1, 3)", 1.0),
+        ("min(3, 2, 1)", 1.0),
+        ("min(4, 3, 2, 1)", 1.0),
+        ("min(5, 4, 1, 3, 2)", 1.0),
+        ("min(5, 4, 3, 2, 1)", 1.0),
+        ("max(3, 2, 1)", 3.0),
+        ("max(1, 3, 2)", 3.0),
+        ("max(1, 2, 3)", 3.0),
+        ("max(1, 2, 3, 4)", 4.0),
+        ("max(2, 1, 5, 4, 3)", 5.0),
+        ("max(1, 2, 3, 4, 5)", 5.0),
+    ] {
+        assert_eq!(constant(text), want, "{text}");
+    }
+}
+
+#[test]
+fn of_equal_arguments_the_first_is_the_result() {
+    // the sign bit shows which zero was taken
+    let sign = |text: &str| constant(text).is_sign_negative();
+    assert!(sign("min(0*-1, 0)"));
+    assert!(!sign("min(0, 0*-1)"));
+    assert!(sign("min(2, 3, 0*-1, 1, 0)"));
+    assert!(sign("min(2, 3, 1, 0*-1, 0)"));
+    assert!(!sign("min(2, 3, 1, 0, 0*-1)"));
+    assert!(sign("max(-2, -3, 0*-1, 0)"));
+    assert!(!sign("max(-2, -3, 0, 0*-1)"));
+}
+
+#[test]
+fn atan2_ignores_the_sign_of_a_zero_argument() {
+    let bits = |text: &str| constant(text).to_bits();
+    // the negative x axis is +π, whatever the sign of the zero y
+    close(constant("atan2(0*-1, -1)"), PI);
+    close(constant("atan2(0*-1, -5)"), PI);
+    assert!(constant("atan2(0*-1, -1)") > 0.0);
+    // the positive x axis and the origin are +0
+    assert_eq!(bits("atan2(0*-1, 1)"), 0.0_f64.to_bits());
+    assert_eq!(bits("atan2(0, 0)"), 0.0_f64.to_bits());
+    assert_eq!(bits("atan2(0*-1, 0)"), 0.0_f64.to_bits());
+    assert_eq!(bits("atan2(0, 0*-1)"), 0.0_f64.to_bits());
+    assert_eq!(bits("atan2(0*-1, 0*-1)"), 0.0_f64.to_bits());
+    // the y axis does not depend on the sign of the zero x
+    close(constant("atan2(1, 0*-1)"), FRAC_PI_2);
+    close(constant("atan2(-1, 0*-1)"), -FRAC_PI_2);
+}
+
+#[test]
 fn a_call_with_the_wrong_number_of_arguments_is_rejected() {
     for text in [
         "atan2(1)",
