@@ -348,6 +348,20 @@ class Changelog(unittest.TestCase):
         e = errors({"CHANGELOG.md": cl})
         self.assertTrue(any("compared nothing" in x and "categories" in x for x in e), e)
 
+    def test_an_empty_unreleased_checks_the_newest_section(self):
+        # just after a cut: empty [Unreleased], the work in the newest section
+        body = CHANGELOG.split("## [Unreleased]\n", 1)[1]
+        cut = CHANGELOG.split("## [Unreleased]\n", 1)[0] + "## [Unreleased]\n\n## [1.5.0] - 2026-10-10\n" + body
+        self.assertEqual(errors({"CHANGELOG.md": cut}), [])
+        bad = cut.replace("### Added", "### Added\n\n### Added", 1)
+        e = errors({"CHANGELOG.md": bad})
+        self.assertTrue(any("[1.5.0]" in x and "appears 2 times" in x for x in e), e)
+
+    def test_an_empty_unreleased_above_a_section_without_categories_compares_nothing(self):
+        cl = CHANGELOG.split("### Added")[0].split("## [Unreleased]")[0] + "## [Unreleased]\n\n## [1.5.0] - 2026-10-10\n\nprose only\n"
+        e = errors({"CHANGELOG.md": cl})
+        self.assertTrue(any("compared nothing" in x and "categories" in x for x in e), e)
+
 
 if __name__ == "__main__":
     unittest.main()

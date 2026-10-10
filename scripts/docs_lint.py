@@ -12,8 +12,9 @@ checked mechanically:
   * changelog   version headings: no duplicates, `[Unreleased]` first,
                 released versions in descending semver order, the Cargo.toml
                 version either released or covered by `[Unreleased]`; inside
-                `[Unreleased]`, each Keep a Changelog category at most once
-                and no emoji status markers
+                `[Unreleased]` (or, when it is empty just after a version is
+                cut, the newest section), each Keep a Changelog category at
+                most once and no emoji status markers
 
 The development-process, tracker, instruction-source and device vocabulary is
 also checked in the text of every other tracked file (comments, workflows,
@@ -211,6 +212,11 @@ def unreleased_body(changelog: str) -> str | None:
     return m.group(1) if m else None
 
 
+def newest_section_body(changelog: str) -> str | None:
+    m = re.search(r"^## \[(?!Unreleased\])[^\]]+\][^\n]*\n(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
+    return m.group(1) if m else None
+
+
 RUST_BLOCK_RE = re.compile(r"^```rust[^\n]*\n(.*?)^```", re.M | re.S)
 
 
@@ -282,18 +288,22 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
             errors.append(f"CHANGELOG.md: Cargo.toml version {cv} has no section and there is no [Unreleased]")
         if cv and released and cv not in released and semver_key(cv) < semver_key(released[0]):
             errors.append(f"CHANGELOG.md: Cargo.toml version {cv} is older than the newest section [{released[0]}]")
-        body = unreleased_body(cl)
+        body, where = unreleased_body(cl), "[Unreleased]"
+        if body is not None and not body.strip() and released:
+            # just after a version is cut, [Unreleased] is empty and the work sits in the
+            # newest section: check that section (it must still have categories)
+            body, where = newest_section_body(cl), f"[{released[0]}]"
         if body is not None:
             cats = re.findall(r"^### (\w+)", body, re.M)
             counts["categories"] = len(cats)
             for c in sorted(set(cats)):
                 if c not in CATEGORIES:
-                    errors.append(f"CHANGELOG.md [Unreleased]: `### {c}` is not a Keep a Changelog category")
+                    errors.append(f"CHANGELOG.md {where}: `### {c}` is not a Keep a Changelog category")
                 elif cats.count(c) > 1:
-                    errors.append(f"CHANGELOG.md [Unreleased]: `### {c}` appears {cats.count(c)} times (append to one list)")
+                    errors.append(f"CHANGELOG.md {where}: `### {c}` appears {cats.count(c)} times (append to one list)")
             for i, line in enumerate(body.splitlines(), 1):
                 if EMOJI_RE.search(line):
-                    errors.append(f"CHANGELOG.md [Unreleased] line {i}: emoji status marker (use **Behavior change:** / **Breaking:**)")
+                    errors.append(f"CHANGELOG.md {where} line {i}: emoji status marker (use **Behavior change:** / **Breaking:**)")
         else:
             counts["categories"] = 1  # no unreleased work: nothing to compare, not an error
 

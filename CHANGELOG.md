@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 未公開 (公開日を入れる)
+
+`alice-lol-macro` 0.2.1 と同時に公開する (公開の順は macro 0.2.1 → `alice-lol` 0.4.0)
+
+**破壊的変更の一覧 (0.3.0 から)**
+
+詳細と移行は各節
+
+#### 公開 API
+
+- `Law::hard` は `Result<Self, NotProvable>` を返す (証明も反例も持たない法則に `Priority::Hard` を名乗らせない)
+- `Violation` に field `evidence` を追加 (struct literal で組む呼び出し側は field の追加)
+- `LawSet` の convenience の引数と優先度が変わった
+- `LawReport` に field `unresolved` を追加し、`all_passed()` は「違反なし かつ 判定不能なし」 判定不能を合格として返さない
+- 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
+- pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
+
+#### 挙動
+
+- 監査 Law (`audit_law`) の証拠は有限で 0 より大きい数だけ、成立範囲は集合として比べ、`expect` の実測が有限でなければ `Undecided`
+- `print_export::node_to_mesh` の破壊的修復は、修復の前後で `χ` が等しく孤立頂点が増えない時だけ採る
+
+#### 識別子 (`law_id`)
+
+- `law_id::LOL_SEMANTICS_ID` は 0.4.0 で入り、振る舞いから計算する pin の fold なので、読み方を変えるたびに動いた: `673481121a…` → `bc2befdc…` (監査の判定順序) → `e1b05c47…` (入力の読み方) → `764a7373…` (研究 Law の式の関数) → `0734b285…` (監査の量の導出) 0.4.0 の値は `0734b285…` 旧値は `tests/law_id_oracle.rs` に名前つきで残す
+- 監査 Law の識別子 (`AuditLaw::law_id`) は `x-input` の型・`x-metric` の式・`x-at-least` を含む 同じ law file の識別子は上の値ごとに変わった (`gate_compares_nonzero` は `79d9f9b7…`、`identifier_feature_independent` は `23f9ce7d…`)
+
+#### law file の文法 (公開仕様、`conformance/TASK.md`)
+
+law file は他の言語の実装も読む公開の仕様なので、読み方の規則をここに挙げる 違反はすべて law file の誤り (読み飛ばさない、request は exit status 2)
+
+- `x-` は宣言の予約接頭辞: trim 後に `x-` で始まる行は宣言として読み、小文字で 1 桁目から書いていなければ誤り NFKC で `x` / `-` になる文字 (全角ほか) にも及ぶ 知らない `x-` 行は誤り
+- 宣言の行は keyword・ASCII の空白 1 つ・残り の形だけ 同じ名前の `x-input` / `x-metric` と同じ量への `x-at-least` が 2 度あれば誤り、`x-metric` が定めない量への `x-at-least` も誤り
+- file は UTF-8、行は LF だけで分ける (LF の直前の CR は行末の一部) 制御文字は TAB・LF・CR LF の CR だけ、書式文字 (BOM ほか)・U+2028 / U+2029 はどこにあっても誤り
+- 数は ASCII の 10 進 (`[+-]? (数字 [. 数字?] | . 数字) ([eE] [+-]? 数字)?`) で double として有限なもの `expect` の許容差と `x-at-least` の下限は負にできない (`-0` は 0)
+- 宣言と項は決まった数の token だけ、`audit <名前>` の行は block に 1 つだけ、audit block は 1 つだけ
+- `x-input` の型 (`number` / `integer` / `text` / `list of <型>` / `record(..)`、`optional`) と `x-metric` の導出の式 (`count` / `distinct` / `distinct(set(..))`)
+
+#### 依存と toolchain
+
+- `alice-sdf` `1.9.0` → `5.1` (途中の 5.0 で `wide::f32x8` の field を持つ型に変わった、5.1 で `alice-det-math` 0.4 に揃う)
+- `alice-physics` (`physics` feature) `0.14.0-preview.4` → `2.0`
+- 新しい依存: `alice-zip` `0.8`、`alice-det-math` `0.4`
+- `alice-lol-macro` `0.2.0` → `0.2.1` (公開版の 0.2.0 は `alice-sdf` 5.x と `glam` に直接依存しない crate で compile できない keyword があった)
+- `rust-version = "1.90"` を宣言 (0.3.0 は宣言なし)
+
 ### Added
 
 #### 公開版と同じ依存で macro の全 keyword を compile する gate (`scripts/registry_consumer.sh` / `scripts/macro_kinds.py` / `scripts/published_source_check.py`)
@@ -1230,3 +1276,7 @@ Ships with:
   + residual reports), `laser_pattern` generator (hatch / halftone /
   guilloche / turing etc.), `pruned_compile` (interval-based space
   culling), `roblox_export` (behind the `roblox` feature).
+
+[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.0...HEAD
+[0.4.0]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.3.0...alice-lol-v0.4.0
+[0.3.0]: https://github.com/ext-sakamoro/ALICE-LOL/releases/tag/alice-lol-v0.3.0
