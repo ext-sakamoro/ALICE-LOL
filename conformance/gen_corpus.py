@@ -36,6 +36,7 @@ except ImportError:
     raise SystemExit("gen_corpus.py needs mpmath: python3 -m pip install -r conformance/requirements.txt")
 
 lc = None  # law_corners, loaded from --tools
+ls = None  # law_schema, loaded from --tools
 
 
 # ------------------------------------------------------------------ validity
@@ -171,20 +172,18 @@ def x_metrics(law, inputs):
     # array of text (null included) is not measured; ranges compare as sets
     nums = {k: v for k, v in inputs.items() if is_num(v)}
     ranges = {k: v for k, v in inputs.items() if isinstance(v, list) and all(isinstance(s, str) for s in v)}
+    # an x-input that does not match its type is not measured, as a whole
+    types = ls.x_input_types(Path(law["_file"]).read_text())
+    inputs = {k: v for k, v in inputs.items() if k not in types or ls.matches(v, types[k])}
+    ranges = {k: v for k, v in ranges.items() if k in inputs}
     if law["name"] == "identifier_feature_independent":
-        # the x-metric lines of the law: builds counts every element whatever its shape
-        # (not measured when builds is not a list); feature_sets is not measured when any
-        # build is not an object or its features is not a list of text; an id that is not
-        # text is no identifier
-        builds = inputs.get("builds", [])
+        # the x-metric lines of the law, on a builds that matches its type (or none)
         nums = {}
-        if isinstance(builds, list):
+        if "builds" in inputs:
+            builds = inputs["builds"]
             nums["builds"] = len(builds)
-            shaped = all(isinstance(b, dict) and isinstance(b.get("features"), list)
-                         and all(isinstance(f, str) for f in b["features"]) for b in builds)
-            if shaped:
-                nums["feature_sets"] = len({frozenset(b["features"]) for b in builds})
-            if builds and all(isinstance(b, dict) and isinstance(b.get("id"), str) for b in builds):
+            nums["feature_sets"] = len({frozenset(b["features"]) for b in builds})
+            if builds and all("id" in b for b in builds):
                 nums["distinct_identifiers"] = len({b["id"] for b in builds})
         ranges = {}
     for line in Path(law["_file"]).read_text().splitlines():
@@ -336,13 +335,14 @@ DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"bui
     ([B(["std"], "ab"), B(["std"], None)], "evidence before expect"),
     ([B([], "x"), B(["a"], "y"), B(["b"], "z")], "all differ"),
     ([B([], "x"), B(["a"], "x"), B(["b"], "x"), B(["a", "b"], "y")], "one differs"),
-    # a build of the wrong shape: builds still counts it, feature_sets is not measured
+    # builds that does not match its type is not measured as a whole: one malformed
+    # build (or id) is enough, and the verdict is no_evidence for builds
     ([{"id": "ab"}, B(["std"], "ab"), B(["simd"], "ab")], "a build without features"),
     ([{"features": "std", "id": "ab"}, B(["simd"], "ab"), B([], "ab")], "features given as text"),
     ([7, B(["std"], "ab"), B(["simd"], "ab")], "a build that is not an object"),
     ([B(["std", 3], "ab"), B(["simd"], "ab")], "a feature that is not text"),
-    # an id that is not text is no identifier
     ([B(["std"], 5), B(["simd"], 5)], "id given as a number"),
+    ([B(["std"], "ab"), {"features": ["simd"], "id": None}], "id given as null"),
     ("std", "builds given as text"),
 ]]
 
@@ -454,10 +454,11 @@ def request_vectors(law):
 
 
 def load_tools(tools):
-    global lc
+    global lc, ls
     sys.path.insert(0, tools)
     import law_corners
-    lc = law_corners
+    import law_schema
+    lc, ls = law_corners, law_schema
 
 
 def main():

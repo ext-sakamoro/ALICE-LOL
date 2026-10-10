@@ -5,10 +5,11 @@ claim the package is built once per feature set and each build reports the ident
 claim every build must report the same identifier; one feature set is not evidence of independence
 source ALICE-Physics tests/physics_semantics_id.rs:552 (the identifier is pinned and independent of features)
 
-x-input builds list of {features: list of names, id: text or absent}
-x-metric builds = number of builds reported: the length of the builds list, every element counted whatever its shape; unmeasured when builds is not a list
-x-metric feature_sets = number of distinct feature sets (a feature set is unordered; duplicates collapse); unmeasured when any build is not an object, or its features is missing or not a list of text
-x-metric distinct_identifiers = number of distinct identifiers; unmeasured when any build has no identifier (an id that is not text counts as no identifier)
+x-input builds list of record(features: list of text, id: optional text)
+x-metric builds = number of builds reported
+x-metric feature_sets = number of distinct feature sets (a feature set is unordered; duplicates collapse)
+x-metric distinct_identifiers = number of distinct identifiers; unmeasured when any build has no id
+# when builds does not match its type (one malformed build is enough), none of the three is measured
 x-at-least feature_sets 2     # fewer than 2 distinct feature sets gives no evidence for feature_sets
 
 begin audit

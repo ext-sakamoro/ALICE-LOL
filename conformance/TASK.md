@@ -94,9 +94,20 @@ These lines state things the core layout above cannot express.
 | `x-expr <name> <unit> = <expr>` | like `let`, but it uses functions outside the core set: `atan2(y, x)` (the angle of the point `(x, y)`, in (-pi, pi]), `min(...)`, `max(...)` |
 | `x-piece <name> <unit> <input> <lo> <hi> = <expr>` | a piecewise output. Use the piece whose `[lo, hi]` contains the input. Where two pieces meet, both give the same value. |
 | `x-periodic <name> <period>` | the deviation of `<name>` is measured modulo the period, for example angles modulo 2 pi |
-| `x-input <name> <text>` | an input that is not a number. Its shape is described in the text. |
+| `x-input <name> <type>` | an input that is not a single number. Its type is written in the form below ("Types of `x-input`"). |
 | `x-metric <name> = <text>` | how a measurement used by the audit block is derived from the inputs |
 | `x-at-least <metric> <n>` | a metric below `n` counts as not measured (as if it were 0) |
+
+### Types of `x-input`
+
+```
+type  := number | integer | text | list of <type> | record(<field>, <field>, ...)
+field := <name>: <type>  |  <name>: optional <type>
+```
+
+- `number` is a JSON number that is finite after parsing. `integer` is such a number with an integer value (`3` and `3.0`). `text` is a JSON string. `list of <type>` is a JSON array whose every element has the type. `record(...)` is a JSON object that has every field that is not `optional`, and each field that is present has its type. Other keys of the object are ignored.
+- `optional` means the field may be absent. A field that is present must have its type: `null` is not absent.
+- **A value that does not match its type does not match as a whole.** One element of a list, or one field of one record, that does not match makes the whole input not match. Such an input is not measured in an audit (as if the key were missing), and it is rejected in a quantitative law.
 
 ### Rules that apply to every law
 
