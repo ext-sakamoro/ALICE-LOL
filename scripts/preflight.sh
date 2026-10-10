@@ -96,6 +96,10 @@ step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validat
 python3 scripts/test_parser_no_direct_validating_builders.py
 python3 scripts/parser_no_direct_validating_builders.py
 
+step "ci.yml / runtime-keywords: oracle + parser の keyword dispatch と syntax_table.rs の SDF_SYNTAX が一致"
+python3 scripts/test_runtime_keywords.py
+python3 scripts/runtime_keywords.py
+
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py

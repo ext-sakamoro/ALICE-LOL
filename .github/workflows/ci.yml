@@ -469,6 +469,10 @@ jobs:
         run: python scripts/test_parser_no_direct_validating_builders.py
       - name: parser-no-direct-validating-builders (parser は validate() 付き infallible builder を直接呼ばない)
         run: python scripts/parser_no_direct_validating_builders.py
+      - name: runtime-keywords oracle (検査器自身の試験)
+        run: python scripts/test_runtime_keywords.py
+      - name: runtime-keywords (parser の keyword dispatch と syntax_table.rs の SDF_SYNTAX が一致)
+        run: python scripts/runtime_keywords.py
       - name: lock-single-version oracle (検査器自身の試験)
         run: python scripts/test_lock_single_version.py
       - name: lock-single-version (alice-* が 2 版以上 lock に入っていない)
