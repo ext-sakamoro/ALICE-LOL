@@ -36,7 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Law::hard` は `Result<Self, NotProvable>` を返す (証明も反例も持たない法則に `Priority::Hard` を名乗らせない)
 - `Violation` に field `evidence` を追加 (struct literal で組む呼び出し側は field の追加)
-- `LawSet` の convenience の引数と優先度が変わった
+- `LawSet` の convenience 4 つは `name` の後に `weight: f32` を取り、`Priority::Soft` で積む (0.3.0 は `Hard`):
+  - `stress(name, node, load_points, min_thickness_factor)` → `stress(name, weight, node, load_points, min_thickness_factor)`
+  - `thermal(name, node, heat_sources, search_radius, min_surface_ratio)` → `thermal(name, weight, node, heat_sources, search_radius, min_surface_ratio)`
+  - `continuity(name, node, seed_point)` → `continuity(name, weight, node, seed_point)`
+  - `volume_conservation(name, before, after, relative_tolerance)` → `volume_conservation(name, weight, before, after, relative_tolerance)`
+  - `contact` / `gradient_bound` / `reachable` は `Hard` のまま
+- `Constraint` に variant `GradientBound` / `Reachable` (`Continuity` の後) と `ThermalField` (末尾) を追加 `VolumeConservation` の discriminant は 7 → 9 になる (variant の並び順や番号に依る扱いは対応しなくなる `Constraint` は `Serialize` を持たないので直列化の互換には関わらない)
 - `LawReport` に field `unresolved` を追加し、`all_passed()` は「違反なし かつ 判定不能なし」 判定不能を合格として返さない
 - 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
 - pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
@@ -71,6 +77,10 @@ law file は他の言語の実装も読む公開の仕様なので、読み方�
 - 数は ASCII の 10 進 (`[+-]? (数字 [. 数字?] | . 数字) ([eE] [+-]? 数字)?`) で double として有限なもの `expect` の許容差と `x-at-least` の下限は負にできない (`-0` は 0)
 - 宣言と項は決まった数の token だけ、`audit <名前>` の行は block に 1 つだけ、audit block は 1 つだけ
 - `x-input` の型 (`number` / `integer` / `text` / `list of <型>` / `record(..)`、`optional`) と `x-metric` の導出の式 (`count` / `distinct` / `distinct(set(..))`)
+
+#### 公開版の修正
+
+- 0.3.0 の package は `lol.gbnf` を含まず (`include_str!` が package の外を指していた)、crates.io から取得すると compile できなかった 0.4.0 は crate 内の `alice-lol/lol.gbnf` を読む (下の Fixed)
 
 #### 依存と toolchain
 
