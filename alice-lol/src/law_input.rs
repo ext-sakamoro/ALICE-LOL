@@ -879,6 +879,14 @@ pub enum LawFileError {
     NoAuditBlock,
     /// audit block が読めない
     Audit(String),
+    /// 読めない宣言の行: 知らない `x-` 行、keyword の後が空白 1 つ (ASCII space) でない、
+    /// 定めていない量への `x-at-least`
+    Declaration {
+        /// 行 (1 から)
+        line: usize,
+        /// 理由
+        reason: String,
+    },
     /// 同じ名前の宣言が 2 度ある (`x-input` / `x-metric`、または同じ量の `x-at-least`)
     Duplicate {
         /// 2 度目の行 (1 から)
@@ -903,6 +911,7 @@ impl fmt::Display for LawFileError {
             }
             Self::Audit(e) => write!(f, "law file: audit block: {e}"),
             Self::InputType { line, error } => write!(f, "law file: line {line}: {error}"),
+            Self::Declaration { line, reason } => write!(f, "law file: line {line}: {reason}"),
             Self::Duplicate { line, name } => {
                 write!(f, "law file: line {line}: `{name}` is declared twice")
             }
@@ -911,6 +920,33 @@ impl fmt::Display for LawFileError {
 }
 
 impl std::error::Error for LawFileError {}
+
+/// An `x-` line is a known declaration whose keyword is followed by exactly one ASCII
+/// space; anything else is refused, never skipped (other lines pass)
+fn check_declaration(line_no: usize, line: &str) -> Result<(), LawFileError> {
+    if !line.starts_with("x-") {
+        return Ok(());
+    }
+    let kw_end = line.find(char::is_whitespace).unwrap_or(line.len());
+    let kw = &line[..kw_end];
+    if !matches!(kw, "x-input" | "x-metric" | "x-at-least") {
+        return Err(LawFileError::Declaration {
+            line: line_no,
+            reason: format!("unknown declaration `{kw}`"),
+        });
+    }
+    let after = &line[kw_end..];
+    if !after.starts_with(' ')
+        || after[1..].starts_with(char::is_whitespace)
+        || after.trim().is_empty()
+    {
+        return Err(LawFileError::Declaration {
+            line: line_no,
+            reason: format!("`{kw}` must be followed by exactly one space"),
+        });
+    }
+    Ok(())
+}
 
 /// law file (`kind audit`) を監査の Law として読む: audit block の項と、`x-input` の行の型
 ///
@@ -926,6 +962,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     let mut inputs = Vec::new();
     let mut metrics = Vec::new();
     let mut at_least = Vec::new();
+    let mut at_least_lines: Vec<(usize, String)> = Vec::new();
     for (n, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if let Some(b) = block.as_mut() {
@@ -937,6 +974,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
             }
             continue;
         }
+        check_declaration(n + 1, line)?;
         if line == "begin audit" {
             block = Some(String::new());
         } else if let Some(rest) = line.strip_prefix("x-metric ") {
@@ -973,6 +1011,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
                 });
             }
             at_least.push((w[0].to_owned(), v));
+            at_least_lines.push((n + 1, w[0].to_owned()));
         } else if let Some(rest) = line.strip_prefix("x-input ") {
             let rest = rest.trim();
             let (name, ty) = rest.split_once(' ').unwrap_or((rest, ""));
@@ -986,6 +1025,17 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
             }
             inputs.push((name.to_owned(), ty));
         }
+    }
+    // a floor on a metric no x-metric line defines is a typo, not a declaration
+    if let Some((line, name)) = at_least_lines.iter().find(|(_, name)| {
+        !metrics
+            .iter()
+            .any(|(m, _): &(String, MetricExpr)| m == name)
+    }) {
+        return Err(LawFileError::Declaration {
+            line: *line,
+            reason: format!("`x-at-least {name}` names no x-metric"),
+        });
     }
     let body = done.ok_or(LawFileError::NoAuditBlock)?;
     let mut law = crate::runtime_parser::parse_law(&body)
@@ -1361,6 +1411,36 @@ mod tests {
             assert!(
                 matches!(law(extra), Err(LawFileError::Duplicate { .. })),
                 "{extra}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_declaration_line_reads_only_in_its_one_form() {
+        let ok =
+            "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n";
+        let law = |decls: &str| {
+            audit_law_from_file(&format!(
+                "{decls}begin audit\naudit a\nevidence n\nend audit\n"
+            ))
+        };
+        assert!(law(ok).is_ok());
+        assert!(law(&format!("  {ok}# x-foo in a comment\n")).is_ok());
+        for bad in [
+            ok.replace("x-metric n", "x-metric\tn"),
+            ok.replace("x-input b", "x-input\tb"),
+            ok.replace("x-at-least n", "x-at-least\tn"),
+            ok.replace("x-metric n", "x-metric  n"),
+            ok.replace("x-metric n", "x-metric\u{a0}n"),
+            format!("{ok}x-foo n 1\n"),
+            format!("{ok}x-metrics t = count(b)\n"),
+            format!("{ok}x-at-least t 2\n"),
+            format!("{ok}x-metric\n"),
+        ] {
+            assert!(
+                matches!(law(&bad), Err(LawFileError::Declaration { .. })),
+                "{bad:?}: {:?}",
+                law(&bad)
             );
         }
     }

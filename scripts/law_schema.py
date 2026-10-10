@@ -129,21 +129,38 @@ def eval_metric(expr, value):
     return len(seen)
 
 
+def _declaration(line: str, kw: str):
+    """the text after `kw` when the line declares it; None for another line.
+    The keyword is followed by exactly one ASCII space (a tab, two spaces or a
+    no-break space does not read)"""
+    if not line.startswith(kw) or (len(line) > len(kw) and not line[len(kw)].isspace()):
+        return None
+    after = line[len(kw):]
+    if not after.startswith(" ") or after[1:2].isspace() or not after.strip():
+        raise SchemaError(f"`{kw}` must be followed by exactly one space: {line!r}")
+    return after[1:]
+
+
 def law_metrics(law_text: str):
     """[(name, expr)] of the x-metric lines and [(name, n)] of the x-at-least lines"""
     metrics, at_least = [], []
     for line in law_text.splitlines():
         w = line.split("#", 1)[0].strip()
-        if w.startswith("x-metric "):
-            name, _, expr = w[len("x-metric "):].partition("=")
+        metric = _declaration(w, "x-metric")
+        floor = _declaration(w, "x-at-least")
+        if metric is not None:
+            name, _, expr = metric.partition("=")
             if any(n == name.strip() for n, _ in metrics):
                 raise SchemaError(f"x-metric `{name.strip()}` is declared twice")
             metrics.append((name.strip(), parse_metric(expr)))
-        elif w.startswith("x-at-least "):
-            name, n = w[len("x-at-least "):].split()
+        elif floor is not None:
+            name, n = floor.split()
             if any(m == name for m, _ in at_least):
                 raise SchemaError(f"x-at-least for `{name}` is declared twice")
             at_least.append((name, float(n)))
+    for name, _ in at_least:
+        if not any(m == name for m, _ in metrics):
+            raise SchemaError(f"`x-at-least {name}` names no x-metric")
     return metrics, at_least
 
 
@@ -151,8 +168,9 @@ def x_input_types(law_text: str) -> dict:
     out = {}
     for line in law_text.splitlines():
         w = line.split("#", 1)[0].strip()
-        if w.startswith("x-input "):
-            name, _, text = w[len("x-input "):].partition(" ")
+        decl = _declaration(w, "x-input")
+        if decl is not None:
+            name, _, text = decl.partition(" ")
             if name in out:
                 raise SchemaError(f"x-input `{name}` is declared twice")
             out[name] = parse(text)

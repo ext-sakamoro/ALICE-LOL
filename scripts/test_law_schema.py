@@ -86,6 +86,20 @@ class Duplicates(unittest.TestCase):
             ls.x_input_types(base + "x-input b list of text\n")
 
 
+class Separators(unittest.TestCase):
+    def test_a_keyword_is_followed_by_exactly_one_space(self):
+        ok = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 1\n"
+        ls.law_metrics(ok)
+        ls.x_input_types(ok)
+        for bad in [ok.replace("x-metric n", "x-metric\tn"), ok.replace("x-metric n", "x-metric  n"),
+                    ok.replace("x-at-least n", "x-at-least\tn"), ok.replace("x-metric n", "x-metric\u00a0n"),
+                    ok + "x-at-least t 2\n"]:
+            with self.assertRaises(ls.SchemaError, msg=repr(bad)):
+                ls.law_metrics(bad)
+        with self.assertRaises(ls.SchemaError):
+            ls.x_input_types(ok.replace("x-input b", "x-input\tb"))
+
+
 class Main(unittest.TestCase):
     def test_zero_lines_fail(self):
         with tempfile.TemporaryDirectory() as d:

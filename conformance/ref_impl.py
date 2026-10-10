@@ -305,6 +305,15 @@ def read_audit_law(name):
     law = {"clauses": [], "types": {}, "metrics": [], "at_least": []}
     inside = False
     for l in lines:
+        # every `x-` line is a known declaration whose keyword is followed by exactly one
+        # ASCII space; anything else is refused, never skipped
+        if l.startswith("x-"):
+            kw = re.match(r"\S*", l).group(0)
+            if kw not in ("x-input", "x-metric", "x-at-least"):
+                raise ValueError(f"unknown declaration `{kw}`")
+            after = l[len(kw):]
+            if not after.startswith(" ") or after[1:2].isspace() or not after.strip():
+                raise ValueError(f"`{kw}` must be followed by exactly one space")
         w = l.split()
         if l == "begin audit":
             inside = True
@@ -334,6 +343,11 @@ def read_audit_law(name):
             if any(n == w[1] for n, _ in law["at_least"]):
                 raise ValueError(f"x-at-least for `{w[1]}` is declared twice")
             law["at_least"].append((w[1], float(w[2])))
+    # a floor on a metric no x-metric line defines is a typo, not a declaration
+    defined = {n for n, _ in law["metrics"]}
+    for name, _ in law["at_least"]:
+        if name not in defined:
+            raise ValueError(f"`x-at-least {name}` names no x-metric")
     return law
 
 
