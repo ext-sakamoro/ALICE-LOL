@@ -34,7 +34,10 @@ class Reject(Exception):
 # to double. The platform libm may be an ulp away (macOS sin is 1 ulp above at
 # x = 0.7891896992570689, where 1000 sin(x) crosses the overflow of exp), and a verdict near
 # a finiteness crossing would then depend on the platform; correctly rounded values are the
-# same everywhere (and equal alice-det-math). A result that is not finite in double raises
+# same everywhere. alice-det-math (the Rust side) is not correctly rounded: it is
+# deterministic and faithful (within about 1 ulp; powf64 within 13 ulp for |y| <= 8), and
+# verdicts agree because the corpus and the probes keep 64 ulp away from every crossing
+# (TASK.md). A result that is not finite in double raises
 # OverflowError, as math.exp does, and the request is rejected (main). mpmath is loaded only
 # when a quantitative law is evaluated (conformance/requirements.txt).
 _MP = None

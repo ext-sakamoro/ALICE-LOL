@@ -78,6 +78,12 @@ class NonFinite(unittest.TestCase):
                     rejected = True
                 self.assertEqual(rejected, row["rejected"])
 
+    def test_four_bar_computes_the_distance_as_written(self):
+        # the law writes d = sqrt(dx^2 + dy^2); math.hypot(dx, dy) rounds differently, and at
+        # this input the angle differs in its last bits (1.7962666500161355 with hypot)
+        out = ref_impl.four_bar({"lc": 1.0, "lco": 2.0, "lr": 1.5, "lg": 2.3, "theta2": 1.552})
+        self.assertEqual(out["theta4"].hex(), (1.7962666500161348).hex())
+
     def test_an_audit_keeps_the_error(self):
         # an audit never rejects: a domain error inside it is an error, not a rejection
         def broken(_inputs):

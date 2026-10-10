@@ -1,5 +1,5 @@
 {
- "note": "finite_evaluation_probe within 41 ulp of both crossings of 1000 sin(x) over the overflow of exp, with correctly rounded sin and exp (conformance/ref_impl.py, mpmath at 60 digits); research_law (alice-det-math) must give the same verdict at every point",
+ "note": "finite_evaluation_probe within 41 ulp of both crossings of 1000 sin(x) over the overflow of exp, with correctly rounded sin and exp (conformance/ref_impl.py, mpmath at 60 digits). These points are inside the 64 ulp band that TASK.md does not score; research_law (alice-det-math, deterministic and faithful, not correctly rounded) gives the same verdict at every point today",
  "points": [
   {
    "x": 0.7891896992570643,

@@ -223,10 +223,13 @@ fn a_negative_radicand_by_rounding_is_not_clamped() {
     assert!((got - 1.483_512_684_293_831_3).abs() <= 1e-9, "{got}");
 }
 
-/// within 41 ulp of both crossings of `1000 sin(x)` over the overflow of `exp`, the verdict is
-/// the correctly rounded one (`conformance/finite_probe_crossings.json`, written by the
-/// reference implementation with correctly rounded `sin` / `exp`; alice-det-math is correctly
-/// rounded, so the two agree at every point)
+/// within 41 ulp of both crossings of `1000 sin(x)` over the overflow of `exp`, Rust gives the
+/// verdict of the reference (`conformance/finite_probe_crossings.json`, written by the reference
+/// implementation with correctly rounded `sin` / `exp` from mpmath). alice-det-math is not
+/// correctly rounded: it is deterministic and faithful (within about 1 ulp; `powf64` within 13
+/// ulp for |y| <= 8). These points are inside the 64 ulp band that `conformance/TASK.md` does
+/// not score; they agree today because det-math's error is far smaller than the band, and this
+/// test shows when that stops being so
 #[test]
 fn the_verdict_at_the_crossings_agrees_with_the_reference() {
     let law = probe_law();
