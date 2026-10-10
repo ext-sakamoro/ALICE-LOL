@@ -110,6 +110,11 @@ step "ci.yml / docs: law_corners (oracle + corner enumeration)"
 python3 scripts/test_law_corners.py
 python3 scripts/law_corners.py laws/spike
 
+step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
+python3 scripts/test_law_schema.py
+python3 scripts/law_schema.py laws/spike
+python3 conformance/check_probes.py -- python3 conformance/ref_impl.py
+
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
 

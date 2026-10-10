@@ -403,6 +403,12 @@ jobs:
         run: python scripts/test_law_corners.py
       - name: law_corners (laws/spike の全 law file から corner を列挙、0 件は fail)
         run: python scripts/law_corners.py laws/spike
+      - name: law_schema oracle (x-input の型の構文と照合の試験)
+        run: python scripts/test_law_schema.py
+      - name: law_schema (laws/spike の全 x-input の型を読む、0 件は fail)
+        run: python scripts/law_schema.py laws/spike
+      - name: probes (決めた読み方を参照実装で確かめる、比較 0 件は fail)
+        run: python conformance/check_probes.py -- python conformance/ref_impl.py
 
   actionlint:
     name: actionlint (workflow YAML 検証)

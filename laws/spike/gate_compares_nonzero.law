@@ -7,7 +7,7 @@ source ALICE-Physics scripts/docs_lint.py:33 (every check must compare at least 
 
 input compared 1
 input mismatches 1
-x-input known-mismatches list of case names
+x-input known-mismatches list of text      # the known case names
 
 begin audit
 audit gate-compares-nonzero

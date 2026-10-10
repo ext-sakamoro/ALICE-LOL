@@ -8,6 +8,7 @@
 #   11 (1e400 read as a number), 12 (malformed build as empty)  -> at least one vector fails
 #   13 (no inputs key is a request error)                       -> at least one vector fails
 #   14 (inputs null / not an object passed on unchecked)        -> at least one vector fails
+#   15 (malformed build read field by field, not as a whole)    -> at least one vector fails
 #   4 (RK4), 5 (last step dropped), 7 (state before each step)  -> every in-range Kepler vector fails
 #   4 again with the state comparison switched off              -> every in-range Kepler vector fails
 # The corpus is deleted at the end.
@@ -63,6 +64,7 @@ run ref_bug_11_overflow_is_number fail REF_BUG=11
 run ref_bug_12_malformed_build_empty fail REF_BUG=12
 run ref_bug_13_inputs_key_required fail REF_BUG=13
 run ref_bug_14_inputs_shape_unchecked fail REF_BUG=14
+run ref_bug_15_build_field_level fail REF_BUG=15
 run ref_bug_4_rk4 kepler-fail REF_BUG=4
 run ref_bug_5_last_step_dropped kepler-fail REF_BUG=5
 run ref_bug_7_state_before_step kepler-fail REF_BUG=7

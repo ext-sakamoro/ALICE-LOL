@@ -16,6 +16,7 @@ REF_BUG=11: a number that is not finite after parsing (1e400) is read as a numbe
 REF_BUG=12: identifier audit reads a build of the wrong shape as an empty feature set
 REF_BUG=13: a request without the inputs key is a request error (exit 2) instead of inputs {}
 REF_BUG=14: inputs that is null or not an object is passed to the law unchecked
+REF_BUG=15: identifier audit reads a malformed build field by field (builds still counted) instead of as a whole
 
 An unknown law, a missing input, inputs that is not an object (null is read as {}) or a
 request that is not a JSON object exits with status 2 and writes nothing on stdout.
@@ -263,25 +264,38 @@ def gate(i):
     return {"verdict": v, "subject": s}
 
 
+def is_build(b):
+    """record(features: list of text, id: optional text); null is not absent"""
+    return (isinstance(b, dict) and isinstance(b.get("features"), list)
+            and all(isinstance(f, str) for f in b["features"])
+            and ("id" not in b or isinstance(b["id"], str)))
+
+
 def ident(i):
     builds = i.get("builds", [])
     nums = {}
-    if isinstance(builds, list):
-        # builds counts every element whatever its shape
+    # builds that does not match its type is not measured, as a whole
+    # (REF_BUG=15: the older field-level reading, where a malformed build still counts)
+    whole = isinstance(builds, list) and all(is_build(b) for b in builds)
+    if BUG == "15" and isinstance(builds, list):
         nums["builds"] = len(builds)
-        # feature_sets is not measured when any build is not an object or its features
-        # is not a list of text
-        if BUG == "12":
-            fs = len({frozenset(b["features"]) if isinstance(b, dict) and isinstance(b.get("features"), list)
-                      else frozenset() for b in builds})
-            nums["feature_sets"] = fs if fs >= 2 else 0
-        elif all(isinstance(b, dict) and isinstance(b.get("features"), list)
-                 and all(isinstance(f, str) for f in b["features"]) for b in builds):
+        if all(isinstance(b, dict) and isinstance(b.get("features"), list)
+               and all(isinstance(f, str) for f in b["features"]) for b in builds):
             fs = len({frozenset(b["features"]) for b in builds})
-            nums["feature_sets"] = fs if (fs >= 2 or BUG == "3") else 0
-        # an id that is not text is no identifier
+            nums["feature_sets"] = fs if fs >= 2 else 0
         if builds and all(isinstance(b, dict) and isinstance(b.get("id"), str) for b in builds):
             nums["distinct_identifiers"] = len({b["id"] for b in builds})
+    elif whole:
+        nums["builds"] = len(builds)
+        fs = len({frozenset(b["features"]) for b in builds})
+        nums["feature_sets"] = fs if (fs >= 2 or BUG == "3") else 0
+        if builds and all("id" in b for b in builds):
+            nums["distinct_identifiers"] = len({b["id"] for b in builds})
+    elif BUG == "12" and isinstance(builds, list):
+        # the reading that takes a malformed build as an empty feature set
+        nums["builds"] = len(builds)
+        fs = len({frozenset(b["features"]) if is_build(b) else frozenset() for b in builds})
+        nums["feature_sets"] = fs if fs >= 2 else 0
     v, s = audit([("evidence", "builds"), ("evidence", "feature_sets"),
                   ("expect", "distinct_identifiers", 1.0, 0.0)], nums, {})
     return {"verdict": v, "subject": s}
