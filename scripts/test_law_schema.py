@@ -51,6 +51,28 @@ class Match(unittest.TestCase):
         self.assertFalse(ls.matches(2.5, i))
 
 
+class Metrics(unittest.TestCase):
+    def test_parse(self):
+        self.assertEqual(ls.parse_metric("count(b)"), ("count", "b"))
+        self.assertEqual(ls.parse_metric(" distinct( b[].id ) "), ("distinct", "b", "id"))
+        self.assertEqual(ls.parse_metric("distinct(set(b[].f))"), ("distinct_set", "b", "f"))
+        for bad in ["count()", "count(b[].f)", "distinct(b)", "distinct(set(b))", "sum(b)", "distinct(set(b[].f)"]:
+            with self.assertRaises(ls.SchemaError, msg=bad):
+                ls.parse_metric(bad)
+
+    def test_rules(self):
+        c, d, s = ("count", "b"), ("distinct", "b", "id"), ("distinct_set", "b", "f")
+        two = [{"f": ["y", "x"], "id": "1"}, {"f": ["x", "y", "x"], "id": "1.0"}]
+        self.assertEqual(ls.eval_metric(c, two), 2)
+        self.assertEqual(ls.eval_metric(d, two), 2)  # "1" and "1.0" are different text
+        self.assertEqual(ls.eval_metric(s, two), 1)  # order and duplicates ignored
+        self.assertIsNone(ls.eval_metric(d, [{"f": []}, {"f": [], "id": "a"}]))  # optional absent
+        self.assertEqual(ls.eval_metric(s, [{"f": []}, {"f": []}]), 1)  # an empty set is a set
+        for e in (c, d, s):
+            self.assertEqual(ls.eval_metric(e, []), 0)
+            self.assertIsNone(ls.eval_metric(e, None))  # input not measured
+
+
 class Main(unittest.TestCase):
     def test_zero_lines_fail(self):
         with tempfile.TemporaryDirectory() as d:

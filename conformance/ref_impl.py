@@ -4,7 +4,7 @@
 Reads {"law": ..., "inputs": {...}} on stdin, prints {"outputs": {...}} or {"rejected": "..."}.
 REF_BUG=1: terminal velocity drag force without the factor 1/2
 REF_BUG=2: ISA altitude range not enforced
-REF_BUG=3: identifier audit ignores the "at least 2 feature sets" rule
+REF_BUG=3: audits ignore the x-at-least lines
 REF_BUG=4: Kepler integrated with RK4 (not the stated method)
 REF_BUG=5: Kepler drops the last step (n * periods - 1 states)
 REF_BUG=6: Kepler evaluates r^3 as r2 ** 1.5 (another rounding; must still conform)
@@ -13,15 +13,15 @@ REF_BUG=8: Kepler evaluates r^3 as sqrt(r2) ** 3 (another rounding; must still c
 REF_BUG=9: audit evidence read as "not 0" over every non-array value (a negative count is evidence)
 REF_BUG=10: audit ranges compared with their duplicates (multisets, not sets)
 REF_BUG=11: a number that is not finite after parsing (1e400) is read as a number
-REF_BUG=12: identifier audit reads a build of the wrong shape as an empty feature set
+REF_BUG=12: a list input of the wrong shape is read with each malformed element as an empty one
 REF_BUG=13: a request without the inputs key is a request error (exit 2) instead of inputs {}
 REF_BUG=14: inputs that is null or not an object is passed to the law unchecked
-REF_BUG=15: identifier audit reads a malformed build field by field (builds still counted) instead of as a whole
+REF_BUG=15: a list input of the wrong shape is read element by element (still counted) instead of as a whole
 
 An unknown law, a missing input, inputs that is not an object (null is read as {}) or a
 request that is not a JSON object exits with status 2 and writes nothing on stdout.
 """
-import json, math, os, sys
+import json, math, os, re, sys
 
 BUG = os.environ.get("REF_BUG", "")
 
@@ -251,55 +251,140 @@ def audit(clauses, nums, ranges, raw=None):
     return "supports", None
 
 
-def measurements(i):
-    """Numbers are finite numbers; a range is an array of text. Anything else is not measured"""
-    nums = {k: v for k, v in i.items() if is_num(v)}
-    ranges = {k: v for k, v in i.items() if isinstance(v, list) and all(isinstance(s, str) for s in v)}
-    return nums, ranges
+LAW_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "laws", "spike")
 
 
-def gate(i):
-    nums, ranges = measurements(i)
-    v, s = audit([("evidence", "compared"), ("expect", "mismatches", 0.0, 0.0),
-                  ("range", "known-mismatches", ["case-17", "case-42"])], nums, ranges, i)
-    return {"verdict": v, "subject": s}
+# -- types of x-input (written here, not imported: this file is an independent implementation)
+def parse_type(text):
+    text = text.strip()
+    if text in ("number", "integer", "text"):
+        return (text,)
+    if text.startswith("list of "):
+        return ("list", parse_type(text[len("list of "):]))
+    if text.startswith("record(") and text.endswith(")"):
+        fields, depth, cur = [], 0, ""
+        for c in text[len("record("):-1] + ",":
+            if c == "," and depth == 0:
+                name, _, t = cur.partition(":")
+                t = t.strip()
+                opt = t.startswith("optional ")
+                fields.append((name.strip(), opt, parse_type(t[len("optional "):] if opt else t)))
+                cur = ""
+                continue
+            depth += (c == "(") - (c == ")")
+            cur += c
+        return ("record", fields)
+    raise ValueError(f"type: {text!r}")
 
 
-def is_build(b):
-    """record(features: list of text, id: optional text); null is not absent"""
-    return (isinstance(b, dict) and isinstance(b.get("features"), list)
-            and all(isinstance(f, str) for f in b["features"])
-            and ("id" not in b or isinstance(b["id"], str)))
+def fits(v, t):
+    if t[0] in ("number", "integer"):
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+            return False
+        return t[0] == "number" or float(v).is_integer()
+    if t[0] == "text":
+        return isinstance(v, str)
+    if t[0] == "list":
+        return isinstance(v, list) and all(fits(x, t[1]) for x in v)
+    return isinstance(v, dict) and all(
+        (n in v and fits(v[n], ft)) or (n not in v and opt) for n, opt, ft in t[1])
 
 
-def ident(i):
-    builds = i.get("builds", [])
-    nums = {}
-    # builds that does not match its type is not measured, as a whole
-    # (REF_BUG=15: the older field-level reading, where a malformed build still counts)
-    whole = isinstance(builds, list) and all(is_build(b) for b in builds)
-    if BUG == "15" and isinstance(builds, list):
-        nums["builds"] = len(builds)
-        if all(isinstance(b, dict) and isinstance(b.get("features"), list)
-               and all(isinstance(f, str) for f in b["features"]) for b in builds):
-            fs = len({frozenset(b["features"]) for b in builds})
-            nums["feature_sets"] = fs if fs >= 2 else 0
-        if builds and all(isinstance(b, dict) and isinstance(b.get("id"), str) for b in builds):
-            nums["distinct_identifiers"] = len({b["id"] for b in builds})
-    elif whole:
-        nums["builds"] = len(builds)
-        fs = len({frozenset(b["features"]) for b in builds})
-        nums["feature_sets"] = fs if (fs >= 2 or BUG == "3") else 0
-        if builds and all("id" in b for b in builds):
-            nums["distinct_identifiers"] = len({b["id"] for b in builds})
-    elif BUG == "12" and isinstance(builds, list):
-        # the reading that takes a malformed build as an empty feature set
-        nums["builds"] = len(builds)
-        fs = len({frozenset(b["features"]) if is_build(b) else frozenset() for b in builds})
-        nums["feature_sets"] = fs if fs >= 2 else 0
-    v, s = audit([("evidence", "builds"), ("evidence", "feature_sets"),
-                  ("expect", "distinct_identifiers", 1.0, 0.0)], nums, {})
-    return {"verdict": v, "subject": s}
+METRIC_RE = re.compile(r"^(count)\(([\w-]+)\)$|^distinct\((set\()?([\w-]+)\[\]\.([\w-]+)\)?\)$")
+
+
+def read_audit_law(name):
+    """the audit block, x-input types, x-metric expressions and x-at-least lines of a law file"""
+    path = os.path.join(LAW_DIR, f"{name}.law")
+    if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.exists(path):
+        return None
+    lines = [l.split("#", 1)[0].strip() for l in open(path, encoding="utf-8")]
+    if "kind audit" not in lines:
+        return None
+    law = {"clauses": [], "types": {}, "metrics": [], "at_least": []}
+    inside = False
+    for l in lines:
+        w = l.split()
+        if l == "begin audit":
+            inside = True
+        elif l == "end audit":
+            inside = False
+        elif inside and w and w[0] == "evidence":
+            law["clauses"].append(("evidence", w[1]))
+        elif inside and w and w[0] == "expect":
+            tol = float(w[5]) if len(w) > 5 and w[4] == "within" else 0.0
+            law["clauses"].append(("expect", w[1], float(w[3]), tol))
+        elif inside and w and w[0] == "range":
+            law["clauses"].append(("range", w[1], w[2:]))
+        elif w and w[0] == "x-input":
+            law["types"][w[1]] = parse_type(l.split(None, 2)[2])
+        elif w and w[0] == "x-metric":
+            name_, _, expr = l[len("x-metric"):].partition("=")
+            m = METRIC_RE.match("".join(expr.split()))
+            if not m:
+                raise ValueError(f"x-metric: {expr!r}")
+            law["metrics"].append((name_.strip(), ("count", m.group(2)) if m.group(1)
+                                   else ("set" if m.group(3) else "distinct", m.group(4), m.group(5))))
+        elif w and w[0] == "x-at-least":
+            law["at_least"].append((w[1], float(w[2])))
+    return law
+
+
+def value_key(v):
+    # with the type: text "1" and the number 1 differ; -0 reads as 0
+    if isinstance(v, bool):
+        return ("bool", v)
+    if isinstance(v, (int, float)):
+        return ("num", float(v) + 0.0)
+    if isinstance(v, str):
+        return ("text", v)
+    if isinstance(v, list):
+        return ("list", tuple(value_key(x) for x in v))
+    return ("other", repr(v))
+
+
+def derive(expr, value, raw):
+    """value: the input when it matches its type, else None; raw: the input as given"""
+    if BUG == "15" and isinstance(raw, list):
+        # the older field-level reading: a malformed element still counts
+        value = raw
+        if expr[0] != "count" and not all(isinstance(b, dict) and expr[2] in b and
+                                          (expr[0] != "set" or isinstance(b[expr[2]], list)) for b in raw):
+            return None
+    if BUG == "12" and value is None and isinstance(raw, list):
+        # the reading that takes a malformed element as an empty one
+        value = [b if isinstance(b, dict) and isinstance(b.get(expr[-1]), list) else {expr[-1]: []}
+                 for b in raw] if expr[0] == "set" else raw
+    if not isinstance(value, list):
+        return None
+    if expr[0] == "count":
+        return len(value)
+    keys = set()
+    for b in value:
+        if not isinstance(b, dict) or expr[2] not in b:
+            return None
+        keys.add(frozenset(value_key(x) for x in b[expr[2]]) if expr[0] == "set" else value_key(b[expr[2]]))
+    return len(keys)
+
+
+def generic_audit(law):
+    def run(i):
+        metric_names = {n for n, _ in law["metrics"]}
+        nums = {k: v for k, v in i.items()
+                if is_num(v) and k not in law["types"] and k not in metric_names}
+        typed = {k: v for k, v in i.items() if k in law["types"] and fits(v, law["types"][k])}
+        ranges = {c[1]: typed[c[1]] for c in law["clauses"] if c[0] == "range" and c[1] in typed}
+        for name, expr in law["metrics"]:
+            v = derive(expr, typed.get(expr[1]), i.get(expr[1]))
+            if v is not None:
+                nums[name] = v
+        if BUG != "3":
+            for name, n in law["at_least"]:
+                if nums.get(name, 0) < n:
+                    nums[name] = 0
+        v, s = audit(law["clauses"], nums, ranges, i)
+        return {"verdict": v, "subject": s}
+    return run
 
 
 LAWS = {
@@ -310,8 +395,6 @@ LAWS = {
     "kepler_energy_bounded_dkd": kepler("dkd", 0.765),
     "four_bar_rocker_angle": four_bar,
     "isa1976_lower_atmosphere": isa,
-    "gate_compares_nonzero": gate,
-    "identifier_feature_independent": ident,
 }
 
 
@@ -368,7 +451,11 @@ def main():
     req = read_request(text)
     if not isinstance(req, dict):
         request_error("request is not a JSON object")
-    law = LAWS.get(req.get("law")) if isinstance(req.get("law"), str) else None
+    name = req.get("law")
+    law = LAWS.get(name) if isinstance(name, str) else None
+    if law is None and isinstance(name, str):
+        audit_law = read_audit_law(name)
+        law = generic_audit(audit_law) if audit_law else None
     if law is None:
         request_error(f"unknown law: {req.get('law')!r}")
     # no inputs key and inputs null are the same as inputs {}: an audit measures

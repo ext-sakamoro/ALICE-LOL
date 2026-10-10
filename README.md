@@ -236,7 +236,8 @@ different arithmetic can answer differently, so it is a different law.
 `LOL_SEMANTICS_ID` is the fold of `LOL_SEMANTICS_PINS`, and the pins are
 computed from behaviour (`audit_verdict_order_fingerprint`,
 `law_input::input_reading_fingerprint`,
-`research_law::expression_functions_fingerprint`) rather than written down, so changing
+`research_law::expression_functions_fingerprint`,
+`law_input::derivation_fingerprint`) rather than written down, so changing
 the order in which verdicts are reached, or how a request's inputs are read,
 makes a pin disagree. An audit law's identifier also covers the type of each
 `x-input` line (`law_input::audit_law_from_file`). Geometric and research laws

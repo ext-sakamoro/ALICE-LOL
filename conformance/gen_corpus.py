@@ -22,7 +22,7 @@ What the generator holds itself (it cannot be read from a law file):
   per law for the inputs a corner does not fix, and the request for each
   x-range edge (a value of a derived quantity, solved by hand); a bound corner
   uses the witness point law_corners found, so it needs nothing here;
-- the derivation of free-text `x-metric` lines (identifier_feature_independent).
+- nothing law specific: x-metric lines are derivation expressions (scripts/law_schema.py).
 
 Nothing here calls an implementation.
 """
@@ -167,7 +167,7 @@ def audit_verdict(law, metrics, ranges):
 
 
 def x_metrics(law, inputs):
-    """Derivation of the free-text x-metric lines (held here, see the module doc)"""
+    """The measurements of an audit request: finite numbers, ranges, and the x-metric derivations"""
     # a value that is not a finite number is not measured; a range that is not an
     # array of text (null included) is not measured; ranges compare as sets
     nums = {k: v for k, v in inputs.items() if is_num(v)}
@@ -176,20 +176,19 @@ def x_metrics(law, inputs):
     types = ls.x_input_types(Path(law["_file"]).read_text())
     inputs = {k: v for k, v in inputs.items() if k not in types or ls.matches(v, types[k])}
     ranges = {k: v for k, v in ranges.items() if k in inputs}
-    if law["name"] == "identifier_feature_independent":
-        # the x-metric lines of the law, on a builds that matches its type (or none)
-        nums = {}
-        if "builds" in inputs:
-            builds = inputs["builds"]
-            nums["builds"] = len(builds)
-            nums["feature_sets"] = len({frozenset(b["features"]) for b in builds})
-            if builds and all("id" in b for b in builds):
-                nums["distinct_identifiers"] = len({b["id"] for b in builds})
-        ranges = {}
-    for line in Path(law["_file"]).read_text().splitlines():
-        w = line.split("#", 1)[0].split()
-        if w[:1] == ["x-at-least"] and nums.get(w[1], 0) < float(w[2]):
-            nums[w[1]] = 0
+    # the x-metric lines (derivation expressions) on the inputs that match their type
+    metrics, at_least = ls.law_metrics(Path(law["_file"]).read_text())
+    # a name defined by x-metric is never read from the request
+    for name, _ in metrics:
+        nums.pop(name, None)
+        ranges.pop(name, None)
+    for name, expr in metrics:
+        v = ls.eval_metric(expr, inputs.get(expr[1]))
+        if v is not None:
+            nums[name] = v
+    for name, n in at_least:
+        if nums.get(name, 0) < n:
+            nums[name] = 0
     return nums, ranges
 
 
@@ -344,7 +343,20 @@ DESIGN["identifier_feature_independent"]["cases"] = [({} if b is None else {"bui
     ([B(["std"], 5), B(["simd"], 5)], "id given as a number"),
     ([B(["std"], "ab"), {"features": ["simd"], "id": None}], "id given as null"),
     ("std", "builds given as text"),
+    # derivations: values compare with their type and as text, sets ignore order and duplicates
+    ([B(["std"], "1"), B(["simd"], "1.0")], "ids 1 and 1.0 are different text"),
+    ([B(["1"], "x"), B(["01"], "x")], "feature names 1 and 01 are different text"),
+    ([B([], "x"), B([], "x")], "every feature list empty: one set"),
+    ([B([], "x"), B(["a", "a"], "x"), B(["a"], "x")], "duplicates collapse inside a set"),
 ]]
+DESIGN["identifier_feature_independent"]["cases"] += [
+    # a name defined by x-metric is never read from the request
+    ({"builds": [B(["std"], "ab")], "feature_sets": 5}, "feature_sets in the request is ignored"),
+    ({"builds": [B(["std"], "ab"), B(["simd"], "ab")], "distinct_identifiers": 2},
+     "distinct_identifiers in the request is ignored"),
+    ({"builds": [B(["std"], None), B(["simd"], "ab")], "distinct_identifiers": 1},
+     "distinct_identifiers in the request does not stand in for an unmeasured one"),
+]
 
 KEPLER_BASE = {"e": 0.5, "n": 200, "periods": 4}
 KEPLER_CASES = [({"e": 0.5, "n": 500, "periods": 20}, "source configuration"),

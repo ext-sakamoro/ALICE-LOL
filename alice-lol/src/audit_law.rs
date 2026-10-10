@@ -46,7 +46,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::law_input::InputType;
+use crate::law_input::{InputType, MetricExpr};
 
 /// 監査の判定 真偽 2 値では潰れる 4 つを別の値として持つ
 ///
@@ -167,6 +167,10 @@ pub struct AuditLaw {
     clauses: Vec<Clause>,
     /// 型を持つ入力 (`x-input <名前> <型>`) 型は識別子に入る
     inputs: Vec<(String, InputType)>,
+    /// 導く量 (`x-metric <名前> = <式>`) 式は識別子に入る
+    metrics: Vec<(String, MetricExpr)>,
+    /// 下限 (`x-at-least <量> <n>`) 下限は識別子に入る
+    at_least: Vec<(String, f64)>,
 }
 
 impl AuditLaw {
@@ -177,7 +181,35 @@ impl AuditLaw {
             name,
             clauses,
             inputs: Vec::new(),
+            metrics: Vec::new(),
+            at_least: Vec::new(),
         }
+    }
+
+    /// 導く量を足す (law file の `x-metric <名前> = <式>` 行)
+    #[must_use]
+    pub fn with_metric(mut self, name: &str, expr: MetricExpr) -> Self {
+        self.metrics.push((name.to_owned(), expr));
+        self
+    }
+
+    /// 導く量 (足した順)
+    #[must_use]
+    pub fn metrics(&self) -> &[(String, MetricExpr)] {
+        &self.metrics
+    }
+
+    /// 量の下限を足す (law file の `x-at-least <量> <n>` 行): `n` 未満は 0 (測られていない) とする
+    #[must_use]
+    pub fn with_at_least(mut self, name: &str, n: f64) -> Self {
+        self.at_least.push((name.to_owned(), n));
+        self
+    }
+
+    /// 量の下限 (足した順)
+    #[must_use]
+    pub fn at_least(&self) -> &[(String, f64)] {
+        &self.at_least
     }
 
     /// 型を持つ入力を足す (law file の `x-input <名前> <型>` 行)

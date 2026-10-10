@@ -221,7 +221,8 @@ NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol
 別の Law として扱う `LOL_SEMANTICS_ID` は `LOL_SEMANTICS_PINS` の fold で、pin の値は
 書き下すのでなく振る舞いから計算する (`audit_verdict_order_fingerprint`、
 `law_input::input_reading_fingerprint`、
-`research_law::expression_functions_fingerprint`) ので、判定の順序や request の入力の読み方を
+`research_law::expression_functions_fingerprint`、
+`law_input::derivation_fingerprint`) ので、判定の順序や request の入力の読み方を
 変えると pin が合わなくなる 監査の Law の識別子は `x-input` の行の型も含む
 (`law_input::audit_law_from_file`) 幾何法則と研究 Law の識別子はまだ無い
 

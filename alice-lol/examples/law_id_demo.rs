@@ -57,6 +57,10 @@ fn main() -> Result<(), ParseError> {
         "  研究 Law の式の関数を今ここで測り直した指紋 = {}",
         hex(&alice_lol::research_law::expression_functions_fingerprint())
     );
+    println!(
+        "  監査の量の導出を今ここで測り直した指紋 = {}",
+        hex(&alice_lol::law_input::derivation_fingerprint())
+    );
     println!("  ⚠️ 上の pin と測り直した指紋が揃わなければ、識別子が振る舞いを名乗れていない");
 
     println!("\n=== 同じ Law は同じ名前 ===");

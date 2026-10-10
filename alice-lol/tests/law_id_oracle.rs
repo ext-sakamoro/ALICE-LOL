@@ -288,7 +288,9 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
     let previous_pins: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
         .filter(|(name, _)| {
-            !name.contains("input reading") && !name.contains("research expressions")
+            !name.contains("input reading")
+                && !name.contains("research expressions")
+                && !name.contains("audit derivations")
         })
         .map(|&(name, id)| {
             if name.contains("audit verdict order") {
@@ -328,7 +330,9 @@ fn typing_the_inputs_moved_the_identifier() {
     let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
         .filter(|(name, _)| {
-            !name.contains("input reading") && !name.contains("research expressions")
+            !name.contains("input reading")
+                && !name.contains("research expressions")
+                && !name.contains("audit derivations")
         })
         .copied()
         .collect();
@@ -389,11 +393,60 @@ fn adding_expression_functions_moved_the_identifier() {
     assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS);
     let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
-        .filter(|(name, _)| !name.contains("research expressions"))
+        .filter(|(name, _)| {
+            !name.contains("research expressions") && !name.contains("audit derivations")
+        })
         .copied()
         .collect();
     assert_eq!(
         alice_lol::law_id::fold_semantics_pins(&before),
         SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS
+    );
+}
+
+/// 監査の量の導出を式にする前の `LOL_SEMANTICS_ID`
+///
+/// 残す理由: 導出を LOL が読むようにした時に識別子が**本当に動いた**ことを固定するため
+const SEMANTICS_ID_BEFORE_DERIVATIONS: [u8; 32] =
+    alice_lol::law_id::hex32("764a737399d4a1eac0e390fed351fe731a8d537a8ed3c5b071b3cc0f1a3568fc");
+
+#[test]
+fn the_derivation_pin_is_the_measured_behaviour() {
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| name.contains("audit derivations"))
+        .expect("導出の pin が無い");
+    assert_eq!(*pinned, alice_lol::law_input::derivation_fingerprint());
+}
+
+#[test]
+fn reading_the_derivations_moved_the_identifier() {
+    assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_DERIVATIONS);
+    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+        .iter()
+        .filter(|(name, _)| !name.contains("audit derivations"))
+        .copied()
+        .collect();
+    assert_eq!(
+        alice_lol::law_id::fold_semantics_pins(&before),
+        SEMANTICS_ID_BEFORE_DERIVATIONS
+    );
+}
+
+#[test]
+fn the_derivations_of_a_law_are_part_of_the_law() {
+    use alice_lol::law_input::{audit_law_from_file, MetricExpr};
+    let text = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nx-at-least n 2\nbegin audit\naudit a\nevidence n\nend audit\n";
+    let base = audit_law_from_file(text).expect("law");
+    let other_expr =
+        audit_law_from_file(&text.replace("count(b)", "distinct(set(b[].f))")).expect("law");
+    let other_floor =
+        audit_law_from_file(&text.replace("x-at-least n 2", "x-at-least n 3")).expect("law");
+    let id = |l: &alice_lol::audit_law::AuditLaw| l.law_id(&LOL_SEMANTICS_ID);
+    assert_ne!(id(&base), id(&other_expr));
+    assert_ne!(id(&base), id(&other_floor));
+    assert_eq!(
+        base.metrics()[0].1,
+        MetricExpr::parse("count(b)").expect("expr")
     );
 }

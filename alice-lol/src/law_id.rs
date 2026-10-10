@@ -93,11 +93,17 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         "research expressions: functions and argument counts",
         hex32("ee1b39dde2b1e577892f19daee2fb514a7b43f56be7d2211061de1ddac28fad3"),
     ),
+    // 監査の量の導出 (x-metric の count / distinct / set、x-at-least、x-metric の名前を
+    // request から読まない) 導出は同じ request に対する判定を変える
+    (
+        "audit derivations: count / distinct / set, x-at-least",
+        hex32("07cdf6079fd001eebf74e925a3e23e75355aec58b3d8c77afe2033cff539a21c"),
+    ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("764a737399d4a1eac0e390fed351fe731a8d537a8ed3c5b071b3cc0f1a3568fc");
+    hex32("70afdc5484cedc28e78c84e9aac29bcae7bfa8df32f074e98df0664730d91a8c");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
@@ -332,6 +338,12 @@ impl AuditLaw {
         }
         for (name, ty) in self.inputs() {
             e = e.u32(3).str(name).str(&ty.canonical());
+        }
+        for (name, expr) in self.metrics() {
+            e = e.u32(4).str(name).str(&expr.canonical());
+        }
+        for (name, n) in self.at_least() {
+            e = e.u32(5).str(name).f64(*n);
         }
         e.finish()
     }

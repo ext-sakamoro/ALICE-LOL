@@ -60,6 +60,13 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 既存分は `scripts/det-math-baseline.txt` に理由付きで置くラチェットで、解消した行が残っていても
 検査は red になる 対象 file が読めない / 呼び出しを 1 件も見ていない場合も red
 
+#### 監査の量の導出を式にし、LOL が読む (`law_input::MetricExpr` / `law_input::measurements`)
+
+- `x-metric <名前> = <導出>` の導出は `count(<入力>)` / `distinct(<入力>[].<field>)` / `distinct(set(<入力>[].<field>))` の式 (`conformance/TASK.md` に文法) 値は型も含めて比べ (text の `"1"` と `"1.0"`、text と数は別)、`set` は field の list を順序と重複を無視した集合として読む `optional` な field が 1 つの要素で欠ければ測られていない、入力が測られていなければ導く量もすべて測られていない、空の list では 0 `x-at-least` は下限未満と測られていない量を 0 とする `x-metric` が定める名前は request から読まない
+- `law_input::measurements(law, inputs)`: law file の宣言 (型を持つ入力 / range 項 / `x-metric` / `x-at-least`) から監査の実測を作る 特定の law を知る code は残っていない (`examples/audit_conformance.rs` は `laws/spike/` の `kind audit` の law file すべてを受け、参照実装も law file を読んで同じ規則で導く)
+- `identifier_feature_independent` の `x-metric` 3 行を式にした corpus に型と text の比べ方・空の集合・集合の重複・request の同名の量の vector を足した (369 件、Rust と参照実装の答えの違いは 0 件)
+- **識別子の変更:** `AuditLaw::law_id` は `x-metric` の式 (正規形) と `x-at-least` を含む `LOL_SEMANTICS_PINS` に「監査の量の導出」(`law_input::derivation_fingerprint`、固定の law と request 13 件を読んだ量の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `764a7373…` から `70afdc54…` に再記録した 監査の Law の識別子: `gate_compares_nonzero` `9db6657a…` → `7c7fa06a…`、`identifier_feature_independent` `59148865…` → `cd71c6dc…` 旧値は `tests/law_id_oracle.rs` に残す
+
 #### 研究 Law の式に `atan2` / `min` / `max` (`research_law`)
 
 - `LawExpr` が `atan2(y, x)` (点 `(x, y)` の角度、値域 (−π, π]、負の x 軸は +π)、`min(a, b, …)` と `max(a, b, …)` (2 個以上、等しい引数は先の方を返すので 0 の符号も決まる) を読む 評価は `alice-det-math` (`atan2_64`)、0 の引数の符号は読まない (`-0` は `0`、負の x 軸は常に +π、原点は +0、表を `conformance/TASK.md` に書いた)、次元は `atan2` の 2 引数が同じで結果は無次元、`min` / `max` は全引数が同じでその次元 引数の数が合わない呼び出しは `ResearchLawError::ArgumentCount` 試験 `tests/analytic_research_functions.rs` (π の分数と定義から書いた期待値、`min` / `max` は 3〜5 引数で極値を先頭・途中・末尾に置き、等しい引数は 0 の符号で先の方を確かめる)

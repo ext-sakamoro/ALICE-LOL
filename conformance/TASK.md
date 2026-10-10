@@ -111,8 +111,8 @@ These lines state things the core layout above cannot express.
 | `x-piece <name> <unit> <input> <lo> <hi> = <expr>` | a piecewise output. Use the piece whose `[lo, hi]` contains the input. Where two pieces meet, both give the same value. |
 | `x-periodic <name> <period>` | the deviation of `<name>` is measured modulo the period, for example angles modulo 2 pi |
 | `x-input <name> <type>` | an input that is not a single number. Its type is written in the form below ("Types of `x-input`"). |
-| `x-metric <name> = <text>` | how a measurement used by the audit block is derived from the inputs |
-| `x-at-least <metric> <n>` | a metric below `n` counts as not measured (as if it were 0) |
+| `x-metric <name> = <derivation>` | a measurement used by the audit block, derived from an `x-input` (see "Derived metrics" below) |
+| `x-at-least <metric> <n>` | a metric below `n`, or not measured, counts as 0 |
 
 ### Types of `x-input`
 
@@ -149,7 +149,20 @@ The measurements are the request inputs:
 - A **numeric metric** is a JSON number. A value that is not a number (text, `true` / `false`, `null`, an array, an object) counts as not measured, as if the key were missing. A number that is not finite after parsing (an overflowing literal such as `1e400`) is not a number, so it is not measured either.
 - A **range key** is an array of text. A value that is not an array of text, including `null`, counts as not measured, so the verdict for that key is `out_of_range`. An empty array is a measured, empty set.
 - Values are compared as text. Two values are the same only when their text is identical.
-- `x-metric` lines describe derived metrics.
+- `x-metric` lines define derived metrics (below). A name defined by an `x-metric` line is never read from the request, even when the request has a key of that name.
+
+### Derived metrics
+
+```
+derivation := count(<input>) | distinct(<input>[].<field>) | distinct(set(<input>[].<field>))
+```
+
+- `count(<input>)`: the number of elements of the list input.
+- `distinct(<input>[].<field>)`: the number of different values of the field over the elements. Values are compared with their type and exactly: the text `"1"` and the text `"1.0"` differ, and the text `"1"` and the number `1` differ.
+- `distinct(set(<input>[].<field>))`: the same, where each element's field (a list) is read as a set: order and duplicates are ignored, so `["b", "a", "a"]` and `["a", "b"]` are the same set. An empty list is a set too.
+- When the field is `optional` and one element does not have it, the metric is not measured.
+- When the input is not measured (absent, or not matching its type), every metric derived from it is not measured.
+- Over an empty list, `count` and `distinct` are 0.
 
 The verdict is found by checking in this fixed order, whatever the order of the lines:
 

@@ -13,6 +13,7 @@ usage: law_schema.py <laws dir>   parses the type of every x-input line (0 lines
 from __future__ import annotations
 
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -83,6 +84,63 @@ def matches(value, t) -> bool:
                 return False
         return True
     raise ValueError(kind)
+
+
+METRIC = re.compile(r"^(?:count\((?P<c>[\w-]+)\)|distinct\((?P<set>set\()?(?P<i>[\w-]+)\[\]\.(?P<f>[\w-]+)(?(set)\))\))$")
+
+
+def parse_metric(text: str):
+    """`count(<input>)` | `distinct(<input>[].<field>)` | `distinct(set(<input>[].<field>))`"""
+    m = METRIC.match("".join(text.split()))
+    if not m:
+        raise SchemaError(f"metric expression expected, got {text.strip()!r}")
+    if m.group("c"):
+        return ("count", m.group("c"))
+    return ("distinct_set" if m.group("set") else "distinct", m.group("i"), m.group("f"))
+
+
+def _key(v):
+    """values compared with their type: text "1" and number 1 differ; -0 reads as 0"""
+    if isinstance(v, bool):
+        return ("b", v)
+    if isinstance(v, (int, float)):
+        return ("n", float(v) + 0.0)
+    if isinstance(v, str):
+        return ("t", v)
+    if v is None:
+        return ("z",)
+    if isinstance(v, list):
+        return ("l", tuple(_key(x) for x in v))
+    return ("o", tuple((k, _key(x)) for k, x in v.items()))
+
+
+def eval_metric(expr, value):
+    """the metric of an input that matches its type (value None = not measured); None = not measured"""
+    if not isinstance(value, list):
+        return None
+    if expr[0] == "count":
+        return len(value)
+    seen = set()
+    for it in value:
+        if expr[2] not in it:
+            return None  # an optional field absent in one element
+        v = it[expr[2]]
+        seen.add(frozenset(_key(x) for x in v) if expr[0] == "distinct_set" else _key(v))
+    return len(seen)
+
+
+def law_metrics(law_text: str):
+    """[(name, expr)] of the x-metric lines and [(name, n)] of the x-at-least lines"""
+    metrics, at_least = [], []
+    for line in law_text.splitlines():
+        w = line.split("#", 1)[0].strip()
+        if w.startswith("x-metric "):
+            name, _, expr = w[len("x-metric "):].partition("=")
+            metrics.append((name.strip(), parse_metric(expr)))
+        elif w.startswith("x-at-least "):
+            name, n = w[len("x-at-least "):].split()
+            at_least.append((name, float(n)))
+    return metrics, at_least
 
 
 def x_input_types(law_text: str) -> dict:

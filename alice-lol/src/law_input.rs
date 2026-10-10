@@ -13,6 +13,9 @@
 //! - ⚠️ **型に合わない値は入力全体が合わない** list の要素 1 つ、record の field 1 つで足りる
 //!   監査ではその入力は測られていない、量の法則では拒否 ([`read`])
 //!
+//! 監査の量は law file の `x-metric` の式 ([`MetricExpr`]) から導く ([`measurements`]) 特定の
+//! law を知る code は無い
+//!
 //! JSON の数は `f64` として読み、double に収まらない literal (`1e400`) は無限大になる
 //! (多くの言語の parser と同じ) 無限大は `number` に合わないので、上の規則で扱われる
 
@@ -502,6 +505,367 @@ pub fn read<'a>(name: &str, ty: &InputType, value: Option<&'a Json>, kind: LawKi
     }
 }
 
+/// 監査の量の導出 (`x-metric <名前> = <式>`)
+///
+/// ```text
+/// metric := count(<input>) | distinct(<input>[].<field>) | distinct(set(<input>[].<field>))
+/// ```
+///
+/// - `count` は list の入力の要素の数
+/// - `distinct` は要素の field の値の異なるものの数 (値は型も含めて比べる: text の `"1"` と数の `1` は別)
+/// - `set(...)` は各要素の field (list) を順序と重複を無視した集合として読む
+/// - `optional` な field が 1 つの要素でも欠けていれば、その量は測られていない
+/// - 入力が測られていなければ (欠けている / 型に合わない)、その入力から導く量はすべて測られていない
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MetricExpr {
+    /// `count(<input>)`
+    Count {
+        /// 入力の名前
+        input: String,
+    },
+    /// `distinct(<input>[].<field>)` (`set` なら field の list を集合として読む)
+    Distinct {
+        /// 入力の名前
+        input: String,
+        /// 要素の field
+        field: String,
+        /// field の list を集合として読むか
+        as_set: bool,
+    },
+}
+
+impl MetricExpr {
+    /// 式を読む
+    ///
+    /// # Errors
+    ///
+    /// 文法に合わない時
+    pub fn parse(text: &str) -> Result<Self, TypeError> {
+        let t: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let bad = || TypeError(format!("metric expression expected, got `{}`", text.trim()));
+        let name_ok = |n: &str| {
+            !n.is_empty()
+                && n.chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                && !n.starts_with(|c: char| c.is_ascii_digit())
+        };
+        let path = |p: &str| -> Option<(String, String)> {
+            let (input, field) = p.split_once("[].")?;
+            (name_ok(input) && name_ok(field)).then(|| (input.to_owned(), field.to_owned()))
+        };
+        if let Some(inner) = t.strip_prefix("count(").and_then(|r| r.strip_suffix(')')) {
+            return if name_ok(inner) {
+                Ok(Self::Count {
+                    input: inner.to_owned(),
+                })
+            } else {
+                Err(bad())
+            };
+        }
+        let inner = t
+            .strip_prefix("distinct(")
+            .and_then(|r| r.strip_suffix(')'))
+            .ok_or_else(bad)?;
+        let (inner, as_set) = inner
+            .strip_prefix("set(")
+            .and_then(|r| r.strip_suffix(')'))
+            .map_or((inner, false), |r| (r, true));
+        let (input, field) = path(inner).ok_or_else(bad)?;
+        Ok(Self::Distinct {
+            input,
+            field,
+            as_set,
+        })
+    }
+
+    /// 正規形の text (識別子はこの text を hash する)
+    #[must_use]
+    pub fn canonical(&self) -> String {
+        match self {
+            Self::Count { input } => format!("count({input})"),
+            Self::Distinct {
+                input,
+                field,
+                as_set: false,
+            } => format!("distinct({input}[].{field})"),
+            Self::Distinct {
+                input,
+                field,
+                as_set: true,
+            } => format!("distinct(set({input}[].{field}))"),
+        }
+    }
+
+    /// 入力の名前
+    #[must_use]
+    pub fn input(&self) -> &str {
+        match self {
+            Self::Count { input } | Self::Distinct { input, .. } => input,
+        }
+    }
+
+    /// 量を導く `value` は型に合った入力 (測られていなければ `None`) 測られていない量は `None`
+    #[must_use]
+    pub fn evaluate(&self, value: Option<&Json>) -> Option<f64> {
+        let Some(Json::Array(items)) = value else {
+            return None;
+        };
+        #[allow(clippy::cast_precision_loss, reason = "counts are small")]
+        let count = |n: usize| n as f64;
+        match self {
+            Self::Count { .. } => Some(count(items.len())),
+            Self::Distinct { field, as_set, .. } => {
+                let mut seen: Vec<Vec<u8>> = Vec::new();
+                for it in items {
+                    // optional field が欠けた要素が 1 つでもあれば測られていない
+                    let v = it.get(field)?;
+                    let key = if *as_set {
+                        let Json::Array(xs) = v else { return None };
+                        let mut ks: Vec<Vec<u8>> = xs.iter().map(value_key).collect();
+                        ks.sort();
+                        ks.dedup();
+                        ks.concat_with_len()
+                    } else {
+                        value_key(v)
+                    };
+                    if !seen.contains(&key) {
+                        seen.push(key);
+                    }
+                }
+                Some(count(seen.len()))
+            }
+        }
+    }
+}
+
+/// 値を比べるための key (型の tag と中身、数は `+0.0` を足した bit = 0 の符号を読まない)
+fn value_key(v: &Json) -> Vec<u8> {
+    let mut out = Vec::new();
+    match v {
+        Json::Null => out.push(0),
+        Json::Bool(b) => out.extend([1, u8::from(*b)]),
+        Json::Number(x) => {
+            out.push(2);
+            out.extend((x + 0.0).to_bits().to_le_bytes());
+        }
+        Json::Text(t) => {
+            out.push(3);
+            out.extend(t.as_bytes());
+        }
+        Json::Array(xs) => {
+            out.push(4);
+            out.extend(
+                xs.iter()
+                    .map(value_key)
+                    .collect::<Vec<_>>()
+                    .concat_with_len(),
+            );
+        }
+        Json::Object(kv) => {
+            out.push(5);
+            for (k, x) in kv {
+                out.extend((k.len() as u64).to_le_bytes());
+                out.extend(k.as_bytes());
+                out.extend(value_key(x));
+            }
+        }
+    }
+    out
+}
+
+/// key の列を 1 つの key に (各 key に長さを付けて連結、境界が曖昧にならない)
+trait ConcatWithLen {
+    fn concat_with_len(&self) -> Vec<u8>;
+}
+
+impl ConcatWithLen for Vec<Vec<u8>> {
+    fn concat_with_len(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for k in self {
+            out.extend((k.len() as u64).to_le_bytes());
+            out.extend(k);
+        }
+        out
+    }
+}
+
+/// request の `inputs` (object、`{}` も可) から監査の実測を作る (law file の宣言に従う)
+///
+/// - `x-input` の型に合う値だけが測られる (合わない入力は測られていない、[`read`])
+/// - 型を持たない入力: 有限な数は数として測る (`x-metric` が定める名前は request から読まない)
+/// - `range` 項の key の入力 (`list of text`) は成立範囲として測る
+/// - `x-metric` の量を導き、`x-at-least <量> <n>` は `n` 未満 (測られていない時も) を 0 にする
+#[must_use]
+pub fn measurements(
+    law: &crate::audit_law::AuditLaw,
+    inputs: &Json,
+) -> crate::audit_law::Measurements {
+    use crate::audit_law::{Clause, Measurements};
+    let mut m = Measurements::new();
+    let typed = |name: &str| law.inputs().iter().find(|(n, _)| n == name).map(|(_, t)| t);
+    let read_typed = |name: &str| -> Option<&Json> {
+        let ty = typed(name)?;
+        match read(name, ty, inputs.get(name), LawKind::Audit) {
+            Read::Value(v) => Some(v),
+            _ => None,
+        }
+    };
+    if let Json::Object(kv) = inputs {
+        let mut keys: Vec<&str> = kv.iter().map(|(k, _)| k.as_str()).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        for k in keys {
+            // a typed input is read through its type, and a name defined by x-metric is
+            // never read from the request
+            if typed(k).is_some() || law.metrics().iter().any(|(n, _)| n == k) {
+                continue;
+            }
+            if let Some(Json::Number(x)) = inputs.get(k) {
+                if x.is_finite() {
+                    m = m.with_number(k, *x);
+                }
+            }
+        }
+    }
+    for c in law.clauses() {
+        if let Clause::Range { key, .. } = c {
+            if let Some(Json::Array(xs)) = read_typed(key) {
+                let texts: Vec<&str> = xs
+                    .iter()
+                    .filter_map(|x| {
+                        if let Json::Text(t) = x {
+                            Some(t.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                m = m.with_range(key, &texts);
+            }
+        }
+    }
+    for (name, expr) in law.metrics() {
+        if let Some(v) = expr.evaluate(read_typed(expr.input())) {
+            m = m.with_number(name, v);
+        }
+    }
+    for (name, n) in law.at_least() {
+        if !m.number(name).is_some_and(|v| v >= *n) {
+            m = m.with_number(name, 0.0);
+        }
+    }
+    m
+}
+
+/// 監査の量の導出の指紋の case: `(law file の text, request の inputs)`
+const DERIVATION_CASES: &[(&str, &str)] = &[
+    // count / distinct / set、optional の欠け、型違反、空の list
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":["x"],"id":"a"},{"f":["y"],"id":"a"}]}"#,
+    ),
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":["x","x"],"id":"a"},{"f":["x"],"id":"b"}]}"#,
+    ),
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":["y","x"],"id":"a"},{"f":["x","y"],"id":"a"}]}"#,
+    ),
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":["1"],"id":"1"},{"f":["01"],"id":"1.0"}]}"#,
+    ),
+    (DERIVATION_LAW, r#"{"b":[{"f":[]},{"f":["x"],"id":"a"}]}"#),
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":[],"id":"a"},{"f":[],"id":"a"}]}"#,
+    ),
+    (DERIVATION_LAW, r#"{"b":[]}"#),
+    (DERIVATION_LAW, r#"{"b":[{"f":["x"],"id":5}]}"#),
+    (DERIVATION_LAW, r#"{"b":"x"}"#),
+    (DERIVATION_LAW, "{}"),
+    // a name defined by x-metric is not read from the request
+    (
+        DERIVATION_LAW,
+        r#"{"b":[{"f":["x"],"id":"a"}],"sets":7,"ids":3}"#,
+    ),
+    (DERIVATION_LAW, r#"{"count":5,"ids":3}"#),
+    // plain numbers and ranges
+    (DERIVATION_LAW, r#"{"b":[],"n":4,"k":["q","p","q"]}"#),
+];
+
+const DERIVATION_LAW: &str = "\
+x-input b list of record(f: list of text, id: optional text)
+x-input k list of text
+x-metric count = count(b)
+x-metric sets = distinct(set(b[].f))
+x-metric ids = distinct(b[].id)
+x-at-least sets 2
+begin audit
+audit derivation
+evidence count
+evidence n
+range k p q
+expect sets == 2
+expect ids == 1
+end audit
+";
+
+/// 監査の量の導出の指紋 — **振る舞いから計算する**
+///
+/// 固定の law と request を [`audit_law_from_file`] と [`measurements`] で読み、項と
+/// 導出が名指しする量の値 (測られたか・bit) を hash する 導出の規則 (count / distinct /
+/// 集合 / optional の欠け / 型違反は入力全体 / x-at-least / x-metric の名前は request から
+/// 読まない) のどれを変えても値が変わる
+///
+/// # Panics
+///
+/// 固定の law と request が読めない時 (定数なので起きない、試験が確かめる)
+#[must_use]
+pub fn derivation_fingerprint() -> [u8; 32] {
+    use crate::audit_law::Clause;
+    let mut h = Sha256::new();
+    h.update(b"lol.audit-derivation");
+    for (law_text, inputs) in DERIVATION_CASES {
+        let law = audit_law_from_file(law_text).expect("fingerprint law parses");
+        let req = parse_json(inputs).expect("fingerprint inputs parse");
+        let m = measurements(&law, &req);
+        h.update((inputs.len() as u64).to_le_bytes());
+        h.update(inputs.as_bytes());
+        let mut names: Vec<&str> = law.metrics().iter().map(|(n, _)| n.as_str()).collect();
+        for c in law.clauses() {
+            match c {
+                Clause::Evidence { metric } | Clause::Expect { metric, .. } => names.push(metric),
+                Clause::Range { key, .. } => names.push(key),
+            }
+        }
+        for name in names {
+            h.update((name.len() as u64).to_le_bytes());
+            h.update(name.as_bytes());
+            match m.number(name) {
+                Some(v) => {
+                    h.update([1]);
+                    h.update(v.to_bits().to_le_bytes());
+                }
+                None => h.update([0]),
+            }
+            match m.range(name) {
+                Some(r) => {
+                    h.update([1]);
+                    h.update((r.len() as u64).to_le_bytes());
+                    for x in r {
+                        h.update((x.len() as u64).to_le_bytes());
+                        h.update(x.as_bytes());
+                    }
+                }
+                None => h.update([0]),
+            }
+        }
+    }
+    h.finalize().into()
+}
+
 /// law file を監査の Law として読めなかった理由
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LawFileError {
@@ -543,6 +907,8 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     let mut block: Option<String> = None;
     let mut done: Option<String> = None;
     let mut inputs = Vec::new();
+    let mut metrics = Vec::new();
+    let mut at_least = Vec::new();
     for (n, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if let Some(b) = block.as_mut() {
@@ -556,6 +922,27 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
         }
         if line == "begin audit" {
             block = Some(String::new());
+        } else if let Some(rest) = line.strip_prefix("x-metric ") {
+            let (name, expr) = rest
+                .split_once('=')
+                .ok_or_else(|| LawFileError::InputType {
+                    line: n + 1,
+                    error: TypeError("`x-metric <name> = <expression>` expected".to_owned()),
+                })?;
+            let expr = MetricExpr::parse(expr)
+                .map_err(|error| LawFileError::InputType { line: n + 1, error })?;
+            metrics.push((name.trim().to_owned(), expr));
+        } else if let Some(rest) = line.strip_prefix("x-at-least ") {
+            let w: Vec<&str> = rest.split_whitespace().collect();
+            let n_val = match w.as_slice() {
+                [_, v] => v.parse::<f64>().ok().filter(|x| x.is_finite()),
+                _ => None,
+            };
+            let v = n_val.ok_or_else(|| LawFileError::InputType {
+                line: n + 1,
+                error: TypeError("`x-at-least <metric> <number>` expected".to_owned()),
+            })?;
+            at_least.push((w[0].to_owned(), v));
         } else if let Some(rest) = line.strip_prefix("x-input ") {
             let rest = rest.trim();
             let (name, ty) = rest.split_once(' ').unwrap_or((rest, ""));
@@ -569,6 +956,12 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
         .map_err(|e| LawFileError::Audit(format!("{e:?}")))?;
     for (name, ty) in inputs {
         law = law.with_input(&name, ty);
+    }
+    for (name, expr) in metrics {
+        law = law.with_metric(&name, expr);
+    }
+    for (name, v) in at_least {
+        law = law.with_at_least(&name, v);
     }
     Ok(law)
 }
@@ -861,6 +1254,81 @@ mod tests {
             })
             .collect();
         assert_eq!(got, expected);
+    }
+
+    /// (count, sets, ids, n, k) of one derivation case
+    type Row = (
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<Vec<&'static str>>,
+    );
+
+    #[test]
+    fn each_derivation_case_measures_as_decided() {
+        // (count, sets, ids, n, k) written from the rules (TASK.md), not from the code
+        let none = None;
+        let expected: [Row; 13] = [
+            (Some(2.0), Some(2.0), Some(1.0), none, None),
+            (Some(2.0), Some(0.0), Some(2.0), none, None), // {x} twice: 1 set, below 2
+            (Some(2.0), Some(0.0), Some(1.0), none, None), // order inside a set is ignored
+            (Some(2.0), Some(2.0), Some(2.0), none, None), // "1" / "01" and "1" / "1.0" differ
+            (Some(2.0), Some(2.0), none, none, None),      // an id absent: ids not measured
+            (Some(2.0), Some(0.0), Some(1.0), none, None), // empty sets: 1 set
+            (Some(0.0), Some(0.0), Some(0.0), none, None), // empty list: 0 everywhere
+            (none, Some(0.0), none, none, None),           // a number id breaks the type of b
+            (none, Some(0.0), none, none, None),           // b is text
+            (none, Some(0.0), none, none, None),           // b absent
+            (Some(1.0), Some(0.0), Some(1.0), none, None), // sets / ids in the request ignored
+            (none, Some(0.0), none, none, None),           // count / ids in the request, b absent
+            (
+                Some(0.0),
+                Some(0.0),
+                Some(0.0),
+                Some(4.0),
+                Some(vec!["p", "q"]),
+            ),
+        ];
+        for ((law_text, inputs), want) in DERIVATION_CASES.iter().zip(expected) {
+            let law = audit_law_from_file(law_text).expect("law");
+            let m = measurements(&law, &parse_json(inputs).expect("inputs"));
+            let k = m
+                .range("k")
+                .map(|r| r.iter().map(String::as_str).collect::<Vec<_>>());
+            let got = (
+                m.number("count"),
+                m.number("sets"),
+                m.number("ids"),
+                m.number("n"),
+                k,
+            );
+            assert_eq!(got, want, "{inputs}");
+        }
+    }
+
+    #[test]
+    fn metric_expressions_parse_and_read_back() {
+        for (text, canon) in [
+            ("count(b)", "count(b)"),
+            (" distinct( b[].id ) ", "distinct(b[].id)"),
+            ("distinct(set(b[].f))", "distinct(set(b[].f))"),
+        ] {
+            let e = MetricExpr::parse(text).expect(text);
+            assert_eq!(e.canonical(), canon);
+            assert_eq!(MetricExpr::parse(&e.canonical()), Ok(e));
+        }
+        for bad in [
+            "count()",
+            "count(b[].f)",
+            "distinct(b)",
+            "distinct(set(b))",
+            "sum(b)",
+            "distinct(b[].)",
+            "distinct(set(b[].f)",
+        ] {
+            assert!(MetricExpr::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
