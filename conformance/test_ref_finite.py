@@ -28,7 +28,9 @@ import ref_impl  # noqa: E402
 def run(law_name: str, laws: dict) -> dict:
     request = json.dumps({"law": law_name, "inputs": {"x": 1.0}}).encode()
     out = io.StringIO()
+    # a stand-in law has no law file: its one declared input is x
     with mock.patch.dict(ref_impl.LAWS, laws, clear=False), \
+            mock.patch.object(ref_impl, "declared_inputs", return_value=["x"]), \
             mock.patch.object(sys, "stdin", mock.Mock(buffer=io.BytesIO(request))), \
             redirect_stdout(out):
         ref_impl.main()

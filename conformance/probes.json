@@ -1645,5 +1645,22 @@
    "theta2": 0
   },
   "expect": "rejected"
+ },
+ {
+  "note": "a missing input decides before another input that would be rejected",
+  "law": "first_order_decay",
+  "inputs": {
+   "c0": "text",
+   "k": 0.5
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "an input given as null is present, not missing: rejected",
+  "law": "isa1976_lower_atmosphere",
+  "inputs": {
+   "hh": null
+  },
+  "expect": "rejected"
  }
 ]

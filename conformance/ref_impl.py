@@ -538,6 +538,13 @@ def generic_audit(law):
     return run
 
 
+def declared_inputs(name):
+    """the input names a quantitative law's file declares (`input <name> ...` lines)"""
+    path = os.path.join(LAW_DIR, f"{name}.law")
+    with open(path, encoding="utf-8") as fh:
+        return [w[1] for w in (line.split("#", 1)[0].split() for line in fh) if w[:1] == ["input"]]
+
+
 def finite_probe(i):
     x = i["x"]
     rng("x", x, 0, math.pi)
@@ -641,6 +648,13 @@ def main():
             inputs = {}
         elif not isinstance(inputs, dict):
             request_error(f"inputs is not a JSON object: {type(inputs).__name__}")
+    # a missing input of a quantitative law is an error of the request, before any other
+    # check of the inputs (TASK.md); the hand-written laws read their inputs in different
+    # orders, so the check is made here, once, from the law file
+    if name in LAWS:
+        missing = [n for n in declared_inputs(name) if n not in inputs]
+        if missing:
+            request_error(f"missing input: {missing[0]!r}")
     try:
         out = {"outputs": law(inputs)}
         # a value that is not finite is not a number (TASK.md): never written as output

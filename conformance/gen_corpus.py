@@ -101,7 +101,7 @@ def closed_form(law, inputs, periodic):
             tols.append(lc.evaluate(tol_trees[name], {**env, name: val}, mp))
         if any(isinstance(inputs.get(n), list) for n in law["lists"]):
             exp[name] = [float(v) for v in vals]
-            tol[name] = float(max(tols))
+            tol[name] = float(max(tols, default=0))  # an empty list: no value, no tolerance
         else:
             exp[name] = float(vals[0])
             tol[name] = float(tols[0])
@@ -237,6 +237,7 @@ DESIGN = {
             (D(3.5, 1.7, [0.2, 0.9, 2.3]), "mid range"),
             (D(42, 0.08, [5, 25, 49.9]), "slow decay"),
             (D(7, 0.5, [8, 1, 4, 1]), "unsorted, repeated times"),
+            (D(10, 0.5, []), "x-list given an empty array: an empty list of values"),
             (D(10, 0.5, 2.0), "x-list given a number, not an array"),
             (D(10, 0.5, {"t": 2.0}), "x-list given an object, not an array"),
         ],
@@ -486,6 +487,17 @@ def request_vectors(law):
     else:
         for lit, note in [(None, "inputs given as null"), ({}, "inputs empty")]:
             out.append({"law": law["name"], "inputs": None, "request_inputs": lit, "note": note,
+                        "kind": "request_error", "expected": None, "tolerance": None})
+        # a missing input is an error of the request before any check of the other inputs:
+        # the first input is given as text (a rejection on its own) and the last is missing
+        d = design_for(law)
+        full = d.get("rebuild", lambda i: i)(dict(d["base"]))
+        names = [v["name"] for v in law["inputs"]]
+        if len(names) >= 2:
+            req = {k: v for k, v in full.items() if k != names[-1]}
+            req[names[0]] = "text"
+            out.append({"law": law["name"], "inputs": None, "request_inputs": req,
+                        "note": f"{names[0]} given as text and {names[-1]} missing: the missing input decides",
                         "kind": "request_error", "expected": None, "tolerance": None})
     return out
 
