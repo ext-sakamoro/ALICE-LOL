@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `examples/audit_conformance.rs` は `kind audit` の行を、注記 (`#` から行末) を除き、LF だけで分けた行で見る これまでは注記を除く前に比べていたので、`kind audit # note` や `kind audit#note` と書いた監査の law file を未知の law (exit 2) にしていた (参照実装と `conformance/TASK.md` の「`#` から行末までは注記」とも、同じ crate の `audit_law_from_file` とも違っていた) probe 2 件 (`kind audit # …` と `kind audit#…` は supports) `scripts/line_split_guard.py` は この example も LF だけで行を分けていることを検査する
+
 ## [0.4.0] - 未公開 (公開日を入れる)
 
 `alice-lol-macro` 0.2.1 と同時に公開する (公開の順は macro 0.2.1 → `alice-lol` 0.4.0)

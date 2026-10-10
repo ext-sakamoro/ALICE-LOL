@@ -21,6 +21,7 @@ FILES = {
     "conformance/ref_impl.py": re.compile(r"\.splitlines\("),
     "scripts/law_schema.py": re.compile(r"\.splitlines\("),
     "alice-lol/src/law_input.rs": re.compile(r"\.lines\(\)"),
+    "alice-lol/examples/audit_conformance.rs": re.compile(r"\.lines\(\)"),
 }
 
 

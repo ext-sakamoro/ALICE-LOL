@@ -23,7 +23,8 @@ class Guard(unittest.TestCase):
     def test_each_forbidden_call_fails(self):
         for rel, bad in [("conformance/ref_impl.py", "t.splitlines()\n"),
                          ("scripts/law_schema.py", "for l in text.splitlines():\n"),
-                         ("alice-lol/src/law_input.rs", "for l in text.lines() {}\n")]:
+                         ("alice-lol/src/law_input.rs", "for l in text.lines() {}\n"),
+                         ("alice-lol/examples/audit_conformance.rs", "t.lines().any(|l| l.trim() == \"kind audit\")\n")]:
             with tempfile.TemporaryDirectory() as d:
                 tree(Path(d), {**CLEAN, rel: bad})
                 self.assertEqual(g.main([d]), 1, rel)

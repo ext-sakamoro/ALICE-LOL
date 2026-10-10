@@ -104,7 +104,15 @@ fn main() -> ExitCode {
     let source = std::fs::read_to_string(law_file(name))
         .ok()
         .filter(|_| plain);
-    let Some(source) = source.filter(|t| t.lines().any(|l| l.trim() == "kind audit")) else {
+    // an audit law has the line `kind audit`, read as every line is (TASK.md): split only
+    // on LF (the CR of a CR LF is part of the line end) and with the `#` comment removed,
+    // so `kind audit # note` is an audit law (the same reading as `audit_law_from_file`)
+    let is_audit = |t: &String| {
+        t.split('\n')
+            .map(|l| l.strip_suffix('\r').unwrap_or(l))
+            .any(|l| l.split('#').next().unwrap_or("").trim() == "kind audit")
+    };
+    let Some(source) = source.filter(is_audit) else {
         return request_error(&format!("unknown law: {name}"));
     };
     // no inputs key and inputs null are the same as {}
