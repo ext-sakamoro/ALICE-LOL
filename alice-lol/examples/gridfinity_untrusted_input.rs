@@ -3,7 +3,9 @@
 //! a degenerate value never panics: it is refused as an `Err` and handled,
 //! not an uncontrolled allocation or an infinite loop.
 
-use alice_lol::stdlib::hardsurface::pattern_sdf::{try_gridfinity_bin, GridfinitySpec};
+use alice_lol::stdlib::hardsurface::pattern_sdf::{
+    try_gridfinity_bin, try_shelf_divider, GridfinitySpec, ShelfDividerSpec,
+};
 use alice_lol::stdlib::hardsurface::skadis_sdf::try_skadis_panel_sdf;
 
 fn build_gridfinity(cols: u32, rows: u32) {
@@ -24,6 +26,17 @@ fn build_skadis_panel(size: f32) {
     }
 }
 
+fn build_shelf_divider(hex_hole_pitch: f32) {
+    let spec = ShelfDividerSpec {
+        hex_hole_pitch,
+        ..ShelfDividerSpec::field_tested_560x250x120()
+    };
+    match try_shelf_divider(&spec) {
+        Ok(_divider) => println!("shelf divider pitch={hex_hole_pitch}: built"),
+        Err(e) => println!("shelf divider pitch={hex_hole_pitch}: refused ({e})"),
+    }
+}
+
 fn main() {
     build_gridfinity(2, 2); // a normal request
     build_gridfinity(1024, 1024); // a degenerate one: refused, not a crash
@@ -31,4 +44,8 @@ fn main() {
     build_skadis_panel(300.0); // a normal request
     build_skadis_panel(f32::NAN); // a degenerate one: refused, not a hang
     build_skadis_panel(f32::INFINITY); // same, refused instead of looping forever
+
+    build_shelf_divider(20.0); // a normal request
+    build_shelf_divider(0.0); // a degenerate one: refused, not a garbage count
+    build_shelf_divider(f32::NAN); // same, refused instead of a saturated cast
 }

@@ -92,6 +92,10 @@ step "ci.yml / wiring-guard: oracle + 新規の未配線 / 理由の無い dead_
 python3 scripts/test_wiring_guard.py
 python3 scripts/wiring_guard.py
 
+step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
+python3 scripts/test_parser_no_direct_validating_builders.py
+python3 scripts/parser_no_direct_validating_builders.py
+
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py

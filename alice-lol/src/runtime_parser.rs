@@ -307,7 +307,6 @@ impl<'a> Parser<'a> {
             return Ok((DEFAULT_SIZE, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
         }
         let size = self.expect_number()?;
-        let size = self.skadis_size(size)?;
         if self.at_rparen()? {
             self.expect_rparen()?;
             return Ok((size, DEFAULT_THICKNESS, DEFAULT_CORNER_R));
@@ -1654,9 +1653,10 @@ impl<'a> Parser<'a> {
                 // LLM 側で「SKADISパネル 10✖10」等の曖昧入力を parse fail させず
                 // canonical に丸める β UX 用の forgiving 動作 (2026-09-04 追加)
                 let (size, thickness, corner_r) = self.parse_skadis_panel_args()?;
-                Ok(crate::stdlib::hardsurface::skadis_sdf::skadis_panel_sdf(
+                crate::stdlib::hardsurface::skadis_sdf::try_skadis_panel_sdf(
                     size, thickness, corner_r,
-                ))
+                )
+                .map_err(|e| self.spec_error(e))
             }
             "skadis_hook_l" => {
                 self.expect_rparen()?;
@@ -1710,9 +1710,8 @@ impl<'a> Parser<'a> {
                     wall_thickness: 1.2,
                     floor_thickness: 1.5,
                 };
-                Ok(crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin(
-                    &spec,
-                ))
+                crate::stdlib::hardsurface::pattern_sdf::try_gridfinity_bin(&spec)
+                    .map_err(|e| self.spec_error(e))
             }
             "gridfinity_bin_ex" => {
                 // gridfinity_bin_ex(ux, uy, hu, divx, divy, wall, floor) 7 param full spec
@@ -1734,9 +1733,8 @@ impl<'a> Parser<'a> {
                     wall_thickness,
                     floor_thickness,
                 };
-                Ok(crate::stdlib::hardsurface::pattern_sdf::gridfinity_bin(
-                    &spec,
-                ))
+                crate::stdlib::hardsurface::pattern_sdf::try_gridfinity_bin(&spec)
+                    .map_err(|e| self.spec_error(e))
             }
             "wall_hook" => {
                 self.expect_rparen()?;
@@ -1752,9 +1750,10 @@ impl<'a> Parser<'a> {
             }
             "shelf_divider" => {
                 self.expect_rparen()?;
-                Ok(crate::stdlib::hardsurface::pattern_sdf::shelf_divider(
+                crate::stdlib::hardsurface::pattern_sdf::try_shelf_divider(
                     &crate::stdlib::hardsurface::pattern_sdf::ShelfDividerSpec::field_tested_560x250x120(),
-                ))
+                )
+                .map_err(|e| self.spec_error(e))
             }
 
             // ── organizer-gridfinity-desk PART 2 archetypes (Phase B、2026-08-19) ──
@@ -3164,19 +3163,21 @@ impl Parser<'_> {
         Ok(lol_u32(self.bounded_count(v)?))
     }
 
-    /// SKADIS 板の一辺 \[mm\] を 0 より大きく `MAX_SKADIS_PANEL_MM` 以下の有限値にする
+    /// [`crate::limits::SpecError`] を `ParseError` に写す
     ///
-    /// 穴は (size / 40)² 個を生成する 旧実装は上限なしで、`skadis_panel(1e30, ..)` は数 GB 確保し、
-    /// `inf` は `loop { if pos >= size break }` が終わらなかった 下限も無く、負の一辺は
-    /// 角の半径の `clamp(0, size / 2)` で panic していた (`skadis_panel(-130, 4, 4031)`)
-    fn skadis_size(&self, size: f32) -> Result<f32, ParseError> {
-        if !(size > 0.0 && size <= MAX_SKADIS_PANEL_MM) {
-            return Err(ParseError {
-                message: format!("SKADIS 板の一辺は 0 より大きく {MAX_SKADIS_PANEL_MM} mm 以下でなければならない: {size}"),
-                position: self.lexer.pos,
-            });
+    /// stdlib の `try_*` builder (`try_gridfinity_bin` / `try_skadis_panel_sdf` /
+    /// `try_shelf_divider` 等) が返す fallible な検査結果を、この parser の唯一の
+    /// error 型に揃える 旧実装は `skadis_size()` のように parser 側に同じ境界を
+    /// 二重に持つ builder ごとの helper があったが、境界を一箇所 (builder 自身の
+    /// `validate()`) にまとめ、parser は常に `try_*` を呼んでここで写すだけにする
+    /// (`gridfinity_bin_ex` が infallible な `gridfinity_bin` を直接呼んでいたため、
+    /// per-axis 上限内でも積が `MAX_NODE_EXPANSION` を超える入力で panic していた
+    /// 事案の根本対応、2026-10-10)
+    fn spec_error(&self, e: crate::limits::SpecError) -> ParseError {
+        ParseError {
+            message: e.to_string(),
+            position: self.lexer.pos,
         }
-        Ok(size)
     }
 
     fn bounded_count(&self, v: f32) -> Result<f32, ParseError> {

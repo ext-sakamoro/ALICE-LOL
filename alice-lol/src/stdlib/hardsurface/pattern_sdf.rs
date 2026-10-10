@@ -27,7 +27,9 @@
 // rename すると pipeline canonical generator との対応が追えなくなるため module 単位で許容
 #![allow(clippy::similar_names)]
 
-use crate::limits::{checked_product, SpecError, MAX_NODE_EXPANSION};
+use crate::limits::{
+    checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
+};
 use alice_sdf::SdfNode;
 use glam::{Quat, Vec3};
 use std::sync::Arc;
@@ -595,6 +597,19 @@ impl ShelfDividerSpec {
             hex_border: 15.0,
         }
     }
+
+    /// `hex_hole_pitch` が検査を通るか (`shelf_divider` が hex cutout の個数をこの値で
+    /// 除算して求めるため、0 / 負 / `NaN` / `±∞` は `as u32` キャストで無意味な個数に
+    /// 飽和する、[`crate::limits`] module doc の「lazy repetition」節参照)
+    ///
+    /// # Errors
+    ///
+    /// [`SpecError`] (`kind = "pitch"`) if `hex_hole_pitch` is not finite or is below
+    /// [`MIN_PITCH_MM`].
+    pub fn validate(&self) -> Result<(), SpecError> {
+        checked_positive_finite(self.hex_hole_pitch, MIN_PITCH_MM, "pitch")?;
+        Ok(())
+    }
 }
 
 /// shelf divider (pipeline `shelf_divider.rs` LOL DSL 生成と等価な `SdfNode` を返す)
@@ -617,8 +632,16 @@ impl ShelfDividerSpec {
 /// use alice_lol::stdlib::hardsurface::pattern_sdf::{shelf_divider, ShelfDividerSpec};
 /// let s = shelf_divider(&ShelfDividerSpec::field_tested_560x250x120());
 /// ```
+///
+/// # Panics
+///
+/// `spec.hex_hole_pitch` が検査を通らない時 (0 / 負 / `NaN` / `±∞` / [`MIN_PITCH_MM`] 未満)
+/// untrusted な入力は [`try_shelf_divider`] を使うこと
 #[must_use]
 pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
+    spec.validate().expect(
+        "ShelfDividerSpec が検査を通らない (hex_hole_pitch が退化している): untrusted な入力は try_shelf_divider を使うこと",
+    );
     let half_width = spec.total_width * 0.5;
     let hx = half_width * 0.5;
     let hy = spec.depth * 0.5;
@@ -672,6 +695,17 @@ pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
     let all_holes = union(grid1_placed, grid2_placed);
 
     subtract(structure, all_holes)
+}
+
+/// [`shelf_divider`] の fallible 版: `hex_hole_pitch` が検査を通らない時は `panic` でなく
+/// `Err` で返す untrusted な入力にはこちらを使うこと
+///
+/// # Errors
+///
+/// [`SpecError`] (`kind = "pitch"`) if `spec.hex_hole_pitch` is degenerate.
+pub fn try_shelf_divider(spec: &ShelfDividerSpec) -> Result<SdfNode, SpecError> {
+    spec.validate()?;
+    Ok(shelf_divider(spec))
 }
 
 // ────────────────────────────────────────────────────────
@@ -7847,6 +7881,53 @@ mod tests {
         let s = shelf_divider(&ShelfDividerSpec::field_tested_560x250x120());
         // hex holes subtracted なので Subtraction
         assert!(matches!(s, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn shelf_divider_spec_validate_accepts_the_field_tested_spec() {
+        assert!(ShelfDividerSpec::field_tested_560x250x120()
+            .validate()
+            .is_ok());
+    }
+
+    #[test]
+    fn shelf_divider_spec_validate_refuses_a_zero_pitch() {
+        let spec = ShelfDividerSpec {
+            hex_hole_pitch: 0.0,
+            ..ShelfDividerSpec::field_tested_560x250x120()
+        };
+        let e = spec.validate().unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "resource limit exceeded: kind=pitch limit=0.01mm value=0mm"
+        );
+    }
+
+    #[test]
+    fn try_shelf_divider_never_hangs_or_panics_on_a_nan_pitch() {
+        // fuzz-class input: hex_hole_pitch = NaN would saturate count_x/count_y's
+        // `as u32` cast to 0 (not a panic in itself, but a garbage count silently
+        // accepted) -- this must be refused instead.
+        let spec = ShelfDividerSpec {
+            hex_hole_pitch: f32::NAN,
+            ..ShelfDividerSpec::field_tested_560x250x120()
+        };
+        let e = try_shelf_divider(&spec).unwrap_err();
+        let SpecError::FloatLimit(e) = e else {
+            panic!("expected FloatLimit, got {e:?}")
+        };
+        assert_eq!(e.kind, "pitch");
+        assert!(e.value.is_nan());
+    }
+
+    #[test]
+    #[should_panic(expected = "ShelfDividerSpec が検査を通らない")]
+    fn shelf_divider_panics_with_its_documented_message_on_a_negative_pitch() {
+        let spec = ShelfDividerSpec {
+            hex_hole_pitch: -5.0,
+            ..ShelfDividerSpec::field_tested_560x250x120()
+        };
+        let _ = shelf_divider(&spec);
     }
 
     #[test]

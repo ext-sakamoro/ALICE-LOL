@@ -14,6 +14,7 @@
 
 use alice_lol::emit::{to_lol, EmitError};
 use alice_lol::runtime_parser::parse_lol;
+use alice_lol::stdlib::hardsurface::pattern_sdf::{try_gridfinity_bin, GridfinitySpec};
 use alice_lol::stdlib::hardsurface::skadis_sdf::skadis_panel_sdf;
 use alice_lol::{SdfNode, Vec3};
 use std::sync::Arc;
@@ -72,11 +73,64 @@ fn a_skadis_panel_side_must_be_greater_than_zero() {
     ] {
         assert!(parse_lol(src).is_ok(), "{src}");
     }
-    // the public builder no longer panics on a side of 0 or less (the corner radius was
-    // clamped to a negative upper bound); a NaN or infinite side is outside this test
+    // 2026-10-10: the public infallible builder's contract changed again. It no
+    // longer silently accepts a side of 0 or less (the corner-radius clamp fix
+    // only ever stopped THAT panic, not a degenerate size reaching the
+    // connector-hole loop): it now validates and panics with a documented
+    // message, matching `gridfinity_bin`'s precedent. Untrusted input must go
+    // through `try_skadis_panel_sdf` (asserted not to panic, just above, via
+    // `parse_lol`); the direct infallible builder is for callers who already
+    // know their size is in range.
     for size in [-130.0, 0.0, -0.0] {
-        let _ = skadis_panel_sdf(size, 4.0, 4031.0);
+        let result = std::panic::catch_unwind(|| skadis_panel_sdf(size, 4.0, 4031.0));
+        assert!(result.is_err(), "skadis_panel_sdf({size}, ..) should panic");
     }
+}
+
+/// 2026-10-10 real regression: `gridfinity_bin_ex` bounded each divider axis
+/// independently (`count_trunc`, `MAX_STDLIB_COUNT` = 1024) but never their
+/// *product*, so `gridfinity_bin_ex(1,1,1,101,100,0,0)` (10,100 dividers,
+/// each axis within the per-axis bound) was accepted before this fix (~6MB)
+/// and PANICKED once the product-level `MAX_NODE_EXPANSION` check was added
+/// to the infallible `gridfinity_bin` without also updating this parser call
+/// site to the fallible `try_gridfinity_bin`. User `.lol` text must never
+/// reach a `.expect()` panic inside a stdlib builder; this is the regression
+/// test for that class, not just this one keyword.
+#[test]
+fn gridfinity_bin_ex_dividers_product_is_a_parse_error_not_a_panic() {
+    for src in [
+        "gridfinity_bin_ex(1,1,1,101,100,0,0)", // 10,100: over the limit, was Ok before this fix
+        "gridfinity_bin_ex(1,1,1,1024,1024,0,0)", // 1,048,576: far over, was Ok (474MB) before this fix
+    ] {
+        assert!(parse_lol(src).is_err(), "{src}");
+    }
+    for src in [
+        "gridfinity_bin_ex(1,1,1,100,100,0,0)", // 10,000: exactly at the limit
+        "gridfinity_bin_ex(1,1,1,2,2,0,0)",     // a realistic request
+    ] {
+        assert!(parse_lol(src).is_ok(), "{src}");
+    }
+}
+
+/// Same boundary, through the public `try_*` entry point directly (the
+/// non-`.lol` Rust API surface), independent of the parser.
+#[test]
+fn try_gridfinity_bin_dividers_product_is_an_error_not_a_panic() {
+    let over = GridfinitySpec {
+        dividers: Some((101, 100)),
+        ..GridfinitySpec::default_2x2()
+    };
+    assert!(try_gridfinity_bin(&over).is_err());
+    let way_over = GridfinitySpec {
+        dividers: Some((1024, 1024)),
+        ..GridfinitySpec::default_2x2()
+    };
+    assert!(try_gridfinity_bin(&way_over).is_err());
+    let at_limit = GridfinitySpec {
+        dividers: Some((100, 100)),
+        ..GridfinitySpec::default_2x2()
+    };
+    assert!(try_gridfinity_bin(&at_limit).is_ok());
 }
 
 #[test]

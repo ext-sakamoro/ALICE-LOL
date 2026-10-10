@@ -911,10 +911,8 @@ mod tests {
         // `NaN`, so the connector-hole loop (line ~485) never terminates --
         // this call returning at all (not the error value) is the assertion.
         let e = try_skadis_panel_sdf(f32::NAN, 5.0, 5.0).unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "resource limit exceeded: kind=panel_size limit=2000000 requested=0"
-        );
+        assert!(e.to_string().contains("kind=panel_size"), "{e}");
+        assert!(e.to_string().contains("NaN"), "{e}");
     }
 
     #[test]
@@ -923,21 +921,25 @@ mod tests {
         // `i: i32` runs up far enough for `i as f32 * PITCH` to overflow to
         // infinity itself -- billions of pushes into `hole_list` first.
         let e = try_skadis_panel_sdf(f32::INFINITY, 5.0, 5.0).unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "resource limit exceeded: kind=panel_size limit=2000000 requested=18446744073709551615"
-        );
+        assert!(e.to_string().contains("kind=panel_size"), "{e}");
+        assert!(e.to_string().contains("inf"), "{e}");
+        // a NaN and an infinite size must not produce the same message
+        let nan = try_skadis_panel_sdf(f32::NAN, 5.0, 5.0).unwrap_err();
+        assert_ne!(e.to_string(), nan.to_string());
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // value is set to the exact literal, no arithmetic in between
     fn try_skadis_panel_sdf_refuses_a_huge_finite_size_too() {
         // not just non-finite: a merely-huge finite size drives the same
         // loop for `size / SKADIS_GRID_PITCH` iterations, which is itself
         // unbounded without this ceiling.
         let e = try_skadis_panel_sdf(1.0e9, 5.0, 5.0).unwrap_err();
-        let crate::limits::SpecError::ResourceLimit(e) = e;
+        let crate::limits::SpecError::FloatLimit(e) = e else {
+            panic!("expected FloatLimit, got {e:?}")
+        };
         assert_eq!(e.kind, "panel_size");
-        assert_eq!(e.requested, 1_000_000_000_000);
+        assert_eq!(e.value, 1.0e9);
     }
 
     #[test]

@@ -32,16 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
 - pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`PatternSpec.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
 - `EmitError` に `NonFinite` を追加し、`EmitError` / `ExportError` / `LawFileError` / `BridgeError` を `#[non_exhaustive]` にした (外の crate の `match` は `_` の腕が要る 次に variant を足す時は破壊的変更にならない)
-- `limits` module を追加: `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` (`runtime_parser` から re-export、既存の import path は変わらない) に加え、`MAX_NODE_EXPANSION` (eager に `SdfNode` を複製して確保する箇所の総数上限) と `MIN_PITCH_MM` (pitch/spacing 引数の下限、度数でなく幾何的な根拠: 市販 FDM の解像度より十分小さい) / `ResourceLimitError { kind, limit, requested }` と検査 helper `checked_product` / `checked_positive_finite`
-- `GridfinitySpec::validate()` と `try_gridfinity_bin` を追加 (untrusted な値を確保の前に検査し、決してパニックしない fallible な入口) / `SpecError` (`#[non_exhaustive]`、`ResourceLimitError` を包む)
-- `limits::checked_bounded` (上限つき有限値検査) と `skadis_sdf::try_skadis_panel_sdf` を追加
+- `limits` module を追加: `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` (`runtime_parser` から re-export、既存の import path は変わらない) に加え、`MAX_NODE_EXPANSION` (eager に `SdfNode` を複製して確保する箇所の総数上限) と `MIN_PITCH_MM` (pitch/spacing 引数の下限、度数でなく幾何的な根拠: 市販 FDM の解像度より十分小さい) / 整数個数の検査 helper `checked_product` と `ResourceLimitError { kind, limit, requested }` / float 値の検査 helper `checked_positive_finite` / `checked_bounded` と `FloatLimitError { kind, limit, value, unit }` (`value` は検査した `f32` をそのまま持つ、整数単位へ変換すると `NaN` と負値が同じ `requested=0` になり区別できなかったため)
+- `GridfinitySpec::validate()` と `try_gridfinity_bin` を追加 (untrusted な値を確保の前に検査し、決してパニックしない fallible な入口) / `SpecError` (`#[non_exhaustive]`、`ResourceLimit(ResourceLimitError)` / `FloatLimit(FloatLimitError)` を包む)
+- `skadis_sdf::try_skadis_panel_sdf` を追加
+- `ShelfDividerSpec::validate()` と `try_shelf_divider` を追加
 
 #### 挙動
 
 - LOL の数は有限: 桁あふれの literal (`1e39` ほか、f32 で ±∞ になるもの) は parse error になる (0.3.0 は ±∞ として読んでいた) `to_lol` は NaN / ±∞ を書かず `EmitError::NonFinite` を返す
 - `skadis_panel` の一辺は 0 より大きくなければならない (0.3.0 は負の一辺から負の寸法の板を作っていた)
-- `gridfinity_bin`: `dividers` の積 (cols × rows) が `limits::MAX_NODE_EXPANSION` を超える `spec` では、確保の前に検査して typed なメッセージでパニックする (`.lol` text 経由の `gridfinity_bin_ex` は各軸を個別に `MAX_STDLIB_COUNT` (1024) まで検査していたが、積は検査しておらず、1024×1024 の `Vec::with_capacity` が制御されない overflow / abort になり得た) untrusted な入力は `try_gridfinity_bin` を使うこと
+- **破壊的変更:** `gridfinity_bin` / `gridfinity_bin_ex`: `dividers` の積 (cols × rows) が `limits::MAX_NODE_EXPANSION` (10,000) を超える `spec` は、`.lol` text 経由を含めて parse error / パニックになる (`.lol` text は各軸を個別に `MAX_STDLIB_COUNT` (1024) まで検査していたが積は検査しておらず、`gridfinity_bin_ex(1,1,1,101,100,0,0)` (10,100 個、各軸は上限内) は 0.3.0 では受理していた、実測 ~6.2MB) 10,000 の根拠: `dividers` は 1 bin cell (`GRID_UNIT` 42mm) 内の仕切りの数で、100 個 / 軸ともなれば壁厚より細い仕切り間隔になり実際には印刷できない形状のため、物理的に正当な要求を拒む側の margin ではない `.lol` text は `gridfinity_bin_ex` の parser 側を infallible な `gridfinity_bin` から fallible な `try_gridfinity_bin` 呼出に変更して対応 (積が検査されないまま infallible builder に届く経路が実際に残っていた、`scripts/parser_no_direct_validating_builders.py` で以後の再発を検査) untrusted な入力は `try_gridfinity_bin` を使うこと
 - `skadis_panel_sdf`: `size` が 0 より大きく `MAX_SKADIS_PANEL_MM` 以下の有限値でない (`NaN` / `±∞` / 過大な finite 値) 時、コネクタ穴を並べる内部 loop に入る前に検査して typed なメッセージでパニックする (`.lol` text 経由は `runtime_parser.rs` の `skadis_size` が既に検査していたが、この pub fn を直接呼ぶ Rust 呼び出し元は検査されておらず、`NaN` で loop が終端しない、`±∞` や過大な finite 値で終端まで膨大な回数かかるハングになり得た) untrusted な入力は `try_skadis_panel_sdf` を使うこと
+- `shelf_divider`: `hex_hole_pitch` が 0 / 負 / `NaN` / `±∞` / `limits::MIN_PITCH_MM` 未満の時、hex cutout の個数をこの値で除算する前に検査して typed なメッセージでパニックする (この個数は `RepeatFinite` の `count` に入り `as u32` キャストを経るため、退化した pitch は無意味な個数に飽和して silent に受理されていた) untrusted な入力は `try_shelf_divider` を使うこと
 - 監査 Law (`audit_law`) の証拠は有限で 0 より大きい数だけ、成立範囲は集合として比べ、`expect` の実測が有限でなければ `Undecided`
 - `print_export::node_to_mesh` の破壊的修復は、修復の前後で `χ` が等しく孤立頂点が増えない時だけ採る
 

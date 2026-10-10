@@ -1,5 +1,5 @@
-//! Named resource limits for user-controlled parameters, and the error type
-//! that reports a refusal.
+//! Named resource limits for user-controlled parameters, and the error types
+//! that report a refusal.
 //!
 //! Two different hazards hide behind "a user gave a huge number":
 //!
@@ -25,6 +25,21 @@
 //! `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` lived in `runtime_parser.rs`
 //! (the only two limits that existed before this module); re-exported here so
 //! every limit lives in one place, old import paths keep working.
+//!
+//! ## Two error shapes, not one
+//!
+//! [`ResourceLimitError`] is for *integer counts* (a product of two `u32`
+//! divider counts, say) -- there is no ambiguity in representing the
+//! requested value as a `u64`, since the inputs were already integers.
+//!
+//! [`FloatLimitError`] is for the float-valued checks
+//! ([`checked_positive_finite`], [`checked_bounded`]): an earlier version of
+//! this module coerced the offending `f32` into a `u64` micrometer count for
+//! the error message, which collapsed `NaN` and a negative value to the same
+//! `requested=0` -- indistinguishable in the message, even though they are
+//! different mistakes. [`FloatLimitError`] instead keeps the literal `f32`
+//! (whose `Display` already renders `NaN` / `inf` / `-5` distinctly) and
+//! names the unit in the message.
 
 /// Maximum value for a per-axis "count" argument (rows / cols / dividers /
 /// etc.), checked by `runtime_parser.rs`'s `bounded_count` before an eager
@@ -47,10 +62,25 @@ pub use crate::runtime_parser::MAX_SKADIS_PANEL_MM;
 /// An eager site additionally pays one heap allocation per repeated child
 /// (e.g. `translate(cavity.clone(), ..)` wraps each clone in its own
 /// `Arc`-holding node). 10,000 elements is roughly 10,000 * (80 bytes + a
-/// small allocation) -- on the order of a few MB, not a denial of service by itself -- while
-/// every current stdlib caller of an eager site (`gridfinity_bin_ex`'s
-/// dividers) uses at most 2*2 = 4 in its tests/examples, so this is headroom,
-/// not a tight fit.
+/// small allocation) -- on the order of 6MB, not a denial of service by
+/// itself.
+///
+/// This is also a **language semantics change**, not just a safety net: the
+/// `.lol` parser previously bounded each divider axis independently to
+/// [`MAX_STDLIB_COUNT`] (1024) but never their *product*, so a request like
+/// `gridfinity_bin_ex(1,1,1,101,100,0,0)` (10,100 dividers) was previously
+/// accepted (expensively: ~6MB, measured) and is refused from this version
+/// on. The ceiling is set by the physical geometry, not by an arbitrary
+/// safety margin: `dividers` subdivides a single bin cell
+/// ([`GRID_UNIT`](crate::stdlib::hardsurface::pattern_sdf::gridfinity_spec::GRID_UNIT)
+/// = 42mm) into compartments; a divider count anywhere near 100 per axis
+/// implies a compartment narrower than the wall thickness needed to print
+/// it, so it was never a producible part regardless of this limit. Every
+/// current stdlib caller of an eager site (`gridfinity_bin_ex`'s dividers)
+/// uses at most 2*2 = 4 in its tests/examples, so 10,000 is headroom over
+/// real usage, not a tight fit. Documented in CHANGELOG as a breaking change
+/// (`#### 挙動`, 0.4.0); folded into the single `LOL_SEMANTICS_ID` move once
+/// the rest of this phase lands.
 pub const MAX_NODE_EXPANSION: u64 = 10_000;
 
 /// Minimum finite value (mm) for a pitch/spacing argument that a count is
@@ -67,28 +97,23 @@ pub const MAX_NODE_EXPANSION: u64 = 10_000;
 /// it, this floor only rejects the *degenerate* (zero/negative/tiny-enough-
 /// to-overflow) case at its source, per the module doc's "lazy repetition"
 /// case.
-// ALLOW-UNWIRED: pending the pitch-class Spec sites (hex_hole_pitch etc.), landed separately
 pub const MIN_PITCH_MM: f32 = 0.01;
 
-/// A user-controlled parameter refused a named resource limit before any
-/// allocation or lazy-but-degenerate count was produced from it.
+/// A user-controlled integer-count parameter refused a named resource limit
+/// before any allocation was produced from it.
 ///
 /// `kind` names which limit was hit (a short, stable, `snake_case` token
-/// such as `"grid_expansion"` or `"pitch"`, suitable for matching in tests
-/// without string-parsing a human sentence); `limit` and `requested` are the
-/// limit's value and what was actually asked for, in the same units (always
-/// representable as `u64`: counts and products of counts for expansion
-/// limits, and pitches/sizes in micrometers -- `requested_mm * 1000.0`,
-/// rounded -- for the mm-denominated ones, so a non-finite input still has a
-/// meaningful value to report instead of being unrepresentable).
+/// such as `"grid_expansion"`, suitable for matching in tests without
+/// string-parsing a human sentence); `limit` and `requested` are the limit's
+/// value and what was actually asked for, in the same (integer) units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceLimitError {
-    /// Which limit was hit, e.g. `"grid_expansion"`, `"pitch"`, `"count"`.
+    /// Which limit was hit, e.g. `"grid_expansion"`.
     pub kind: &'static str,
     /// The limit's value.
     pub limit: u64,
     /// What was actually requested (saturates to `u64::MAX` if the request
-    /// itself overflows representing it, e.g. a non-finite pitch).
+    /// itself overflows representing it).
     pub requested: u64,
 }
 
@@ -104,16 +129,50 @@ impl std::fmt::Display for ResourceLimitError {
 
 impl std::error::Error for ResourceLimitError {}
 
+/// A user-controlled **float** parameter refused a named resource limit.
+///
+/// Unlike [`ResourceLimitError`], `value` and `limit` keep the literal `f32`
+/// the caller supplied instead of coercing it into an integer unit -- so the
+/// message distinguishes `NaN` from `-5` from `1e30`, which a `requested=0`
+/// placeholder for both `NaN` and a negative value could not. `unit` names
+/// the physical unit for the message (e.g. `"mm"`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FloatLimitError {
+    /// Which limit was hit, e.g. `"pitch"`, `"panel_size"`.
+    pub kind: &'static str,
+    /// The limit's value, in `unit`.
+    pub limit: f32,
+    /// What was actually requested, in `unit` (kept literal: may be `NaN` or
+    /// infinite).
+    pub value: f32,
+    /// The physical unit both `limit` and `value` are in, e.g. `"mm"`.
+    pub unit: &'static str,
+}
+
+impl std::fmt::Display for FloatLimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "resource limit exceeded: kind={} limit={}{} value={}{}",
+            self.kind, self.limit, self.unit, self.value, self.unit
+        )
+    }
+}
+
+impl std::error::Error for FloatLimitError {}
+
 /// A `Spec` struct's `validate()` refused its fields, and the matching
 /// `try_*` builder refused to construct an `SdfNode` from them.
 ///
 /// `#[non_exhaustive]`: a `Spec` may grow new validated fields with their
 /// own reasons to refuse, without that being a breaking change to this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum SpecError {
-    /// A named resource limit was exceeded; see [`ResourceLimitError`].
+    /// A named integer-count resource limit was exceeded; see [`ResourceLimitError`].
     ResourceLimit(ResourceLimitError),
+    /// A named float-valued resource limit was exceeded; see [`FloatLimitError`].
+    FloatLimit(FloatLimitError),
 }
 
 impl From<ResourceLimitError> for SpecError {
@@ -122,10 +181,17 @@ impl From<ResourceLimitError> for SpecError {
     }
 }
 
+impl From<FloatLimitError> for SpecError {
+    fn from(e: FloatLimitError) -> Self {
+        Self::FloatLimit(e)
+    }
+}
+
 impl std::fmt::Display for SpecError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ResourceLimit(e) => write!(f, "{e}"),
+            Self::FloatLimit(e) => write!(f, "{e}"),
         }
     }
 }
@@ -164,38 +230,21 @@ pub fn checked_product(
 /// zero, negative, `NaN`, or infinite is refused at its source, before it is
 /// divided into anything).
 ///
-/// `requested` in the returned error is `v` in micrometers, rounded and
-/// saturated to `u64` (so a `NaN`/infinite `v` still has a representable
-/// value: `0` for `NaN` or a negative value, `u64::MAX` for `+inf`) -- `limit`
-/// is `floor` in the same units.
-///
 /// # Errors
 ///
-/// [`ResourceLimitError`] (`kind` as given) if `v` is not finite or is below
-/// `floor`.
-// ALLOW-UNWIRED: pending the pitch-class Spec sites (hex_hole_pitch etc.), landed separately
+/// [`FloatLimitError`] (`kind` as given, `unit = "mm"`) if `v` is not finite
+/// or is below `floor`.
 pub fn checked_positive_finite(
     v: f32,
     floor: f32,
     kind: &'static str,
-) -> Result<f32, ResourceLimitError> {
+) -> Result<f32, FloatLimitError> {
     if !v.is_finite() || v < floor {
-        let requested = if v.is_nan() || v < 0.0 {
-            0
-        } else if v.is_infinite() {
-            u64::MAX
-        } else {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            {
-                (f64::from(v) * 1000.0).round() as u64
-            }
-        };
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let limit = (f64::from(floor) * 1000.0).round() as u64;
-        return Err(ResourceLimitError {
+        return Err(FloatLimitError {
             kind,
-            limit,
-            requested,
+            limit: floor,
+            value: v,
+            unit: "mm",
         });
     }
     Ok(v)
@@ -214,40 +263,22 @@ pub fn checked_positive_finite(
 /// degenerate *small* value. An upper bound is therefore load-bearing on its
 /// own, not just a finite check.
 ///
-/// `requested` in the returned error is `v` in micrometers, rounded and
-/// saturated to `u64`, same convention as [`checked_positive_finite`]: `0`
-/// for `NaN` or a non-positive `v`, `u64::MAX` for `+inf`, otherwise the
-/// actual (possibly over-ceiling) value -- so an over-large but finite
-/// request still reports what was actually asked for, not a saturated
-/// placeholder.
-///
 /// # Errors
 ///
-/// [`ResourceLimitError`] (`kind` as given) if `v` is not finite, is at or
-/// below `floor`, or is above `ceiling`.
+/// [`FloatLimitError`] (`kind` as given, `unit = "mm"`, `limit = ceiling`) if
+/// `v` is not finite, is at or below `floor`, or is above `ceiling`.
 pub fn checked_bounded(
     v: f32,
     floor: f32,
     ceiling: f32,
     kind: &'static str,
-) -> Result<f32, ResourceLimitError> {
+) -> Result<f32, FloatLimitError> {
     if !(v.is_finite() && v > floor && v <= ceiling) {
-        let requested = if v.is_nan() || v <= 0.0 {
-            0
-        } else if v.is_infinite() {
-            u64::MAX
-        } else {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            {
-                (f64::from(v) * 1000.0).round() as u64
-            }
-        };
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let limit = (f64::from(ceiling) * 1000.0).round() as u64;
-        return Err(ResourceLimitError {
+        return Err(FloatLimitError {
             kind,
-            limit,
-            requested,
+            limit: ceiling,
+            value: v,
+            unit: "mm",
         });
     }
     Ok(v)
@@ -310,28 +341,36 @@ mod tests {
     }
 
     #[test]
-    fn checked_positive_finite_zero_errs() {
+    #[allow(clippy::float_cmp)] // v is set to the exact literal, no arithmetic in between
+    fn checked_positive_finite_zero_errs_and_value_is_literally_zero() {
         let e = checked_positive_finite(0.0, MIN_PITCH_MM, "pitch").unwrap_err();
         assert_eq!(e.kind, "pitch");
-        assert_eq!(e.requested, 0);
+        assert_eq!(e.value, 0.0);
     }
 
     #[test]
-    fn checked_positive_finite_negative_errs() {
+    #[allow(clippy::float_cmp)] // v is set to the exact literal, no arithmetic in between
+    fn checked_positive_finite_negative_errs_and_value_is_the_literal_negative() {
         let e = checked_positive_finite(-5.0, MIN_PITCH_MM, "pitch").unwrap_err();
-        assert_eq!(e.requested, 0);
+        assert_eq!(e.value, -5.0);
     }
 
     #[test]
-    fn checked_positive_finite_nan_errs() {
+    fn checked_positive_finite_nan_errs_and_value_is_distinguishable_from_negative() {
         let e = checked_positive_finite(f32::NAN, MIN_PITCH_MM, "pitch").unwrap_err();
-        assert_eq!(e.requested, 0);
+        assert!(e.value.is_nan());
+        // the whole point of this type: a NaN message must not read the same
+        // as a negative-value message (the old u64-coerced "requested=0" did)
+        assert!(e.to_string().contains("NaN"), "{}", e.to_string());
+        let neg = checked_positive_finite(-5.0, MIN_PITCH_MM, "pitch").unwrap_err();
+        assert_ne!(e.to_string(), neg.to_string());
     }
 
     #[test]
-    fn checked_positive_finite_infinite_errs() {
+    fn checked_positive_finite_infinite_errs_and_value_is_literally_infinite() {
         let e = checked_positive_finite(f32::INFINITY, MIN_PITCH_MM, "pitch").unwrap_err();
-        assert_eq!(e.requested, u64::MAX);
+        assert!(e.value.is_infinite() && e.value > 0.0);
+        assert!(e.to_string().contains("inf"), "{}", e.to_string());
     }
 
     #[test]
@@ -366,31 +405,42 @@ mod tests {
     fn checked_bounded_nan_errs_without_hanging() {
         let e = checked_bounded(f32::NAN, 0.0, 2000.0, "panel_size").unwrap_err();
         assert_eq!(e.kind, "panel_size");
-        assert_eq!(e.requested, 0);
+        assert!(e.value.is_nan());
     }
 
     #[test]
     fn checked_bounded_infinite_errs() {
         let e = checked_bounded(f32::INFINITY, 0.0, 2000.0, "panel_size").unwrap_err();
-        assert_eq!(e.requested, u64::MAX);
+        assert!(e.value.is_infinite() && e.value > 0.0);
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // limit/value are set to the exact literals, no arithmetic in between
     fn checked_bounded_over_ceiling_reports_the_actual_request_not_a_placeholder() {
         let e = checked_bounded(50_000.0, 0.0, 2000.0, "panel_size").unwrap_err();
-        assert_eq!(e.limit, 2_000_000);
-        assert_eq!(e.requested, 50_000_000);
+        assert_eq!(e.limit, 2000.0);
+        assert_eq!(e.value, 50_000.0);
     }
 
     #[test]
-    fn checked_bounded_negative_errs() {
+    #[allow(clippy::float_cmp)] // value is set to the exact literal, no arithmetic in between
+    fn checked_bounded_negative_errs_and_value_is_distinguishable_from_nan() {
         let e = checked_bounded(-5.0, 0.0, 2000.0, "panel_size").unwrap_err();
-        assert_eq!(e.requested, 0);
+        assert_eq!(e.value, -5.0);
+        let nan = checked_bounded(f32::NAN, 0.0, 2000.0, "panel_size").unwrap_err();
+        assert_ne!(e.to_string(), nan.to_string());
     }
 
     #[test]
     fn spec_error_from_resource_limit_error_displays_the_same_text() {
         let e = checked_product(1000, 1000, MAX_NODE_EXPANSION, "grid_expansion").unwrap_err();
+        let spec_err: SpecError = e.into();
+        assert_eq!(spec_err.to_string(), e.to_string());
+    }
+
+    #[test]
+    fn spec_error_from_float_limit_error_displays_the_same_text() {
+        let e = checked_bounded(50_000.0, 0.0, 2000.0, "panel_size").unwrap_err();
         let spec_err: SpecError = e.into();
         assert_eq!(spec_err.to_string(), e.to_string());
     }
@@ -402,5 +452,14 @@ mod tests {
         assert!(s.contains("grid_expansion"), "{s}");
         assert!(s.contains(&MAX_NODE_EXPANSION.to_string()), "{s}");
         assert!(s.contains("1000000"), "{s}");
+    }
+
+    #[test]
+    fn float_limit_error_display_names_kind_and_unit() {
+        let e = checked_bounded(50_000.0, 0.0, 2000.0, "panel_size").unwrap_err();
+        let s = e.to_string();
+        assert!(s.contains("panel_size"), "{s}");
+        assert!(s.contains("mm"), "{s}");
+        assert!(s.contains("50000"), "{s}");
     }
 }
