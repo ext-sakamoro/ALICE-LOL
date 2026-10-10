@@ -299,7 +299,16 @@ def read_audit_law(name):
     path = os.path.join(LAW_DIR, f"{name}.law")
     if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.exists(path):
         return None
-    raws = [l.split("#", 1)[0].rstrip("\r\n") for l in open(path, encoding="utf-8")]
+    # read without newline translation: a line ends with LF or CR LF; a CR that is not
+    # followed by LF, and a byte-order mark anywhere, make the file unreadable
+    with open(path, encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    bodies = [l[:-1] if l.endswith("\r") else l for l in text.split("\n")]
+    if text.endswith("\n"):
+        bodies = bodies[:-1]
+    if any("\r" in b or "\ufeff" in b for b in bodies):
+        raise ValueError("a law file has no byte-order mark, and a line ends with LF or CR LF")
+    raws = [b.split("#", 1)[0] for b in bodies]
     lines = [r.strip() for r in raws]
     if "kind audit" not in lines:
         return None

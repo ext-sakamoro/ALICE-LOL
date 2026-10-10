@@ -1145,5 +1145,94 @@
    ]
   },
   "expect": "exit 2"
+ },
+ {
+  "note": "law file: byte-order mark first",
+  "law": "decl_probe",
+  "law_text": "\ufefflaw decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: byte-order mark before x-input",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\n\ufeffx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: lone CR line ends",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\rkind audit\rx-input b list of record(f: list of text)\rx-metric n = count(b)\rx-metric s = distinct(set(b[].f))\rx-at-least s 2\rbegin audit\raudit decl-probe\revidence n\revidence s\rend audit\r",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: CR LF line ends (read)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\r\nkind audit\r\nx-input b list of record(f: list of text)\r\nx-metric n = count(b)\r\nx-metric s = distinct(set(b[].f))\r\nx-at-least s 2\r\nbegin audit\r\naudit decl-probe\r\nevidence n\r\nevidence s\r\nend audit\r\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "bytes: byte-order mark before the request",
+  "law": "gate_compares_nonzero",
+  "raw_hex": "efbbbf7b226c6177223a22676174655f636f6d70617265735f6e6f6e7a65726f222c22696e70757473223a7b22636f6d7061726564223a332c226d69736d617463686573223a302c226b6e6f776e2d6d69736d617463686573223a5b22636173652d3137222c22636173652d3432225d7d7d",
+  "expect": "exit 2"
  }
 ]

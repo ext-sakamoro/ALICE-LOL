@@ -956,6 +956,22 @@ fn check_declaration(line_no: usize, raw: &str, line: &str) -> Result<(), LawFil
     Ok(())
 }
 
+/// The text of a law file: no byte-order mark anywhere, and a line ends with LF or CR LF (a
+/// CR that is not followed by LF is not a line end, and is refused rather than read)
+fn check_text(text: &str) -> Result<(), LawFileError> {
+    for (n, raw) in text.split('\n').enumerate() {
+        let body = raw.strip_suffix('\r').unwrap_or(raw);
+        if body.contains('\u{feff}') || body.contains('\r') {
+            return Err(LawFileError::Declaration {
+                line: n + 1,
+                reason: "a law file has no byte-order mark, and a line ends with LF or CR LF"
+                    .to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// law file (`kind audit`) を監査の Law として読む: audit block の項と、`x-input` の行の型
 ///
 /// 型は [`AuditLaw::law_id`](crate::law_id) に入る `#` 以降は注記として読まない
@@ -971,6 +987,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     let mut metrics = Vec::new();
     let mut at_least = Vec::new();
     let mut at_least_lines: Vec<(usize, String)> = Vec::new();
+    check_text(text)?;
     for (n, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if let Some(b) = block.as_mut() {
@@ -1455,6 +1472,27 @@ mod tests {
                 matches!(law(&bad), Err(LawFileError::Declaration { .. })),
                 "{bad:?}: {:?}",
                 law(&bad)
+            );
+        }
+    }
+
+    #[test]
+    fn a_byte_order_mark_or_a_lone_carriage_return_does_not_read() {
+        let ok = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nbegin audit\naudit a\nevidence n\nend audit\n";
+        assert!(audit_law_from_file(ok).is_ok());
+        assert!(audit_law_from_file(&ok.replace('\n', "\r\n")).is_ok());
+        for bad in [
+            format!("\u{feff}{ok}"),
+            ok.replace("x-metric", "\u{feff}x-metric"),
+            ok.replace('\n', "\r"),
+            ok.replacen('\n', "\r", 1),
+        ] {
+            assert!(
+                matches!(
+                    audit_law_from_file(&bad),
+                    Err(LawFileError::Declaration { .. })
+                ),
+                "{bad:?}"
             );
         }
     }

@@ -43,7 +43,8 @@ def outcome(cmd, p, timeout):
         # a law file of the probe's own (malformed declarations): written to a fresh
         # directory that the implementation reads through LOL_LAW_DIR
         d = tempfile.mkdtemp()
-        Path(d, f"{p['law']}.law").write_text(p["law_text"], encoding="utf-8")
+        # bytes as written (no newline translation: CR / CR LF probes keep their line ends)
+        Path(d, f"{p['law']}.law").write_bytes(p["law_text"].encode("utf-8"))
         env = dict(os.environ, LOL_LAW_DIR=d)
     r = subprocess.run(cmd, input=request_bytes(p), capture_output=True, timeout=timeout, env=env)
     out = r.stdout.decode("utf-8", errors="replace")
