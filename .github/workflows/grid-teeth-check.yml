@@ -1,0 +1,58 @@
+name: Grid teeth check
+
+# Weekly, not per-push: scripts/grid_teeth_check.sh reintroduces 5 historical
+# regressions as mutants (one at a time, in an isolated worktree) and asserts
+# the degenerate-parameter grid test or a named unit test turns red for each
+# -- each mutant rebuilds the probe binary and reruns the full grid (~90s),
+# so 5 mutants is roughly 10 minutes, far more than a per-push gate should cost.
+
+on:
+  schedule:
+    - cron: '30 3 * * 1' # Mondays 03:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grid-teeth-check
+  cancel-in-progress: false
+
+jobs:
+  grid-teeth-check:
+    name: Grid teeth check (5 historical-regression mutants)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: grid_teeth_check (M1-M5, each mutant must turn its target red)
+        working-directory: ALICE-LOL
+        run: bash scripts/grid_teeth_check.sh

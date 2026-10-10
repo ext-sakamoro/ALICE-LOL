@@ -442,6 +442,52 @@ jobs:
   # 配線ガード: 実装したが production から呼ばれていない pub item と、理由の無い
   # allow(dead_code) の新規追加を止める (既存分は scripts/wiring-baseline.txt)
   # 併せて版ガード: 同じ alice-* crate が 2 版以上 lock に入っている (= 同じ法則が
+  # degenerate-parameter grid: every SDF keyword's `.lol` text, with one or
+  # two numeric literals at a time pushed to a value hostile to a
+  # cast/limit/division, must never hang, crash, or allocate unboundedly (see
+  # tests/degenerate_grid.rs's module doc) ubuntu only: killing a subprocess
+  # cleanly on a 2s timeout has different semantics on macOS/Windows, and
+  # the existing Test matrix already runs the full suite (this file
+  # included, but `#[ignore]`d there) on every OS -- this job's value is the
+  # breadth of the sweep (~35,000 cases, ~90s), not its OS coverage
+  degenerate-grid:
+    name: Degenerate-parameter grid (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Degenerate-parameter grid (one-at-a-time / all-same / pairwise, ~35,000 cases)
+        working-directory: ALICE-LOL
+        run: cargo test --test degenerate_grid -- --ignored --nocapture
+
   # 2 通りに評価されうる) 状態を止める (既存分は scripts/lock-duplicates-baseline.txt)
   # 併せて算術ガード: 判定を出す file で platform の libm (値が IEEE 754 で規定されて
   # いない超越関数) を直呼びしている状態を止める (= 同じ実測で判定が機械ごとに割れる)

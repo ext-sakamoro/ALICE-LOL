@@ -57,6 +57,86 @@ fn nums(n: usize) -> String {
 const CHILD_A: &str = "sphere(1.0)";
 const CHILD_B: &str = "box3d(0.5, 0.5, 0.5)";
 
+/// `src` 内の数値 literal token の個数 (`with_one_number` が狙える添字の範囲)
+#[must_use]
+pub fn count_numbers(src: &str) -> usize {
+    let bytes = src.as_bytes();
+    let (mut at, mut n) = (0, 0);
+    while at < bytes.len() {
+        let after_ident =
+            at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_');
+        let starts = bytes[at].is_ascii_digit()
+            || (bytes[at] == b'-' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit));
+        if starts && !after_ident {
+            let mut end = at + 1;
+            while end < bytes.len()
+                && (bytes[end].is_ascii_digit()
+                    || matches!(bytes[end], b'.' | b'e' | b'E')
+                    || (matches!(bytes[end], b'-' | b'+') && matches!(bytes[end - 1], b'e' | b'E')))
+            {
+                end += 1;
+            }
+            n += 1;
+            at = end;
+        } else {
+            at += 1;
+        }
+    }
+    n
+}
+
+/// `src` の数値 literal token のうち、`targets` に含まれる添字のものだけを
+/// `replacement` に置き換え、他の literal は corpus 自身の安全な既定値のまま
+/// 触らない (`tests/finite_numbers.rs` の `with_numbers` は全 literal を
+/// palette で回転させるか全 literal を同じ値にするかの二択で、「N 箇所だけ
+/// 退化、残りは既定値」という形を作れない degenerate-parameter grid は
+/// こちらを使う、`with_numbers` は emit round-trip 試験専用のまま)
+///
+/// `targets` が 1 添字なら「1 箇所だけ退化」、2 添字なら pairwise 退化、
+/// `0..count_numbers(src)` 全体なら「全 literal を同じ退化値」になる
+/// (`gridfinity_bin_ex` の dividers (2 引数の積) のような、1 箇所だけでは
+/// 閾値に届かない複数座標の組合せ退化を pairwise / all-same で捕まえる)
+#[must_use]
+pub fn with_numbers_at(src: &str, targets: &[usize], replacement: &str) -> String {
+    let bytes = src.as_bytes();
+    let (mut out, mut at, mut nth) = (String::new(), 0, 0);
+    while at < bytes.len() {
+        let byte = bytes[at];
+        let after_ident =
+            at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_');
+        let starts = byte.is_ascii_digit()
+            || (byte == b'-' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit));
+        if starts && !after_ident {
+            let mut end = at + 1;
+            while end < bytes.len()
+                && (bytes[end].is_ascii_digit()
+                    || matches!(bytes[end], b'.' | b'e' | b'E')
+                    || (matches!(bytes[end], b'-' | b'+') && matches!(bytes[end - 1], b'e' | b'E')))
+            {
+                end += 1;
+            }
+            if targets.contains(&nth) {
+                out.push_str(replacement);
+            } else {
+                out.push_str(std::str::from_utf8(&bytes[at..end]).expect("src is valid UTF-8"));
+            }
+            nth += 1;
+            at = end;
+        } else {
+            out.push(char::from(byte));
+            at += 1;
+        }
+    }
+    out
+}
+
+/// [`with_numbers_at`] with a single target index -- "exactly one literal
+/// degenerate, the rest at the corpus's own safe default".
+#[must_use]
+pub fn with_one_number(src: &str, idx: usize, replacement: &str) -> String {
+    with_numbers_at(src, &[idx], replacement)
+}
+
 /// bucket 名 → snippet (Intent 系 bucket は SDF ではないので None)
 pub fn snippet(rule: &str, name: &str) -> Option<String> {
     let s = match rule {

@@ -288,6 +288,9 @@ step "ci.yml / test: Test (roblox oracle, named)"
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
 
+step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-same / pairwise, ~35,000 cases, ~90s)"
+( export CARGO_TERM_COLOR="always"; cargo test -p alice-lol --test degenerate_grid -- --ignored --nocapture )
+
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )
 
