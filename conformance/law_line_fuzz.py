@@ -47,6 +47,12 @@ SPACES = {
 }
 
 
+LINE_ENDS = {
+    "vt": "\v", "ff": "\f", "fs": "\x1c", "gs": "\x1d", "rs": "\x1e", "nel": "\u0085",
+    "ls": "\u2028", "ps": "\u2029", "cr": "\r", "lf cr": "\n\r", "cr cr lf": "\r\r\n",
+}
+
+
 def perturbations() -> list[tuple[str, list[str], str]]:
     """(label, lines, line ending) for every single perturbation"""
     out = []
@@ -67,8 +73,18 @@ def perturbations() -> list[tuple[str, list[str], str]]:
         out.append((f"line {i}: long name", _with(i, BASE[i].replace(" n ", " " + "n" * 10_000 + " ", 1)), "\n"))
         out.append((f"line {i}: comment only", _with(i, "# " + BASE[i]), "\n"))
         out.append((f"line {i}: carriage return inside", _with(i, BASE[i].replace(" ", "\r", 1)), "\n"))
-    for name, ending in [("crlf", "\r\n"), ("cr", "\r"), ("lf", "\n"), ("mixed", None)]:
+    for name, ending in [("crlf", "\r\n"), ("cr", "\r"), ("lf", "\n"), ("mixed", None), ("lf cr", "\n\r")]:
         out.append((f"file: line ending {name}", list(BASE), ending))
+    # every separator used as the line end after one line (each reader must split the same)
+    for name, sep in LINE_ENDS.items():
+        for i in [1] + DECLS:
+            lines = list(BASE)
+            lines[i] = lines[i] + sep + lines[i + 1]
+            del lines[i + 1]
+            out.append((f"line {i}: {name} as a line end", lines, "\n"))
+    out.append(("file: ends with lf cr", list(BASE), "END:\n\r"))
+    out.append(("file: ends with cr", list(BASE), "END:\r"))
+    out.append(("file: ends with cr cr lf", list(BASE), "END:\r\r\n"))
     out.append(("file: bom first", ["﻿" + BASE[0]] + BASE[1:], "\n"))
     out.append(("file: bom before x-input", BASE[:2] + ["﻿" + BASE[2]] + BASE[3:], "\n"))
     out.append(("file: blank lines with spaces", BASE[:2] + ["   ", "\t"] + BASE[2:], "\n"))
@@ -82,6 +98,9 @@ def _with(i: int, line: str) -> list[str]:
 
 
 def render(lines: list[str], ending: str | None) -> bytes:
+    if ending is not None and ending.startswith("END:"):
+        # LF between the lines, and the given text as the very end of the file
+        return ("\n".join(lines) + ending[len("END:"):]).encode("utf-8")
     if ending is None:
         endings = ["\n", "\r\n", "\n", "\r\n"]
         text = "".join(l + endings[k % len(endings)] for k, l in enumerate(lines))
@@ -131,6 +150,7 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=20261010)
     ap.add_argument("--timeout", type=float, default=60)
     ap.add_argument("--show", type=int, default=20)
+    ap.add_argument("--min-cases", type=int, default=400, help="fail when fewer law files were compared")
     ap.add_argument("rest", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     rest = a.rest[1:] if a.rest[:1] == ["--"] else a.rest
@@ -153,9 +173,10 @@ def main(argv=None) -> int:
         print("DIFF " + b)
     if len(bad) > a.show:
         print(f"... {len(bad) - a.show} more")
-    print(f"compared {len(cases)} law files ({len(singles)} single, {len(cases) - 1 - len(singles)} pairs), "
-          f"disagreements {len(bad)}; outcomes {dict(sorted(classes.items()))}")
-    if not cases:
+    print(f"compared {len(cases)} law files ({len(singles)} single, {len(cases) - 1 - len(singles)} pairs, "
+          f"seed {a.seed}), disagreements {len(bad)}; outcomes {dict(sorted(classes.items()))}")
+    if len(cases) < a.min_cases:
+        print(f"error: compared {len(cases)} law files, fewer than {a.min_cases}", file=sys.stderr)
         return 2
     return 1 if bad else 0
 

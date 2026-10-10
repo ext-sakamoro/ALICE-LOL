@@ -921,12 +921,18 @@ impl fmt::Display for LawFileError {
 
 impl std::error::Error for LawFileError {}
 
-/// The `x-` prefix is reserved: a line whose text (trimmed, in any case) starts with `x-`
+/// The `x-` prefix is reserved: a line whose text (trimmed) starts with `x-` in any case or
+/// in a compatibility form (NFKC: full-width `ｘ`, `－`, ...)
 /// must be a known declaration, written from the first column, in lowercase, with its
 /// keyword followed by exactly one ASCII space; anything else is refused, never skipped
 /// (other lines pass) `raw` is the line without its comment, `line` the same trimmed
 fn check_declaration(line_no: usize, raw: &str, line: &str) -> Result<(), LawFileError> {
-    if !line.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-")) {
+    let mut head = line.chars();
+    let reserved = matches!(
+        (head.next(), head.next()),
+        (Some(a), Some(b)) if X_LIKE.contains(&a) && DASH_LIKE.contains(&b)
+    );
+    if !reserved {
         return Ok(());
     }
     if !raw.starts_with("x-") {
@@ -956,16 +962,109 @@ fn check_declaration(line_no: usize, raw: &str, line: &str) -> Result<(), LawFil
     Ok(())
 }
 
-/// The text of a law file: no byte-order mark anywhere, and a line ends with LF or CR LF (a
-/// CR that is not followed by LF is not a line end, and is refused rather than read)
+/// Format characters (general category Cf, Unicode 16.0) as inclusive ranges: invisible,
+/// so a law file must not contain them (they would let readers see different text)
+const FORMAT_CHARS: &[(u32, u32)] = &[
+    (0x00AD, 0x00AD),
+    (0x0600, 0x0605),
+    (0x061C, 0x061C),
+    (0x06DD, 0x06DD),
+    (0x070F, 0x070F),
+    (0x0890, 0x0891),
+    (0x08E2, 0x08E2),
+    (0x180E, 0x180E),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x2064),
+    (0x2066, 0x206F),
+    (0xFEFF, 0xFEFF),
+    (0xFFF9, 0xFFFB),
+    (0x110BD, 0x110BD),
+    (0x110CD, 0x110CD),
+    (0x13430, 0x1343F),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0001, 0xE0001),
+    (0xE0020, 0xE007F),
+];
+
+/// Characters whose NFKC form, case-folded, is `x` (Unicode 16.0)
+const X_LIKE: &[char] = &[
+    '\u{58}',
+    '\u{78}',
+    '\u{2E3}',
+    '\u{2093}',
+    '\u{2169}',
+    '\u{2179}',
+    '\u{24CD}',
+    '\u{24E7}',
+    '\u{FF38}',
+    '\u{FF58}',
+    '\u{1CCED}',
+    '\u{1D417}',
+    '\u{1D431}',
+    '\u{1D44B}',
+    '\u{1D465}',
+    '\u{1D47F}',
+    '\u{1D499}',
+    '\u{1D4B3}',
+    '\u{1D4CD}',
+    '\u{1D4E7}',
+    '\u{1D501}',
+    '\u{1D51B}',
+    '\u{1D535}',
+    '\u{1D54F}',
+    '\u{1D569}',
+    '\u{1D583}',
+    '\u{1D59D}',
+    '\u{1D5B7}',
+    '\u{1D5D1}',
+    '\u{1D5EB}',
+    '\u{1D605}',
+    '\u{1D61F}',
+    '\u{1D639}',
+    '\u{1D653}',
+    '\u{1D66D}',
+    '\u{1D687}',
+    '\u{1D6A1}',
+    '\u{1F147}',
+];
+
+/// Characters whose NFKC form is `-` (Unicode 16.0)
+const DASH_LIKE: &[char] = &['-', '\u{FE63}', '\u{FF0D}'];
+
+/// Whether a character may appear in a law file: TAB and every non-control character,
+/// except the format characters and the line / paragraph separators (LF and the CR of a
+/// CR LF are taken out before this check)
+fn allowed_char(c: char) -> bool {
+    let cp = u32::from(c);
+    c == '\t'
+        || !(c.is_control()
+            || c == '\u{2028}'
+            || c == '\u{2029}'
+            || FORMAT_CHARS.iter().any(|&(lo, hi)| (lo..=hi).contains(&cp)))
+}
+
+/// The text of a law file: a line ends with LF, or CR LF (the CR directly before the LF);
+/// no other control character (TAB is allowed), no format character (a byte-order mark,
+/// a zero-width space, ...) and no line / paragraph separator anywhere
 fn check_text(text: &str) -> Result<(), LawFileError> {
-    for (n, raw) in text.split('\n').enumerate() {
-        let body = raw.strip_suffix('\r').unwrap_or(raw);
-        if body.contains('\u{feff}') || body.contains('\r') {
+    let segments: Vec<&str> = text.split('\n').collect();
+    let last = segments.len() - 1;
+    for (n, seg) in segments.iter().enumerate() {
+        // a CR is a line end only directly before an LF (not at the very end of the text)
+        let body = if n < last {
+            seg.strip_suffix('\r').unwrap_or(seg)
+        } else {
+            seg
+        };
+        if let Some(c) = body.chars().find(|&c| !allowed_char(c)) {
             return Err(LawFileError::Declaration {
                 line: n + 1,
-                reason: "a law file has no byte-order mark, and a line ends with LF or CR LF"
-                    .to_owned(),
+                reason: format!(
+                    "U+{:04X} is not allowed in a law file (only TAB, LF and the CR of a CR LF among control characters, no format or separator character)",
+                    u32::from(c)
+                ),
             });
         }
     }
@@ -988,7 +1087,12 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     let mut at_least = Vec::new();
     let mut at_least_lines: Vec<(usize, String)> = Vec::new();
     check_text(text)?;
-    for (n, raw) in text.lines().enumerate() {
+    // lines split only on LF (after check_text, a CR is only the one of a CR LF)
+    for (n, raw) in text
+        .split('\n')
+        .map(|l| l.strip_suffix('\r').unwrap_or(l))
+        .enumerate()
+    {
         let line = raw.split('#').next().unwrap_or("").trim();
         if let Some(b) = block.as_mut() {
             if line == "end audit" {
@@ -1477,15 +1581,31 @@ mod tests {
     }
 
     #[test]
-    fn a_byte_order_mark_or_a_lone_carriage_return_does_not_read() {
+    fn only_tab_lf_and_cr_lf_among_controls_and_no_format_characters() {
         let ok = "x-input b list of record(f: list of text)\nx-metric n = count(b)\nbegin audit\naudit a\nevidence n\nend audit\n";
         assert!(audit_law_from_file(ok).is_ok());
         assert!(audit_law_from_file(&ok.replace('\n', "\r\n")).is_ok());
+        // TAB is allowed (in a comment, or around the clauses of the audit block)
+        assert!(audit_law_from_file(&format!("{ok}#\tnote\n")).is_ok());
         for bad in [
             format!("\u{feff}{ok}"),
             ok.replace("x-metric", "\u{feff}x-metric"),
             ok.replace('\n', "\r"),
             ok.replacen('\n', "\r", 1),
+            format!("{ok}\r"),
+            // other controls and separators, also as line ends and inside comments
+            ok.replacen('\n', "\u{b}", 1),
+            ok.replacen('\n', "\u{c}", 1),
+            ok.replacen('\n', "\u{1c}", 1),
+            ok.replacen('\n', "\u{85}", 1),
+            ok.replacen('\n', "\u{2028}", 1),
+            ok.replacen('\n', "\u{2029}", 1),
+            format!("{ok}# a\u{200b}b\n"),
+            format!("{ok}# nul \u{0}\n"),
+            // the reserved prefix in a compatibility form
+            ok.replace("x-metric", "\u{ff58}-metric"),
+            ok.replace("x-metric", "x\u{ff0d}metric"),
+            ok.replace("x-metric", "\u{2179}-metric"),
         ] {
             assert!(
                 matches!(

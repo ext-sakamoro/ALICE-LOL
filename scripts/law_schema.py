@@ -148,7 +148,7 @@ def _declaration(line: str, kw: str, raw: str | None = None):
 def law_metrics(law_text: str):
     """[(name, expr)] of the x-metric lines and [(name, n)] of the x-at-least lines"""
     metrics, at_least = [], []
-    for line in law_text.splitlines():
+    for line in law_text.split("\n"):
         raw = line.split("#", 1)[0]
         w = raw.strip()
         metric = _declaration(w, "x-metric", raw)
@@ -171,7 +171,7 @@ def law_metrics(law_text: str):
 
 def x_input_types(law_text: str) -> dict:
     out = {}
-    for line in law_text.splitlines():
+    for line in law_text.split("\n"):
         raw = line.split("#", 1)[0]
         w = raw.strip()
         decl = _declaration(w, "x-input", raw)
@@ -185,7 +185,7 @@ def x_input_types(law_text: str) -> dict:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 1:
-        print(__doc__.strip().splitlines()[-1], file=sys.stderr)
+        print(__doc__.strip().split("\n")[-1], file=sys.stderr)
         return 2
     n = 0
     for f in sorted(Path(argv[0]).glob("*.law")):

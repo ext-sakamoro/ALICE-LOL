@@ -294,20 +294,49 @@ def fits(v, t):
 METRIC_RE = re.compile(r"^(count)\(([\w-]+)\)$|^distinct\((set\()?([\w-]+)\[\]\.([\w-]+)\)?\)$")
 
 
+# format characters (category Cf, Unicode 16.0), inclusive ranges: written out here so the
+# answer does not depend on the unicodedata version of the Python that runs this file
+FORMAT_CHARS = [(0x00AD, 0x00AD), (0x0600, 0x0605), (0x061C, 0x061C), (0x06DD, 0x06DD),
+                (0x070F, 0x070F), (0x0890, 0x0891), (0x08E2, 0x08E2), (0x180E, 0x180E),
+                (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x2064), (0x2066, 0x206F),
+                (0xFEFF, 0xFEFF), (0xFFF9, 0xFFFB), (0x110BD, 0x110BD), (0x110CD, 0x110CD),
+                (0x13430, 0x1343F), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0001, 0xE0001),
+                (0xE0020, 0xE007F)]
+# characters whose NFKC form, case-folded, is "x" / is "-" (Unicode 16.0)
+X_LIKE = {0x58, 0x78, 0x2E3, 0x2093, 0x2169, 0x2179, 0x24CD, 0x24E7, 0xFF38, 0xFF58, 0x1CCED,
+          0x1D417, 0x1D431, 0x1D44B, 0x1D465, 0x1D47F, 0x1D499, 0x1D4B3, 0x1D4CD, 0x1D4E7,
+          0x1D501, 0x1D51B, 0x1D535, 0x1D54F, 0x1D569, 0x1D583, 0x1D59D, 0x1D5B7, 0x1D5D1,
+          0x1D5EB, 0x1D605, 0x1D61F, 0x1D639, 0x1D653, 0x1D66D, 0x1D687, 0x1D6A1, 0x1F147}
+DASH_LIKE = {0x2D, 0xFE63, 0xFF0D}
+
+
+def allowed_char(c):
+    """TAB and every non-control character, except format and line / paragraph separators"""
+    cp = ord(c)
+    if c == "\t":
+        return True
+    if cp < 0x20 or 0x7F <= cp <= 0x9F or cp in (0x2028, 0x2029):
+        return False
+    return not any(lo <= cp <= hi for lo, hi in FORMAT_CHARS)
+
+
 def read_audit_law(name):
     """the audit block, x-input types, x-metric expressions and x-at-least lines of a law file"""
     path = os.path.join(LAW_DIR, f"{name}.law")
     if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.exists(path):
         return None
-    # read without newline translation: a line ends with LF or CR LF; a CR that is not
-    # followed by LF, and a byte-order mark anywhere, make the file unreadable
+    # read without newline translation, split only on LF; a CR is a line end only directly
+    # before an LF; every other control character except TAB, every format character and
+    # the line / paragraph separators make the file unreadable
     with open(path, encoding="utf-8", newline="") as fh:
         text = fh.read()
-    bodies = [l[:-1] if l.endswith("\r") else l for l in text.split("\n")]
-    if text.endswith("\n"):
-        bodies = bodies[:-1]
-    if any("\r" in b or "\ufeff" in b for b in bodies):
-        raise ValueError("a law file has no byte-order mark, and a line ends with LF or CR LF")
+    segments = text.split("\n")
+    bodies = [seg[:-1] if k < len(segments) - 1 and seg.endswith("\r") else seg
+              for k, seg in enumerate(segments)]
+    for b in bodies:
+        for c in b:
+            if not allowed_char(c):
+                raise ValueError(f"U+{ord(c):04X} is not allowed in a law file")
     raws = [b.split("#", 1)[0] for b in bodies]
     lines = [r.strip() for r in raws]
     if "kind audit" not in lines:
@@ -318,7 +347,7 @@ def read_audit_law(name):
         # the `x-` prefix is reserved: a line starting with it (trimmed, any case) is a known
         # declaration written in lowercase from the first column, its keyword followed by
         # exactly one ASCII space; anything else is refused, never skipped
-        if l[:2].lower() == "x-" and not raw.startswith("x-"):
+        if len(l) >= 2 and ord(l[0]) in X_LIKE and ord(l[1]) in DASH_LIKE and not raw.startswith("x-"):
             raise ValueError("a line starting with `x-` is a declaration: lowercase, from the first column")
         if l.startswith("x-"):
             kw = re.match(r"\S*", l).group(0)

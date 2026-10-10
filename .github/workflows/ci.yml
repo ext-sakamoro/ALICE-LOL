@@ -439,6 +439,10 @@ jobs:
         run: python scripts/test_law_corners.py
       - name: law_corners (laws/spike の全 law file から corner を列挙、0 件は fail)
         run: python scripts/law_corners.py laws/spike
+      - name: line_split_guard oracle (検査器自身の試験)
+        run: python scripts/test_line_split_guard.py
+      - name: line_split_guard (law file の読み手は LF だけで行を分ける)
+        run: python scripts/line_split_guard.py
       - name: workflow_concurrency oracle (検査器自身の試験)
         run: python scripts/test_workflow_concurrency.py
       - name: workflow_concurrency (branch の push で走る workflow に concurrency、0 件は fail)
