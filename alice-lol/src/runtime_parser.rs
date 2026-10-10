@@ -3585,15 +3585,59 @@ fn law_error(message: &str, position: usize) -> ParseError {
     }
 }
 
+/// A number of a law file: ASCII decimal, finite as a double
+///
+/// The form is `[+-]? (digits [. digits?] | . digits) ([eE] [+-]? digits)?`: `2`, `-1`, `+2`,
+/// `2.`, `.5`, `2e0` are numbers; `inf`, `nan`, `1_0`, `0x2`, a full-width or non-ASCII
+/// digit and `1e400` are not
+///
+/// The form is checked here, not left to a language's number parser (which accept
+/// different spellings: `inf`, `nan`, `infinity`, underscores, other digits)
+#[must_use]
+pub fn law_number(token: &str) -> Option<f64> {
+    let b = token.as_bytes();
+    let mut i = usize::from(matches!(b.first(), Some(b'+' | b'-')));
+    let digits = |i: &mut usize| {
+        let start = *i;
+        while b.get(*i).is_some_and(u8::is_ascii_digit) {
+            *i += 1;
+        }
+        *i - start
+    };
+    let int = digits(&mut i);
+    let frac = if b.get(i) == Some(&b'.') {
+        i += 1;
+        digits(&mut i)
+    } else {
+        0
+    };
+    if int == 0 && frac == 0 {
+        return None;
+    }
+    if matches!(b.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        if matches!(b.get(i), Some(b'+' | b'-')) {
+            i += 1;
+        }
+        if digits(&mut i) == 0 {
+            return None;
+        }
+    }
+    if i != b.len() {
+        return None;
+    }
+    token.parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
 fn law_expect(rest: &[&str]) -> Option<Clause> {
     let metric = rest.first()?;
     if *rest.get(1)? != "==" {
         return None;
     }
-    let value: f64 = rest.get(2)?.parse().ok()?;
+    let value = law_number(rest.get(2)?)?;
     let tolerance = match rest.len() {
         3 => 0.0,
-        5 if rest[3] == "within" => rest[4].parse().ok()?,
+        5 if rest[3] == "within" => law_number(rest[4])?,
         _ => return None,
     };
     Some(Clause::Expect {
@@ -3610,6 +3654,43 @@ fn law_expect(rest: &[&str]) -> Option<Clause> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_law_number_is_ascii_decimal_and_finite() {
+        for (t, v) in [
+            ("2", 2.0),
+            ("2.0", 2.0),
+            ("+2", 2.0),
+            ("2e0", 2.0),
+            ("2.", 2.0),
+            (".5", 0.5),
+            ("-1", -1.0),
+            ("1E-3", 0.001),
+            ("002", 2.0),
+        ] {
+            assert_eq!(law_number(t), Some(v), "{t}");
+        }
+        for t in [
+            "nan", "NaN", "inf", "-inf", "infinity", "1_0", "\u{ff12}", "\u{662}", "1e400", "0x2",
+            ".", "e5", "1e", "+", "", " 2", "--1", "1.2.3",
+        ] {
+            assert_eq!(law_number(t), None, "{t:?}");
+        }
+    }
+
+    #[test]
+    fn an_expect_clause_takes_only_law_numbers() {
+        assert!(parse_law("audit a\nexpect m == 2 within 0.5\n").is_ok());
+        for bad in [
+            "expect m == nan",
+            "expect m == inf",
+            "expect m == 2 within inf",
+            "expect m == 1_0",
+            "expect m == 2 junk",
+        ] {
+            assert!(parse_law(&format!("audit a\n{bad}\n")).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn test_sphere() {

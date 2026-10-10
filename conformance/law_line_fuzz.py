@@ -35,8 +35,13 @@ BASE = [
     "audit fuzz-probe",
     "evidence n",
     "evidence s",
+    "expect n == 2 within 0",
     "end audit",
 ]
+AT_LEAST, EXPECT = 5, 10  # indices of the x-at-least line and the expect clause
+NUMBERS = ["2", "2.0", "+2", "2e0", "2.", ".5", "-1", "1E0", "002", "nan", "NaN", "inf", "-inf",
+           "infinity", "1_0", "\uff12", "\u0662", "1e400", "-1e400", "0x2", ".", "e5", "1e", "+",
+           "--2", "2..0", "2e+", "1e-400"]
 DECLS = [2, 3, 4, 5]  # indices of the declaration lines
 REQUEST = {"law": LAW, "inputs": {"b": [{"f": ["x"], "id": "a"}, {"f": ["y"], "id": "a"}]}}
 
@@ -73,6 +78,31 @@ def perturbations() -> list[tuple[str, list[str], str]]:
         out.append((f"line {i}: long name", _with(i, BASE[i].replace(" n ", " " + "n" * 10_000 + " ", 1)), "\n"))
         out.append((f"line {i}: comment only", _with(i, "# " + BASE[i]), "\n"))
         out.append((f"line {i}: carriage return inside", _with(i, BASE[i].replace(" ", "\r", 1)), "\n"))
+    # the number form and the token count of numeric declarations and clauses
+    for num in NUMBERS:
+        out.append((f"x-at-least floor {num!r}", _with(AT_LEAST, f"x-at-least s {num}"), "\n"))
+        out.append((f"expect value {num!r}", _with(EXPECT, f"expect n == {num} within 0"), "\n"))
+        out.append((f"expect tolerance {num!r}", _with(EXPECT, f"expect n == 2 within {num}"), "\n"))
+    for label, line, i in [
+        ("x-at-least extra token", "x-at-least s 2 junk", AT_LEAST),
+        ("x-at-least missing number", "x-at-least s", AT_LEAST),
+        ("x-at-least nbsp separated", "x-at-least s\u00a02", AT_LEAST),
+        ("x-at-least em space separated", "x-at-least s\u20032", AT_LEAST),
+        ("x-at-least ideographic space separated", "x-at-least s\u30002", AT_LEAST),
+        ("expect extra token", "expect n == 2 within 0 junk", EXPECT),
+        ("expect without within", "expect n == 2", EXPECT),
+        ("expect wrong operator", "expect n = 2", EXPECT),
+        ("expect within missing value", "expect n == 2 within", EXPECT),
+        ("evidence extra token", "evidence n extra", 8),
+        ("evidence missing metric", "evidence", 8),
+        ("unknown clause", "require n", 8),
+        ("audit name missing", "audit", 7),
+        ("audit two names", "audit a b", 7),
+        ("range without values", "range k", 8),
+    ]:
+        out.append((label, _with(i, line), "\n"))
+    out.append(("no end audit", BASE[:-1], "\n"))
+    out.append(("two audit blocks", BASE + ["begin audit", "audit again", "evidence n", "end audit"], "\n"))
     for name, ending in [("crlf", "\r\n"), ("cr", "\r"), ("lf", "\n"), ("mixed", None), ("lf cr", "\n\r")]:
         out.append((f"file: line ending {name}", list(BASE), ending))
     # every separator used as the line end after one line (each reader must split the same)

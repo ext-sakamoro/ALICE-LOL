@@ -310,6 +310,18 @@ X_LIKE = {0x58, 0x78, 0x2E3, 0x2093, 0x2169, 0x2179, 0x24CD, 0x24E7, 0xFF38, 0xF
 DASH_LIKE = {0x2D, 0xFE63, 0xFF0D}
 
 
+# the number form of a law file: ASCII decimal, finite (not float()'s spellings: inf, nan,
+# underscores, other digits)
+LAW_NUMBER = re.compile(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?")
+
+
+def law_number(token):
+    if not LAW_NUMBER.fullmatch(token):
+        return None
+    v = float(token)
+    return v if math.isfinite(v) else None
+
+
 def allowed_char(c):
     """TAB and every non-control character, except format and line / paragraph separators"""
     cp = ord(c)
@@ -342,7 +354,7 @@ def read_audit_law(name):
     if "kind audit" not in lines:
         return None
     law = {"clauses": [], "types": {}, "metrics": [], "at_least": []}
-    inside = False
+    inside = closed = False
     for raw, l in zip(raws, lines):
         # the `x-` prefix is reserved: a line starting with it (trimmed, any case) is a known
         # declaration written in lowercase from the first column, its keyword followed by
@@ -357,17 +369,31 @@ def read_audit_law(name):
             if not after.startswith(" ") or after[1:2].isspace() or not after.strip():
                 raise ValueError(f"`{kw}` must be followed by exactly one space")
         w = l.split()
-        if l == "begin audit":
+        if inside:
+            # the audit block: one clause per line, each with its exact tokens
+            if l == "end audit":
+                inside = False
+                closed = True
+            elif not w:
+                continue
+            elif w[0] == "audit" and len(w) == 2:
+                law["name"] = w[1]
+            elif w[0] == "evidence" and len(w) == 2:
+                law["clauses"].append(("evidence", w[1]))
+            elif w[0] == "expect" and len(w) in (4, 6) and w[2] == "==" and (len(w) == 4 or w[4] == "within"):
+                value = law_number(w[3])
+                tol = law_number(w[5]) if len(w) == 6 else 0.0
+                if value is None or tol is None:
+                    raise ValueError(f"expect: not a number of a law file: {l!r}")
+                law["clauses"].append(("expect", w[1], value, tol))
+            elif w[0] == "range" and len(w) >= 3:
+                law["clauses"].append(("range", w[1], w[2:]))
+            else:
+                raise ValueError(f"audit block: not a clause: {l!r}")
+        elif l == "begin audit":
+            if closed:
+                raise ValueError("a second audit block")
             inside = True
-        elif l == "end audit":
-            inside = False
-        elif inside and w and w[0] == "evidence":
-            law["clauses"].append(("evidence", w[1]))
-        elif inside and w and w[0] == "expect":
-            tol = float(w[5]) if len(w) > 5 and w[4] == "within" else 0.0
-            law["clauses"].append(("expect", w[1], float(w[3]), tol))
-        elif inside and w and w[0] == "range":
-            law["clauses"].append(("range", w[1], w[2:]))
         elif w and w[0] == "x-input":
             if w[1] in law["types"]:
                 raise ValueError(f"x-input `{w[1]}` is declared twice")
@@ -384,7 +410,16 @@ def read_audit_law(name):
         elif w and w[0] == "x-at-least":
             if any(n == w[1] for n, _ in law["at_least"]):
                 raise ValueError(f"x-at-least for `{w[1]}` is declared twice")
-            law["at_least"].append((w[1], float(w[2])))
+            floor = law_number(w[2]) if len(w) == 3 else None
+            if floor is None:
+                raise ValueError(f"`x-at-least <metric> <number>` expected: {l!r}")
+            law["at_least"].append((w[1], floor))
+    if inside or not closed:
+        raise ValueError("no closed `begin audit` ... `end audit` block")
+    if "name" not in law:
+        raise ValueError("no `audit <name>` line")
+    if not law["clauses"]:
+        raise ValueError("the audit block states nothing")
     # a floor on a metric no x-metric line defines is a typo, not a declaration
     defined = {n for n, _ in law["metrics"]}
     for name, _ in law["at_least"]:

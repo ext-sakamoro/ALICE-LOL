@@ -1071,6 +1071,32 @@ fn check_text(text: &str) -> Result<(), LawFileError> {
     Ok(())
 }
 
+/// `x-metric <name> = <derivation>` (the text after the keyword)
+fn metric_line(line: usize, rest: &str) -> Result<(String, MetricExpr), LawFileError> {
+    let (name, expr) = rest
+        .split_once('=')
+        .ok_or_else(|| LawFileError::InputType {
+            line,
+            error: TypeError("`x-metric <name> = <expression>` expected".to_owned()),
+        })?;
+    let expr = MetricExpr::parse(expr).map_err(|error| LawFileError::InputType { line, error })?;
+    Ok((name.trim().to_owned(), expr))
+}
+
+/// `x-at-least <metric> <number>` (the text after the keyword): exactly a metric and a
+/// number of a law file ([`law_number`](crate::runtime_parser::law_number))
+fn floor_line(line: usize, rest: &str) -> Result<(String, f64), LawFileError> {
+    let w: Vec<&str> = rest.split_whitespace().collect();
+    match w.as_slice() {
+        [name, v] => crate::runtime_parser::law_number(v).map(|v| ((*name).to_owned(), v)),
+        _ => None,
+    }
+    .ok_or_else(|| LawFileError::InputType {
+        line,
+        error: TypeError("`x-at-least <metric> <number>` expected".to_owned()),
+    })
+}
+
 /// law file (`kind audit`) を監査の Law として読む: audit block の項と、`x-input` の行の型
 ///
 /// 型は [`AuditLaw::law_id`](crate::law_id) に入る `#` 以降は注記として読まない
@@ -1105,17 +1131,16 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
         }
         check_declaration(n + 1, raw.split('#').next().unwrap_or(""), line)?;
         if line == "begin audit" {
+            // one audit block per law file: a second one is not read in place of the first
+            if done.is_some() {
+                return Err(LawFileError::Declaration {
+                    line: n + 1,
+                    reason: "a second `begin audit` block".to_owned(),
+                });
+            }
             block = Some(String::new());
         } else if let Some(rest) = line.strip_prefix("x-metric ") {
-            let (name, expr) = rest
-                .split_once('=')
-                .ok_or_else(|| LawFileError::InputType {
-                    line: n + 1,
-                    error: TypeError("`x-metric <name> = <expression>` expected".to_owned()),
-                })?;
-            let expr = MetricExpr::parse(expr)
-                .map_err(|error| LawFileError::InputType { line: n + 1, error })?;
-            let name = name.trim().to_owned();
+            let (name, expr) = metric_line(n + 1, rest)?;
             if metrics
                 .iter()
                 .any(|(m, _): &(String, MetricExpr)| *m == name)
@@ -1124,23 +1149,12 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
             }
             metrics.push((name, expr));
         } else if let Some(rest) = line.strip_prefix("x-at-least ") {
-            let w: Vec<&str> = rest.split_whitespace().collect();
-            let n_val = match w.as_slice() {
-                [_, v] => v.parse::<f64>().ok().filter(|x| x.is_finite()),
-                _ => None,
-            };
-            let v = n_val.ok_or_else(|| LawFileError::InputType {
-                line: n + 1,
-                error: TypeError("`x-at-least <metric> <number>` expected".to_owned()),
-            })?;
-            if at_least.iter().any(|(m, _): &(String, f64)| m == w[0]) {
-                return Err(LawFileError::Duplicate {
-                    line: n + 1,
-                    name: w[0].to_owned(),
-                });
+            let (name, v) = floor_line(n + 1, rest)?;
+            if at_least.iter().any(|(m, _): &(String, f64)| *m == name) {
+                return Err(LawFileError::Duplicate { line: n + 1, name });
             }
-            at_least.push((w[0].to_owned(), v));
-            at_least_lines.push((n + 1, w[0].to_owned()));
+            at_least_lines.push((n + 1, name.clone()));
+            at_least.push((name, v));
         } else if let Some(rest) = line.strip_prefix("x-input ") {
             let rest = rest.trim();
             let (name, ty) = rest.split_once(' ').unwrap_or((rest, ""));

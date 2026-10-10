@@ -1357,5 +1357,148 @@
    "verdict": "supports",
    "subject": null
   }
+ },
+ {
+  "note": "law file: x-at-least with an extra token",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2 junk\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-at-least floor nan",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s nan\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: x-at-least floor 2. (read)",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2.\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "law file: expect value inf",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nexpect n == inf\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: expect with an extra token",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nexpect n == 2 junk\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: unknown clause in the audit block",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nrequire n\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
+ },
+ {
+  "note": "law file: two audit blocks",
+  "law": "decl_probe",
+  "law_text": "law decl_probe\nkind audit\nx-input b list of record(f: list of text)\nx-metric n = count(b)\nx-metric s = distinct(set(b[].f))\nx-at-least s 2\nbegin audit\naudit decl-probe\nevidence n\nevidence s\nend audit\nbegin audit\naudit again\nevidence n\nend audit\n",
+  "inputs": {
+   "b": [
+    {
+     "f": [
+      "x"
+     ]
+    },
+    {
+     "f": [
+      "y"
+     ]
+    }
+   ]
+  },
+  "expect": "exit 2"
  }
 ]
