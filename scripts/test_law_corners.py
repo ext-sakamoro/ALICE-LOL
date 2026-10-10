@@ -110,6 +110,66 @@ class Expressions(unittest.TestCase):
             self.ev("zz + 1")
 
 
+class StrictDouble(unittest.TestCase):
+    """TASK.md: every intermediate value of a quantitative law's expression is finite"""
+
+    def sd(self, s, **env):
+        return lc.strict_double(lc.parse_expr(s), {k: float(v) for k, v in env.items()})
+
+    def test_each_kind_of_non_finite_intermediate_is_refused(self):
+        for expr, env in [
+            ("exp(x)", {"x": 1000}),          # math.exp raises OverflowError
+            ("x^y", {"x": 10, "y": 400}),      # ** raises OverflowError
+            ("x*x", {"x": 1e200}),             # * gives inf without raising
+            ("x+x", {"x": 1.7e308}),           # + gives inf without raising
+            ("ln(x)", {"x": -1}),              # domain error (ValueError)
+            ("sqrt(x)", {"x": -1}),            # domain error (ValueError)
+            ("1/x", {"x": 0}),                 # ZeroDivisionError
+            ("x^y", {"x": 0, "y": -1}),        # 0 to a negative power
+            ("1/exp(x)", {"x": 1000}),         # finite under IEEE overflow (0): still refused
+            ("exp(x) - exp(x)", {"x": 1000}),  # inf - inf
+        ]:
+            with self.subTest(expr=expr), self.assertRaises(lc.NonFinite):
+                self.sd(expr, **env)
+
+    def test_a_name_without_a_value_is_not_a_non_finite_value(self):
+        # ExprError is a ValueError: it must stay an ExprError (finite_in_double skips the
+        # expression, as env_for does), not become NonFinite
+        with self.assertRaises(lc.ExprError):
+            self.sd("vx^2 + 1")
+
+    def test_finite_intermediates_evaluate_as_double(self):
+        self.assertEqual(self.sd("1/exp(x)", x=700), 1 / math.exp(700))
+        self.assertEqual(self.sd("x*x", x=1e150), 1e150 * 1e150)
+        self.assertEqual(self.sd("exp(x) - exp(x)", x=700), 0.0)
+
+    def test_the_probe_law_rejects_only_where_an_intermediate_overflows(self):
+        law = lc.load(ROOT / "laws" / "spike" / "finite_evaluation_probe.law")
+        for x, ok in [(0, True), (0.5, True), (0.7, True), (1.0, False), (math.pi / 2, False),
+                      (2.0, False), (2.6, True), (math.pi, True)]:
+            with self.subTest(x=x):
+                self.assertEqual(lc.finite_in_double(law, {"x": x}), ok)
+
+    def test_an_output_that_overflows_is_refused(self):
+        # the overflow is in the output expression only (no let)
+        law = lc.parse_law("law o\nkind research\ninput x 1 range 0 1000\noutput y 1 = exp(x)\n"
+                           "tolerance y 1 = 0\n")
+        self.assertTrue(lc.finite_in_double(law, {"x": 700}))
+        self.assertFalse(lc.finite_in_double(law, {"x": 1000}))
+
+    def test_the_other_laws_are_finite_at_their_corners(self):
+        # the rule adds no rejection to a law whose range keeps every value finite
+        for f in sorted((ROOT / "laws" / "spike").glob("*.law")):
+            law = lc.load(f)
+            if law["kind"] != "research" or f.stem == "finite_evaluation_probe":
+                continue
+            for c in lc.corners(law):
+                if c["type"] == "bound" and "witness" in c:
+                    inputs = {**c["witness"], c["input"]: c["value"]}
+                    with self.subTest(law=f.stem, corner=c["id"]):
+                        self.assertTrue(lc.finite_in_double(law, inputs))
+
+
 class Corners(unittest.TestCase):
     def test_demo_corner_ids(self):
         ids = [c["id"] for c in lc.corners(lc.parse_law(LAW))]

@@ -255,6 +255,20 @@ DESIGN = {
                   "zeta<lo": {"m": 1, "kp": 1, "kd": 0.08, "target": 1},
                   "zeta>hi": {"m": 1, "kp": 1, "kd": 1.92, "target": 1}},
     },
+    "finite_evaluation_probe": {
+        # 1000 sin(x) passes 709.78 (the largest exp argument that is finite in double) at
+        # x = 0.789 and x = 2.353; the cases stay away from both
+        "base": {"x": 0.5},
+        "cases": [
+            ({"x": 0.5}, "exp(479): finite"),
+            ({"x": 0.7}, "exp(644): finite, y near the smallest normal double"),
+            ({"x": 2.6}, "exp(516) after the peak: finite"),
+            ({"x": 1.0}, "exp(841) overflows: rejected"),
+            ({"x": 1.5707963267948966}, "exp(1000) overflows: rejected (1/exp(1000) would be 0)"),
+            ({"x": 2.0}, "exp(909) overflows: rejected"),
+        ],
+        "edges": {},
+    },
     "four_bar_rocker_angle": {
         "base": {"lc": 1.0, "lco": 2.0, "lr": 1.5, "lg": 2.3, "theta2": 1.0},
         "cases": [({"lc": 1.0, "lco": 2.0, "lr": 1.5, "lg": 2.3, "theta2": float(2 * mp.pi * i / 24)},
@@ -404,7 +418,9 @@ def vector(law, inputs, note):
         verdict, subject = audit_verdict(law, nums, ranges)
         v.update(kind="verdict", expected={"verdict": verdict, "subject": subject}, tolerance=None)
         return v
-    if not valid(law, inputs):
+    # in range, but an intermediate value is not finite in double: rejected as well
+    # (conformance/TASK.md: every intermediate value of an expression is finite)
+    if not valid(law, inputs) or not lc.finite_in_double(law, inputs):
         v.update(kind="reject", expected=None, tolerance=None)
         return v
     if law["name"].startswith("kepler_energy_bounded"):

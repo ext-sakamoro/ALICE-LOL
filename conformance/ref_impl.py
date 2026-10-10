@@ -487,6 +487,24 @@ def generic_audit(law):
     return run
 
 
+def finite_probe(i):
+    x = i["x"]
+    rng("x", x, 0, math.pi)
+    # math.exp raises OverflowError past ~709.78: the intermediate is not finite, and the
+    # request is rejected (main) although 1/exp(...) would be 0 under IEEE overflow
+    e = math.exp(1000 * math.sin(x))
+    return {"y": 1 / e}
+
+
+def finite_numbers(v):
+    """every number in an output (lists included) is finite"""
+    if isinstance(v, list):
+        return all(finite_numbers(x) for x in v)
+    if isinstance(v, dict):
+        return all(finite_numbers(x) for x in v.values())
+    return not isinstance(v, float) or math.isfinite(v)
+
+
 LAWS = {
     "terminal_velocity_quadratic_drag": terminal,
     "first_order_decay": decay,
@@ -495,6 +513,7 @@ LAWS = {
     "kepler_energy_bounded_dkd": kepler("dkd", 0.765),
     "four_bar_rocker_angle": four_bar,
     "isa1976_lower_atmosphere": isa,
+    "finite_evaluation_probe": finite_probe,
 }
 
 
@@ -573,8 +592,17 @@ def main():
             request_error(f"inputs is not a JSON object: {type(inputs).__name__}")
     try:
         out = {"outputs": law(inputs)}
+        # a value that is not finite is not a number (TASK.md): never written as output
+        if not finite_numbers(out["outputs"]):
+            out = {"rejected": "non-finite value"}
     except Reject as e:
         out = {"rejected": str(e)}
+    except (OverflowError, ValueError, ZeroDivisionError):
+        # an intermediate value of a quantitative law is not finite (overflow, a domain
+        # error, a division by 0); an audit never rejects, so there it stays an error
+        if name not in LAWS:
+            raise
+        out = {"rejected": "non-finite value"}
     except KeyError as e:
         request_error(f"missing input: {e}")
     json.dump(out, sys.stdout)

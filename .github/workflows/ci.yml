@@ -534,6 +534,8 @@ jobs:
         run: python scripts/test_law_schema.py
       - name: law_schema (laws/spike の全 x-input の型を読む、0 件は fail)
         run: python scripts/law_schema.py laws/spike
+      - name: reference implementation (a non-finite value of a quantitative law is a rejection)
+        run: python conformance/test_ref_finite.py
       - name: probes (決めた読み方を参照実装で確かめる、比較 0 件は fail)
         run: python conformance/check_probes.py -- python conformance/ref_impl.py
 

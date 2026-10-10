@@ -129,6 +129,7 @@ python3 scripts/law_ambiguity_lint.py laws/spike
 step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
 python3 scripts/test_law_schema.py
 python3 scripts/law_schema.py laws/spike
+python3 conformance/test_ref_finite.py
 python3 conformance/check_probes.py -- python3 conformance/ref_impl.py
 cargo build -q -p alice-lol --example audit_conformance
 python3 conformance/check_probes.py --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe -- target/debug/examples/audit_conformance

@@ -1560,5 +1560,21 @@
    ]
   },
   "expect": "exit 2"
+ },
+ {
+  "note": "an intermediate value overflows inside the range (exp(1000)); IEEE overflow would give y = 0, the contract rejects",
+  "law": "finite_evaluation_probe",
+  "inputs": {
+   "x": 1.5707963267948966
+  },
+  "expect": "rejected"
+ },
+ {
+  "note": "an intermediate value overflows inside the range (exp(841))",
+  "law": "finite_evaluation_probe",
+  "inputs": {
+   "x": 1.0
+  },
+  "expect": "rejected"
  }
 ]

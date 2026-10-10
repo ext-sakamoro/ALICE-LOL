@@ -6,6 +6,10 @@
 //! a relative tolerance. A difference of two infinities is NaN, so a plain `|a - b| <= tol`
 //! says two equal infinities disagree (a fuzz input `capped_torus(5.1e23, 1, 748)` evaluates
 //! to +∞ on both sides of a round trip, and that comparison failed).
+//!
+//! This is the evaluation of an SDF field (`eval`). A quantitative law (`research_law`) is
+//! stricter: a non-finite intermediate value is an error there (`conformance/TASK.md`). SDF
+//! evaluation has no reference evaluator of its own in `conformance/`, which covers law files.
 
 /// `a` and `b` agree: the same bits, both NaN, or both finite and `|a - b| <= rel_tol * max(|a|, 1)`
 ///

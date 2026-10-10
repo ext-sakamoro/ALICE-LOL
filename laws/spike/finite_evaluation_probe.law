@@ -1,0 +1,18 @@
+# Evaluation of a quantitative law is strict: every intermediate value must be finite
+law finite_evaluation_probe
+kind research
+claim y = exp(-1000 sin(x)), written as 1/exp(1000 sin(x)) so that the intermediate exp can overflow
+claim for 1000 sin(x) above about 709.78 the intermediate exp is not finite in double, and the request is rejected (an evaluation that let the intermediate overflow would give y = 0)
+claim the range ends (x = 0 and x = pi) keep 1000 sin(x) small, so the overflow is only inside the range
+source conformance/TASK.md (evaluation of quantitative laws: every intermediate value is finite)
+
+input x 1 range 0 3.141592653589793
+
+let e 1 = exp(1000*sin(x))
+output y 1 = 1/e
+tolerance y 1 = 1e-9*y
+
+oracle y x=0 -> 1 within 0
+
+verdict conforms when y is within the tolerance of the output expression, and a request whose evaluation has a non-finite intermediate value is rejected
+verdict an input outside its range is rejected

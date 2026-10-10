@@ -188,6 +188,55 @@ def evaluate(tree, env: dict, lib=math):
     raise ExprError(f"unknown node {kind}")
 
 
+class NonFinite(ArithmeticError):
+    """an intermediate value of an expression is not finite in double"""
+
+
+def strict_double(tree, env: dict) -> float:
+    """`evaluate` in double with the contract of quantitative laws (conformance/TASK.md):
+    every intermediate value must be finite. Python raises for some overflows (`exp`,
+    `**`) and returns an infinity for others (`*`, `+`); both are NonFinite here, as are a
+    domain error (`ln` of a negative number) and a division by zero"""
+    try:
+        if tree[0] in ("num", "var"):
+            v = float(evaluate(tree, env, math))
+        elif tree[0] == "neg":
+            v = -strict_double(tree[1], env)
+        elif tree[0] == "call":
+            args = [strict_double(a, env) for a in tree[2]]
+            v = float(evaluate(("call", tree[1], [("num", a) for a in args]), {}, math))
+        else:
+            a, b = strict_double(tree[1], env), strict_double(tree[2], env)
+            v = float(evaluate((tree[0], ("num", a), ("num", b)), {}, math))
+    except ExprError:
+        raise  # a name with no value here (a ValueError too): not a non-finite value
+    except (OverflowError, ValueError, ZeroDivisionError) as e:
+        raise NonFinite(str(e)) from None
+    if not math.isfinite(v):
+        raise NonFinite(f"{v}")
+    return v
+
+
+def finite_in_double(law: dict, inputs: dict) -> bool:
+    """Whether every `let`, `x-expr` and output of the law evaluates with finite
+    intermediate values in double (False: the request is rejected). A name with no value
+    here (a list element, a simulated state) leaves its expression out, as `env_for` does"""
+    lists = [n for n in law["lists"] if isinstance(inputs.get(n), list)]
+    envs = [inputs] if not lists else [{**inputs, lists[0]: x} for x in inputs[lists[0]]]
+    for request in envs:
+        env = {k: float(v) for k, v in law["params"].items()}
+        env.update({k: float(v) for k, v in request.items()
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)})
+        for name, tree in law["lets"] + law["x_exprs"] + law["outputs"]:
+            try:
+                env[name] = strict_double(tree, env)
+            except ExprError:
+                continue
+            except NonFinite:
+                return False
+    return True
+
+
 # ---------------------------------------------------------------- law files
 
 
@@ -290,7 +339,9 @@ def env_for(law: dict, inputs: dict, lib=math) -> dict:
     for name, tree in law["lets"] + law["x_exprs"]:
         try:
             val = evaluate(tree, env, lib)
-        except (ExprError, ValueError, ZeroDivisionError, TypeError, AttributeError):
+        # OverflowError: a `let` whose value is past the double range (exp(1000)) has no
+        # value in double, like a domain error; the request is rejected by finite_in_double
+        except (ExprError, ValueError, ZeroDivisionError, OverflowError, TypeError, AttributeError):
             continue
         if isinstance(val, complex) or getattr(val, "imag", 0):
             continue  # e.g. sqrt of a negative number with mpmath: not a real value
