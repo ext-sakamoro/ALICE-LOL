@@ -287,7 +287,9 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
     // 入力の読み方の pin はその世代には無かった
     let previous_pins: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
-        .filter(|(name, _)| !name.contains("input reading"))
+        .filter(|(name, _)| {
+            !name.contains("input reading") && !name.contains("research expressions")
+        })
         .map(|&(name, id)| {
             if name.contains("audit verdict order") {
                 (name, PREVIOUS_AUDIT_ORDER_PIN)
@@ -325,7 +327,9 @@ fn typing_the_inputs_moved_the_identifier() {
     // 旧 ID は入力の読み方の pin を除いた fold であること (写し間違いで空振りしない歯)
     let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
         .iter()
-        .filter(|(name, _)| !name.contains("input reading"))
+        .filter(|(name, _)| {
+            !name.contains("input reading") && !name.contains("research expressions")
+        })
         .copied()
         .collect();
     assert_eq!(
@@ -359,5 +363,37 @@ fn the_type_of_an_input_is_part_of_the_law() {
     assert_eq!(
         rec.law_id(&LOL_SEMANTICS_ID),
         rec_spaced.law_id(&LOL_SEMANTICS_ID)
+    );
+}
+
+/// 研究 Law の式に atan2 / min / max を足す前の `LOL_SEMANTICS_ID`
+///
+/// 残す理由: 式の関数を足した時に識別子が**本当に動いた**ことを固定するため
+const SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS: [u8; 32] =
+    alice_lol::law_id::hex32("e1b05c475eaa4209264d7e74211baa68f8d5e550359bfa05f812d645af9a6e3c");
+
+#[test]
+fn the_expression_functions_pin_is_the_measured_behaviour() {
+    let (_, pinned) = LOL_SEMANTICS_PINS
+        .iter()
+        .find(|(name, _)| name.contains("research expressions"))
+        .expect("式の関数の pin が無い");
+    assert_eq!(
+        *pinned,
+        alice_lol::research_law::expression_functions_fingerprint()
+    );
+}
+
+#[test]
+fn adding_expression_functions_moved_the_identifier() {
+    assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS);
+    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+        .iter()
+        .filter(|(name, _)| !name.contains("research expressions"))
+        .copied()
+        .collect();
+    assert_eq!(
+        alice_lol::law_id::fold_semantics_pins(&before),
+        SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS
     );
 }

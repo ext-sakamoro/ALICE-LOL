@@ -21,15 +21,20 @@
 //! # Expressions
 //!
 //! [`LawExpr::parse`] reads numbers, identifiers, `+ - * / ^`, unary minus,
-//! parentheses and the functions `exp`, `ln`, `sqrt`, `sin`, `cos`. `^` binds
+//! parentheses and the functions `exp`, `ln`, `sqrt`, `sin`, `cos` (one argument),
+//! `atan2(y, x)` (the angle of the point `(x, y)`, in (−π, π]) and `min` / `max`
+//! (two or more arguments; of equal arguments the first is the result). `^` binds
 //! tighter than unary minus (`-2^2 = -4`) and is right associative
 //! (`2^3^2 = 512`); its exponent must be a constant. Expressions nest at most
 //! [`MAX_DEPTH`] levels (a sum of many terms counts one level per term).
 //!
 //! Dimensions are checked when a law is built: `+` and `-` need equal
 //! dimensions, `exp` / `ln` / `sin` / `cos` need a dimensionless argument,
-//! `x^p` and `sqrt` must give integer exponents, and the expression must
-//! have the dimension of the output.
+//! `x^p` and `sqrt` must give integer exponents, the arguments of `atan2` /
+//! `min` / `max` share one dimension (`atan2` gives a pure number, `min` / `max`
+//! that dimension), and the expression must have the dimension of the output.
+//! A call with a number of arguments the function does not take is
+//! [`ResearchLawError::ArgumentCount`].
 //!
 //! # Units
 //!
@@ -47,9 +52,10 @@
 //! intermediate value (division by zero, `ln` of a negative number,
 //! overflow) gives [`ResearchLawError::NonFinite`] instead of a NaN or an
 //! infinity. Evaluation is a fixed sequence of `f64` operations without fused
-//! multiply-add, so the same inputs give the same bits on the same platform;
-//! `exp`, `ln`, `sin`, `cos` and non-integer powers come from the platform's
-//! math library.
+//! multiply-add; `exp`, `ln`, `sqrt`, `sin`, `cos`, `atan2` and non-integer
+//! powers come from `alice-det-math`, so the same inputs give the same bits on
+//! every platform. [`expression_functions_fingerprint`] hashes their behaviour
+//! and is part of `law_id::LOL_SEMANTICS_ID`.
 //!
 //! # Judging new evidence
 //!
@@ -151,8 +157,16 @@ pub enum ResearchLawError {
     },
     /// The exponent of `^` refers to a variable
     NonConstantExponent,
-    /// A call of a function other than `exp`, `ln`, `sqrt`, `sin`, `cos`
+    /// A call of a function other than `exp`, `ln`, `sqrt`, `sin`, `cos`, `atan2`,
+    /// `min`, `max`
     UnknownFunction(String),
+    /// A call with a number of arguments the function does not take
+    ArgumentCount {
+        /// Name of the function
+        function: &'static str,
+        /// Number of arguments given
+        found: usize,
+    },
     /// The expression nests deeper than [`MAX_DEPTH`]
     NestingTooDeep,
     /// An identifier that is neither an input nor a parameter
@@ -217,6 +231,14 @@ impl fmt::Display for ResearchLawError {
             Self::InvalidNumber { position } => write!(f, "invalid number at byte {position}"),
             Self::NonConstantExponent => f.write_str("the exponent of ^ must be a constant"),
             Self::UnknownFunction(name) => write!(f, "unknown function `{name}`"),
+            Self::ArgumentCount { function, found } => {
+                let (lo, hi) = Func::from_name(function).map_or((0, 0), Func::arity);
+                if hi == usize::MAX {
+                    write!(f, "`{function}` takes {lo} or more arguments, got {found}")
+                } else {
+                    write!(f, "`{function}` takes {lo} argument(s), got {found}")
+                }
+            }
             Self::NestingTooDeep => write!(f, "expression nests deeper than {MAX_DEPTH}"),
             Self::UnknownIdentifier(name) => write!(f, "unknown identifier `{name}`"),
             Self::UnknownUnit(name) => write!(f, "unknown unit `{name}`"),
@@ -548,6 +570,12 @@ enum Func {
     Sqrt,
     Sin,
     Cos,
+    /// `atan2(y, x)`: the angle of the point `(x, y)`, in (−π, π]
+    Atan2,
+    /// `min(a, b, ...)`: the smallest argument (the first of equal ones)
+    Min,
+    /// `max(a, b, ...)`: the largest argument (the first of equal ones)
+    Max,
 }
 
 impl Func {
@@ -558,6 +586,9 @@ impl Func {
             "sqrt" => Some(Self::Sqrt),
             "sin" => Some(Self::Sin),
             "cos" => Some(Self::Cos),
+            "atan2" => Some(Self::Atan2),
+            "min" => Some(Self::Min),
+            "max" => Some(Self::Max),
             _ => None,
         }
     }
@@ -569,6 +600,18 @@ impl Func {
             Self::Sqrt => "sqrt",
             Self::Sin => "sin",
             Self::Cos => "cos",
+            Self::Atan2 => "atan2",
+            Self::Min => "min",
+            Self::Max => "max",
+        }
+    }
+
+    /// The number of arguments the function takes (`lo..=hi`)
+    const fn arity(self) -> (usize, usize) {
+        match self {
+            Self::Exp | Self::Ln | Self::Sqrt | Self::Sin | Self::Cos => (1, 1),
+            Self::Atan2 => (2, 2),
+            Self::Min | Self::Max => (2, usize::MAX),
         }
     }
 }
@@ -589,7 +632,7 @@ enum Node {
     Neg(Box<Self>),
     Bin(BinOp, Box<Self>, Box<Self>),
     Pow(Box<Self>, f64),
-    Call(Func, Box<Self>),
+    Call(Func, Vec<Self>),
 }
 
 /// Expression tree with identifiers resolved to input / parameter slots
@@ -601,7 +644,7 @@ enum Code {
     Neg(Box<Self>),
     Bin(BinOp, Box<Self>, Box<Self>),
     Pow(Box<Self>, f64),
-    Call(Func, Box<Self>),
+    Call(Func, Vec<Self>),
 }
 
 /// A parsed law expression
@@ -672,13 +715,72 @@ impl LawExpr {
     }
 }
 
+/// The fixed expressions behind [`expression_functions_fingerprint`]: every function, the
+/// quadrants and axes of `atan2`, the first-of-equal rule of `min` / `max` (the sign of
+/// zero shows which argument was taken) and the argument counts that do not parse
+const EXPRESSION_FUNCTION_CASES: &[&str] = &[
+    "exp(1)",
+    "ln(2)",
+    "sqrt(2)",
+    "sin(1)",
+    "cos(1)",
+    "atan2(1, 1)",
+    "atan2(1, -1)",
+    "atan2(-1, -1)",
+    "atan2(-1, 1)",
+    "atan2(1, 0)",
+    "atan2(-1, 0)",
+    "atan2(0, 1)",
+    "atan2(0, -1)",
+    "atan2(3, 4)",
+    "min(3, 1, 2)",
+    "max(3, 1, 2)",
+    "min(0*-1, 0)",
+    "min(0, 0*-1)",
+    "max(0*-1, 0)",
+    "max(0, 0*-1)",
+    "atan2(1)",
+    "atan2(1, 2, 3)",
+    "min(1)",
+    "sqrt(1, 2)",
+];
+
+/// The behaviour of the expression functions, **computed** (not written down)
+///
+/// Each fixed expression is parsed and evaluated; the hash covers whether it parsed and
+/// the bits of the value. Changing a function, its argument count, the quadrant rule of
+/// `atan2` or the tie rule of `min` / `max` changes this value
+#[must_use]
+pub fn expression_functions_fingerprint() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"lol.research.expression-functions");
+    for text in EXPRESSION_FUNCTION_CASES {
+        h.update((text.len() as u64).to_le_bytes());
+        h.update(text.as_bytes());
+        match LawExpr::parse(text).and_then(|e| e.evaluate_constant()) {
+            Ok(v) => {
+                h.update([1]);
+                h.update(v.to_bits().to_le_bytes());
+            }
+            Err(_) => h.update([0]),
+        }
+    }
+    h.finalize().into()
+}
+
 fn collect_identifiers(node: &Node, out: &mut BTreeSet<String>) {
     match node {
         Node::Num(_) => {}
         Node::Ident(name) => {
             out.insert(name.clone());
         }
-        Node::Neg(a) | Node::Pow(a, _) | Node::Call(_, a) => collect_identifiers(a, out),
+        Node::Neg(a) | Node::Pow(a, _) => collect_identifiers(a, out),
+        Node::Call(_, args) => {
+            for a in args {
+                collect_identifiers(a, out);
+            }
+        }
         Node::Bin(_, a, b) => {
             collect_identifiers(a, out);
             collect_identifiers(b, out);
@@ -697,6 +799,7 @@ enum Tok {
     Caret,
     LParen,
     RParen,
+    Comma,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -724,6 +827,7 @@ fn tokenize(text: &str) -> Result<Vec<Token>> {
             b'^' => Tok::Caret,
             b'(' => Tok::LParen,
             b')' => Tok::RParen,
+            b',' => Tok::Comma,
             b'0'..=b'9' | b'.' => {
                 i = scan_number(bytes, i);
                 let value: f64 = text[start..i]
@@ -876,9 +980,27 @@ impl ExprParser {
                 let func = Func::from_name(&name).ok_or(ResearchLawError::UnknownFunction(name))?;
                 let open = self.tokens[self.pos].position;
                 self.pos += 1;
-                let (arg, d) = self.sum(level + 1)?;
+                let mut args = Vec::new();
+                let mut depth = 0;
+                loop {
+                    let (arg, d) = self.sum(level + 1)?;
+                    args.push(arg);
+                    depth = depth.max(d);
+                    if self.peek() == Some(&Tok::Comma) {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
                 self.close(open)?;
-                Ok((Node::Call(func, Box::new(arg)), deeper(d)?))
+                let (lo, hi) = func.arity();
+                if args.len() < lo || args.len() > hi {
+                    return Err(ResearchLawError::ArgumentCount {
+                        function: func.name(),
+                        found: args.len(),
+                    });
+                }
+                Ok((Node::Call(func, args), deeper(depth)?))
             }
             Tok::LParen => {
                 let (inner, d) = self.sum(level + 1)?;
@@ -923,7 +1045,12 @@ fn compile(node: &Node, inputs: &[&str], params: &[&str]) -> Result<Code> {
             Box::new(compile(b, inputs, params)?),
         ),
         Node::Pow(a, p) => Code::Pow(Box::new(compile(a, inputs, params)?), *p),
-        Node::Call(f, a) => Code::Call(*f, Box::new(compile(a, inputs, params)?)),
+        Node::Call(f, args) => Code::Call(
+            *f,
+            args.iter()
+                .map(|a| compile(a, inputs, params))
+                .collect::<Result<_>>()?,
+        ),
     })
 }
 
@@ -949,14 +1076,36 @@ fn dimension_of(code: &Code, inputs: &[Dimension], params: &[Dimension]) -> Resu
             }
         }
         Code::Pow(a, p) => dimension_of(a, inputs, params)?.pow(*p),
-        Code::Call(f, a) => {
-            let d = dimension_of(a, inputs, params)?;
-            if *f == Func::Sqrt {
-                d.pow(0.5)
-            } else if d.is_dimensionless() {
-                Ok(d)
-            } else {
-                Err(ResearchLawError::DimensionfulArgument { function: f.name() })
+        Code::Call(f, args) => {
+            let dims = args
+                .iter()
+                .map(|a| dimension_of(a, inputs, params))
+                .collect::<Result<Vec<_>>>()?;
+            match f {
+                // every argument has the dimension of the first; atan2 is a ratio
+                Func::Atan2 | Func::Min | Func::Max => {
+                    for &d in &dims[1..] {
+                        if d != dims[0] {
+                            return Err(ResearchLawError::IncompatibleDimensions {
+                                left: dims[0],
+                                right: d,
+                            });
+                        }
+                    }
+                    Ok(if *f == Func::Atan2 {
+                        Dimension::DIMENSIONLESS
+                    } else {
+                        dims[0]
+                    })
+                }
+                Func::Sqrt => dims[0].pow(0.5),
+                Func::Exp | Func::Ln | Func::Sin | Func::Cos => {
+                    if dims[0].is_dimensionless() {
+                        Ok(dims[0])
+                    } else {
+                        Err(ResearchLawError::DimensionfulArgument { function: f.name() })
+                    }
+                }
             }
         }
     }
@@ -998,14 +1147,22 @@ fn eval(code: &Code, inputs: &[f64], params: &[f64]) -> Result<f64> {
                 alice_det_math::powf64(x, *p)
             }
         }
-        Code::Call(f, a) => {
-            let x = eval(a, inputs, params)?;
+        Code::Call(f, args) => {
+            let xs = args
+                .iter()
+                .map(|a| eval(a, inputs, params))
+                .collect::<Result<Vec<_>>>()?;
+            let x = xs[0];
             match f {
                 Func::Exp => alice_det_math::exp64(x),
                 Func::Ln => alice_det_math::ln64(x),
                 Func::Sqrt => alice_det_math::sqrt64(x),
                 Func::Sin => alice_det_math::sin64(x),
                 Func::Cos => alice_det_math::cos64(x),
+                Func::Atan2 => alice_det_math::atan2_64(x, xs[1]),
+                // the first of equal arguments, so the sign of a zero is fixed by the order
+                Func::Min => xs[1..].iter().fold(x, |m, &v| if v < m { v } else { m }),
+                Func::Max => xs[1..].iter().fold(x, |m, &v| if v > m { v } else { m }),
             }
         }
     };

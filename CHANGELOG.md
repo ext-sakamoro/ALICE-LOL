@@ -60,6 +60,13 @@ Law は「同じ実測なら同じ判定」でなければならないが、`sin
 既存分は `scripts/det-math-baseline.txt` に理由付きで置くラチェットで、解消した行が残っていても
 検査は red になる 対象 file が読めない / 呼び出しを 1 件も見ていない場合も red
 
+#### 研究 Law の式に `atan2` / `min` / `max` (`research_law`)
+
+- `LawExpr` が `atan2(y, x)` (点 `(x, y)` の角度、値域 (−π, π]、負の x 軸は +π)、`min(a, b, …)` と `max(a, b, …)` (2 個以上、等しい引数は先の方を返すので 0 の符号も決まる) を読む 評価は `alice-det-math` (`atan2_64`)、次元は `atan2` の 2 引数が同じで結果は無次元、`min` / `max` は全引数が同じでその次元 引数の数が合わない呼び出しは `ResearchLawError::ArgumentCount` 試験 `tests/analytic_research_functions.rs` (π の分数と定義から書いた期待値)
+- `laws/spike/four_bar_rocker_angle.law` の `x-expr` 3 行を `output` / `let` にし、`oracle` 4 行を足した (2 円の交点を 50 桁で別の式から計算した値) LOL 自身が four_bar の law を評価・次元検査できるようになった `conformance/TASK.md` の式の関数に 3 つを足し、`x-expr` の行を外した (使う law が無い)
+- **識別子の変更:** `LOL_SEMANTICS_PINS` に「研究 Law の式の関数と引数の数」(`research_law::expression_functions_fingerprint`、固定の式 24 件の読めたか・値の bit の hash) を足し、`law_id::LOL_SEMANTICS_ID` を `e1b05c47…` から `f528500d…` に再記録した 監査の Law の識別子も動く 旧値は `tests/law_id_oracle.rs` に残し、新旧が違うことと旧値が fold であることを試験する
+- `research_law` の module doc の「`exp` などは platform の数学 library」は誤りで、`alice-det-math` を使う (この変更の前から) 文を直した
+
 #### 入力の読み方を LOL が持つ (`law_input`)
 
 - `law_input::parse_json`: request の JSON を読む (RFC 8259、数は `f64` で読み double に収まらない literal は ±∞ (400 桁の整数も)、`NaN` / `Infinity` は誤り、同じ key は後の方、入れ子は request の object を 1 段目として 512 段まで、孤立した surrogate の escape は誤り) この読み方を `conformance/TASK.md` に書き、参照実装 (`conformance/ref_impl.py`) を揃えた JSON の端の request 32 件を `conformance/probes.json` に足した (Rust と Python の答えの違いは 0 件、旧い読み方の参照実装では 13 件が違う) request は UTF-8 で、UTF-8 として読めない byte は request の誤り (exit status 2) 参照実装は標準入力を byte で読み、誤りの経路の中で UTF-8 として解く `conformance/check_probes.py` は byte で request を送り (`raw_hex`)、実装が標準エラーに traceback か panic を出したら終了 status によらず不一致とする (比べた件数が 0 なら exit 2)

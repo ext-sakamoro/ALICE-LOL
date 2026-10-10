@@ -22,14 +22,22 @@ let across m = sqrt(lco^2 - along^2)
 let bx m = ax + along*dx/d - across*dy/d
 let by m = ay + along*dy/d + across*dx/d
 
-x-expr theta4 1 = atan2(by, bx - lg)
-x-expr crank_margin m = min(lco, lr, lg) - lc
-x-expr grashof_margin m = lco + lr + lg - lc - 2*max(lco, lr, lg)
+output theta4 1 = atan2(by, bx - lg)
+let crank_margin m = min(lco, lr, lg) - lc
+let grashof_margin m = lco + lr + lg - lc - 2*max(lco, lr, lg)
 x-range crank_margin > 0                       # the crank is strictly the shortest link
 x-range grashof_margin > 0                     # shortest + longest < sum of the other two
 x-periodic theta4 6.283185307179586            # compare angles modulo 2 pi
 
 tolerance theta4 1 = 0.01
+
+# oracle: the intersection of the circle around A (radius lco) and the circle around O4
+# (radius lr), the point left of A -> O4, computed at 50 digits from the radical line
+# (not from the along / across lines above); lengths of the source configuration
+oracle theta4 lc=1 lco=2 lr=1.5 lg=2.3 theta2=0 -> 1.5554111044574521754 within 1e-12
+oracle theta4 lc=1 lco=2 lr=1.5 lg=2.3 theta2=0.5 -> 1.3576654859068082598 within 1e-12
+oracle theta4 lc=1 lco=2 lr=1.5 lg=2.3 theta2=1.5707963267948966 -> 1.8084338193014990525 within 1e-12
+oracle theta4 lc=1 lco=2 lr=1.5 lg=2.3 theta2=3.141592653589793 -> 2.747205770393659432 within 1e-12
 
 verdict conforms when the reported theta4 is within the tolerance of the angle above, modulo 2 pi
 verdict an input outside its range, or a linkage that is not a crank-rocker, is rejected

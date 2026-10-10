@@ -68,7 +68,10 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 
 ### Expressions
 
-- Numbers, names, `+ - * / ^`, unary minus, parentheses, and the functions `exp`, `ln`, `sqrt`, `sin`, `cos`.
+- Numbers, names, `+ - * / ^`, unary minus, parentheses, and the functions `exp`, `ln`, `sqrt`, `sin`, `cos` (one argument each), `atan2(y, x)`, `min(a, b, ...)` and `max(a, b, ...)`.
+- `atan2(y, x)` is the angle of the point `(x, y)`, in (-pi, pi]: on the negative x axis it is +pi. `y` and `x` have the same unit; the result is a pure number.
+- `min` and `max` take two or more arguments, all with the same unit, and give that unit. Of equal arguments the first one is the result (this decides the sign of a zero).
+- A call with another number of arguments is not part of the language.
 - `^` binds tighter than unary minus (`-2^2 = -4`) and is right associative. Its exponent is a constant.
 - Angles are in radians. Unit `1` means a pure number.
 - Number literals carry no unit.
@@ -85,7 +88,7 @@ These lines state things the core layout above cannot express.
 |------|---------|
 | `x-list <input>` | the input is a list of values. The law holds for every element. The output with a tolerance is a list aligned with it. A value that is not an array, or an array with an element that is not a number, is rejected. |
 | `x-integer <input>` | the input must be an integer. Otherwise it is rejected. A number with an integer value satisfies it whatever its JSON spelling (`100` and `100.0` are both integers). |
-| `x-range <name> <lo> <hi>` | the law applies only for `lo <= name <= hi`, where `name` is a `let` or `x-expr` quantity. For a list input this applies to every element. |
+| `x-range <name> <lo> <hi>` | the law applies only for `lo <= name <= hi`, where `name` is a `let` quantity. For a list input this applies to every element. |
 | `x-range <name> > <value>` | the law applies only for `name > value` |
 | `x-state <name> <unit>` | a simulated state variable |
 | `x-initial <name> = <expr>` | the state at time 0 |
@@ -97,7 +100,6 @@ These lines state things the core layout above cannot express.
 | `x-reduce <name> = <text>` | the reported quantity is a reduction over the simulated trajectory |
 | `x-output <name> = <text>` | the reported output and its shape |
 | `x-invariant <text>` | a condition on the reported trajectory that the checker verifies (see below) |
-| `x-expr <name> <unit> = <expr>` | like `let`, but it uses functions outside the core set: `atan2(y, x)` (the angle of the point `(x, y)`, in (-pi, pi]), `min(...)`, `max(...)` |
 | `x-piece <name> <unit> <input> <lo> <hi> = <expr>` | a piecewise output. Use the piece whose `[lo, hi]` contains the input. Where two pieces meet, both give the same value. |
 | `x-periodic <name> <period>` | the deviation of `<name>` is measured modulo the period, for example angles modulo 2 pi |
 | `x-input <name> <type>` | an input that is not a single number. Its type is written in the form below ("Types of `x-input`"). |
@@ -117,7 +119,7 @@ field := <name>: <type>  |  <name>: optional <type>
 
 ### Rules that apply to every law
 
-- **Valid ranges on derived quantities.** An `x-range` quantity is computed from the inputs by evaluating its `let` / `x-expr` expression as written, operation by operation in the order of the expression, in ordinary double precision. Both bounds are inclusive (`lo <= q <= hi`) and there is no slack: a value just outside a bound is rejected. The `>` form is strict.
+- **Valid ranges on derived quantities.** An `x-range` quantity is computed from the inputs by evaluating its `let` expression as written, operation by operation in the order of the expression, in ordinary double precision. Both bounds are inclusive (`lo <= q <= hi`) and there is no slack: a value just outside a bound is rejected. The `>` form is strict.
 - **Inputs are never clamped.** An input outside its range is rejected, even when it is outside by one rounding step.
 - **Rounding residue in an intermediate.** A quantity computed from valid inputs may come out slightly outside its mathematical domain by rounding, for example a radicand of `-1e-17` that is 0 exactly. Such a residue in an intermediate may be set to the domain boundary (here 0). This applies to intermediates only, never to an input.
 - **`x-reduce ... max over t >= 0`.** The trajectory is infinite, so the program chooses how long to simulate. Choose a horizon long enough that no later maximum can exceed the one you report, for example simulate until the trajectory has turned and is decaying below the reported value.
