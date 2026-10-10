@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    # ci/**: 取り込み前の branch の CI を main と同じ job で走らせる
-    branches: [main, 'ci/**']
+    branches: [main]
   pull_request:
     branches: [main]
 
