@@ -51,6 +51,7 @@ WORD = re.compile(rf"(?<![A-Za-z0-9]){OLD}(?![A-Za-z0-9])", re.IGNORECASE)
 GRANT = re.compile("Permission is hereby " "granted, free of " "charge", re.IGNORECASE)
 # (path, SHA-256 of the full line without its line end, occurrences in the file, reason)
 ALLOWED: list[tuple[str, str, int, str]] = [
+    ("alice-lol-macro/CHANGELOG.md", "4859808644fe2d0ae08cbcf2ad4d7e196607799b0b79506ef3fddc8b29c5b92a", 1, "the terms of macro 0.2.0 and earlier"),
     ("CHANGELOG.md", "7d5afcfe2df58db06968ea3fba25bfb51add2f5ebd57283ea01b4535140fdb05", 1, "0.4.0 notes the terms of the versions published before it"),
     ("CHANGELOG.md", "05ed21a6fcf69466d5c3cf663edb2523dc6bc7bed5a293392c353934f63547cc", 1, "0.4.0 records removing the old licence file"),
     ("CHANGELOG.md", "b69f8af757a91d7930c94f9ca0d5c32d32cf7f443525c2b639976ff8583be218", 1, "0.4.0 records replacing the copied licence text of lol-sdf"),
