@@ -64,6 +64,13 @@ def find_violations(text: str) -> list[tuple[str, int, str]]:
 
 
 def main() -> int:
+    # Windows の既定 stdout/stderr は cp1252 で、日本語の print が UnicodeEncodeError
+    # になる (scripts/docs_lint.py 等と同じ対策)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     if not TARGET.is_file():
         print(f"parser_no_direct_validating_builders: {TARGET} が読めない", file=sys.stderr)
         return 2
