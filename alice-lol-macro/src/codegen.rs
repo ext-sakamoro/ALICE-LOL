@@ -369,7 +369,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             hy,
             half_height,
         } => {
-            quote! { ::alice_lol::SdfNode::Rect2D { half_extents: ::glam::Vec2::new(#hx, #hy), half_height: #half_height } }
+            quote! { ::alice_lol::SdfNode::Rect2D { half_extents: ::alice_lol::Vec2::new(#hx, #hy), half_height: #half_height } }
         }
         Expr::Segment2DPrim {
             ax,
@@ -379,7 +379,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             thickness,
             half_height,
         } => {
-            quote! { ::alice_lol::SdfNode::Segment2D { a: ::glam::Vec2::new(#ax, #ay), b: ::glam::Vec2::new(#bx, #by), thickness: #thickness, half_height: #half_height } }
+            quote! { ::alice_lol::SdfNode::Segment2D { a: ::alice_lol::Vec2::new(#ax, #ay), b: ::alice_lol::Vec2::new(#bx, #by), thickness: #thickness, half_height: #half_height } }
         }
         Expr::RoundedRect2DPrim {
             hx,
@@ -387,7 +387,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             round_radius,
             half_height,
         } => {
-            quote! { ::alice_lol::SdfNode::RoundedRect2D { half_extents: ::glam::Vec2::new(#hx, #hy), round_radius: #round_radius, half_height: #half_height } }
+            quote! { ::alice_lol::SdfNode::RoundedRect2D { half_extents: ::alice_lol::Vec2::new(#hx, #hy), round_radius: #round_radius, half_height: #half_height } }
         }
         Expr::Annular2DPrim {
             outer_radius,
@@ -410,7 +410,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             child,
         } => {
             let c = codegen(child);
-            quote! { ::alice_lol::SdfNode::SweepBezier { child: ::std::sync::Arc::new(#c), p0: ::glam::Vec2::new(#p0x,#p0y), p1: ::glam::Vec2::new(#p1x,#p1y), p2: ::glam::Vec2::new(#p2x,#p2y) } }
+            quote! { ::alice_lol::SdfNode::SweepBezier { child: ::std::sync::Arc::new(#c), p0: ::alice_lol::Vec2::new(#p0x,#p0y), p1: ::alice_lol::Vec2::new(#p1x,#p1y), p2: ::alice_lol::Vec2::new(#p2x,#p2y) } }
         }
 
         // ── Operations (left-fold for N-ary → binary) ──

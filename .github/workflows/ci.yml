@@ -222,6 +222,65 @@ jobs:
         # (toolchain は rust-toolchain.toml pin)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery
 
+  # 他の job は sibling crate を path (各 repo の main) で引くので、公開した `alice-lol` が
+  # crates.io から引く版では一度も build されない ここでは package した `alice-lol` だけに
+  # 依存する crate を作り、macro の全 keyword をその crate から compile する
+  # (0.2.0 の macro は alice-sdf 5.x の `Taper` と合わず、`::glam` を直接参照していた)
+  registry-consumer:
+    name: Registry consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+
+      # cargo package が path dep の manifest を読むので sibling は要る (build には使わない)
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: published-source oracle (検査器自身の試験)
+        working-directory: ALICE-LOL
+        run: python3 scripts/test_published_source_check.py
+
+      # workspace 内の依存 (path + version) の版要求が解決する公開版と、手元の src が同じ
+      - name: published source (workspace 内の依存が公開版と同じ src)
+        working-directory: ALICE-LOL
+        run: python3 scripts/published_source_check.py
+
+      - name: registry consumer (macro の全 keyword を crates.io の依存で compile)
+        working-directory: ALICE-LOL
+        run: scripts/registry_consumer.sh
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -410,6 +469,8 @@ jobs:
         run: python scripts/test_det_math_guard.py
       - name: det-math-guard (判定経路に platform 依存の超越関数が無い)
         run: python scripts/det_math_guard.py
+      - name: macro kinds (macro の全 keyword を試験 file が持つ)
+        run: python scripts/macro_kinds.py --check
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py) と、公開文書と全 tracked file の語彙 (scripts/docs_lint.py)

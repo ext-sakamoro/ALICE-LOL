@@ -111,7 +111,7 @@ pub use alice_lol_macro::lol;
 
 // ── Re-exports used by macro-generated code ──
 pub use alice_sdf::SdfNode;
-pub use glam::{EulerRot, Quat, Vec3};
+pub use glam::{EulerRot, Quat, Vec2, Vec3};
 
 // ── Transpile functions ──
 

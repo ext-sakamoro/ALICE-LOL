@@ -14,7 +14,7 @@ keywords = ["dsl", "sdf", "distance-field", "geometry", "3d-print"]
 categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
-alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.0" }
+alice-lol-macro = { path = "../alice-lol-macro", version = "0.2.1" }
 alice-sdf = { path = "../../ALICE-SDF", version = "5.1", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # `research_law` が成立範囲 / 残差統計 / 出典 / 判定閾値の型を共有する

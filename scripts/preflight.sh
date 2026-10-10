@@ -95,6 +95,8 @@ python3 scripts/wiring_guard.py
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py
+python3 scripts/macro_kinds.py --check
+python3 scripts/test_published_source_check.py
 
 step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越関数が無い"
 python3 scripts/test_det_math_guard.py
@@ -268,5 +270,9 @@ step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )
+
+step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
+python3 scripts/published_source_check.py
+REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
 
 echo; echo "preflight OK"

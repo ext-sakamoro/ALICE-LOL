@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### 公開版と同じ依存で macro の全 keyword を compile する gate (`scripts/registry_consumer.sh` / `scripts/macro_kinds.py` / `scripts/published_source_check.py`)
+
+他の job は sibling crate を path (各 repo の main) で引くので、公開した `alice-lol` が crates.io から解決する版では一度も build されていなかった
+上の macro の 2 件はどちらもこの差で見えていなかった
+
+- `scripts/macro_kinds.py`: macro の parser の keyword (124 個) と各 keyword の引数の形を読み、keyword ごとに `lol!` を 1 回呼ぶ試験 `alice-lol/tests/macro_every_kind.rs` を生成する `--check` は試験 file が生成結果と同じでなければ fail、読めた keyword が 0 個なら fail (ci.yml の `wiring-guard` job と preflight)
+- `scripts/registry_consumer.sh`: `alice-lol-macro` と `alice-lol` を package し、package した `alice-lol` だけに依存する crate を作って上の試験を compile・実行する package の manifest は path を持たないので、`alice-sdf` / `alice-zip` / `alice-det-math` は crates.io から解決される macro は package したもの (`[patch]`) を使い、patch が使われなかった・試験が走らなかった・`alice-*` が 2 版 link された場合も fail (ci.yml の `registry-consumer` job と preflight の full)
+- `scripts/published_source_check.py`: workspace 内の依存 (path と version を両方持つもの) の版要求が crates.io で解決する版を取得し、手元の `src/` と比べる 違えば fail (版を上げて要求も上げる) 要求に合う公開版が無いものは pending (先に公開する) 依存が 0 件なら fail 0.2.0 の時点の手元で実行すると `src/codegen.rs` の差で fail する `scripts/test_published_source_check.py` (8 本) が歯を確かめる
+- 破壊試験: 公開版の macro 0.2.0 に差し替えると `reach` の不足 1 件と `glam` 4 件で fail、`taper` を struct literal に戻すと `reach` で fail、1 keyword を `::glam` に戻すと fail、試験 file から keyword を 1 つ消す・parser の keyword を変えると `--check` が fail
+
 #### branch の push で走る workflow に concurrency (`scripts/workflow_concurrency.py`)
 
 - `ci.yml` に concurrency を置いた 同じ branch の新しい push が古い run を打ち切る (置き換わった run は runner を占有するだけ) main では commit ごとに別の group なので、main の commit の run は打ち切られない (group は待ちの run を 1 つしか持たず、古い待ちの run は cancel-in-progress によらず打ち切られるため) 実測: concurrency が無く、1 branch への 3 回の push が 3 本とも待ち行列に並び、main の CI が 1 時間以上待った
@@ -855,6 +865,12 @@ hardcode していたため、**推定を Hard 以外で積む導線が存在し
 - `rust-toolchain.toml` pin `1.92.0` → `1.98.1` (6 release 遅れで `cargo-semver-checks@latest` の MSRV に追い抜かれていた)、`cargo-semver-checks` を `0.50.0` に明示 pin
 
 ### Fixed
+
+#### `alice-lol-macro` 0.2.1: 公開版の macro が生成する code を `alice-sdf` 5.x と利用側の crate に合わせる
+
+- 0.2.0 の `taper` は `SdfNode::Taper { child, factor }` の struct literal を生成していた `alice-sdf` 5.x の `Taper` は field `reach` を持つので、公開版の 0.2.0 で `taper(..)` を書くと compile できない 0.2.1 は `SdfNode::taper(child, factor)` を呼ぶ (この変更は 0.2.0 の後に入っていたが、版を上げずに残っていた)
+- 0.2.0 は 4 つの keyword (`rect2d` / `segment2d` / `rounded_rect2d` / `sweep_bezier`) で `::glam::Vec2` を生成していた `glam` に直接依存していない crate では compile できない (`alice-lol` 自身の試験は `alice-lol` が `glam` に依存するので通っていた) 0.2.1 は `::alice_lol::Vec2` を生成し、`alice-lol` は `Vec2` を再公開する (`pub use glam::{EulerRot, Quat, Vec2, Vec3}`、追加のみ)
+- `alice-lol` の `alice-lol-macro` の要求を `0.2.0` → `0.2.1` 公開の順は macro 0.2.1 → `alice-lol` 0.4.0
 
 #### 修復が mesh の位相を変えても採られていた (2026-10-09)
 
