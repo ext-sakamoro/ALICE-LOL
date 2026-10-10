@@ -52,6 +52,8 @@ pub const LOL_GBNF: &str = include_str!("../lol.gbnf");
 
 pub mod runtime_parser;
 
+pub mod limits;
+
 /// `SdfNode` → LOL text (runtime parser の逆変換、Track C0)
 pub mod emit;
 
