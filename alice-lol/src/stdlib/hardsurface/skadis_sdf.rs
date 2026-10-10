@@ -38,6 +38,7 @@
 //! Python `LineString.buffer(R)` = SDF では連続 `Capsule` の `Union` で表現
 //! `buffer(R).buffer(-R)` fillet は本 module では省略 (DC の Hermite で自然に滑らか)
 
+use crate::limits::{checked_bounded, SpecError, MAX_SKADIS_PANEL_MM};
 use alice_sdf::SdfNode;
 use glam::Vec3;
 use std::sync::Arc;
@@ -373,9 +374,20 @@ pub const SKADIS_OUTER_FRAME: f32 = 12.0;
 /// 本 SDF を MC (`node_to_3mf`) で mesh 化すると pipeline 実測相当の非多様体エッジが発生
 /// DC (`node_to_3mf_dual_contouring`) で mesh 化すると Hermite data により watertight 保証
 /// example `skadis_panel_dc_vs_mc.rs` で実測比較
+///
+/// # Panics
+///
+/// `size` が 0 より大きく [`MAX_SKADIS_PANEL_MM`] 以下の有限値でない時 (`NaN` /
+/// `±∞` / 過大な finite 値はコネクタ穴を並べる内部 loop を終端させない、
+/// `.lol` text 経由 (`runtime_parser.rs` の `skadis_size`) はこの境界を既に検査
+/// しているが、この pub fn を直接呼ぶ Rust 呼び出し元は検査されない)
+/// untrusted な入力は [`try_skadis_panel_sdf`] を使うこと
 #[must_use]
 #[allow(clippy::too_many_lines)] // 1 枚の板の SDF 構成を直列に記述 (分割すると寸法の対応が追いにくい)
 pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNode {
+    checked_bounded(size, 0.0, MAX_SKADIS_PANEL_MM, "panel_size").expect(
+        "skadis_panel_sdf の size が検査を通らない (0 より大きく MAX_SKADIS_PANEL_MM mm 以下の有限値でなければならない): untrusted な入力は try_skadis_panel_sdf を使うこと",
+    );
     // 外形 (原点中心の RoundedBox、Y 軸方向 = 板厚)
     // 2026-08-08 fix: RoundedBox は 6 面全てに round_radius を追加する仕様のため、
     // 素朴に使うと Y 方向にも corner_radius が加算されて板厚が (thickness + 2*corner_radius)
@@ -555,6 +567,23 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         },
         None => panel,
     }
+}
+
+/// [`skadis_panel_sdf`] の fallible 版: `size` が検査を通らない時は `panic` でなく
+/// `Err` で返す untrusted な入力 (API 越しの値、ユーザー入力から直接組んだ `Spec`
+/// 相当の生 f32) にはこちらを使うこと
+///
+/// # Errors
+///
+/// [`SpecError`] (`kind = "panel_size"`) if `size` is not finite, is at or
+/// below 0, or is above [`MAX_SKADIS_PANEL_MM`].
+pub fn try_skadis_panel_sdf(
+    size: f32,
+    thickness: f32,
+    corner_radius: f32,
+) -> Result<SdfNode, SpecError> {
+    checked_bounded(size, 0.0, MAX_SKADIS_PANEL_MM, "panel_size")?;
+    Ok(skadis_panel_sdf(size, thickness, corner_radius))
 }
 
 // ────────────────────────────────────────────────────────
@@ -868,6 +897,53 @@ mod tests {
     fn skadis_panel_sdf_returns_subtraction() {
         let panel = skadis_panel_sdf(300.0, 5.0, 5.0);
         assert!(matches!(panel, SdfNode::Subtraction { .. }));
+    }
+
+    #[test]
+    fn try_skadis_panel_sdf_accepts_every_size_in_use_today() {
+        assert!(try_skadis_panel_sdf(300.0, 5.0, 5.0).is_ok());
+        assert!(try_skadis_panel_sdf(MAX_SKADIS_PANEL_MM, 5.0, 5.0).is_ok());
+    }
+
+    #[test]
+    fn try_skadis_panel_sdf_never_hangs_on_a_nan_size() {
+        // fuzz-found: `pos >= size` is `false` for every `pos` when `size` is
+        // `NaN`, so the connector-hole loop (line ~485) never terminates --
+        // this call returning at all (not the error value) is the assertion.
+        let e = try_skadis_panel_sdf(f32::NAN, 5.0, 5.0).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "resource limit exceeded: kind=panel_size limit=2000000 requested=0"
+        );
+    }
+
+    #[test]
+    fn try_skadis_panel_sdf_never_hangs_on_an_infinite_size() {
+        // fuzz-found: `+inf` eventually breaks the same loop, but only after
+        // `i: i32` runs up far enough for `i as f32 * PITCH` to overflow to
+        // infinity itself -- billions of pushes into `hole_list` first.
+        let e = try_skadis_panel_sdf(f32::INFINITY, 5.0, 5.0).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "resource limit exceeded: kind=panel_size limit=2000000 requested=18446744073709551615"
+        );
+    }
+
+    #[test]
+    fn try_skadis_panel_sdf_refuses_a_huge_finite_size_too() {
+        // not just non-finite: a merely-huge finite size drives the same
+        // loop for `size / SKADIS_GRID_PITCH` iterations, which is itself
+        // unbounded without this ceiling.
+        let e = try_skadis_panel_sdf(1.0e9, 5.0, 5.0).unwrap_err();
+        let crate::limits::SpecError::ResourceLimit(e) = e;
+        assert_eq!(e.kind, "panel_size");
+        assert_eq!(e.requested, 1_000_000_000_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "skadis_panel_sdf の size が検査を通らない")]
+    fn skadis_panel_sdf_panics_with_its_documented_message_on_a_nan_size() {
+        let _ = skadis_panel_sdf(f32::NAN, 5.0, 5.0);
     }
 
     #[test]

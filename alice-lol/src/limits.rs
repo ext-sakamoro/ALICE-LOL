@@ -201,10 +201,63 @@ pub fn checked_positive_finite(
     Ok(v)
 }
 
+/// `v.is_finite() && v > floor && v <= ceiling`.
+///
+/// The degenerate-*size* check: unlike [`checked_positive_finite`] (a floor
+/// only, for a pitch/spacing a count is later derived from), a size that
+/// itself drives a loop bounded by `pos >= size` (e.g. `skadis_panel_sdf`'s
+/// connector-hole placement, which starts at `i = 1` and advances by a fixed
+/// pitch until `pos >= size`) hangs for `NaN` (the comparison is always
+/// `false`, so the loop never terminates) and for `+inf` or any merely huge
+/// finite value (the loop runs `size / pitch` times before it terminates,
+/// which is unbounded without an upper limit here) -- not only for a
+/// degenerate *small* value. An upper bound is therefore load-bearing on its
+/// own, not just a finite check.
+///
+/// `requested` in the returned error is `v` in micrometers, rounded and
+/// saturated to `u64`, same convention as [`checked_positive_finite`]: `0`
+/// for `NaN` or a non-positive `v`, `u64::MAX` for `+inf`, otherwise the
+/// actual (possibly over-ceiling) value -- so an over-large but finite
+/// request still reports what was actually asked for, not a saturated
+/// placeholder.
+///
+/// # Errors
+///
+/// [`ResourceLimitError`] (`kind` as given) if `v` is not finite, is at or
+/// below `floor`, or is above `ceiling`.
+pub fn checked_bounded(
+    v: f32,
+    floor: f32,
+    ceiling: f32,
+    kind: &'static str,
+) -> Result<f32, ResourceLimitError> {
+    if !(v.is_finite() && v > floor && v <= ceiling) {
+        let requested = if v.is_nan() || v <= 0.0 {
+            0
+        } else if v.is_infinite() {
+            u64::MAX
+        } else {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            {
+                (f64::from(v) * 1000.0).round() as u64
+            }
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let limit = (f64::from(ceiling) * 1000.0).round() as u64;
+        return Err(ResourceLimitError {
+            kind,
+            limit,
+            requested,
+        });
+    }
+    Ok(v)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
+        checked_bounded, checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION,
+        MIN_PITCH_MM,
     };
 
     #[test]
@@ -285,6 +338,54 @@ mod tests {
     fn checked_positive_finite_just_below_floor_errs() {
         let below = MIN_PITCH_MM - 0.001;
         assert!(checked_positive_finite(below, MIN_PITCH_MM, "pitch").is_err());
+    }
+
+    #[test]
+    fn checked_bounded_within_range_is_ok() {
+        assert_eq!(
+            checked_bounded(1000.0, 0.0, 2000.0, "panel_size"),
+            Ok(1000.0)
+        );
+    }
+
+    #[test]
+    fn checked_bounded_at_the_ceiling_is_ok() {
+        assert_eq!(
+            checked_bounded(2000.0, 0.0, 2000.0, "panel_size"),
+            Ok(2000.0)
+        );
+    }
+
+    #[test]
+    fn checked_bounded_at_the_floor_errs() {
+        // floor is exclusive: a panel size of exactly 0 is still degenerate
+        assert!(checked_bounded(0.0, 0.0, 2000.0, "panel_size").is_err());
+    }
+
+    #[test]
+    fn checked_bounded_nan_errs_without_hanging() {
+        let e = checked_bounded(f32::NAN, 0.0, 2000.0, "panel_size").unwrap_err();
+        assert_eq!(e.kind, "panel_size");
+        assert_eq!(e.requested, 0);
+    }
+
+    #[test]
+    fn checked_bounded_infinite_errs() {
+        let e = checked_bounded(f32::INFINITY, 0.0, 2000.0, "panel_size").unwrap_err();
+        assert_eq!(e.requested, u64::MAX);
+    }
+
+    #[test]
+    fn checked_bounded_over_ceiling_reports_the_actual_request_not_a_placeholder() {
+        let e = checked_bounded(50_000.0, 0.0, 2000.0, "panel_size").unwrap_err();
+        assert_eq!(e.limit, 2_000_000);
+        assert_eq!(e.requested, 50_000_000);
+    }
+
+    #[test]
+    fn checked_bounded_negative_errs() {
+        let e = checked_bounded(-5.0, 0.0, 2000.0, "panel_size").unwrap_err();
+        assert_eq!(e.requested, 0);
     }
 
     #[test]
