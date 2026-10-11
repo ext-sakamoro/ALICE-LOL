@@ -224,10 +224,27 @@ NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol
 `research_law::expression_functions_fingerprint`、
 `law_input::derivation_fingerprint`) ので、判定の順序や request の入力の読み方を
 変えると pin が合わなくなる 監査の Law の識別子は `x-input` の行の型も含む
-(`law_input::audit_law_from_file`) 幾何法則と研究 Law の識別子はまだ無い
+(`law_input::audit_law_from_file`) 研究 Law の識別子はまだ無い `SdfNode` の評価には
+別の識別子がある (下記)
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs)、oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs)
+
+## 幾何評価の識別子 (`geometry_id`)
+
+上の `law_id` は監査 Law / 研究 Law の意味論専用で、`SdfNode` 自身の数値評価は
+対象外 `LOL_GEOMETRY_SEMANTICS_ID` がその別の識別子 — 上流 `alice-det-math` の
+算術世代、`canon_angle_deg` の度数正規化、構文ごとの評価の算術 (`rotate`/
+`rotate_q` の quaternion 構築等)、受理・拒否の境界 (`rotate_q` の単位長許容差、
+TPMS の `scale`/`thickness` 受理範囲等)、`emit` の canonical text 形 (`fmt_f32`
+の round-trip 忠実度等) を pin する 2 つの識別子は独立した定数で、片方の変更が
+他方を動かすことはない
+
+`LOL_SEMANTICS_ID` と同じく、`LOL_GEOMETRY_SEMANTICS_PINS` の各 pin は振る舞いから
+計算する (固定 probe set を実関数に通した値)、書き下した定数ではない
+
+Example: [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs)、oracle:
+[`alice-lol/tests/geometry_id_oracle.rs`](alice-lol/tests/geometry_id_oracle.rs)
 
 ## 幾何法則 (`law`)
 
@@ -330,6 +347,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | 理想気体の式を SI と (kPa, L) で書き、再計算・比較・oracle・新しい証拠の判定 |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | 検査を監査 Law として書き、6 値の判定に到達させる |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
+| [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | `SdfNode` 評価の識別子が何から決まり、`law_id` とどう別か |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | 同じ mesh を STL / 3MF / FBX に書き、解像度 preset を並べる |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | 区間演算による格子セルごとの枝刈り |
