@@ -7,7 +7,18 @@ holds a shared runner until it finishes, delaying every other run in the account
 A workflow whose push trigger names only tags (a release) is exempt, as is one with
 no push trigger. Fails when such a workflow lacks the key, and when no workflow was read.
 
+A workflow whose jobs ALL run on `self-hosted` runners (one machine) may keep one group
+per ref on main instead of one per commit: a per-commit group would let a burst of
+pushes queue without bound on that machine, while a per-ref group keeps at most one
+pending run (the latest main commit is always run; an older pending one may be
+superseded). It must say so in a comment line starting with SELF_HOSTED_REASON and
+giving the reason, its group must still name `github.ref`, and it may never cancel
+an in-progress run on main (the cancel rule applies to it unchanged).
+
 usage: workflow_concurrency.py [workflows dir]
+
+Kept byte-identical in ALICE-LOL, ALICE-SDF and ALICE-DetMath (this file and its
+test); change every copy together.
 """
 from __future__ import annotations
 
@@ -20,6 +31,26 @@ from pathlib import Path
 # be added here deliberately)
 MAIN_EXCEPTED = "github.ref != 'refs/heads/main'"
 PER_SHA_ON_MAIN = "github.ref == 'refs/heads/main' && github.sha"
+# the comment that claims the single self-hosted runner exemption, followed by a reason
+SELF_HOSTED_REASON = "# concurrency: single self-hosted runner"
+MIN_REASON = 12
+
+
+def all_jobs_self_hosted(text: str) -> bool:
+    """whether the workflow has jobs and every `runs-on` names `self-hosted`"""
+    runs = re.findall(r"^\s+runs-on:\s*(.+)$", text, re.M)
+    return bool(runs) and all("self-hosted" in r for r in runs)
+
+
+def self_hosted_reason(text: str) -> bool:
+    """whether a comment line claims the exemption and gives a reason after it"""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(SELF_HOSTED_REASON):
+            reason = stripped[len(SELF_HOSTED_REASON):].strip(" :-—")
+            if len(reason) >= MIN_REASON:
+                return True
+    return False
 
 
 def push_to_branches(text: str) -> bool:
@@ -67,6 +98,15 @@ def main(argv: list[str]) -> int:
         # on main each commit has a group of its own: a group keeps one pending run and
         # cancels an older pending one whatever cancel-in-progress says
         group_ok = group is not None and PER_SHA_ON_MAIN in group.group(1)
+        if not group_ok and group is not None and all_jobs_self_hosted(text):
+            # one machine: a per-ref group (at most one pending run) with a stated reason
+            if "github.ref" in group.group(1) and self_hosted_reason(text):
+                group_ok = True
+            else:
+                missing.append(
+                    f"{f.name}: all jobs are self-hosted but the group is not per ref, or the "
+                    f"'{SELF_HOSTED_REASON} <reason>' comment is missing"
+                )
         if not cancel_ok:
             missing.append(f"{f.name}: cancel-in-progress can cancel a run on main")
         if not group_ok:
