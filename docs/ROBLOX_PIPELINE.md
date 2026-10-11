@@ -202,6 +202,7 @@ ALICE-SDF → Roblox は**座標系変換不要** (同一)。スケーリング�
 
 ### Rust (compile-time)
 
+<!-- measured: 2026-03-20, the stats this example printed (vertex and triangle count of snowman_hat.obj), recorded in 4e377e1 -->
 ```rust
 use alice_lol::lol;
 use alice_lol::roblox_export::{RobloxConfig, node_to_obj_roblox};

@@ -34,7 +34,7 @@ User Request
     │   │
     │   └── Thick (> 5mm):
     │       Use SdfNode primitives + `node_to_3mf()` or `lol_to_3mf()`
-    │       - stdlib::hardsurface (fastener/joint/reinforcement/mount) 24 primitive
+    │       - stdlib::hardsurface (fastener/joint/reinforcement/mount) primitives
     │       - marching cubes at resolution 128/256/512
     │
     ├── Step 2: Classify Structural Intent

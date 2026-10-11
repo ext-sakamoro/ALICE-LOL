@@ -115,9 +115,11 @@ step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越�
 python3 scripts/test_det_math_guard.py
 python3 scripts/det_math_guard.py
 
-step "ci.yml / docs: readme_sync + docs_lint (oracle + check)"
+step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check
+python3 scripts/test_doc_numbers.py
+python3 scripts/doc_numbers.py
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
 

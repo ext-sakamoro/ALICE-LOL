@@ -80,6 +80,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 ### 1.1 薄物 DC 経路 (9 品目、pipeline 側の `output/thin/`)
 
+<!-- measured: 2026-08-06, vertex / triangle count and file size of the .3mf the Phase 5.3 examples wrote, recorded in d2d6b09 -->
 | No | file | LOL DSL | 実測 (Phase 5.3) | 期待 slice 時間 (PLA, 0.12mm layer) |
 |--|--|--|--|--|
 | T1 | `shopping_cart_coin_100yen.3mf` | `shopping_cart_coin(22.8, 1.7)` | 49K vert / 99K tri / 779KB | ~10 min |
@@ -94,6 +95,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 
 ### 1.2 厚物 MC 経路 (4 品目、pipeline 側の `output/thick/`)
 
+<!-- measured: 2026-08-06, vertex / triangle count and file size of the .3mf the Phase 5.3 examples wrote, recorded in d2d6b09 -->
 | No | file | Rust API 呼び出し | 実測 | 期待 slice 時間 |
 |--|--|--|--|--|
 | K1 | `wall_hook_pla_1kgf.3mf` | `pattern_sdf::wall_hook(&WallHookSpec::pla_1kgf())` | 63K vert / 125K tri / 1008KB | ~1.5 hours |
@@ -107,6 +109,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 Bambu Studio で開くと「印刷設定なし」で表示される、user が material / printer を毎回設定要
 本格運用は Phase 5.3 example (Bambu template embed 版) を推奨
 
+<!-- measured: 2026-08-06, file size of the .3mf each pipeline CLI subcommand wrote, recorded in d2d6b09 -->
 | No | file | CLI subcommand | 実測サイズ | 状態 |
 |--|--|--|--|--|
 | C1 | `hook.3mf` | `<pipeline-cli> hook --load 3 --mount screw` | 18MB | OK |
@@ -227,7 +230,7 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 - User が **Printer > H2D、Filament > PLA/PETG、Process > 0.2mm 標準** を手動設定要
 - 推奨: § 1.1-1.2 の Bambu template 埋込版 (Phase 5.3 example 経由) を使用
 
-**C2 gridfinity 1.3KB = degenerate mesh 疑い**:
+**C2 gridfinity 1.3KB = degenerate mesh 疑い**: <!-- measured: 2026-08-06, the C2 row of the table in § 1.3, recorded in d2d6b09 -->
 - Bambu Studio で開くと mesh 表示なし or 極小
 - **pipeline rust generator wrapper 実装の bug 疑い**
 - Report 要 → 別 sprint (Phase 5.8 or B.1.d 補修) で対処

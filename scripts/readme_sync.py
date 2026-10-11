@@ -23,8 +23,10 @@ follow fails CI instead of drifting:
               the `[features]` of alice-lol/Cargo.toml (minus `default`)
   * msrv      every line carrying `<!-- readme-sync: msrv -->` states
               `rust-version` as `**X.Y**`
-  * version   any `alice-lol = "X"` dependency line is caret-compatible with
-              the package version (zero such lines is fine)
+  * version   no line of either README states a version of an alice-lol
+              crate (`alice-lol = "X"`, `alice-lol X.Y`): the READMEs carry none,
+              so a release cannot leave a stale one behind (every line is
+              compared, so the check is never empty)
   * example   the first ```rust block of each README is the ```rust block of
               the crate documentation in alice-lol/src/lib.rs (a doctest)
   * links     every relative link in both READMEs points at a file that exists
@@ -199,24 +201,6 @@ def first_rust_block(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def caret_ok(req: str, version: str) -> bool:
-    def parts(v: str) -> list[int]:
-        return [int(x) for x in re.findall(r"\d+", v.split("-")[0])][:3]
-
-    r, v = parts(req), parts(version)
-    if not r:
-        return False
-    r += [0] * (3 - len(r))
-    v += [0] * (3 - len(v))
-    if v < r:
-        return False
-    if r[0] > 0:
-        return v[0] == r[0]
-    if r[1] > 0:
-        return v[0] == 0 and v[1] == r[1]
-    return v[:3] == r[:3]
-
-
 # ── the check ──────────────────────────────────────────────────────────
 
 
@@ -364,16 +348,17 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                 errors.append(f"{rel}: MSRV line says {m.group(1) if m else '?'}, rust-version is {msrv}")
     counts["msrv"] = n
 
-    # version literals (optional)
+    # version: the READMEs state none (badges read crates.io, installation uses `cargo add`)
     n = 0
-    version = pkg.get("version", "")
-    pat = re.compile(r'alice-lol\s*=\s*(?:"([^"]+)"|\{[^}\n]*?version\s*=\s*"([^"]+)")')
-    for rel, text in docs.items():
-        for m in pat.finditer(text):
-            req = m.group(1) or m.group(2)
+    pat = re.compile(r'\balice-lol(?:-[a-z]+)*\s*=\s*(?:"[^"]*\d|\{[^}\n]*?\bversion\s*=)'
+                     r'|\balice-lol(?:-[a-z]+)*\s+v?\d+\.\d+')
+    for rel in READMES:
+        for i, line in enumerate(docs[rel].split("\n"), 1):
             n += 1
-            if not caret_ok(req, version):
-                errors.append(f"{rel}: `alice-lol = \"{req}\"` does not match package version {version}")
+            m = pat.search(line)
+            if m:
+                errors.append(f"{rel}:{i}: states a version (`{m.group(0)}`); the READMEs carry none "
+                              f"(badges read crates.io, installation uses `cargo add`)")
     counts["version"] = n
 
     # example
@@ -434,7 +419,7 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
     counts["sections"] = secs["README.md"]
 
     for name, c in counts.items():
-        if c == 0 and name != "version":
+        if c == 0:
             errors.append(f"check `{name}` compared nothing")
     return errors, counts
 

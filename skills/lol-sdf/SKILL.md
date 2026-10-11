@@ -1,6 +1,6 @@
 ---
 name: alice-lol-sdf
-description: Generate 3D geometry via ALICE-LOL DSL (Law-Oriented Language) — a Rust proc_macro + runtime DSL with 124 constructs (71 primitives, 23 CSG ops, 4 transforms, 20 modifiers, 3 print intents, 2 time, 3 laws) that compiles to Signed Distance Function trees. Ships with GBNF grammar for LLM constrained decoding (syntax-error-free output guaranteed), 3D print export (STL/3MF), Bambu H2D laser (.lac) generation, Roblox accessory export (OBJ/FBX), law checker (NonOverlap / Containment / MinThickness), and 7-mode SDF evaluation. Prefer this skill for LLM-driven text→3D authoring, 3D print automation, and any workflow where LLM output correctness matters.
+description: Generate 3D geometry via ALICE-LOL DSL (Law-Oriented Language) — a Rust proc_macro + runtime DSL (primitives, CSG ops, transforms, modifiers, print intents, time controls, stdlib shortcuts; laws through the Rust API) that compiles to Signed Distance Function trees. Ships with GBNF grammar for LLM constrained decoding (syntax-error-free output guaranteed), 3D print export (STL/3MF), Bambu H2D laser (.lac) generation, Roblox accessory export (OBJ/FBX), law checker (`law::Constraint`), and 7-mode SDF evaluation. Prefer this skill for LLM-driven text→3D authoring, 3D print automation, and any workflow where LLM output correctness matters.
 ---
 
 # ALICE-LOL — Law-Oriented Language for 3D
@@ -36,7 +36,7 @@ Do **not** use this skill for:
 
 ## Core value: GBNF constrained decoding
 
-`references/lol.gbnf` is a **GBNF (Guided Backus-Naur Form)** grammar that covers all 124 runtime-parseable constructs. When loaded into a supported inference stack:
+`references/lol.gbnf` is a **GBNF (Guided Backus-Naur Form)** grammar that covers all <!-- num: syntax.all -->237 runtime-parseable constructs (<!-- num: syntax.core -->125 plus <!-- num: syntax.stdlib -->112 stdlib shortcuts). When loaded into a supported inference stack:
 
 - **llama.cpp**: `--grammar-file references/lol.gbnf`
 - **vLLM / TGI**: pass grammar via OpenAI-compatible `response_format: {"type": "grammar", "grammar": "..."}` API
@@ -144,7 +144,7 @@ After generating a print / laser / Roblox artifact, always report the file path.
 
 ## Related skills
 
-- **`alice-implicit-cad`** (companion, ALICE-SDF side) — lower-level SDF authoring with 126 constructs and direct GLSL / WGSL / HLSL emit. Prefer for engine-integration workflows and shader-native output.
+- **`alice-implicit-cad`** (companion, ALICE-SDF side) — lower-level SDF authoring and direct GLSL / WGSL / HLSL emit. Prefer for engine-integration workflows and shader-native output.
 - **`earthtojake/text-to-cad` `cad`** — STEP-first parametric CAD (build123d Python). Use for mechanical CAD with mating / assembly semantics; ALICE-LOL does not model BREP.
 - **`earthtojake/text-to-cad` `bambu-labs`** — post-slice print job dispatch. Feed LOL-generated `.3mf` to that skill for actual printer control.
 

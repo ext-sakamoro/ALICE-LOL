@@ -29,9 +29,11 @@ This compiles to an `SdfNode` tree that can be:
 6. No trailing commas
 7. No `//` comments, no indentation: at most one whitespace character between tokens (the LLM grammar enforces this; comments belong in prose, never in the emitted program)
 
-## Complete Syntax Reference (79 constructs)
+## Syntax Reference
 
-### Primitives (27)
+The language has <!-- num: syntax.core -->125 constructs, or <!-- num: syntax.all -->237 with the <!-- num: syntax.stdlib -->112 stdlib shortcuts. The tables below give the arguments of the common ones; README.md lists every name, and `lol.gbnf` accepts all of them.
+
+### Primitives (<!-- num: syntax.primitives -->73 in the language, common ones below)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -64,7 +66,7 @@ This compiles to an `SdfNode` tree that can be:
 | `star_polygon(r, n, m, h)` | radius, num points, inner ratio, half-height | Star prism |
 | `cross_shape(l, t, r, h)` | length, thickness, round radius, half-height | Plus shape |
 
-### CSG Operations (23)
+### CSG Operations (<!-- num: syntax.csg -->23)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -92,7 +94,7 @@ This compiles to an `SdfNode` tree that can be:
 | `groove(ra, rb, a, b)` | two radii, two children | Groove at intersection |
 | `tongue(ra, rb, a, b)` | two radii, two children | Tongue-and-groove joint |
 
-### Transforms (4)
+### Transforms (<!-- num: syntax.transforms -->4)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -101,7 +103,7 @@ This compiles to an `SdfNode` tree that can be:
 | `scale(s, child)` | uniform factor, child | Uniform scale |
 | `scale_non_uniform(sx, sy, sz, child)` | factors X, Y, Z, child | Non-uniform scale |
 
-### Modifiers (19)
+### Modifiers (<!-- num: syntax.modifiers -->20)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -124,6 +126,7 @@ This compiles to an `SdfNode` tree that can be:
 | `icosahedral_symmetry(child)` | child | 60-fold icosahedral symmetry |
 | `with_material(id, child)` | material ID, child | Assign material |
 | `surface_roughness(freq, amp, oct, child)` | frequency, amplitude, octaves, child | Surface roughness |
+| `sweep_bezier(p0x, p0z, p1x, p1z, p2x, p2z, child)` | three control points (x, z), child | Sweep along a quadratic Bezier curve in the XZ plane |
 
 ### High-Level Hardsurface Primitives (5, Phase 5.1)
 
@@ -151,7 +154,7 @@ skadis_hook_l()
 1 word で呼び出せる形にしたもの mesh 化経路は必ず Dual Contouring 経由
 (polygon_extrude Phase 4 で削除済)
 
-### 3D Print Structural Intent (3)
+### 3D Print Structural Intent (<!-- num: syntax.print -->3)
 
 These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, TPMS))`. Use them when generating objects for physical fabrication.
 
@@ -161,14 +164,14 @@ These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, T
 | `diamond_infill(shell_t, scale, lattice_t, child)` | shell thickness, lattice scale, lattice thickness, child | Diamond | High stiffness in all directions |
 | `schwarz_infill(shell_t, scale, lattice_t, child)` | shell thickness, lattice scale, lattice thickness, child | Schwarz-P | Isotropic — equal strength in X/Y/Z |
 
-### Time Controls (2)
+### Time Controls (<!-- num: syntax.time -->2)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
 | `animate(speed, amplitude, child)` | speed, amplitude, child | Animate over time |
 | `morph(t, a, b)` | blend factor 0-1, shape A, shape B | Morph between two shapes |
 
-### Phase 3 Intent — `program(...)` wrapper (18 constructs)
+### Phase 3 Intent — `program(...)` wrapper (<!-- num: syntax.intent -->18 constructs)
 
 A bare SDF expression describes geometry (Phase 2 Law). To also express **what an agent should do** in that scene (Phase 3 Intent), wrap it in `program(...)`:
 
@@ -852,7 +855,7 @@ OK — 1 node, O(1) eval per point:
 translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole))
 ```
 
-**Effect**: 93% DSL size reduction, 58% mesh reduction, dramatically faster generation.
+**Effect**: 93% DSL size reduction, 58% mesh reduction, dramatically faster generation. <!-- measured: 2026-03-19, one organizer written both ways (explicit union of holes vs repeat_finite), recorded in 3d9f401 -->
 
 ### Staggered Grid (e.g. SKADIS)
 
@@ -1085,6 +1088,7 @@ assert mesh.is_watertight, "Mesh must be watertight for 3D printing"
 
 ### Mesh Resolution Guide
 
+<!-- measured: 2026-03-19, approximate triangle count and 3MF size per resolution, recorded in 3d9f401 -->
 | Use | Resolution | Triangles | File Size |
 |-----|-----------|-----------|-----------|
 | Preview | 128 | ~500K | ~40MB |

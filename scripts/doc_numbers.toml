@@ -1,0 +1,207 @@
+# Numbers the documents state, and where each one is counted (scripts/doc_numbers.py)
+#
+# A document writes `<!-- num: KEY -->73` and the gate recomputes KEY from the
+# source below. A count without a marker, or a measured value without
+# `<!-- measured: YYYY-MM-DD, how -->` in its block, fails.
+
+[scan]
+include = ["*.md", "**/*.md"]
+# CHANGELOGs record what each release had at the time; their numbers are history, not claims about now
+# LICENSE files are legal text
+exclude = ["CHANGELOG.md", "*/CHANGELOG.md", "*/LICENSE*", "LICENSE*", "target/**", "*/target/**"]
+
+# ---------------------------------------------------------------- what counts as a count
+
+[[countable]]
+# "73 primitives", "23 CSG ops", "38 tests", "4 targets", "18 verbs", "130 variants"
+pattern = '''(?i)(?<![\w.#/-])(?P<n>\d[\d,]*)\s+(?:runtime-parseable |grammar |print |template |proc[_-]macro )?(?:constructs?|primitives?|CSG(?: ops?)?|transforms?|modifiers?|print intents|laws|constraints?|variants?|tests?|fuzz targets?|targets|examples|families|verbs?|verdicts|probes)\b'''
+
+[[countable]]
+# headings and lists: "Primitives (27)", "Modifiers (20)", "Laws (3)", "verb (14)", "Primitives (5, Phase 5.1)"
+pattern = '''(?i)\b(?:constructs?|primitives?|operations|CSG|transforms|modifiers|controls|intents?|laws|constraints?|variants?|verbs?|tests?|examples|families)\s*\(\s*(?:<!--[^>]*-->\s*)?(?P<n>\d+)\s*[),]'''
+
+[[countable]]
+# Japanese counters after a code noun: "テスト 11 件", "8 Constraint variant" is covered above
+pattern = '''(?:テスト|test|variant|verb|primitive|example|target)\s*(?P<n>\d+)\s*(?:件|個|種)'''
+
+# ---------------------------------------------------------------- measured values
+
+[measured]
+# time, throughput and sizes of what the code produces; physical dimensions (mm, kgf, %) of printed parts are design inputs, not measurements of the code
+# a value after a comparison ("≤ 10ns", "> 10KB") or before 未満 / 以下 is a limit, not a measurement
+bound_before = '''≤|<=|<|≥|>=|>'''
+bound_after = '''未満|以下|以上'''
+units = '''(?:ns|µs|us|ms)(?:/point)?\b|samples/s\b|(?:triangles|tris)\b|(?:KB|MB|GB)\b|%\s+(?:DSL size|mesh|size)\s+reduction'''
+
+# ---------------------------------------------------------------- sources
+
+[sources."syntax.primitives"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"primitives",\s*&\[(.*?)\]'''
+
+[sources."syntax.csg"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"csg",\s*&\[(.*?)\]'''
+
+[sources."syntax.transforms"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"transforms",\s*&\[(.*?)\]'''
+
+[sources."syntax.modifiers"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"modifiers",\s*&\[(.*?)\]'''
+
+[sources."syntax.print"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"print",\s*&\[(.*?)\]'''
+
+[sources."syntax.time"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"time",\s*&\[(.*?)\]'''
+
+[sources."syntax.stdlib"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''\(\s*"stdlib",\s*&\[(.*?)\]'''
+
+[sources."syntax.core"]
+# the language without the stdlib shortcuts
+kind = "sum"
+of = ["syntax.primitives", "syntax.csg", "syntax.transforms", "syntax.modifiers", "syntax.print", "syntax.time"]
+
+[sources."syntax.all"]
+kind = "sum"
+of = ["syntax.core", "syntax.stdlib"]
+
+[sources."syntax.intent"]
+kind = "strings_in_block"
+file = "alice-lol/src/syntax_table.rs"
+block = '''const INTENT_SYNTAX[^=]*=\s*&\[(.*?)\];'''
+
+[sources."law.constraints"]
+kind = "rust_enum_variants"
+file = "alice-lol/src/law.rs"
+name = "Constraint"
+
+[sources."intent.variants"]
+kind = "rust_enum_variants"
+file = "alice-lol/src/intent.rs"
+name = "IntentNode"
+
+[sources."intent.composites"]
+kind = "distinct_matches"
+file = "alice-lol/src/intent.rs"
+pattern = '''(?m)^    (Sequence|Parallel)\('''
+
+[sources."intent.other"]
+# the variants that are neither an L1 physical verb nor a composite
+kind = "distinct_matches"
+file = "alice-lol/src/intent.rs"
+pattern = '''(?m)^    (LatentIntent|Music)\b'''
+
+[sources."intent.l1_verbs"]
+kind = "sum"
+of = ["intent.variants"]
+minus = ["intent.composites", "intent.other"]
+
+[sources."sdf.variants"]
+# every SdfNode variant emit::to_lol names (the emitter matches all of them, no wildcard arm)
+kind = "distinct_matches"
+file = "alice-lol/src/emit.rs"
+pattern = '''SdfNode::([A-Z][A-Za-z0-9]*)'''
+
+[sources."tests.law"]
+kind = "rust_test_fns"
+file = "alice-lol/tests/law_tests.rs"
+
+[sources."fuzz.targets"]
+kind = "glob"
+glob = "fuzz/fuzz_targets/*.rs"
+
+[sources."datagen.families"]
+kind = "rust_enum_variants"
+file = "alice-lol-datagen/src/families/mod.rs"
+name = "Family"
+
+# ---------------------------------------------------------------- counts that are history or plans, not claims about now
+
+[[allow]]
+file = "SPEC.md"
+text = "| 4 | テスト 7件 + showcase 更新 |"
+reason = "a step of the v0.x implementation plan (what that step was to add), not the current test count"
+
+[[allow]]
+file = "SPEC.md"
+text = "新 5 variant (Stress / Thermal / Contact / Continuity / VolumeConservation)"
+reason = "the five variants the A.2 sprint added, named in the same sentence"
+
+[[allow]]
+file = "SPEC.md"
+text = "physics_bridge + sim_bridge 11 test、regression 1272 test (alice-sdf 側)"
+reason = "part of the dated snapshot in §9.6 (2026-08-06); the 1272 are tests of another repository"
+
+[[allow]]
+file = "SPEC.md"
+text = "A.4 backend parity Level 1 (22 test)"
+reason = "what commit 4364dc1 added (§9.8 is a list of commits)"
+
+[[allow]]
+file = "SPEC.md"
+text = "B.1 IntentNode + Program 構造 (16 variant、10 test)"
+reason = "what commit ac675d5 added (§9.8 is a list of commits)"
+
+[[allow]]
+file = "LLM_REFERENCE.md"
+text = "### High-Level Hardsurface Primitives (5, Phase 5.1)"
+reason = "the five shortcuts Phase 5.1 added, one row each in the table below (a part of the stdlib group)"
+
+[[allow]]
+file = "docs/HUMANOID_TEMPLATE_DESIGN.md"
+text = "各 public API に minimal doctest 1 個"
+reason = "a rule per API (one doctest each), not a count"
+
+[[allow]]
+file = "docs/HUMANOID_TEMPLATE_DESIGN.md"
+text = "各 Phase に対応 example 1 個"
+reason = "a rule per phase (one example each), not a count"
+
+[[allow]]
+file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
+text = "smoke test 1 個"
+reason = "the plan for a crate not created yet (one smoke test)"
+
+[[allow]]
+file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
+text = "「掴む」= Grasp 等 14 verb"
+reason = "the planned verbs of the humanoid template (StandUp, RaiseArm, ...), not the variants of IntentNode"
+
+[[allow]]
+file = "docs/PIPELINE_COMPLETE.md"
+text = "**実装対象 (5 primitive)**"
+reason = "the five shortcuts the Phase 5.1 plan was to add, listed right below"
+
+[[allow]]
+file = "docs/PIPELINE_COMPLETE.md"
+text = "- Primitive (71):"
+reason = "part of the snapshot dated 2026-08-05 in the heading above"
+
+[[allow]]
+file = "docs/PIPELINE_COMPLETE.md"
+text = "- Operations (23):"
+reason = "part of the snapshot dated 2026-08-05 in the heading above"
+
+[[allow]]
+file = "docs/PIPELINE_COMPLETE.md"
+text = "- Transforms (4):"
+reason = "part of the snapshot dated 2026-08-05 in the heading above"
+
+[[allow]]
+file = "docs/PIPELINE_COMPLETE.md"
+text = "- Modifiers (20):"
+reason = "part of the snapshot dated 2026-08-05 in the heading above"

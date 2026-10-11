@@ -1,4 +1,4 @@
-# ALICE-LOL DSL Syntax Reference (Runtime Parser, 124 Constructs)
+# ALICE-LOL DSL Syntax Reference (Runtime Parser)
 
 **Source of truth**: `LLM_REFERENCE.md` in the parent crate. This file mirrors the essentials for skill self-containment; if you need the full LLM-oriented guide (semantic anti-patterns, worked examples, coordinate-frame gotchas), read the parent doc.
 
@@ -13,7 +13,7 @@
 7. `//` line comments and whitespace allowed between tokens
 8. **Variable capture** (`{rust_expr}` and bare identifiers) is `proc_macro`-only — the runtime parser rejects these. LLM output should emit numeric constants only.
 
-## Primitives (71)
+## Primitives (<!-- num: syntax.primitives -->73 in the language, common ones below; README.md lists every name)
 
 ### Basic solids
 - `sphere(r)` — radius
@@ -57,7 +57,7 @@ For lightweight lattice infill, **prefer `lattice_infill` / `diamond_infill` / `
 ### 2D primitives (for `extrude` / `revolution`)
 - `circle_2d`, `rect_2d`, `segment_2d`, `rounded_rect_2d`, `annular_2d`
 
-## CSG Operations (23)
+## CSG Operations (<!-- num: syntax.csg -->23)
 
 ### Sharp
 - `union(a, b, ...)` — combine (OR)
@@ -81,14 +81,14 @@ For lightweight lattice infill, **prefer `lattice_infill` / `diamond_infill` / `
 ### Columnar
 - `columns_union(r, n, a, b, ...)`, `columns_intersection`, `columns_subtraction`
 
-## Transforms (4)
+## Transforms (<!-- num: syntax.transforms -->4)
 
 - `translate(x, y, z, child)`
 - `rotate(rx, ry, rz, child)` — Euler degrees
 - `scale(s, child)` — uniform
 - `scale_non_uniform(sx, sy, sz, child)`
 
-## Modifiers (20)
+## Modifiers (<!-- num: syntax.modifiers -->20)
 
 ### Surface
 - `round(r, child)` — global corner rounding
@@ -119,9 +119,9 @@ For lightweight lattice infill, **prefer `lattice_infill` / `diamond_infill` / `
 - `animate(track, child)` — keyframe animation
 - `morph(t, a, b)` — linear morph between two SDF trees at parameter `t`
 
-## Laws (3) — proc_macro only
+## Laws — Rust API only
 
-The runtime parser does **not** accept Law declarations. Apply laws in Rust:
+The runtime parser does **not** accept Law declarations. Apply laws in Rust. `law::Constraint` has <!-- num: law.constraints -->11 variants; the three most used:
 
 - `NonOverlap { a, b, priority }` — a and b must not intersect
 - `Containment { inner, outer, priority }` — inner must be fully inside outer

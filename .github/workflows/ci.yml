@@ -541,7 +541,8 @@ jobs:
         run: python scripts/license_check.py
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
-  # (scripts/readme_sync.py) と、公開文書と全 tracked file の語彙 (scripts/docs_lint.py)
+  # (scripts/readme_sync.py)、全文書の件数と計測値 (scripts/doc_numbers.py)、
+  # 公開文書と全 tracked file の語彙 (scripts/docs_lint.py)
   # 検査器自身が OS 依存で空振り / 異常終了しないよう 3 OS で動かす (比較 0 件は fail)
   docs:
     name: Docs gates (${{ matrix.os }})
@@ -563,6 +564,10 @@ jobs:
         run: python scripts/test_readme_sync.py
       - name: readme_sync (README とコードの一致)
         run: python scripts/readme_sync.py --check
+      - name: doc_numbers oracle (検査器自身の試験)
+        run: python scripts/test_doc_numbers.py
+      - name: doc_numbers (文書の件数・計測値とコードの一致、scripts/doc_numbers.toml)
+        run: python scripts/doc_numbers.py
       - name: docs_lint oracle (検査器自身の試験)
         run: python scripts/test_docs_lint.py
       - name: docs_lint (公開文書と tracked file の語彙、CHANGELOG の構造)

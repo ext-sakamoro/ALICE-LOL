@@ -15,9 +15,10 @@ LOL is executable, so training data can be manufactured without human labelling.
 | `random_tree` | vocabulary coverage from the grammar buckets (structural captions) |
 | `product_shortcut` | `pen_cup(50, 100)` etc. — `lol` keeps the shortcut, `lol_canonical` holds the expansion |
 
+<!-- measured: 2026-10-11, release build, `datagen --n 20000 --seed 42 --families all`, 8 runs gave 40,000 to 75,000 samples/s (median 53,000) on one arm64 core with the machine under a load average of about 45; CPU-bound (0.32 s of user time per 20,000) -->
 ```bash
 cargo run --release -p alice-lol-datagen --bin datagen -- --n 20000 --seed 42 --families all --out data.jsonl
-# ≈ 5,000 samples/s single-thread; rejected samples (self-check failures) are reported on stderr
+# ≈ 50,000 samples/s single-thread; rejected samples (self-check failures) are reported on stderr
 ```
 
 Each JSONL line: `{id, family, seed, caption_en, caption_ja, lol, lol_canonical, oracle:[[x,y,z,"in"|"out"],…], intent_verbs:[…]}`.

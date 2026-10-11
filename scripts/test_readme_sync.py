@@ -313,9 +313,20 @@ class Checks(unittest.TestCase):
         e = errors(both(R.replace(" <!-- readme-sync: msrv -->", "")))
         self.assertTrue(any("`msrv` compared nothing" in x for x in e), e)
 
-    def test_stale_dependency_version(self):
-        e = errors({"README.md": R + '\n```toml\nalice-lol = "0.3"\n```\n'})
-        self.assertTrue(any('alice-lol = "0.3"' in x for x in e), e)
+    def test_a_dependency_version_fails_even_when_current(self):
+        # the READMEs carry no version, so even the current one would go stale on the next release
+        for line in ('alice-lol = "0.4"', 'alice-lol = { version = "0.4", features = ["llm"] }',
+                     'alice-lol-macro = "0.2.1"', "Install alice-lol 0.4.0 from crates.io"):
+            with self.subTest(line=line):
+                e = errors({"README_JP.md": R + "\n```toml\n" + line + "\n```\n"})
+                self.assertTrue(any(x.startswith("README_JP.md:") and "states a version" in x for x in e), e)
+
+    def test_a_crate_name_without_a_version_is_not_a_version(self):
+        self.assertEqual(errors({"README.md": R + "\nRun `cargo add alice-lol`, see alice-lol-macro.\n"}), [])
+
+    def test_the_version_check_reads_every_readme_line(self):
+        _, counts = rs.check(crate())
+        self.assertEqual(counts["version"], 2 * len(R.split("\n")))
 
     def test_readme_example_diverges_from_doctest(self):
         e = errors({"README_JP.md": README.format(example=EXAMPLE.replace("x, 1", "x, 2"))})

@@ -331,7 +331,7 @@ SdfNode 直接eval     pruned GLSL 生成        onnx/safetensors
 | 優先度 | `Priority::Hard`（エラー）/ `Priority::Soft(weight)`（警告） |
 | 検出方式 | グリッド点サンプリング + セル AABB レポート |
 | レポート | `LawReport` — 違反リスト（残差の絶対値降順）、空間座標、AABB |
-| テスト | 11 件（law_tests.rs） |
+| テスト | <!-- num: tests.law -->38 件（law_tests.rs） |
 | デモ | `law_demo.rs` — 5 シナリオ |
 
 ### v0.4（実装済み）: DSL 大幅拡張
@@ -440,7 +440,7 @@ LOL は ALICE エコシステム全体の **三相原理**「Data (Phase 1) → 
 | Phase | 送信物 | 圧縮率 | 実装状態 |
 |--|--|--|--|
 | **Phase 1 Data** | polygon / mocap / texture (従来 IT / ゲーム) | 1× (baseline) | 対象外 (LOL は Phase 2 以上のみ) |
-| **Phase 2 Law** | SDF 数式 / 決定論物理 / 制約 | 数十〜数千× | ✅ SdfNode IR + 8 Constraint variant |
+| **Phase 2 Law** | SDF 数式 / 決定論物理 / 制約 | 数十〜数千× | ✅ SdfNode IR + <!-- num: law.constraints -->11 Constraint variant |
 | **Phase 3 Intent** | 8-byte verb packet / 動作意図 | 10,000× (目標) | ⏳ IntentNode + Program skeleton (実行系は B.3 以降) |
 
 ### 9.2 IR 階層
@@ -453,13 +453,13 @@ Program {
 }
 ```
 
-- **SdfNode** = 71 primitive + 23 CSG + 4 transform + 20 modifier + 3 TPMS + 時間軸 の代数系
-- **`law::Constraint`** = 8 variant (§9.3)
-- **`intent::IntentNode`** = 16 variant (14 verb + Sequence/Parallel、§9.4)
+- **SdfNode** = <!-- num: syntax.primitives -->73 primitive + <!-- num: syntax.csg -->23 CSG + <!-- num: syntax.transforms -->4 transform + <!-- num: syntax.modifiers -->20 modifier + <!-- num: syntax.print -->3 TPMS + <!-- num: syntax.time -->2 時間軸 の代数系
+- **`law::Constraint`** = <!-- num: law.constraints -->11 variant (§9.3)
+- **`intent::IntentNode`** = <!-- num: intent.variants -->18 variant (<!-- num: intent.l1_verbs -->14 verb + LatentIntent / Music + Sequence / Parallel、§9.4)
 
 型分離設計: `Program::as_sdf()` は intent field を露出しない = GPU backend の 誤解釈事故を型で防止。
 
-### 9.3 Law 制約 8 variant (Phase 2)
+### 9.3 Law 制約 <!-- num: law.constraints -->11 variant (Phase 2)
 
 | # | Constraint | 検証内容 | 実装 |
 |--|--|--|--|
@@ -471,12 +471,15 @@ Program {
 | 6 | `Contact { a, b, min_distance, max_distance }` | 2 面の接触距離範囲 (assembly/mating) | A.2 追加 |
 | 7 | `Continuity { node, seed_point }` | 単一連結領域 (flood fill 6-connected) | A.2 追加 |
 | 8 | `VolumeConservation { before, after, relative_tolerance }` | morph 前後の体積保存 | A.2 追加 |
+| 9 | `GradientBound { node, max_gradient, probe }` | 場の勾配が上限以下 (距離を過大申告しない) | 2026-09-27 追加 |
+| 10 | `Reachable { node, from, to }` | 内部の 2 点が内部を通って繋がる | 2026-09-27 追加 |
+| 11 | `ThermalField { node, sources, material, metres_per_unit, ambient_c, max_temperature_c, duration_s }` (feature `physics`) | 解いた熱場の最高温度が上限以下 | 2026-09-29 追加 |
 
 新 5 variant (Stress / Thermal / Contact / Continuity / VolumeConservation) は **geometric proxy 評価** (grid + `sdf_eval`)、Physics dep 追加なし。精密 physics-backed 評価は A.2.1 (別 sprint) で `alice-physics` `sim_modifier` / `sdf_collider` API 経由に置換予定。
 
-### 9.4 Intent verb catalog 16 variant (Phase 3、B.1 MVP)
+### 9.4 Intent catalog <!-- num: intent.variants -->18 variant (Phase 3)
 
-**L1 Physical Intent verb (14)**:
+**L1 Physical Intent verb (<!-- num: intent.l1_verbs -->14)**:
 
 | # | Verb | 引数 |
 |--|--|--|
@@ -495,7 +498,9 @@ Program {
 | 13 | `Avoid` | target_id, min_distance |
 | 14 | `Rest` | duration_ms |
 
-**合成 (2)**: `Sequence(Vec<IntentNode>)` / `Parallel(Vec<IntentNode>)`
+**L1 以外 (<!-- num: intent.other -->2)**: `LatentIntent { values, semantic_hint }` (連続 latent、2026-09-13 追加) / `Music { packet: [u8; 8] }` (8-byte の音楽 intent、2026-09-13 追加)
+
+**合成 (<!-- num: intent.composites -->2)**: `Sequence(Vec<IntentNode>)` / `Parallel(Vec<IntentNode>)`
 
 L2 Social Intent と L3 Architectural Intent は未定義 (本 crate の外で扱う)。
 

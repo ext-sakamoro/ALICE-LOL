@@ -8,14 +8,14 @@ Why this exists: LOL is a *law language* (Phase 2/3 of the ALICE Data → Law �
 
 | Track | Step | Status | Where |
 |---|---|---|---|
-| A0 | Phase 3 Intent text syntax: `program(<sdf>, entities(...), <intent>)`, 18 verbs, `parse_program`, `IntentNode::to_lol` | ✅ 2026-09-14 | `alice-lol/src/runtime_parser.rs`, `lol.gbnf` |
-| A1 | Fast constrained-decoding loop | ✅ 2026-09-14 | alice-llm B-10 token-trie mask (`grammar::TokenTrie`): 8 s → ~1 ms per step on a 130k vocab; the bottleneck was the per-token FSM probe, not the GPU path |
+| A0 | Phase 3 Intent text syntax: `program(<sdf>, entities(...), <intent>)`, <!-- num: syntax.intent -->18 intent names, `parse_program`, `IntentNode::to_lol` | ✅ 2026-09-14 | `alice-lol/src/runtime_parser.rs`, `lol.gbnf` |
+| A1 | Fast constrained-decoding loop | ✅ 2026-09-14 | alice-llm B-10 token-trie mask (`grammar::TokenTrie`): 8 s → ~1 ms per step on a 130k vocab; the bottleneck was the per-token FSM probe, not the GPU path <!-- measured: 2026-09-14, time per decoding step before and after the token-trie mask, recorded in f55da53 --> |
 | — | Grammar tightened for the LLM path: no `//` comments, at most one whitespace char between tokens (still a strict subset of what the runtime parser accepts) | ✅ | `lol.gbnf` |
 | — | Grammar is the single source: `alice_lol::LOL_GBNF` (feature-free) → re-exported by the pipeline crate → consumed by text-to-print; parser ⊆ grammar drift guard in `tests/lol_gbnf_test.rs` | ✅ | 103 product / mechanical / fastener constructs recovered into the canonical grammar |
 | A2 | Think-first generation: free `<think>…</think>` prefix, then grammar (alice-llm B-11 `generate_grammar_prefixed`, `bridge::generate_program_thinking`) | ✅ | MiniCPM5-2B produces the full mug (`union(cylinder(25,50), translate(25,0,50, rotate(0,90,0, torus(12,4))))`) only with the think prefix |
 | A2 | Quality benchmark `examples/llm_bench.rs`: 20 prompts (T1 primitives / T2 compositions / T3 transforms / T4 Intent), judged by SDF-eval oracle points and Intent structure | ✅ | **baseline MiniCPM5-2B Q4_K_M: grammar-only 7/20, think→grammar 9/20** (parse 40/40) |
-| C0 | `emit::to_lol`: `SdfNode` → LOL text, 128 variants exhaustive, canonical form, eval-parity round trip over all 237 grammar constructs | ✅ | `alice-lol/src/emit.rs`, `tests/emit_roundtrip.rs` |
-| C1 | `alice-lol-datagen`: 8 template families emit LOL + EN/JA captions + oracle points from the same parameters, self-checked; ≈6,500 samples/s | ✅ | `alice-lol-datagen/` |
+| C0 | `emit::to_lol`: `SdfNode` → LOL text, <!-- num: sdf.variants -->130 variants exhaustive, canonical form, eval-parity round trip over all <!-- num: syntax.all -->237 grammar constructs | ✅ | `alice-lol/src/emit.rs`, `tests/emit_roundtrip.rs` |
+| C1 | `alice-lol-datagen`: <!-- num: datagen.families -->8 template families emit LOL + EN/JA captions + oracle points from the same parameters, self-checked; ≈ 50,000 samples/s single-thread <!-- measured: 2026-10-11, release build, `datagen --n 20000 --seed 42 --families all`, 8 runs gave 40,000 to 75,000 samples/s (median 53,000) on one arm64 core with the machine under a load average of about 45; CPU-bound (0.32 s of user time per 20,000) --> | ✅ | `alice-lol-datagen/` |
 | **A3** | **SFT of a small model on datagen pairs, re-run `llm_bench` without think** | ⏳ next (the part that actually changes the model) | pass line: ≥ 15/20 without think, T2/T3 ≥ 3/5 |
 | A4 | RL with verifiable reward (parse + oracle match) | planned | |
 | B0–B4 | Latent side: physical RSSM, latent → Intent head, latent → LOL decoder, projector into the LLM, LOL → latent encoder | planned | the current RSSM in Project-ALICE is trained on coding-agent transitions, not physics |

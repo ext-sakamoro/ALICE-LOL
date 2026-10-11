@@ -47,7 +47,7 @@ canonical narrative
               ▼
 ┌──────────────────────────────────────────┐
 │ alice-sdf (中核)                          │
-│   SdfNode 71 primitive + 23 CSG + ...     │
+│   SdfNode primitive + CSG + ...           │
 └──────────────────────────────────────────┘
 ```
 
