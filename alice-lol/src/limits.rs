@@ -289,17 +289,21 @@ pub fn checked_bounded(
 ///
 /// `gyroid`/`schwarz_p`/`diamond_surface`/`neovius`/`lidinoid`/`iwp`/`frd`/
 /// `fischer_koch_s`/`pmy` each divide a bounded quantity by `scale`
-/// (`d.abs() / scale - thickness`), so `scale` must be finite and bounded
-/// away from `0.0` or the division is `±inf`/`NaN`; `thickness` only has to
-/// be finite (it is subtracted, not divided by).
+/// (`d.abs() / scale - thickness`), so `scale` must be finite and strictly
+/// greater than `0.0` or the division is `±inf`/`NaN`; `thickness` only has
+/// to be finite (it is subtracted, not divided by).
 ///
-/// The `1e-6` floor matches `fmt_f32`'s own near-zero-collapse threshold: a
-/// smaller `scale` would parse once, then be silently rounded to `0.0` by the
-/// very first `to_lol`, making that emitted text unparseable by this same
-/// check (so "parses" implies "survives one emit-reparse round trip
-/// unchanged", not just "accepted once"). If `fmt_f32` stops collapsing
-/// near-zero values, this floor should become `0.0` (`scale > 0.0`, no
-/// longer tied to the emitter's own rounding).
+/// The floor is plain `scale > 0.0`, not [`checked_positive_finite`]'s usual
+/// inclusive floor (this needs every positive value, including subnormals
+/// down to `f32::from_bits(1)`, so no single inclusive floor constant would
+/// do). An earlier version of this check used `>= 1e-6` instead, to match
+/// `fmt_f32`'s then-near-zero-collapsing behavior (a scale accepted below
+/// that threshold would have been silently rounded to `0.0` by the first
+/// `to_lol`, making the emitted text unparseable by this very check).
+/// `fmt_f32` is a faithful round-trip for every finite value now (no
+/// near-zero collapsing left), so that extra margin is no longer needed: any
+/// finite positive scale, however small, round-trips through emit/parse
+/// unchanged.
 ///
 /// Every entrance that builds one of these 9 node types goes through this one
 /// function: the runtime `.lol` text parser (`runtime_parser.rs`, both the 9
@@ -315,10 +319,18 @@ pub fn checked_bounded(
 ///
 /// # Errors
 ///
-/// [`SpecError`] if `scale` is non-finite or below `1e-6`, or `thickness` is
-/// non-finite.
+/// [`SpecError`] if `scale` is non-finite or not strictly positive, or
+/// `thickness` is non-finite.
 pub fn checked_tpms_fields(scale: f32, thickness: f32) -> Result<(f32, f32), SpecError> {
-    let scale = checked_positive_finite(scale, 1e-6, "tpms_scale")?;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(FloatLimitError {
+            kind: "tpms_scale",
+            limit: 0.0,
+            value: scale,
+            unit: "mm",
+        }
+        .into());
+    }
     let thickness = checked_positive_finite(thickness, f32::NEG_INFINITY, "tpms_thickness")?;
     Ok((scale, thickness))
 }
@@ -511,7 +523,7 @@ mod tests {
             f32::NAN,
             f32::INFINITY,
             f32::NEG_INFINITY,
-            5e-7,
+            -5e-7,
         ] {
             assert!(
                 checked_tpms_fields(scale, 0.1).is_err(),
@@ -536,5 +548,21 @@ mod tests {
     fn checked_tpms_fields_accepts_the_threshold_and_ordinary_values() {
         assert_eq!(checked_tpms_fields(1e-6, 0.1).unwrap(), (1e-6, 0.1));
         assert_eq!(checked_tpms_fields(3.0, 0.1).unwrap(), (3.0, 0.1));
+    }
+
+    /// Any finite positive scale is accepted, with no lower floor beyond
+    /// `> 0.0` -- down to the smallest positive subnormal `f32` -- now that
+    /// `fmt_f32` no longer needs a margin against its own near-zero
+    /// collapsing (it doesn't collapse anything any more).
+    #[test]
+    fn checked_tpms_fields_accepts_any_finite_positive_scale_including_subnormals() {
+        for scale in [1e-45_f32, 1e-40, 1e-10, 5e-7] {
+            assert!(scale > 0.0, "test input itself must be positive: {scale}");
+            assert_eq!(
+                checked_tpms_fields(scale, 0.1).unwrap(),
+                (scale, 0.1),
+                "scale={scale} should be accepted"
+            );
+        }
     }
 }

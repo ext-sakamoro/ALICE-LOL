@@ -1,7 +1,0 @@
-error: a TPMS surface's scale must be finite and >= 1e-6, got 0.0000005
- --> tests/compile_fail/tpms_scale_below_the_floor.rs:7:13
-  |
-7 |     let _ = lol! { gyroid(5e-7, 0.1) };
-  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: this error originates in the macro `lol` (in Nightly builds, run with -Z macro-backtrace for more info)

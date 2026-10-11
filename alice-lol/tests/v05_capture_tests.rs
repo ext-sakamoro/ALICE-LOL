@@ -113,6 +113,33 @@ fn captured_valid_tpms_fields_still_work() {
     assert!(matches!(node, alice_lol::SdfNode::Gyroid { .. }));
 }
 
+/// A literal TPMS scale this small used to be a `compile_error!` (the old
+/// `>= 1e-6` floor); it is a finite positive value now, so the macro must
+/// accept it at compile time (the `tpms_node` literal branch in
+/// `codegen.rs`) and build the node, round-tripping bit-exact through
+/// emit/parse like the runtime entrance does.
+#[test]
+fn literal_tpms_scale_below_the_old_1e_minus_6_floor_now_compiles() {
+    let node = lol! { gyroid(5e-7, 0.1) };
+    let alice_lol::SdfNode::Gyroid { scale, thickness } = node else {
+        panic!("expected Gyroid, got {node:?}");
+    };
+    assert_eq!(scale.to_bits(), 5e-7_f32.to_bits());
+    assert_eq!(thickness.to_bits(), 0.1_f32.to_bits());
+    let text = alice_lol::emit::to_lol(&node).unwrap();
+    assert_eq!(text, "gyroid(5e-7, 0.1)");
+    let back = alice_lol::runtime_parser::parse_lol(&text).unwrap();
+    let alice_lol::SdfNode::Gyroid {
+        scale: back_scale,
+        thickness: back_thickness,
+    } = back
+    else {
+        panic!("expected Gyroid, got {back:?}");
+    };
+    assert_eq!(back_scale.to_bits(), scale.to_bits());
+    assert_eq!(back_thickness.to_bits(), thickness.to_bits());
+}
+
 /// The `lol!` macro's literal-float parsing (`parser.rs`'s `parse_val`) must
 /// round a decimal literal to `f32` bit-identically with the runtime `.lol`
 /// text parser's lexer (`runtime_parser.rs`'s `read_number`, which just uses

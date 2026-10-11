@@ -253,7 +253,7 @@ pub fn honeycomb_infill(
 ///
 /// # Panics
 ///
-/// `cell_scale` が有限かつ `1e-6` 以上でない、または `wall_thickness` が
+/// `cell_scale` が有限かつ `0.0` より大きくない、または `wall_thickness` が
 /// 有限でない時 ([`crate::limits::checked_tpms_fields`] の契約、この crate の
 /// 他の infallible builder と同じ `try_*` が無い生の builder の panic 規約)
 #[must_use]
@@ -474,6 +474,22 @@ mod tests {
             half_extents: Vec3::new(20.0, 20.0, 20.0),
         };
         let _ = gyroid_infill(container, 3.0, f32::NAN);
+    }
+
+    /// Any finite positive `cell_scale` is accepted, down to a subnormal
+    /// `f32` -- `1e-45`/`5e-7` were rejected by an earlier `>= 1e-6` floor.
+    #[test]
+    fn gyroid_infill_accepts_any_finite_positive_cell_scale() {
+        for cell_scale in [1e-45_f32, 5e-7] {
+            let container = SdfNode::Box3d {
+                half_extents: Vec3::new(20.0, 20.0, 20.0),
+            };
+            let node = gyroid_infill(container, cell_scale, 0.4);
+            assert!(
+                matches!(node, SdfNode::Intersection { .. }),
+                "cell_scale={cell_scale} should build an Intersection node"
+            );
+        }
     }
 
     #[test]

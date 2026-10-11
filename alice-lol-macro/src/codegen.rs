@@ -54,9 +54,9 @@ fn literal_f32(ts: &TokenStream2) -> Option<f32> {
 /// does for a non-literal value). `None` if both are valid, `Some(message)`
 /// otherwise.
 fn tpms_literal_error(scale: f32, thickness: f32) -> Option<String> {
-    if !scale.is_finite() || scale < 1e-6 {
+    if !scale.is_finite() || scale <= 0.0 {
         return Some(format!(
-            "a TPMS surface's scale must be finite and >= 1e-6, got {scale}"
+            "a TPMS surface's scale must be finite and > 0.0, got {scale}"
         ));
     }
     if !thickness.is_finite() {

@@ -4310,20 +4310,17 @@ mod tests {
     /// `alice_sdf`'s 9 TPMS surfaces (`gyroid`/`schwarz_p`/`diamond_surface`/
     /// `neovius`/`lidinoid`/`iwp`/`frd`/`fischer_koch_s`/`pmy`) all compute
     /// `d.abs() / scale - thickness` with no guard on `scale`: a scale of
-    /// exactly `0.0` or `-0.0` divides into `+inf` / `-inf`, and because
-    /// `emit::canon` collapses any near-zero value (including `-0.0`) to a
-    /// positive `0.0`, a `-0.0` survives in the parsed tree but not in its
-    /// own re-emitted text -- `eval` then disagrees by sign of infinity
-    /// after a single round trip (`fuzz_lol_emit_parity` found this via
-    /// `lidinoid(-0.0,1e8)`). Reject at the language boundary instead of
-    /// letting an accepted builder produce that pair of trees. The accept
-    /// threshold is 1e-6 (not just "> 0"), matching `emit::canon`'s own
-    /// near-zero-collapse threshold exactly: a scale this change let through
-    /// below 1e-6 would itself be silently collapsed to `0.0` by the first
-    /// `to_lol`, making the emitted text unparseable by this very check --
-    /// an `(0, 1e-6)` scale is excluded here so that "parses" implies
-    /// "survives one emit-reparse round trip unchanged", not just "accepted
-    /// once".
+    /// exactly `0.0` or `-0.0` divides into `+inf` / `-inf`. Reject at the
+    /// language boundary instead of letting an accepted builder produce a
+    /// tree whose `eval` is infinite. The accept threshold is plain `> 0.0`:
+    /// an earlier version of this check used `>= 1e-6` instead, matching
+    /// `fmt_f32`'s then-near-zero-collapsing behavior (a scale accepted below
+    /// that threshold would have been silently rounded to `0.0` by the first
+    /// `to_lol`, making the emitted text unparseable by this very check).
+    /// `fmt_f32` is a faithful round-trip for every finite value now (no
+    /// near-zero collapsing left), so that extra margin is no longer needed:
+    /// any finite positive scale, however small, round-trips through
+    /// emit/parse unchanged.
     #[test]
     fn tpms_scale_and_thickness_reject_degenerate_values() {
         let names = [
@@ -4337,17 +4334,16 @@ mod tests {
             "fischer_koch_s",
             "pmy",
         ];
-        // scale: must be finite and >= 1e-6 (emit::canon's own threshold).
-        // "NaN"/"inf"/"-inf" are not included here: this crate's lexer
-        // already refuses any literal that reads as non-finite, for every
-        // numeric field in the whole grammar (see
-        // `tpms_fields_validation_rejects_non_finite_values_directly`,
+        // scale: must be finite and > 0.0. "NaN"/"inf"/"-inf" are not
+        // included here: this crate's lexer already refuses any literal that
+        // reads as non-finite, for every numeric field in the whole grammar
+        // (see `tpms_fields_validation_rejects_non_finite_values_directly`,
         // which exercises `validate_tpms_fields` without going through that
         // earlier, unrelated gate -- confirmed by mutation: deleting the
         // scale/thickness checks in `validate_tpms_fields` does not turn a
         // text-level "NaN"/"inf" case red, because the lexer's gate is what
         // actually rejects it).
-        let bad_scales = ["-0.0", "0.0", "-1.0", "1e-10", "5e-7", "-5e-7"];
+        let bad_scales = ["-0.0", "0.0", "-1.0", "-5e-7"];
         for name in names {
             for scale in bad_scales {
                 let input = format!("{name}({scale}, 0.1)");
@@ -4356,10 +4352,10 @@ mod tests {
                     "{input} should be rejected (degenerate scale)"
                 );
             }
-            // exactly at the threshold (emit::canon's own boundary is `< 1e-6`,
-            // so `1e-6` itself is NOT collapsed) and the usual case: accepted,
-            // and round-trips through one emit-reparse unchanged.
-            for scale in ["1e-6", "3.0"] {
+            // any finite positive value, however small, is accepted and
+            // round-trips through one emit-reparse unchanged -- "1e-45" and
+            // "5e-7" were rejected by the old 1e-6 floor.
+            for scale in ["1e-45", "1e-10", "5e-7", "1e-6", "3.0"] {
                 let input = format!("{name}({scale}, 0.1)");
                 let node = parse_lol(&input).unwrap_or_else(|e| panic!("{input}: {e}"));
                 let text = crate::emit::to_lol(&node)
@@ -4367,6 +4363,10 @@ mod tests {
                 assert!(
                     parse_lol(&text).is_ok(),
                     "{input} -> {text:?} should re-parse"
+                );
+                assert_eq!(
+                    text, input,
+                    "{input} must round-trip bit-exact through emit/parse"
                 );
             }
         }
@@ -4386,15 +4386,19 @@ mod tests {
     #[test]
     fn infill_wrappers_reject_the_same_degenerate_tpms_fields() {
         for name in ["lattice_infill", "diamond_infill", "schwarz_infill"] {
-            for scale in ["-0.0", "0.0", "-1.0", "5e-7"] {
+            for scale in ["-0.0", "0.0", "-1.0", "-5e-7"] {
                 let input = format!("{name}(1.0, {scale}, 0.1, sphere(1.0))");
                 assert!(
                     parse_lol(&input).is_err(),
                     "{input} should be rejected (degenerate lattice scale)"
                 );
             }
-            let input = format!("{name}(1.0, 3.0, 0.1, sphere(1.0))");
-            assert!(parse_lol(&input).is_ok(), "{input} should still parse");
+            // any finite positive lattice scale, however small, is accepted
+            // ("1e-45"/"5e-7" were rejected by the old 1e-6 floor).
+            for scale in ["1e-45", "5e-7", "3.0"] {
+                let input = format!("{name}(1.0, {scale}, 0.1, sphere(1.0))");
+                assert!(parse_lol(&input).is_ok(), "{input} should still parse");
+            }
         }
     }
 
