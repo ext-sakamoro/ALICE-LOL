@@ -34,6 +34,9 @@ class Repo:
         self.env = {**os.environ, **GIT_ENV, "HOME": str(path)}
         self.run("init", "-q", "-b", "main")
         self.run("config", "commit.gpgsign", "false")
+        # git for Windows refuses a tab, quote or control character in an index path by
+        # default (core.protectNTFS); the fixture records such names without writing them
+        self.run("config", "core.protectNTFS", "false")
 
     def run(self, *args: str) -> str:
         p = subprocess.run(["git", "-C", str(self.path), *args], capture_output=True, text=True,
@@ -49,17 +52,20 @@ class Repo:
         self.run("commit", "-q", "-m", msg)
         return self.run("rev-parse", "HEAD")
 
-    def commit_names(self, names: list[str], msg: str = "names") -> str:
-        """commit files by name through the index only (a tab, quote, newline or control
-        character cannot be a file name on every file system, e.g. Windows)"""
-        blob = subprocess.run(["git", "-C", str(self.path), "hash-object", "-w", "--stdin"],
-                              input=b"x\n", capture_output=True, env=self.env,
-                              check=True).stdout.decode().strip()
+    def commit_names(self, parent: str, names: list[str], msg: str = "names") -> str:
+        """a commit on `parent` adding files by name, made with plumbing only: neither the
+        working tree nor HEAD is touched (a tab, quote, newline or control character cannot
+        be a file name on every file system, e.g. Windows)"""
+        def git_in(args: list[str], data: bytes, env: dict[str, str]) -> str:
+            return subprocess.run(["git", "-C", str(self.path), *args], input=data,
+                                  capture_output=True, env=env, check=True).stdout.decode().strip()
+        env = {**self.env, "GIT_INDEX_FILE": str(self.path / ".git" / "fixture-index")}
+        blob = git_in(["hash-object", "-w", "--stdin"], b"x\n", env)
+        git_in(["read-tree", parent], b"", env)
         info = b"".join(f"100644 {blob}\t".encode() + n.encode("utf-8") + b"\0" for n in names)
-        subprocess.run(["git", "-C", str(self.path), "update-index", "-z", "--index-info"],
-                       input=info, capture_output=True, env=self.env, check=True)
-        self.run("commit", "-q", "-m", msg)
-        return self.run("rev-parse", "HEAD")
+        git_in(["update-index", "-z", "--index-info"], info, env)
+        tree = git_in(["write-tree"], b"", env)
+        return git_in(["commit-tree", tree, "-p", parent, "-m", msg], b"", env)
 
     def checkout(self, *args: str) -> None:
         self.run("checkout", "-q", *args)
@@ -149,8 +155,7 @@ class PushCases(unittest.TestCase):
                "alice-lol/src/\u00e9t\u00e9.rs"]
         for name in odd:
             with self.subTest(name=name):
-                self.r.checkout("-B", "work/odd", "main")
-                c1 = self.r.commit_names([name, "docs/plain.md"])
+                c1 = self.r.commit_names(self.m0, [name, "docs/plain.md"])
                 d = cp.decide(args(self.r, created="true", before=ZERO, after=c1))
                 self.assertTrue(d.run, d.reason)
                 self.assertEqual(d.matched, [name])
