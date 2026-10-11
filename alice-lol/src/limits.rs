@@ -439,6 +439,63 @@ pub fn checked_rotation_quat(x: f32, y: f32, z: f32, w: f32) -> Result<glam::Qua
     Ok(glam::Quat::from_xyzw(x, y, z, w))
 }
 
+/// The exact `±1ulp` boundary either side of [`ROTATION_QUAT_UNIT_TOLERANCE`],
+/// found by sweeping adjacent `f32` bit patterns near `sqrt(1 + tolerance)`
+/// (see `checked_rotation_quat_boundary_is_exact` in this module's tests for
+/// the measured `|q|^2-1` of each).
+const ROTATION_QUAT_BOUNDARY_INSIDE_W: u32 = 0x3f80_0003;
+const ROTATION_QUAT_BOUNDARY_OUTSIDE_W: u32 = 0x3f80_0004;
+
+/// The single source of truth for [`checked_rotation_quat`]'s cross-case
+/// oracle and `geometry_id`'s pin digest: representative accept/reject
+/// `(x, y, z, w)` inputs, covering the identity, an ordinary unit quat, the
+/// exact `±1ulp` boundary, and clearly non-unit rejects.
+pub(crate) const ROTATION_QUAT_BOUNDARY_PROBE_INPUTS: &[(f32, f32, f32, f32)] = &[
+    (0.0, 0.0, 0.0, 1.0),
+    (0.6, 0.8, 0.0, 0.0),
+    (
+        0.0,
+        0.0,
+        0.0,
+        f32::from_bits(ROTATION_QUAT_BOUNDARY_INSIDE_W),
+    ),
+    (
+        0.0,
+        0.0,
+        0.0,
+        f32::from_bits(ROTATION_QUAT_BOUNDARY_OUTSIDE_W),
+    ),
+    (0.0, 0.0, 0.0, 0.0),
+    (2.0, 0.0, 0.0, 0.0),
+    (1.0, 1.0, 0.0, 0.0),
+];
+
+/// The single source of truth for [`checked_tpms_fields`]'s cross-case oracle
+/// and `geometry_id`'s pin digest: representative accept/reject
+/// `(scale, thickness)` inputs, covering the degenerate-scale rejects, the
+/// non-finite-thickness rejects, the `1e-6` historical threshold, an ordinary
+/// value, a negative thickness (unrestricted beyond finiteness), and
+/// subnormal scales down to the smallest positive `f32`.
+pub(crate) const TPMS_VALIDITY_PROBE_INPUTS: &[(f32, f32)] = &[
+    (-0.0, 0.1),
+    (0.0, 0.1),
+    (-1.0, 0.1),
+    (f32::NAN, 0.1),
+    (f32::INFINITY, 0.1),
+    (f32::NEG_INFINITY, 0.1),
+    (-5e-7, 0.1),
+    (3.0, f32::NAN),
+    (3.0, f32::INFINITY),
+    (3.0, f32::NEG_INFINITY),
+    (1e-6, 0.1),
+    (3.0, 0.1),
+    (3.0, -5.0),
+    (1e-45, 0.1),
+    (1e-40, 0.1),
+    (1e-10, 0.1),
+    (5e-7, 0.1),
+];
+
 #[cfg(test)]
 mod tests {
     use super::{
