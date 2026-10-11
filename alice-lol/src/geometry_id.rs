@@ -165,21 +165,39 @@ fn dense_canon_angle_deg_sweep(n: usize) -> impl Iterator<Item = f32> {
     })
 }
 
+/// IEEE 754 leaves a NaN result's sign bit unspecified for an operation that
+/// produces NaN from a non-NaN input (here, `%` applied to +/-infinity) --
+/// measured to differ between an arm64 and an `x86_64` build of this exact pin
+/// (`+-infinity % 360.0` comes back as a positive-sign NaN on one, a
+/// negative-sign NaN on the other, every finite input's bits agreeing).
+/// `canon_angle_deg` already treats any NaN alike (neither `if` branch
+/// fires), so the pin should too: collapse every NaN's bits to one
+/// representative before hashing, the way `to_bits` would if `f32` only
+/// ever produced a single canonical NaN.
+const fn canonical_bits(x: f32) -> u32 {
+    if x.is_nan() {
+        0x7fc0_0000
+    } else {
+        x.to_bits()
+    }
+}
+
 /// `canon_angle_deg` の pin.
 ///
 /// 代表値 (`angle::CANON_ANGLE_DEG_PROBE_VALUES`、特殊値・巨大値・subnormal・
 /// 非有限) + `[-1080, 1080]` 度の密な sweep ([`dense_canon_angle_deg_sweep`]、
 /// `(-180, 180]` の折返しを複数回跨ぐ) の出力 bit を hash した digest —
 /// 度数の正規化範囲や巨大値の reduce の仕方が変われば、`rotate`/`rotate_q`
-/// に渡る前の入力自体が変わる
+/// に渡る前の入力自体が変わる NaN は [`canonical_bits`] で符号を畳んでから
+/// hash する (非有限入力が作る NaN の符号は IEEE 754 が規定しない)
 #[must_use]
 pub fn canon_angle_deg_probe_digest() -> [u8; 32] {
     let mut h = Sha256::new();
     for &deg in CANON_ANGLE_DEG_PROBE_VALUES {
-        h.update(canon_angle_deg(deg).to_bits().to_le_bytes());
+        h.update(canonical_bits(canon_angle_deg(deg)).to_le_bytes());
     }
     for deg in dense_canon_angle_deg_sweep(2161) {
-        h.update(canon_angle_deg(deg).to_bits().to_le_bytes());
+        h.update(canonical_bits(canon_angle_deg(deg)).to_le_bytes());
     }
     h.finalize().into()
 }
