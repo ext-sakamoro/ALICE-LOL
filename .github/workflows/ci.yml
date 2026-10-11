@@ -579,6 +579,10 @@ jobs:
         run: python scripts/test_workflow_concurrency.py
       - name: workflow_concurrency (branch の push で走る workflow に concurrency、0 件は fail)
         run: python scripts/workflow_concurrency.py
+      - name: changed_paths oracle (path filter の判定器と trigger lint の試験)
+        run: python scripts/test_changed_paths.py
+      - name: changed_paths sync (on.push に paths が無い、pull_request の paths と pattern file が一致、0 件は fail)
+        run: python scripts/changed_paths.py sync
       - name: workflow_timeouts oracle (検査器自身の試験)
         run: python scripts/test_workflow_timeouts.py
       - name: workflow_timeouts (全 workflow の全 job に timeout-minutes、0 件は fail)

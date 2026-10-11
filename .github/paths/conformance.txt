@@ -1,0 +1,9 @@
+# the paths that run .github/workflows/conformance.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync)
+conformance/**
+laws/**
+scripts/law_*.py
+.github/workflows/conformance.yml
+.github/workflows/ci.yml
+.github/paths/conformance.txt

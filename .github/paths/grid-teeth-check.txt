@@ -1,0 +1,9 @@
+# the paths that run .github/workflows/grid-teeth-check.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync)
+.github/workflows/grid-teeth-check.yml
+scripts/grid_teeth_check.sh
+alice-lol/examples/parse_one_lol.rs
+alice-lol/tests/degenerate_grid.rs
+alice-lol/tests/common/corpus.rs
+.github/paths/grid-teeth-check.txt

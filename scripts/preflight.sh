@@ -130,6 +130,8 @@ python3 scripts/test_line_split_guard.py
 python3 scripts/line_split_guard.py
 python3 scripts/test_workflow_concurrency.py
 python3 scripts/workflow_concurrency.py
+python3 scripts/test_changed_paths.py
+python3 scripts/changed_paths.py sync
 python3 scripts/test_workflow_timeouts.py
 python3 scripts/workflow_timeouts.py
 python3 scripts/test_history_free_tests.py
