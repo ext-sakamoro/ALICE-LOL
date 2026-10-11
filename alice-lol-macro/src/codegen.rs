@@ -17,14 +17,15 @@ fn literal_f32(ts: &TokenStream2) -> Option<f32> {
                 lit: syn::Lit::Float(f),
                 ..
             }) => {
-                // base10_parse::<f32>() panics (does not return Err) for a literal
-                // whose magnitude overflows f32 -- parse as f64 first (syn/rustc's
-                // own f64 range covers every such literal this DSL's lexer accepts)
-                // and let `as f32` saturate to +-inf the same way this crate's own
-                // runtime text lexer already does for an out-of-range literal
-                #[allow(clippy::cast_possible_truncation)]
-                let v = f.base10_parse::<f64>().ok()? as f32;
-                Some(v)
+                // base10_parse::<f32>() does not panic here (this value is only
+                // ever compared, never re-quoted as a literal token by this
+                // function's caller) -- an overflowing literal parses to a finite
+                // Ok(f32::INFINITY), which tpms_literal_error below correctly
+                // rejects as non-finite; parsing as f64 first would double-round
+                // (differ from this crate's own runtime text lexer's rounding of
+                // the same decimal digits for a value near an f32 rounding
+                // boundary)
+                f.base10_parse::<f32>().ok()
             }
             syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Int(i),

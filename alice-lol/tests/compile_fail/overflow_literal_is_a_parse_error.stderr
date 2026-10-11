@@ -1,0 +1,5 @@
+error: number out of range: '3.4028235e39'
+  --> tests/compile_fail/overflow_literal_is_a_parse_error.rs:16:34
+   |
+16 |     let _ = lol! { lidinoid(3.0, 3.4028235e39) };
+   |                                  ^^^^^^^^^^^^

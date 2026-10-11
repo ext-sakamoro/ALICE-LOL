@@ -112,3 +112,112 @@ fn captured_valid_tpms_fields_still_work() {
     let node = lol! { gyroid({scale}, {thickness}) };
     assert!(matches!(node, alice_lol::SdfNode::Gyroid { .. }));
 }
+
+/// The `lol!` macro's literal-float parsing (`parser.rs`'s `parse_val`) must
+/// round a decimal literal to `f32` bit-identically with the runtime `.lol`
+/// text parser's lexer (`runtime_parser.rs`'s `read_number`, which just uses
+/// `s.parse::<f32>()`) for the SAME digits -- a literal this close to an f32
+/// rounding boundary pins an earlier regression where the macro parsed as
+/// f64 first (to dodge a separate, unrelated overflow-literal panic) and
+/// cast down, double-rounding to a DIFFERENT bit pattern than parsing the
+/// decimal digits directly to f32 (`16777217.000000001` and
+/// `1.0000000596046448`, both one ulp off the nearest round number in f32,
+/// are exactly the shape that exposes it: f64 rounds first to a value
+/// f32-representable as the round number, erasing the one-ulp residual that
+/// a direct f32 parse keeps).
+#[test]
+fn macro_literal_float_parsing_is_bit_identical_to_the_runtime_parser() {
+    for literal in [
+        "16777217.000000001",
+        "1.0000000596046448",
+        "0.1",
+        "3.0",
+        "1e30",
+        "1e-30",
+        "-2.5",
+    ] {
+        let expected: f32 = literal.parse().unwrap();
+        let text = format!("sphere({literal})");
+        let runtime_node = alice_lol::runtime_parser::parse_lol(&text).unwrap();
+        let alice_lol::SdfNode::Sphere {
+            radius: runtime_radius,
+        } = runtime_node
+        else {
+            panic!("expected Sphere");
+        };
+        assert_eq!(
+            runtime_radius.to_bits(),
+            expected.to_bits(),
+            "runtime parser: {literal}"
+        );
+    }
+    // the macro side is exercised separately (its literal is a Rust token, not
+    // a runtime string): these are the SAME two digit strings written as
+    // Rust float literals, which `parse_val` parses through the identical
+    // `syn::LitFloat::base10_parse::<f32>()` path this test's doc comment
+    // describes
+    let macro_node_a = lol! { sphere(16777217.000000001) };
+    let macro_node_b = lol! { sphere(1.0000000596046448) };
+    let alice_lol::SdfNode::Sphere { radius: a } = macro_node_a else {
+        panic!("expected Sphere");
+    };
+    let alice_lol::SdfNode::Sphere { radius: b } = macro_node_b else {
+        panic!("expected Sphere");
+    };
+    assert_eq!(
+        a.to_bits(),
+        "16777217.000000001".parse::<f32>().unwrap().to_bits()
+    );
+    assert_eq!(
+        b.to_bits(),
+        "1.0000000596046448".parse::<f32>().unwrap().to_bits()
+    );
+}
+
+/// One `#[should_panic]` test per TPMS-type construction site in the macro
+/// (the 9 direct constructors, then the 3 infill wrappers): a mutant that
+/// un-wires `tpms_node`/`checked_tpms_fields` at a SPECIFIC site (while
+/// leaving the others wired) is only caught by exercising that exact site,
+/// not by the handful of sites `captured_tpms_scale_is_checked_at_runtime`
+/// and the `compile_fail` cases already cover.
+macro_rules! tpms_scale_runtime_check {
+    ($test_name:ident, $src:expr) => {
+        #[test]
+        #[should_panic(expected = "tpms_scale")]
+        fn $test_name() {
+            let bad_scale = -0.0_f32;
+            let _ = $src(bad_scale);
+        }
+    };
+}
+
+tpms_scale_runtime_check!(site_gyroid_direct_is_wired, |s: f32| lol! {
+    gyroid({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_schwarz_p_direct_is_wired, |s: f32| lol! {
+    schwarz_p({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_diamond_surface_direct_is_wired, |s: f32| lol! {
+    diamond_surface({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_neovius_direct_is_wired, |s: f32| lol! {
+    neovius({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_lidinoid_direct_is_wired, |s: f32| lol! {
+    lidinoid({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_iwp_direct_is_wired, |s: f32| lol! { iwp({s}, 0.1) });
+tpms_scale_runtime_check!(site_frd_direct_is_wired, |s: f32| lol! { frd({s}, 0.1) });
+tpms_scale_runtime_check!(site_fischer_koch_s_direct_is_wired, |s: f32| lol! {
+    fischer_koch_s({s}, 0.1)
+});
+tpms_scale_runtime_check!(site_pmy_direct_is_wired, |s: f32| lol! { pmy({s}, 0.1) });
+tpms_scale_runtime_check!(site_lattice_infill_is_wired, |s: f32| lol! {
+    lattice_infill(1.0, {s}, 0.1, sphere(1.0))
+});
+tpms_scale_runtime_check!(site_diamond_infill_is_wired, |s: f32| lol! {
+    diamond_infill(1.0, {s}, 0.1, sphere(1.0))
+});
+tpms_scale_runtime_check!(site_schwarz_infill_is_wired, |s: f32| lol! {
+    schwarz_infill(1.0, {s}, 0.1, sphere(1.0))
+});
