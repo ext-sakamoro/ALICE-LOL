@@ -250,12 +250,17 @@ pub fn honeycomb_infill(
 /// let cube = SdfNode::Box3d { half_extents: Vec3::new(20.0, 20.0, 20.0) };
 /// let g = gyroid_infill(cube, 3.0, 0.4);
 /// ```
+///
+/// # Panics
+///
+/// `cell_scale` が有限かつ `1e-6` 以上でない、または `wall_thickness` が
+/// 有限でない時 ([`crate::limits::checked_tpms_fields`] の契約、この crate の
+/// 他の infallible builder と同じ `try_*` が無い生の builder の panic 規約)
 #[must_use]
 pub fn gyroid_infill(container: SdfNode, cell_scale: f32, wall_thickness: f32) -> SdfNode {
-    let gyroid = SdfNode::Gyroid {
-        scale: cell_scale,
-        thickness: wall_thickness * 0.5,
-    };
+    let (scale, thickness) = crate::limits::checked_tpms_fields(cell_scale, wall_thickness * 0.5)
+        .unwrap_or_else(|e| panic!("gyroid_infill: {e}"));
+    let gyroid = SdfNode::Gyroid { scale, thickness };
     SdfNode::Intersection {
         a: Arc::new(container),
         b: Arc::new(gyroid),
@@ -451,6 +456,24 @@ mod tests {
             }
             _ => panic!("expected Intersection with Gyroid"),
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "gyroid_infill")]
+    fn gyroid_infill_panics_on_a_degenerate_cell_scale() {
+        let container = SdfNode::Box3d {
+            half_extents: Vec3::new(20.0, 20.0, 20.0),
+        };
+        let _ = gyroid_infill(container, -0.0, 0.4);
+    }
+
+    #[test]
+    #[should_panic(expected = "gyroid_infill")]
+    fn gyroid_infill_panics_on_a_non_finite_wall_thickness() {
+        let container = SdfNode::Box3d {
+            half_extents: Vec3::new(20.0, 20.0, 20.0),
+        };
+        let _ = gyroid_infill(container, 3.0, f32::NAN);
     }
 
     #[test]

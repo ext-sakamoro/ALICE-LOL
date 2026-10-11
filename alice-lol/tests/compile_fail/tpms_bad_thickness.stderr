@@ -1,0 +1,5 @@
+error: number out of range: '3.4028235e39'
+ --> tests/compile_fail/tpms_bad_thickness.rs:4:34
+  |
+4 |     let _ = lol! { lidinoid(3.0, 3.4028235e39) };
+  |                                  ^^^^^^^^^^^^

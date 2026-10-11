@@ -87,3 +87,28 @@ fn capture_function_call() {
     let d = eval(&node, Vec3::ZERO);
     assert!((d - (-3.0)).abs() < 1e-4, "expected -3.0, got {d}");
 }
+
+/// TPMS surface の `scale`/`thickness` は、値が macro 展開時に分からない
+/// (`{expr}` 捕捉・裸の変数名) 時は実行時に検査される
+/// (`tests/compile_fail/`: literal の時は compile 時に検査される)
+#[test]
+#[should_panic(expected = "tpms_scale")]
+fn captured_tpms_scale_is_checked_at_runtime() {
+    let bad_scale = -0.0_f32;
+    let _ = lol! { gyroid({bad_scale}, 0.1) };
+}
+
+#[test]
+#[should_panic(expected = "tpms_thickness")]
+fn captured_tpms_thickness_is_checked_at_runtime() {
+    let bad_thickness = f32::NAN;
+    let _ = lol! { lidinoid(3.0, {bad_thickness}) };
+}
+
+#[test]
+fn captured_valid_tpms_fields_still_work() {
+    let scale = 3.0_f32;
+    let thickness = 0.1_f32;
+    let node = lol! { gyroid({scale}, {thickness}) };
+    assert!(matches!(node, alice_lol::SdfNode::Gyroid { .. }));
+}

@@ -293,44 +293,23 @@ impl<'a> Parser<'a> {
         Ok((a, b))
     }
 
-    /// `alice_sdf` の TPMS 9 primitive (`gyroid`/`schwarz_p`/`diamond_surface`/
-    /// `neovius`/`lidinoid`/`iwp`/`frd`/`fischer_koch_s`/`pmy`) 共通の
-    /// `(scale, thickness)` 引数、`d.abs() / scale - thickness` という式で
-    /// `scale` を割るため、`scale` が `0.0` 以下 / 非有限だと eval が
-    /// `±inf` / `NaN` になる `emit::canon` は `-0.0` も含め絶対値 1e-6 未満を
-    /// 符号を落として `0.0` に丸めるので、`-0.0` を受理すると
-    /// 元の tree と 1 度 emit した text を再 parse した tree が符号違いの
-    /// `±inf` で食い違う (`fuzz_lol_emit_parity` が `lidinoid(-0.0,1e8)` で検出)
-    /// `thickness` は減算の相手なので非有限だけ弾く (符号・0 は制約しない)
+    /// `alice_sdf` の TPMS 9 primitive の `(scale, thickness)` 引数、この
+    /// crate が TPMS node を組み立てる**どの入口からでも**共通に適用する
+    /// 契約は [`crate::limits::checked_tpms_fields`] (その doc comment に
+    /// 理由を集約、`lattice_infill`/`diamond_infill`/`schwarz_infill` も
+    /// 同じ関数を呼ぶ、別構文でも同じ node 型である以上同じ制約が要る)
     fn parse_tpms_fields(&mut self) -> Result<(f32, f32), ParseError> {
         let (scale, thickness) = self.parse_2f()?;
         self.validate_tpms_fields(scale, thickness)?;
         Ok((scale, thickness))
     }
 
-    /// [`Self::parse_tpms_fields`] の検証部分だけ (`lattice_infill`/`diamond_infill`/
-    /// `schwarz_infill` は TPMS node を直接組み立てる別構文で、同じ 9 node 型の
-    /// どれかである以上は構文が違っても同じ制約を満たす必要がある、でないと
-    /// この構文経由で作った node が emit の正準形 (常に `gyroid(...)` 等で書く)
-    /// を 1 度 再 parse するだけで、ここでは弾かなかった scale が弾かれて
-    /// round-trip が壊れる)
+    /// [`Self::parse_tpms_fields`] の検証部分だけ ([`crate::limits::checked_tpms_fields`]
+    /// を呼んで [`crate::limits::SpecError`] を [`Self::spec_error`] で `ParseError` に写すだけ)
     fn validate_tpms_fields(&self, scale: f32, thickness: f32) -> Result<(), ParseError> {
-        // 1e-6: emit.rs の `canon()` が絶対値 1e-6 未満を符号ごと 0.0 に丸める
-        // 閾値と同じ値 (emit.rs は変更しない方針のためここに複製、値が動いたら
-        // 両方を揃える) これ未満を受理すると、1 度 emit した text の scale が
-        // 0.0 に丸められて再 parse できなくなる (「emit した text は常に
-        // 読み戻せる」という不変条件がこの入力だけ壊れる)
-        if !scale.is_finite() || scale < 1e-6 {
-            return self.err(format!(
-                "TPMS の scale は有限かつ 1e-6 以上でなければならない: {scale}"
-            ));
-        }
-        if !thickness.is_finite() {
-            return self.err(format!(
-                "TPMS の thickness は有限でなければならない: {thickness}"
-            ));
-        }
-        Ok(())
+        crate::limits::checked_tpms_fields(scale, thickness)
+            .map(|_| ())
+            .map_err(|e| self.spec_error(e))
     }
 
     /// SKADIS panel の variadic arg 解析 0/1/2/3-arg を許容し不足分は

@@ -47,7 +47,25 @@ fn parse_val(input: ParseStream) -> Result<V> {
         false
     };
     if input.peek(syn::LitFloat) {
-        let v: f32 = input.parse::<syn::LitFloat>()?.base10_parse()?;
+        // base10_parse::<f32>() panics (not an Err) for a literal whose magnitude
+        // overflows f32 (e.g. `sphere(3.4028235e39)`), crashing the proc-macro
+        // itself instead of a clean compile error -- parse as f64 first (syn's
+        // own f64 range covers every finite literal this DSL's grammar accepts),
+        // so overflow is observed as `!is_finite()` rather than as a panic, and
+        // refuse it with a normal parse error (quoting a non-finite f32 back as a
+        // literal token is not possible either -- there is no Rust literal syntax
+        // for infinity -- so accepting it here only moves the crash one step
+        // later); matches this crate's own runtime text lexer's identical refusal
+        // (`read_number`: "a literal past the f32 range reads as ±inf: refuse it")
+        let lit = input.parse::<syn::LitFloat>()?;
+        #[allow(clippy::cast_possible_truncation)]
+        let v = lit.base10_parse::<f64>()? as f32;
+        if !v.is_finite() {
+            return Err(syn::Error::new_spanned(
+                &lit,
+                format!("number out of range: '{lit}'"),
+            ));
+        }
         let v = if neg { -v } else { v };
         return Ok(quote!( #v ));
     }

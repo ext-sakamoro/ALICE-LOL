@@ -284,11 +284,50 @@ pub fn checked_bounded(
     Ok(v)
 }
 
+/// The TPMS scale/thickness contract shared by every way to build one of the
+/// 9 `alice_sdf` TPMS surfaces.
+///
+/// `gyroid`/`schwarz_p`/`diamond_surface`/`neovius`/`lidinoid`/`iwp`/`frd`/
+/// `fischer_koch_s`/`pmy` each divide a bounded quantity by `scale`
+/// (`d.abs() / scale - thickness`), so `scale` must be finite and bounded
+/// away from `0.0` or the division is `±inf`/`NaN`; `thickness` only has to
+/// be finite (it is subtracted, not divided by).
+///
+/// The `1e-6` floor matches `fmt_f32`'s own near-zero-collapse threshold: a
+/// smaller `scale` would parse once, then be silently rounded to `0.0` by the
+/// very first `to_lol`, making that emitted text unparseable by this same
+/// check (so "parses" implies "survives one emit-reparse round trip
+/// unchanged", not just "accepted once"). If `fmt_f32` stops collapsing
+/// near-zero values, this floor should become `0.0` (`scale > 0.0`, no
+/// longer tied to the emitter's own rounding).
+///
+/// Every entrance that builds one of these 9 node types goes through this one
+/// function: the runtime `.lol` text parser (`runtime_parser.rs`, both the 9
+/// direct constructors and the 3 `lattice_infill`/`diamond_infill`/
+/// `schwarz_infill` wrappers, which build the same node types through a
+/// different surface syntax), the `lol!` compile-time macro
+/// (`alice-lol-macro`'s `codegen.rs`, which inlines this same check for a
+/// literal scale/thickness known at macro-expansion time, and calls this
+/// function for a captured runtime expression), and
+/// `stdlib::hardsurface::reinforcement::gyroid_infill` (a plain Rust builder,
+/// which panics on [`SpecError`] per this crate's existing `try_*` +
+/// `# Panics` convention for an infallible public builder).
+///
+/// # Errors
+///
+/// [`SpecError`] if `scale` is non-finite or below `1e-6`, or `thickness` is
+/// non-finite.
+pub fn checked_tpms_fields(scale: f32, thickness: f32) -> Result<(f32, f32), SpecError> {
+    let scale = checked_positive_finite(scale, 1e-6, "tpms_scale")?;
+    let thickness = checked_positive_finite(thickness, f32::NEG_INFINITY, "tpms_thickness")?;
+    Ok((scale, thickness))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        checked_bounded, checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION,
-        MIN_PITCH_MM,
+        checked_bounded, checked_positive_finite, checked_product, checked_tpms_fields, SpecError,
+        MAX_NODE_EXPANSION, MIN_PITCH_MM,
     };
 
     #[test]
@@ -461,5 +500,41 @@ mod tests {
         assert!(s.contains("panel_size"), "{s}");
         assert!(s.contains("mm"), "{s}");
         assert!(s.contains("50000"), "{s}");
+    }
+
+    #[test]
+    fn checked_tpms_fields_rejects_a_degenerate_scale() {
+        for scale in [
+            -0.0,
+            0.0,
+            -1.0,
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            5e-7,
+        ] {
+            assert!(
+                checked_tpms_fields(scale, 0.1).is_err(),
+                "scale={scale} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn checked_tpms_fields_rejects_a_non_finite_thickness() {
+        for thickness in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(
+                checked_tpms_fields(3.0, thickness).is_err(),
+                "thickness={thickness} should be rejected"
+            );
+        }
+        // a negative thickness is not restricted (only its finiteness is)
+        assert!(checked_tpms_fields(3.0, -5.0).is_ok());
+    }
+
+    #[test]
+    fn checked_tpms_fields_accepts_the_threshold_and_ordinary_values() {
+        assert_eq!(checked_tpms_fields(1e-6, 0.1).unwrap(), (1e-6, 0.1));
+        assert_eq!(checked_tpms_fields(3.0, 0.1).unwrap(), (3.0, 0.1));
     }
 }

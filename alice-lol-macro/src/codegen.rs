@@ -4,6 +4,99 @@ use crate::ast::*;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 
+/// `ts`'s `f32` value if it is EXACTLY a (possibly negated) numeric literal
+/// known at macro-expansion time -- the token shape `parser.rs`'s `parse_val`
+/// literal branch produces (a `{expr}` capture or a bare variable name are a
+/// different shape, see that function). `None` for anything else (a captured
+/// runtime expression or a bare variable), which must be checked at run time
+/// instead, since its value is not known here.
+fn literal_f32(ts: &TokenStream2) -> Option<f32> {
+    fn lit(expr: &syn::Expr) -> Option<f32> {
+        match expr {
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Float(f),
+                ..
+            }) => {
+                // base10_parse::<f32>() panics (does not return Err) for a literal
+                // whose magnitude overflows f32 -- parse as f64 first (syn/rustc's
+                // own f64 range covers every such literal this DSL's lexer accepts)
+                // and let `as f32` saturate to +-inf the same way this crate's own
+                // runtime text lexer already does for an out-of-range literal
+                #[allow(clippy::cast_possible_truncation)]
+                let v = f.base10_parse::<f64>().ok()? as f32;
+                Some(v)
+            }
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(i),
+                ..
+            }) => i.base10_parse::<i64>().ok().map(|v| {
+                #[allow(clippy::cast_precision_loss)]
+                let v = v as f32;
+                v
+            }),
+            syn::Expr::Unary(syn::ExprUnary {
+                op: syn::UnOp::Neg(_),
+                expr,
+                ..
+            }) => lit(expr).map(|v| -v),
+            _ => None,
+        }
+    }
+    lit(&syn::parse2(ts.clone()).ok()?)
+}
+
+/// Same TPMS `(scale, thickness)` contract as
+/// `alice_lol::limits::checked_tpms_fields` (kept in sync manually: a
+/// proc-macro crate cannot call a function from the crate it is generating
+/// code FOR at its OWN expansion time -- only generate a call for the
+/// generated code to run later, which is what the runtime branch below
+/// does for a non-literal value). `None` if both are valid, `Some(message)`
+/// otherwise.
+fn tpms_literal_error(scale: f32, thickness: f32) -> Option<String> {
+    if !scale.is_finite() || scale < 1e-6 {
+        return Some(format!(
+            "a TPMS surface's scale must be finite and >= 1e-6, got {scale}"
+        ));
+    }
+    if !thickness.is_finite() {
+        return Some(format!(
+            "a TPMS surface's thickness must be finite, got {thickness}"
+        ));
+    }
+    None
+}
+
+/// Builds one of the 9 TPMS `SdfNode` variants (`variant_path` is e.g.
+/// `::alice_lol::SdfNode::Gyroid`), applying the same `(scale, thickness)`
+/// contract as the runtime `.lol` text parser's `validate_tpms_fields`
+/// (`alice_lol::limits::checked_tpms_fields`): a `compile_error!` if both
+/// arguments are literals known now and one is invalid (closing the gap this
+/// macro previously left -- it built any of these 9 node types unchecked,
+/// even for a literal the runtime parser would already reject at parse
+/// time); a runtime call to the same validator otherwise, for a captured
+/// variable or expression whose value is not known until the macro-user's
+/// own code runs.
+fn tpms_node(
+    variant_path: &TokenStream2,
+    scale: &TokenStream2,
+    thickness: &TokenStream2,
+) -> TokenStream2 {
+    if let (Some(s), Some(t)) = (literal_f32(scale), literal_f32(thickness)) {
+        return tpms_literal_error(s, t).map_or_else(
+            || quote! { #variant_path { scale: #scale, thickness: #thickness } },
+            |msg| quote! { compile_error!(#msg) },
+        );
+    }
+    quote! {
+        {
+            let (__lol_scale, __lol_thickness) =
+                ::alice_lol::limits::checked_tpms_fields(#scale, #thickness)
+                    .unwrap_or_else(|e| panic!("{e}"));
+            #variant_path { scale: __lol_scale, thickness: __lol_thickness }
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn codegen(expr: &Expr) -> TokenStream2 {
     match expr {
@@ -223,7 +316,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             quote! { ::alice_lol::SdfNode::InfiniteCone { angle: #angle } }
         }
         Expr::GyroidPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::Gyroid { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::Gyroid }, scale, thickness)
         }
         Expr::ChamferedCube {
             hx,
@@ -234,7 +327,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             quote! { ::alice_lol::SdfNode::ChamferedCube { half_extents: ::alice_lol::Vec3::new(#hx,#hy,#hz), chamfer: #chamfer } }
         }
         Expr::SchwarzPPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::SchwarzP { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::SchwarzP }, scale, thickness)
         }
         Expr::SuperellipsoidPrim { hx, hy, hz, e1, e2 } => {
             quote! { ::alice_lol::SdfNode::Superellipsoid { half_extents: ::alice_lol::Vec3::new(#hx,#hy,#hz), e1: #e1, e2: #e2 } }
@@ -337,26 +430,30 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
         Expr::TruncatedIcosahedronPrim { radius } => {
             quote! { ::alice_lol::SdfNode::TruncatedIcosahedron { radius: #radius } }
         }
-        Expr::DiamondSurfacePrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::DiamondSurface { scale: #scale, thickness: #thickness } }
-        }
+        Expr::DiamondSurfacePrim { scale, thickness } => tpms_node(
+            &quote! { ::alice_lol::SdfNode::DiamondSurface },
+            scale,
+            thickness,
+        ),
         Expr::NeoviusPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::Neovius { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::Neovius }, scale, thickness)
         }
         Expr::LidinoidPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::Lidinoid { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::Lidinoid }, scale, thickness)
         }
         Expr::IWPPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::IWP { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::IWP }, scale, thickness)
         }
         Expr::FRDPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::FRD { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::FRD }, scale, thickness)
         }
-        Expr::FischerKochSPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::FischerKochS { scale: #scale, thickness: #thickness } }
-        }
+        Expr::FischerKochSPrim { scale, thickness } => tpms_node(
+            &quote! { ::alice_lol::SdfNode::FischerKochS },
+            scale,
+            thickness,
+        ),
         Expr::PMYPrim { scale, thickness } => {
-            quote! { ::alice_lol::SdfNode::PMY { scale: #scale, thickness: #thickness } }
+            tpms_node(&quote! { ::alice_lol::SdfNode::PMY }, scale, thickness)
         }
         Expr::Circle2DPrim {
             radius,
@@ -645,6 +742,11 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             child,
         } => {
             let c = codegen(child);
+            let tpms = tpms_node(
+                &quote! { ::alice_lol::SdfNode::Gyroid },
+                lattice_scale,
+                lattice_thickness,
+            );
             quote! { {
                 let __lol_child = #c;
                 ::alice_lol::SdfNode::Union {
@@ -654,10 +756,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
                     }),
                     b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
                         a: ::std::sync::Arc::new(__lol_child),
-                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::Gyroid {
-                            scale: #lattice_scale,
-                            thickness: #lattice_thickness,
-                        }),
+                        b: ::std::sync::Arc::new(#tpms),
                     }),
                 }
             } }
@@ -669,6 +768,11 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             child,
         } => {
             let c = codegen(child);
+            let tpms = tpms_node(
+                &quote! { ::alice_lol::SdfNode::DiamondSurface },
+                lattice_scale,
+                lattice_thickness,
+            );
             quote! { {
                 let __lol_child = #c;
                 ::alice_lol::SdfNode::Union {
@@ -678,10 +782,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
                     }),
                     b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
                         a: ::std::sync::Arc::new(__lol_child),
-                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::DiamondSurface {
-                            scale: #lattice_scale,
-                            thickness: #lattice_thickness,
-                        }),
+                        b: ::std::sync::Arc::new(#tpms),
                     }),
                 }
             } }
@@ -693,6 +794,11 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             child,
         } => {
             let c = codegen(child);
+            let tpms = tpms_node(
+                &quote! { ::alice_lol::SdfNode::SchwarzP },
+                lattice_scale,
+                lattice_thickness,
+            );
             quote! { {
                 let __lol_child = #c;
                 ::alice_lol::SdfNode::Union {
@@ -702,10 +808,7 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
                     }),
                     b: ::std::sync::Arc::new(::alice_lol::SdfNode::Intersection {
                         a: ::std::sync::Arc::new(__lol_child),
-                        b: ::std::sync::Arc::new(::alice_lol::SdfNode::SchwarzP {
-                            scale: #lattice_scale,
-                            thickness: #lattice_thickness,
-                        }),
+                        b: ::std::sync::Arc::new(#tpms),
                     }),
                 }
             } }

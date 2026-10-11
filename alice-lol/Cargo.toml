@@ -49,6 +49,10 @@ alice-physics = { path = "../../ALICE-Physics", version = "2.0", default-feature
 [dev-dependencies]
 # tests/transpiler_naga_validate.rs: corpus 全構文の WGSL / GLSL を naga で parse + validate
 naga = { version = "24", default-features = false, features = ["wgsl-in", "glsl-in"] }
+# tests/compile_fail.rs: `lol!` macro の compile_error! (TPMS の degenerate literal) を実際に
+# rustc へ通して確かめる、`#[test]` 内では compile error を起こすとテスト binary 全体が
+# ビルドできなくなるため、別プロセスで ui test を回す必要がある
+trybuild = "1"
 
 [features]
 default = ["glsl"]
