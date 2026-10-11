@@ -49,6 +49,18 @@ class Repo:
         self.run("commit", "-q", "-m", msg)
         return self.run("rev-parse", "HEAD")
 
+    def commit_names(self, names: list[str], msg: str = "names") -> str:
+        """commit files by name through the index only (a tab, quote, newline or control
+        character cannot be a file name on every file system, e.g. Windows)"""
+        blob = subprocess.run(["git", "-C", str(self.path), "hash-object", "-w", "--stdin"],
+                              input=b"x\n", capture_output=True, env=self.env,
+                              check=True).stdout.decode().strip()
+        info = b"".join(f"100644 {blob}\t".encode() + n.encode("utf-8") + b"\0" for n in names)
+        subprocess.run(["git", "-C", str(self.path), "update-index", "-z", "--index-info"],
+                       input=info, capture_output=True, env=self.env, check=True)
+        self.run("commit", "-q", "-m", msg)
+        return self.run("rev-parse", "HEAD")
+
     def checkout(self, *args: str) -> None:
         self.run("checkout", "-q", *args)
 
@@ -129,6 +141,34 @@ class PushCases(unittest.TestCase):
         self.assertFalse(d.run, d.reason)
         self.assertEqual(d.files, ["README.md"])
         self.assertIn("before..after", d.reason)
+
+    def test_names_git_would_c_quote_still_match(self):
+        # without -z git prints "alice-lol/src/a\tb.rs" with quotes and `**/src/**` misses
+        odd = ["alice-lol/src/tab\there.rs", 'alice-lol/src/quo"te.rs', "alice-lol/src/back\\slash.rs",
+               "alice-lol/src/new\nline.rs", "alice-lol/src/ctl\x01char.rs", "alice-lol/src/cr\rhere.rs",
+               "alice-lol/src/\u00e9t\u00e9.rs"]
+        for name in odd:
+            with self.subTest(name=name):
+                self.r.checkout("-B", "work/odd", "main")
+                c1 = self.r.commit_names([name, "docs/plain.md"])
+                d = cp.decide(args(self.r, created="true", before=ZERO, after=c1))
+                self.assertTrue(d.run, d.reason)
+                self.assertEqual(d.matched, [name])
+                self.assertEqual(sorted(d.files), sorted([name, "docs/plain.md"]))
+
+    def test_a_rename_out_of_a_matched_dir_runs(self):
+        # with renames on, src/x.rs -> docs/x.rs lists docs/x.rs only and src/** misses it
+        self.r.checkout("main")
+        self.r.commit({"src/x.rs": "fn main() {}\n" * 20})
+        self.r.publish_main()
+        self.r.checkout("-b", "work/mv")
+        (self.r.path / "docs").mkdir()
+        self.r.run("mv", "src/x.rs", "docs/x.rs")
+        self.r.run("commit", "-q", "-m", "mv")
+        c1 = self.r.run("rev-parse", "HEAD")
+        d = cp.decide(args(self.r, created="true", before=ZERO, after=c1, pattern=["src/**"]))
+        self.assertTrue(d.run, d.reason)
+        self.assertEqual(d.matched, ["src/x.rs"])
 
     def test_follow_up_push_with_no_file_change_skips(self):
         c1 = self.branch_commit({"alice-lol/src/lib.rs": "b\n"})
@@ -236,8 +276,64 @@ class PushCases(unittest.TestCase):
         self.assertIn("matched=1", lines)
         self.assertTrue(any(l.startswith("reason=run:") for l in lines))
         s = summ.read_text(encoding="utf-8")
-        self.assertIn("`alice-lol/src/lib.rs`", s)
-        self.assertIn("`README.md`", s)
+        self.assertIn('`"alice-lol/src/lib.rs"`', s)
+        self.assertIn('`"README.md"`', s)
+
+
+class LogInjection(unittest.TestCase):
+    """a file name must not be read as a workflow command (`::warning::` and the like)"""
+
+    NAMES = ["::warning::x", "::add-mask::x", "::stop-commands::x", "::error::x",
+             "   ::warning::lead", "\t::error::tab", "a\n::error::after-newline",
+             "b\r\n::warning::crlf", "c\x1b[31m::error::ctl", "d\x00e", "src/ok.rs"]
+
+    def output(self, d: cp.Decision) -> str:
+        import contextlib
+        import io
+        buf = io.StringIO()
+        old = {k: os.environ.pop(k, None) for k in ("GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY")}
+        try:
+            with contextlib.redirect_stdout(buf):
+                cp.report(d)
+        finally:
+            for k, v in old.items():
+                if v is not None:
+                    os.environ[k] = v
+        return buf.getvalue()
+
+    def test_no_line_starts_a_command_except_the_stop_block(self):
+        names = [n for n in self.NAMES if "\x00" not in n]
+        d = cp.Decision(True, "run: x\n::error::in-reason", names, ["src/ok.rs"])
+        out = self.output(d)
+        lines = out.split("\n")
+        opens = [l for l in lines if l.startswith("::stop-commands::")]
+        self.assertEqual(len(opens), 1, out)
+        token = opens[0][len("::stop-commands::"):]
+        self.assertRegex(token, r"^[0-9a-f]{32}$")
+        for line in lines:
+            if line.lstrip().startswith("::"):
+                self.assertIn(line, (f"::stop-commands::{token}", f"::{token}::"), out)
+        # the list sits inside the block
+        i, j = lines.index(f"::stop-commands::{token}"), lines.index(f"::{token}::")
+        self.assertEqual(j - i - 1, len(names))
+        # the token differs per call
+        self.assertNotIn(token, self.output(d))
+
+    def test_a_name_with_a_newline_is_one_escaped_line(self):
+        out = self.output(cp.Decision(True, "r", ["a\n::error::after-newline", "c\x07bell"], []))
+        self.assertIn('- "a\\n::error::after-newline"\n', out)
+        self.assertIn('- "c\\u0007bell"\n', out)
+
+    def test_github_output_has_one_line_per_key(self):
+        with tempfile.TemporaryDirectory() as t:
+            f = Path(t, "out")
+            os.environ["GITHUB_OUTPUT"] = str(f)
+            try:
+                cp.report(cp.Decision(True, "x\n::error::y\rz", ["a\nb"], []))
+            finally:
+                os.environ.pop("GITHUB_OUTPUT")
+            lines = f.read_text(encoding="utf-8").split("\n")
+        self.assertEqual([l.split("=")[0] for l in lines if l], ["run", "count", "matched", "reason"])
 
 
 class Events(unittest.TestCase):

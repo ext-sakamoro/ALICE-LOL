@@ -31,12 +31,17 @@ decide   which files changed, and whether any matches the patterns
   no file was compared, and an empty diff on a new / force-pushed branch (the change cannot
   be known). An empty diff on an existing branch skips.
   Output: `run`, `count` (changed files), `matched` and `reason` in $GITHUB_OUTPUT; the
-  decision and the file list in the log and in $GITHUB_STEP_SUMMARY. Exit 0.
+  decision and the file list in the log and in $GITHUB_STEP_SUMMARY. Exit 0. File names
+  are read NUL-separated (`git diff -z`) and printed JSON-escaped inside a
+  `::stop-commands::` block, so a name cannot be misread or run as a workflow command.
 
 gate     the final job of a workflow: did the jobs that should have run succeed?
     --needs-json JSON   ${{ toJSON(needs) }} (needs the `changes` job and the heavy jobs)
   changes did not succeed: fail. run=true: every other job must be `success`. run=false:
   every other job must be `skipped`. Fails when no heavy job was named. Exit 0 / 1.
+  Do NOT make the Gate job a required status check: `paths` stays on `pull_request`, so a
+  pull request that touches no listed path gets no run, and a required check would stay
+  pending forever.
 
 sync     the trigger lint: no workflow filters `on.push` by paths unless the push runs on
          main only (main is never created by a push, so before..after holds), and the `pull_request`
@@ -62,6 +67,7 @@ import argparse
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -101,7 +107,8 @@ def compile_pattern(pat: str) -> re.Pattern[str]:
         else:
             out.append(re.escape(pat[i]))
             i += 1
-    return re.compile("".join(out) + r"\Z")
+    # DOTALL: a file name may contain a newline, and `**` must still cross it
+    return re.compile("".join(out) + r"\Z", re.S)
 
 
 def compile_patterns(pats: list[str]) -> list[tuple[bool, re.Pattern[str]]]:
@@ -139,19 +146,24 @@ class GitError(RuntimeError):
 
 
 def git(repo: str, *args: str) -> str:
+    """stdout as text, without newline translation (a file name may contain CR)"""
     try:
-        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", check=False)
+        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, check=False)
     except OSError as e:
         raise GitError(f"git {' '.join(args)}: {e}") from e
     if p.returncode != 0:
-        raise GitError(f"git {' '.join(args)}: exit {p.returncode}: {p.stderr.strip()[:300]}")
-    return p.stdout
+        err = p.stderr.decode("utf-8", "replace").strip()[:300]
+        raise GitError(f"git {' '.join(args)}: exit {p.returncode}: {err}")
+    return p.stdout.decode("utf-8", "surrogateescape")
 
 
 def diff_names(repo: str, spec: str) -> list[str]:
-    out = git(repo, "-c", "core.quotepath=false", "diff", "--name-only", "--no-renames", spec)
-    return [l for l in out.splitlines() if l]
+    # -z: names are NUL-separated and never C-quoted (without it git quotes a name with a
+    # tab, quote, backslash, newline or control character, and `src/**` misses `"src/a\tb"`)
+    # --no-renames: a rename lists both the old and the new name (with renames on,
+    # src/x.rs -> docs/x.rs lists docs/x.rs only and `src/**` misses it)
+    out = git(repo, "diff", "-z", "--name-only", "--no-renames", spec)
+    return [n for n in out.split("\0") if n]
 
 
 def truthy(v: str | None) -> bool:
@@ -227,15 +239,26 @@ def decide(a: argparse.Namespace) -> Decision:
                     files, matched, label)
 
 
+def one_line(text: str) -> str:
+    """a log line that cannot carry a workflow command on a following line"""
+    return json.dumps(text)[1:-1]
+
+
 def report(d: Decision) -> None:
     head = f"changed_paths: run={'true' if d.run else 'false'} count={len(d.files)} matched={len(d.matched)}"
     print(head)
-    print(f"reason: {d.reason}")
+    print(f"reason: {one_line(d.reason)}")
+    # a file name is attacker-controlled text: print it JSON-escaped (the line starts with
+    # `+ "` or `- "`, newlines and control characters are escaped), and stop the runner from
+    # reading workflow commands (`::warning::` and the like) while the list is printed
+    token = secrets.token_hex(16)
+    print(f"::stop-commands::{token}")
     for f in d.files:
-        print(f"  {'+' if f in d.matched else ' '} {f}")
+        print(f"{'+' if f in d.matched else '-'} {json.dumps(f)}")
+    print(f"::{token}::")
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
-        reason = d.reason.replace("\n", " ")
+        reason = one_line(d.reason)
         with open(out, "a", encoding="utf-8") as fh:
             fh.write(f"run={'true' if d.run else 'false'}\ncount={len(d.files)}\n"
                      f"matched={len(d.matched)}\nreason={reason}\n")
@@ -246,7 +269,7 @@ def report(d: Decision) -> None:
             if d.files:
                 fh.write("| match | file |\n|---|---|\n")
                 for f in d.files[:SUMMARY_FILES]:
-                    fh.write(f"| {'yes' if f in d.matched else ''} | `{f}` |\n")
+                    fh.write(f"| {'yes' if f in d.matched else ''} | `{json.dumps(f)}` |\n")
                 if len(d.files) > SUMMARY_FILES:
                     fh.write(f"\n... {len(d.files) - SUMMARY_FILES} more\n")
             fh.write("\n")
@@ -391,7 +414,7 @@ def main(argv: list[str]) -> int:
         return 0
     if a.cmd == "gate":
         ok, msg = gate(a.needs_json)
-        print(f"gate: {'pass' if ok else 'FAIL'}: {msg}")
+        print(f"gate: {'pass' if ok else 'FAIL'}: {one_line(msg)}")
         summ = os.environ.get("GITHUB_STEP_SUMMARY")
         if summ:
             with open(summ, "a", encoding="utf-8") as fh:
