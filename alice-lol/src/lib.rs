@@ -90,6 +90,11 @@ pub mod pruned_compile;
 pub mod law;
 pub mod law_id;
 
+// ── 幾何評価 (text→`SdfNode`→評価結果) の意味論の識別子 ──
+// `law_id` (監査 / 研究 Law 専用) とは別軸: rotate/rotate_q の算術世代・TPMS の
+// 受理境界・emit の canonical form 等、`SdfNode` の数値評価そのものを pin する
+pub mod geometry_id;
+
 // ── 研究 Law (単位付きの多変数の式 + 成立範囲 + 残差 + 出典 + oracle) ──
 // 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う
 pub mod research_law;

@@ -240,11 +240,31 @@ computed from behaviour (`audit_verdict_order_fingerprint`,
 `law_input::derivation_fingerprint`) rather than written down, so changing
 the order in which verdicts are reached, or how a request's inputs are read,
 makes a pin disagree. An audit law's identifier also covers the type of each
-`x-input` line (`law_input::audit_law_from_file`). Geometric and research laws
-do not have identifiers yet.
+`x-input` line (`law_input::audit_law_from_file`). Research laws do not have
+an identifier yet; `SdfNode` evaluation has its own, separate one (below).
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs); oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs).
+
+## Geometry identity (`geometry_id`)
+
+`law_id` above is scoped to audit law and research law: it does not cover
+`SdfNode`'s own numeric evaluation. `LOL_GEOMETRY_SEMANTICS_ID` is the
+separate identifier for that — the upstream `alice-det-math` arithmetic
+generation, `canon_angle_deg`'s degree-range reduction, the arithmetic a
+construct's evaluation uses (e.g. `rotate`/`rotate_q`'s quaternion
+construction), the accept/reject boundary of a construct's inputs (e.g.
+`rotate_q`'s unit-length tolerance, TPMS's `scale`/`thickness` validity
+range), and `emit`'s canonical text form (e.g. `fmt_f32`'s round-trip
+fidelity class). The two identifiers are independent constants: a change to
+one never moves the other.
+
+Like `LOL_SEMANTICS_ID`, each pin in `LOL_GEOMETRY_SEMANTICS_PINS` is computed
+from behaviour (a fixed probe set run through the real function), never
+written down by hand.
+
+Example: [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs); oracle:
+[`alice-lol/tests/geometry_id_oracle.rs`](alice-lol/tests/geometry_id_oracle.rs).
 
 ## Geometric laws (`law`)
 
@@ -360,6 +380,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`research_law_demo`](alice-lol/examples/research_law_demo.rs) | the ideal-gas law in SI and in (kPa, L): re-evaluation, comparison, oracles, new evidence |
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | writing a check as an audit law and reaching the <!-- num: verdict.audit -->6 verdicts |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | what a law's identifier is derived from, and what changes it |
+| [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | what `SdfNode` evaluation's identifier is derived from, and how it differs from `law_id` |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
