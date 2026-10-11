@@ -293,6 +293,46 @@ impl<'a> Parser<'a> {
         Ok((a, b))
     }
 
+    /// `alice_sdf` の TPMS 9 primitive (`gyroid`/`schwarz_p`/`diamond_surface`/
+    /// `neovius`/`lidinoid`/`iwp`/`frd`/`fischer_koch_s`/`pmy`) 共通の
+    /// `(scale, thickness)` 引数、`d.abs() / scale - thickness` という式で
+    /// `scale` を割るため、`scale` が `0.0` 以下 / 非有限だと eval が
+    /// `±inf` / `NaN` になる `emit::canon` は `-0.0` も含め絶対値 1e-6 未満を
+    /// 符号を落として `0.0` に丸めるので、`-0.0` を受理すると
+    /// 元の tree と 1 度 emit した text を再 parse した tree が符号違いの
+    /// `±inf` で食い違う (`fuzz_lol_emit_parity` が `lidinoid(-0.0,1e8)` で検出)
+    /// `thickness` は減算の相手なので非有限だけ弾く (符号・0 は制約しない)
+    fn parse_tpms_fields(&mut self) -> Result<(f32, f32), ParseError> {
+        let (scale, thickness) = self.parse_2f()?;
+        self.validate_tpms_fields(scale, thickness)?;
+        Ok((scale, thickness))
+    }
+
+    /// [`Self::parse_tpms_fields`] の検証部分だけ (`lattice_infill`/`diamond_infill`/
+    /// `schwarz_infill` は TPMS node を直接組み立てる別構文で、同じ 9 node 型の
+    /// どれかである以上は構文が違っても同じ制約を満たす必要がある、でないと
+    /// この構文経由で作った node が emit の正準形 (常に `gyroid(...)` 等で書く)
+    /// を 1 度 再 parse するだけで、ここでは弾かなかった scale が弾かれて
+    /// round-trip が壊れる)
+    fn validate_tpms_fields(&self, scale: f32, thickness: f32) -> Result<(), ParseError> {
+        // 1e-6: emit.rs の `canon()` が絶対値 1e-6 未満を符号ごと 0.0 に丸める
+        // 閾値と同じ値 (emit.rs は変更しない方針のためここに複製、値が動いたら
+        // 両方を揃える) これ未満を受理すると、1 度 emit した text の scale が
+        // 0.0 に丸められて再 parse できなくなる (「emit した text は常に
+        // 読み戻せる」という不変条件がこの入力だけ壊れる)
+        if !scale.is_finite() || scale < 1e-6 {
+            return self.err(format!(
+                "TPMS の scale は有限かつ 1e-6 以上でなければならない: {scale}"
+            ));
+        }
+        if !thickness.is_finite() {
+            return self.err(format!(
+                "TPMS の thickness は有限でなければならない: {thickness}"
+            ));
+        }
+        Ok(())
+    }
+
     /// SKADIS panel の variadic arg 解析 0/1/2/3-arg を許容し不足分は
     /// SKADIS canonical default (300mm 板 / 5mm 厚 / 5mm `corner_r`) で補完
     /// LLM 出力の arity ズレ (「SKADISパネル 10✖10」→ `skadis_panel(10, 10)` 等)
@@ -1228,6 +1268,7 @@ impl<'a> Parser<'a> {
             // ── 3D Print Structural Intent (3) ──
             "lattice_infill" => {
                 let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                self.validate_tpms_fields(scale, lattice_t)?;
                 Ok(SdfNode::Union {
                     a: Arc::new(SdfNode::Onion {
                         child: Arc::new(child.clone()),
@@ -1244,6 +1285,7 @@ impl<'a> Parser<'a> {
             }
             "diamond_infill" => {
                 let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                self.validate_tpms_fields(scale, lattice_t)?;
                 Ok(SdfNode::Union {
                     a: Arc::new(SdfNode::Onion {
                         child: Arc::new(child.clone()),
@@ -1260,6 +1302,7 @@ impl<'a> Parser<'a> {
             }
             "schwarz_infill" => {
                 let (shell_t, scale, lattice_t, child) = self.parse_3f_child()?;
+                self.validate_tpms_fields(scale, lattice_t)?;
                 Ok(SdfNode::Union {
                     a: Arc::new(SdfNode::Onion {
                         child: Arc::new(child.clone()),
@@ -1389,7 +1432,7 @@ impl<'a> Parser<'a> {
                 Ok(SdfNode::InfiniteCone { angle: a })
             }
             "gyroid" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::Gyroid {
                     scale: s,
                     thickness: t,
@@ -1403,7 +1446,7 @@ impl<'a> Parser<'a> {
                 })
             }
             "schwarz_p" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::SchwarzP {
                     scale: s,
                     thickness: t,
@@ -1537,49 +1580,49 @@ impl<'a> Parser<'a> {
                 Ok(SdfNode::TruncatedIcosahedron { radius: r })
             }
             "diamond_surface" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::DiamondSurface {
                     scale: s,
                     thickness: t,
                 })
             }
             "neovius" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::Neovius {
                     scale: s,
                     thickness: t,
                 })
             }
             "lidinoid" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::Lidinoid {
                     scale: s,
                     thickness: t,
                 })
             }
             "iwp" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::IWP {
                     scale: s,
                     thickness: t,
                 })
             }
             "frd" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::FRD {
                     scale: s,
                     thickness: t,
                 })
             }
             "fischer_koch_s" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::FischerKochS {
                     scale: s,
                     thickness: t,
                 })
             }
             "pmy" => {
-                let (s, t) = self.parse_2f()?;
+                let (s, t) = self.parse_tpms_fields()?;
                 Ok(SdfNode::PMY {
                     scale: s,
                     thickness: t,
@@ -4283,6 +4326,127 @@ mod tests {
             let input = format!("{name}({args})");
             assert!(parse_lol(&input).is_ok(), "failed: {input}");
         }
+    }
+
+    /// `alice_sdf`'s 9 TPMS surfaces (`gyroid`/`schwarz_p`/`diamond_surface`/
+    /// `neovius`/`lidinoid`/`iwp`/`frd`/`fischer_koch_s`/`pmy`) all compute
+    /// `d.abs() / scale - thickness` with no guard on `scale`: a scale of
+    /// exactly `0.0` or `-0.0` divides into `+inf` / `-inf`, and because
+    /// `emit::canon` collapses any near-zero value (including `-0.0`) to a
+    /// positive `0.0`, a `-0.0` survives in the parsed tree but not in its
+    /// own re-emitted text -- `eval` then disagrees by sign of infinity
+    /// after a single round trip (`fuzz_lol_emit_parity` found this via
+    /// `lidinoid(-0.0,1e8)`). Reject at the language boundary instead of
+    /// letting an accepted builder produce that pair of trees. The accept
+    /// threshold is 1e-6 (not just "> 0"), matching `emit::canon`'s own
+    /// near-zero-collapse threshold exactly: a scale this change let through
+    /// below 1e-6 would itself be silently collapsed to `0.0` by the first
+    /// `to_lol`, making the emitted text unparseable by this very check --
+    /// an `(0, 1e-6)` scale is excluded here so that "parses" implies
+    /// "survives one emit-reparse round trip unchanged", not just "accepted
+    /// once".
+    #[test]
+    fn tpms_scale_and_thickness_reject_degenerate_values() {
+        let names = [
+            "gyroid",
+            "schwarz_p",
+            "diamond_surface",
+            "neovius",
+            "lidinoid",
+            "iwp",
+            "frd",
+            "fischer_koch_s",
+            "pmy",
+        ];
+        // scale: must be finite and >= 1e-6 (emit::canon's own threshold).
+        // "NaN"/"inf"/"-inf" are not included here: this crate's lexer
+        // already refuses any literal that reads as non-finite, for every
+        // numeric field in the whole grammar (see
+        // `tpms_fields_validation_rejects_non_finite_values_directly`,
+        // which exercises `validate_tpms_fields` without going through that
+        // earlier, unrelated gate -- confirmed by mutation: deleting the
+        // scale/thickness checks in `validate_tpms_fields` does not turn a
+        // text-level "NaN"/"inf" case red, because the lexer's gate is what
+        // actually rejects it).
+        let bad_scales = ["-0.0", "0.0", "-1.0", "1e-10", "5e-7", "-5e-7"];
+        for name in names {
+            for scale in bad_scales {
+                let input = format!("{name}({scale}, 0.1)");
+                assert!(
+                    parse_lol(&input).is_err(),
+                    "{input} should be rejected (degenerate scale)"
+                );
+            }
+            // exactly at the threshold (emit::canon's own boundary is `< 1e-6`,
+            // so `1e-6` itself is NOT collapsed) and the usual case: accepted,
+            // and round-trips through one emit-reparse unchanged.
+            for scale in ["1e-6", "3.0"] {
+                let input = format!("{name}({scale}, 0.1)");
+                let node = parse_lol(&input).unwrap_or_else(|e| panic!("{input}: {e}"));
+                let text = crate::emit::to_lol(&node)
+                    .unwrap_or_else(|e| panic!("{input}: to_lol failed: {e}"));
+                assert!(
+                    parse_lol(&text).is_ok(),
+                    "{input} -> {text:?} should re-parse"
+                );
+            }
+        }
+    }
+
+    /// `lattice_infill`/`diamond_infill`/`schwarz_infill` build an
+    /// `SdfNode::Gyroid`/`DiamondSurface`/`SchwarzP` directly (a different
+    /// surface syntax from the raw constructor, same underlying node type):
+    /// the same scale/thickness constraint as
+    /// `tpms_scale_and_thickness_reject_degenerate_values` must hold here
+    /// too, or a tree built through this syntax can still reach the exact
+    /// `-inf`/`inf` disagreement that change closed for the raw syntax --
+    /// `emit` writes the SAME canonical `gyroid(...)`/etc. text for a node
+    /// regardless of which syntax built it, so a degenerate value accepted
+    /// here would merely move the round-trip failure to a different source
+    /// text instead of removing it.
+    #[test]
+    fn infill_wrappers_reject_the_same_degenerate_tpms_fields() {
+        for name in ["lattice_infill", "diamond_infill", "schwarz_infill"] {
+            for scale in ["-0.0", "0.0", "-1.0", "5e-7"] {
+                let input = format!("{name}(1.0, {scale}, 0.1, sphere(1.0))");
+                assert!(
+                    parse_lol(&input).is_err(),
+                    "{input} should be rejected (degenerate lattice scale)"
+                );
+            }
+            let input = format!("{name}(1.0, 3.0, 0.1, sphere(1.0))");
+            assert!(parse_lol(&input).is_ok(), "{input} should still parse");
+        }
+    }
+
+    /// `validate_tpms_fields`'s own `thickness.is_finite()` branch has no
+    /// reachable text-level case: this lexer already refuses any literal
+    /// that reads as `NaN`/`±inf` for every numeric field in the grammar
+    /// (`read_number`'s own `!v.is_finite()` check, and "NaN"/"inf" are not
+    /// even numeric syntax -- they lex as identifiers), before any
+    /// constructor-specific validation runs. Exercise the branch directly,
+    /// bypassing the lexer, so a mutant that deletes it is still caught
+    /// (confirmed: a text-level case for this did NOT catch that mutant).
+    #[test]
+    fn tpms_fields_validation_rejects_non_finite_values_directly() {
+        let p = Parser::new("");
+        for bad_thickness in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(
+                p.validate_tpms_fields(3.0, bad_thickness).is_err(),
+                "thickness={bad_thickness} should be rejected"
+            );
+        }
+        for bad_scale in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0, -0.0, -1.0] {
+            assert!(
+                p.validate_tpms_fields(bad_scale, 0.1).is_err(),
+                "scale={bad_scale} should be rejected"
+            );
+        }
+        assert!(p.validate_tpms_fields(3.0, 0.1).is_ok());
+        assert!(
+            p.validate_tpms_fields(3.0, -5.0).is_ok(),
+            "a negative thickness is not restricted"
+        );
     }
 
     #[test]
