@@ -850,6 +850,38 @@ mod tests {
         );
     }
 
+    /// The merge decision is exact bit equality, not a `< 1e-6` tolerance: two
+    /// `smooth_union` `k` values that differ by less than 1e-6 but are not
+    /// bit-identical are a genuinely different operation each (`fmt_f32` now
+    /// writes each faithfully, so they print different text too) -- merging
+    /// them into one chain would silently drop one of the two k values.
+    #[test]
+    fn variadic_merge_does_not_fold_values_closer_than_the_old_tolerance() {
+        let text =
+            "smooth_union(0.5, smooth_union(0.5000001, sphere(1.0), sphere(2.0)), sphere(3.0))";
+        let node = parse_lol(text).unwrap();
+        assert_eq!(
+            to_lol(&node).unwrap(),
+            text,
+            "two different (if close) k values must not merge into one smooth_union call"
+        );
+    }
+
+    /// Bit equality, not plain `==`: `0.0 == -0.0` is true under IEEE754 even
+    /// though the two have different bit patterns (and `fmt_f32` -- faithful
+    /// now -- writes them as different text), so a merge check weakened to
+    /// `x == y` would still fold these two apart k values into one call.
+    #[test]
+    fn variadic_merge_does_not_fold_negative_and_positive_zero() {
+        let text = "smooth_union(0.0, smooth_union(-0.0, sphere(1.0), sphere(2.0)), sphere(3.0))";
+        let node = parse_lol(text).unwrap();
+        assert_eq!(
+            to_lol(&node).unwrap(),
+            text,
+            "0.0 and -0.0 k values must not merge into one smooth_union call"
+        );
+    }
+
     #[test]
     fn rotate_round_trips_through_euler_degrees() {
         let node = parse_lol("rotate(90.0, 0.0, 0.0, cylinder(1.0, 2.0))").unwrap();
@@ -889,6 +921,75 @@ mod tests {
         assert_eq!(to_lol(&sym).unwrap(), "capsule(0.5, 2.0)");
         let back = parse_lol(&to_lol(&node).unwrap()).unwrap();
         assert!(matches!(back, SdfNode::Capsule { radius, .. } if (radius - 0.5).abs() < 1e-6));
+    }
+
+    /// The symmetry check is exact equality (`== 0.0`), not a `< 1e-6`
+    /// tolerance, and it is independently checked on all four coordinates
+    /// (`point_a.x`, `point_a.z`, `point_b.x`, `point_b.z`): a tiny but
+    /// nonzero value on any one of them (`fmt_f32` is faithful now, so this is
+    /// no longer "noise" that a tolerance check could reasonably discard) must
+    /// stay in the long `capsule_ab` form, or that coordinate is silently lost
+    /// on the first round trip through the short form. Pinning only one of
+    /// the four (as an earlier version of this test did) left the other three
+    /// weakenable to `|v| < 1e-6` without any test going red.
+    #[test]
+    fn capsule_tiny_nonzero_on_any_symmetry_coordinate_is_not_short_formed() {
+        let tiny = 1e-7_f32;
+        // Y is made exactly symmetric in every case (point_a.y == -point_b.y)
+        // so each case isolates its own X/Z check alone -- a Y mismatch would
+        // already force the long form on its own, masking a mutant that only
+        // weakens one X/Z check.
+        let cases: [(&str, Vec3, Vec3); 4] = [
+            (
+                "point_a.x",
+                Vec3::new(tiny, -1.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+            ),
+            (
+                "point_a.z",
+                Vec3::new(0.0, -1.0, tiny),
+                Vec3::new(0.0, 1.0, 0.0),
+            ),
+            (
+                "point_b.x",
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec3::new(tiny, 1.0, 0.0),
+            ),
+            (
+                "point_b.z",
+                Vec3::new(0.0, -1.0, 0.0),
+                Vec3::new(0.0, 1.0, tiny),
+            ),
+        ];
+        for (name, point_a, point_b) in cases {
+            let node = SdfNode::Capsule {
+                point_a,
+                point_b,
+                radius: 0.5,
+            };
+            let text = to_lol(&node).unwrap();
+            assert!(
+                text.starts_with("capsule_ab("),
+                "{name}: a 1e-7 coordinate must not be treated as symmetric: {text:?}"
+            );
+            let back = parse_lol(&text).unwrap();
+            let SdfNode::Capsule {
+                point_a: pa,
+                point_b: pb,
+                ..
+            } = back
+            else {
+                panic!("expected Capsule, got {back:?}");
+            };
+            let got = match name {
+                "point_a.x" => pa.x,
+                "point_a.z" => pa.z,
+                "point_b.x" => pb.x,
+                "point_b.z" => pb.z,
+                _ => unreachable!(),
+            };
+            assert_eq!(got.to_bits(), tiny.to_bits(), "{name}: {text:?}");
+        }
     }
 
     #[test]

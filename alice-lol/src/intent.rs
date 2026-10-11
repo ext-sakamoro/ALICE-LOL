@@ -699,6 +699,20 @@ mod tests {
         assert_eq!(intents.len(), 14);
     }
 
+    /// `IntentNode::to_lol` writes its float fields through the same
+    /// `fmt_f32` as `SdfNode`'s emit path -- a faithful round-trip value
+    /// (here a tiny force this crate's old `emit::canon` would have
+    /// silently rounded to `0.0`) must come through unchanged, not just for
+    /// `SdfNode`.
+    #[test]
+    fn to_lol_preserves_a_tiny_force_value() {
+        let text = grasp(0, HandSide::Right, 5e-7).to_lol();
+        assert!(
+            text.contains("5e-7"),
+            "a tiny force must not be rounded away: {text:?}"
+        );
+    }
+
     #[test]
     fn sequence_composition() {
         let seq = sequence(vec![
