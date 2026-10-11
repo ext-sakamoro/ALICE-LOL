@@ -23,7 +23,7 @@
 //! [`heat_set_insert_hole`] は `heat_insert_hole()` と同式 (`+ 0.2` 熱膨張余裕)
 
 use alice_sdf::SdfNode;
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use std::sync::Arc;
 
 // ────────────────────────────────────────────────────────
@@ -383,7 +383,7 @@ pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
     };
     let cone_inverted = SdfNode::Rotate {
         child: Arc::new(cone),
-        rotation: Quat::from_rotation_x(std::f32::consts::PI),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::PI),
     };
     let cone_shifted = SdfNode::Translate {
         child: Arc::new(cone_inverted),

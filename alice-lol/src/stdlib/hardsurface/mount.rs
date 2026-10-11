@@ -23,7 +23,7 @@
 //! hook 本体組立は pipeline 側に委譲
 
 use alice_sdf::SdfNode;
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use std::sync::Arc;
 
 // ────────────────────────────────────────────────────────
@@ -371,7 +371,7 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
         let angle = std::f32::consts::FRAC_PI_2 * f32::from(i);
         let rotated = SdfNode::Rotate {
             child: Arc::new(t_slot.clone()),
-            rotation: Quat::from_rotation_y(angle),
+            rotation: crate::angle::quat_from_rotation_y(angle),
         };
         // + 0.0 (via mul_add's addend): at i=0, angle.sin() is exactly 0.0, so
         // -face_offset * 0.0 is exactly -0.0 -- a sign with no geometric meaning

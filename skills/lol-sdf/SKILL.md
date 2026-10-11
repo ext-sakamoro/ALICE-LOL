@@ -36,7 +36,7 @@ Do **not** use this skill for:
 
 ## Core value: GBNF constrained decoding
 
-`references/lol.gbnf` is a **GBNF (Guided Backus-Naur Form)** grammar that covers all <!-- num: syntax.all -->237 runtime-parseable constructs (<!-- num: syntax.core -->125 plus <!-- num: syntax.stdlib -->112 stdlib shortcuts). When loaded into a supported inference stack:
+`references/lol.gbnf` is a **GBNF (Guided Backus-Naur Form)** grammar that covers all <!-- num: syntax.all -->238 runtime-parseable constructs (<!-- num: syntax.core -->126 plus <!-- num: syntax.stdlib -->112 stdlib shortcuts). When loaded into a supported inference stack:
 
 - **llama.cpp**: `--grammar-file references/lol.gbnf`
 - **vLLM / TGI**: pass grammar via OpenAI-compatible `response_format: {"type": "grammar", "grammar": "..."}` API
@@ -49,7 +49,7 @@ The LLM literally cannot emit tokens that violate LOL syntax. Combined with the 
 - Free-form JSON tree: LLM often emits invalid JSON or wrong schema
 - LOL + GBNF: syntax invariant is enforced by the sampler; only semantic content is LLM responsibility
 
-## Available constructs (<!-- num: syntax.core -->125 total; <!-- num: syntax.all -->237 with the stdlib)
+## Available constructs (<!-- num: syntax.core -->126 total; <!-- num: syntax.all -->238 with the stdlib)
 
 See `references/syntax.md` for full argument tables. Summary:
 
@@ -57,7 +57,7 @@ See `references/syntax.md` for full argument tables. Summary:
 |--|--|--|
 | Primitives | <!-- num: syntax.primitives -->73 | `sphere`, `box3d`, `torus`, `gyroid`, `heart`, `helix`, TPMS surfaces |
 | CSG Operations | <!-- num: syntax.csg -->23 | `union`, `smooth_union`, `subtract`, `chamfer_union`, `stairs_union` |
-| Transforms | <!-- num: syntax.transforms -->4 | `translate`, `rotate`, `scale`, `scale_non_uniform` |
+| Transforms | <!-- num: syntax.transforms -->5 | `translate`, `rotate`, `rotate_q`, `scale`, `scale_non_uniform` |
 | Modifiers | <!-- num: syntax.modifiers -->20 | `round`, `onion`, `twist`, `bend`, `mirror`, `repeat`, `noise`, `shell` |
 | 3D Print structural intent | <!-- num: syntax.print -->3 | `lattice_infill`, `diamond_infill`, `schwarz_infill` |
 | Time control | <!-- num: syntax.time -->2 | `animate`, `morph` |
@@ -151,7 +151,7 @@ After generating a print / laser / Roblox artifact, always report the file path.
 
 ## References
 
-- `references/syntax.md` — <!-- num: syntax.core -->125-construct reference (mirrors parent `LLM_REFERENCE.md`)
+- `references/syntax.md` — <!-- num: syntax.core -->126-construct reference (mirrors parent `LLM_REFERENCE.md`)
 - `references/print-guide.md` — 3D print system prompt (mirrors parent `LLM_PRINT_PROMPT.md`)
 - `references/lol.gbnf` — GBNF grammar for constrained decoding
 - Parent docs: `README.md`, `LLM_REFERENCE.md`, `LLM_PRINT_PROMPT.md`, `SPEC.md`

@@ -76,6 +76,89 @@ pub fn canon_angle_deg(deg: f32) -> f32 {
         r
     }
 }
+
+/// `glam::Quat::from_euler(EulerRot::XYZ, x, y, z)`, specialised to intrinsic
+/// XYZ.
+///
+/// Built from [`alice_det_math::sin_cos`] instead of `glam`'s own `sin`/`cos`
+/// (the only order this crate's `rotate(x, y, z, child)` ever uses).
+///
+/// # Why this exists
+///
+/// `glam::Quat::from_euler` dispatches to a different SIMD backend per target
+/// (NEON on `aarch64`, SSE2 on `x86_64`, a scalar fallback elsewhere), and
+/// each backend's `sin_cos` is ultimately the platform's own libm -- the same
+/// non-determinism this crate already avoids for every other Law-path
+/// trigonometric call (`research_law.rs`, `law_id.rs`: see
+/// `alice_det_math::SEMANTICS_ID`). The same source text parsed on two
+/// machines must build the same quaternion bits; this function is the one
+/// place `rotate(x, y, z, child)` goes through to get that. The new
+/// `rotate_q` construct's unit-magnitude tolerance
+/// ([`crate::limits::checked_rotation_quat`]) was derived from a one-time
+/// measurement of this function's own maximum deviation from unit length
+/// across a dense angle sweep, not something this function computes itself.
+///
+/// The formula is Ken Shoemake's (Graphics Gems IV), specialised to the
+/// `XYZ` case of `glam`'s own `impl_quat_from_euler!` macro (verified against
+/// `glam 0.29.3`'s source: `Order::from_euler(EulerRot::XYZ)` is
+/// `(initial_axis: X, parity_even: true, initial_repeated: false,
+/// frame_static: true)`, which collapses the general macro to exactly the
+/// steps below) -- not a re-derivation from the paper, a transcription of the
+/// one case this crate actually uses, with `alice_det_math::sin_cos` in
+/// place of `glam`'s `$scalar::math::sin_cos`.
+#[must_use]
+pub fn quat_from_euler_xyz(x: f32, y: f32, z: f32) -> glam::Quat {
+    let ti = x * 0.5;
+    let tj = (-y) * 0.5; // XYZ is parity-even: angles.y negated before halving
+    let th = z * 0.5;
+    let (si, ci) = alice_det_math::sin_cos(ti);
+    let (sj, cj) = alice_det_math::sin_cos(tj);
+    let (sh, ch) = alice_det_math::sin_cos(th);
+    let cc = ci * ch;
+    let cs = ci * sh;
+    let sc = si * ch;
+    let ss = si * sh;
+    // XYZ: parity_even = true -> parity = -1.0, (i, j, k) = (x, y, z)
+    glam::Quat::from_xyzw(
+        cj.mul_add(sc, -(sj * cs)),
+        -(cj.mul_add(ss, sj * cc)),
+        cj.mul_add(cs, -(sj * sc)),
+        cj.mul_add(cc, sj * ss),
+    )
+}
+
+/// `glam::Quat::from_rotation_x(angle)`, built from
+/// [`alice_det_math::sin_cos`] instead of `glam`'s own `sin`/`cos`.
+///
+/// Same reason as [`quat_from_euler_xyz`]: any `SdfNode::Rotate` this
+/// crate's own `stdlib` constructs directly (not through the `rotate(x, y,
+/// z, child)`/`rotate_q(...)` text grammar) must build the identical
+/// quaternion on every architecture too, or `emit`'s now-faithful text
+/// exposes the same platform-libm drift `rotate`'s own fix closed. Formula
+/// verified against `glam 0.29.3`'s own `from_rotation_x`
+/// (`Quat::from_xyzw(s, 0.0, 0.0, c)` where `(s, c) = sin_cos(angle * 0.5)`).
+#[must_use]
+pub fn quat_from_rotation_x(angle: f32) -> glam::Quat {
+    let (s, c) = alice_det_math::sin_cos(angle * 0.5);
+    glam::Quat::from_xyzw(s, 0.0, 0.0, c)
+}
+
+/// `glam::Quat::from_rotation_y(angle)`, deterministic; see
+/// [`quat_from_rotation_x`].
+#[must_use]
+pub fn quat_from_rotation_y(angle: f32) -> glam::Quat {
+    let (s, c) = alice_det_math::sin_cos(angle * 0.5);
+    glam::Quat::from_xyzw(0.0, s, 0.0, c)
+}
+
+/// `glam::Quat::from_rotation_z(angle)`, deterministic; see
+/// [`quat_from_rotation_x`].
+#[must_use]
+pub fn quat_from_rotation_z(angle: f32) -> glam::Quat {
+    let (s, c) = alice_det_math::sin_cos(angle * 0.5);
+    glam::Quat::from_xyzw(0.0, 0.0, s, c)
+}
+
 #[cfg(test)]
 mod tests {
     use super::canon_angle_deg;
@@ -294,5 +377,245 @@ mod tests {
              upstream and this pin should be revisited)"
         );
         assert_eq!(canon_angle_deg(x).to_bits(), x.to_bits());
+    }
+}
+
+#[cfg(test)]
+mod quat_from_euler_xyz_tests {
+    use super::{
+        quat_from_euler_xyz, quat_from_rotation_x, quat_from_rotation_y, quat_from_rotation_z,
+    };
+    use glam::{EulerRot, Quat};
+
+    /// This is a different trig backend (`alice_det_math::sin_cos`, not
+    /// `glam`'s own libm-backed one) computing the SAME Shoemake XYZ formula,
+    /// so an exact bit match is not expected -- only that the two stay within
+    /// a few ulp of each other across a representative sweep, confirming the
+    /// formula transcription itself (not the trig) is correct. Measured max
+    /// over this sweep: `1.7881393e-7` (about 1 ulp at this magnitude); the
+    /// bound below is `1e-5`, two orders of magnitude of headroom so this
+    /// does not become a flaky pin if `alice_det_math` tightens its own
+    /// accuracy later.
+    #[test]
+    fn matches_glam_from_euler_on_a_sweep() {
+        let angles: &[f32] = &[-3.0, -1.5, -0.7, -0.1, 0.0, 0.05, 0.3, 0.9, 1.57, 2.0, 2.9];
+        let mut max_diff = 0.0_f32;
+        for &x in angles {
+            for &y in angles {
+                for &z in angles {
+                    let want = Quat::from_euler(EulerRot::XYZ, x, y, z);
+                    let got = quat_from_euler_xyz(x, y, z);
+                    for (a, b) in [
+                        (want.x, got.x),
+                        (want.y, got.y),
+                        (want.z, got.z),
+                        (want.w, got.w),
+                    ] {
+                        max_diff = max_diff.max((a - b).abs());
+                    }
+                }
+            }
+        }
+        assert!(
+            max_diff < 1e-5,
+            "quat_from_euler_xyz formula does not match glam's XYZ case: max_diff={max_diff:e}"
+        );
+    }
+
+    /// `quat_from_euler_xyz` must itself be a pure function of its three
+    /// inputs (no hidden platform dependence beyond `alice_det_math`'s own
+    /// portability guarantee): the same angles must give bit-identical
+    /// output across repeated calls -- a mutant that introduced, say, an
+    /// uninitialised-memory read or a thread-local would be caught here, not
+    /// by the glam-comparison test above (which only bounds a *difference*,
+    /// not exact repeatability).
+    #[test]
+    fn is_bit_identical_across_repeated_calls() {
+        for (x, y, z) in [
+            (0.0_f32, 0.0, 0.0),
+            (1.0, -2.0, 3.5),
+            (std::f32::consts::PI, 0.1, -0.1),
+        ] {
+            let a = quat_from_euler_xyz(x, y, z);
+            let b = quat_from_euler_xyz(x, y, z);
+            assert_eq!(a.x.to_bits(), b.x.to_bits());
+            assert_eq!(a.y.to_bits(), b.y.to_bits());
+            assert_eq!(a.z.to_bits(), b.z.to_bits());
+            assert_eq!(a.w.to_bits(), b.w.to_bits());
+        }
+    }
+
+    /// Cross-architecture determinism oracle: a fixed table of
+    /// `(x, y, z)` Euler-radian inputs mapped to the exact `f32` bit
+    /// pattern `quat_from_euler_xyz` must produce for each, computed once
+    /// (on `aarch64`) and pinned as literals here -- this test runs
+    /// identically on every CI runner (`ubuntu-latest`/`windows-latest` are
+    /// `x86_64`, `macos-latest` is `aarch64`), so a mismatch on any one of
+    /// them is exactly the cross-architecture drift `alice_det_math::sin_cos`
+    /// exists to prevent (unlike `glam::Quat::from_euler`, which dispatches
+    /// to a different SIMD/libm backend per target). If `alice_det_math`
+    /// ever changes its own rounding, this is the test that should be
+    /// re-generated (see the module doc's "Why this exists" for how), not
+    /// loosened to a tolerance.
+    #[test]
+    fn quat_from_euler_xyz_is_bit_identical_across_architectures() {
+        type Row = ((f32, f32, f32), (u32, u32, u32, u32));
+        use std::f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI};
+        // FRAC_PI_2/FRAC_PI_4/FRAC_PI_6/FRAC_PI_3 are bit-identical to
+        // 90/45/30/60 .to_radians() (confirmed separately) -- the inputs
+        // below really are those degree values, just spelled as the named
+        // constant clippy wants here.
+        let table: &[Row] = &[
+            (
+                (0.0, 0.0, 0.0),
+                (0x0000_0000, 0x8000_0000, 0x0000_0000, 0x3f80_0000),
+            ),
+            (
+                (FRAC_PI_2, 0.0, 0.0),
+                (0x3f35_04f4, 0x8000_0000, 0x0000_0000, 0x3f35_04f3),
+            ),
+            (
+                (0.0, FRAC_PI_4, 0.0),
+                (0x0000_0000, 0x3ec3_ef16, 0x0000_0000, 0x3f6c_835e),
+            ),
+            (
+                (0.0, 0.0, FRAC_PI_6),
+                (0x0000_0000, 0x8000_0000, 0x3e84_83ee, 0x3f77_46ea),
+            ),
+            (
+                (0.174_532_92, 0.349_065_84, FRAC_PI_6),
+                (0x3e02_be66, 0x3e14_5aef, 0x3e89_7d87, 0x3f71_9743),
+            ),
+            (
+                (-FRAC_PI_4, FRAC_PI_3, -2.094_395_2),
+                (0xbf10_d58a, 0xbd65_8d0f, 0xbf49_e06a, 0x3e6f_f811),
+            ),
+            (
+                (PI, 0.0, 0.0),
+                (0x3f80_0000, 0x8000_0000, 0x8000_0000, 0xb33b_bd2e),
+            ),
+            (
+                (1.0, -2.0, 3.5),
+                (0xbf45_d6a5, 0xbdfc_6f29, 0x3f09_d982, 0x3e9f_f8d0),
+            ),
+        ];
+        for &((x, y, z), (ex, ey, ez, ew)) in table {
+            let q = quat_from_euler_xyz(x, y, z);
+            assert_eq!(q.x.to_bits(), ex, "x component at ({x}, {y}, {z})");
+            assert_eq!(q.y.to_bits(), ey, "y component at ({x}, {y}, {z})");
+            assert_eq!(q.z.to_bits(), ez, "z component at ({x}, {y}, {z})");
+            assert_eq!(q.w.to_bits(), ew, "w component at ({x}, {y}, {z})");
+        }
+    }
+
+    /// Same cross-architecture oracle as
+    /// `quat_from_euler_xyz_is_bit_identical_across_architectures`, for the
+    /// single-axis builders `stdlib` uses directly (not through the
+    /// `rotate`/`rotate_q` text grammar): `can_rack`'s tilt and the other
+    /// `stdlib` shapes build their `SdfNode::Rotate` through these, so they
+    /// need the same guarantee `rotate(...)` itself has.
+    #[test]
+    fn quat_from_rotation_axes_are_bit_identical_across_architectures() {
+        use std::f32::consts::{FRAC_PI_2, PI};
+        type Row = (
+            f32,
+            (u32, u32, u32, u32),
+            (u32, u32, u32, u32),
+            (u32, u32, u32, u32),
+        );
+        let table: &[Row] = &[
+            (
+                0.0,
+                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+            ),
+            (
+                FRAC_PI_2,
+                (0x3f35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
+                (0x0000_0000, 0x3f35_04f4, 0x0000_0000, 0x3f35_04f3),
+                (0x0000_0000, 0x0000_0000, 0x3f35_04f4, 0x3f35_04f3),
+            ),
+            (
+                -FRAC_PI_2,
+                (0xbf35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
+                (0x0000_0000, 0xbf35_04f4, 0x0000_0000, 0x3f35_04f3),
+                (0x0000_0000, 0x0000_0000, 0xbf35_04f4, 0x3f35_04f3),
+            ),
+            (
+                PI,
+                (0x3f80_0000, 0x0000_0000, 0x0000_0000, 0xb33b_bd2e),
+                (0x0000_0000, 0x3f80_0000, 0x0000_0000, 0xb33b_bd2e),
+                (0x0000_0000, 0x0000_0000, 0x3f80_0000, 0xb33b_bd2e),
+            ),
+            (
+                -2.670_354, // a representative non-special angle (a can_rack-like tilt)
+                (0xbf78_ed3d, 0x0000_0000, 0x0000_0000, 0x3e6f_0c49),
+                (0x0000_0000, 0xbf78_ed3d, 0x0000_0000, 0x3e6f_0c49),
+                (0x0000_0000, 0x0000_0000, 0xbf78_ed3d, 0x3e6f_0c49),
+            ),
+        ];
+        for &(a, (xx, xy, xz, xw), (yx, yy, yz, yw), (zx, zy, zz, zw)) in table {
+            let qx = quat_from_rotation_x(a);
+            assert_eq!(
+                (
+                    qx.x.to_bits(),
+                    qx.y.to_bits(),
+                    qx.z.to_bits(),
+                    qx.w.to_bits()
+                ),
+                (xx, xy, xz, xw),
+                "quat_from_rotation_x({a})"
+            );
+            let qy = quat_from_rotation_y(a);
+            assert_eq!(
+                (
+                    qy.x.to_bits(),
+                    qy.y.to_bits(),
+                    qy.z.to_bits(),
+                    qy.w.to_bits()
+                ),
+                (yx, yy, yz, yw),
+                "quat_from_rotation_y({a})"
+            );
+            let qz = quat_from_rotation_z(a);
+            assert_eq!(
+                (
+                    qz.x.to_bits(),
+                    qz.y.to_bits(),
+                    qz.z.to_bits(),
+                    qz.w.to_bits()
+                ),
+                (zx, zy, zz, zw),
+                "quat_from_rotation_z({a})"
+            );
+        }
+    }
+
+    /// Formula cross-check against `glam`'s own `from_rotation_x/y/z`, same
+    /// spirit as `matches_glam_from_euler_on_a_sweep`: a different trig
+    /// backend computing the same construction, bounded to a few ulp, not
+    /// bit-identical.
+    #[test]
+    fn quat_from_rotation_axes_match_glam_on_a_sweep() {
+        let angles: &[f32] = &[-3.0, -1.5, -0.7, -0.1, 0.0, 0.05, 0.3, 0.9, 1.57, 2.0, 2.9];
+        let mut max_diff = 0.0_f32;
+        for &a in angles {
+            for (got, want) in [
+                (quat_from_rotation_x(a), glam::Quat::from_rotation_x(a)),
+                (quat_from_rotation_y(a), glam::Quat::from_rotation_y(a)),
+                (quat_from_rotation_z(a), glam::Quat::from_rotation_z(a)),
+            ] {
+                for (g, w) in [
+                    (got.x, want.x),
+                    (got.y, want.y),
+                    (got.z, want.z),
+                    (got.w, want.w),
+                ] {
+                    max_diff = max_diff.max((g - w).abs());
+                }
+            }
+        }
+        assert!(max_diff < 1e-5, "max_diff={max_diff:e}");
     }
 }

@@ -113,6 +113,42 @@ fn captured_valid_tpms_fields_still_work() {
     assert!(matches!(node, alice_lol::SdfNode::Gyroid { .. }));
 }
 
+/// `rotate_q`'s unit-quaternion contract is checked at runtime for a
+/// captured value, the same literal-vs-captured split as TPMS's
+/// `checked_tpms_fields` (`tests/compile_fail/`: literal non-unit is a
+/// `compile_error!`).
+#[test]
+#[should_panic(expected = "rotation_quat")]
+fn captured_rotate_q_non_unit_is_checked_at_runtime() {
+    let bad_x = 1.0_f32;
+    let _ = lol! { rotate_q({bad_x}, 1.0, 0.0, 0.0, sphere(1.0)) };
+}
+
+#[test]
+fn captured_valid_rotate_q_fields_still_work() {
+    let w = 1.0_f32;
+    let node = lol! { rotate_q(0.0, 0.0, 0.0, {w}, sphere(1.0)) };
+    let alice_lol::SdfNode::Rotate { rotation, .. } = node else {
+        panic!("expected Rotate, got {node:?}");
+    };
+    assert_eq!(
+        (rotation.x, rotation.y, rotation.z, rotation.w),
+        (0.0, 0.0, 0.0, 1.0)
+    );
+}
+
+/// `rotate_q` round-trips bit-exact through emit/parse -- the exact-quaternion
+/// alternative to `rotate`'s lossy Euler-degrees form.
+#[test]
+fn rotate_q_round_trips_bit_exact() {
+    let node = lol! { rotate_q(0.6, 0.8, 0.0, 0.000_001, sphere(1.0)) };
+    let text = alice_lol::emit::to_lol(&node).unwrap();
+    assert_eq!(text, "rotate_q(0.6, 0.8, 0.0, 1e-6, sphere(1.0))");
+    let back = alice_lol::runtime_parser::parse_lol(&text).unwrap();
+    let text2 = alice_lol::emit::to_lol(&back).unwrap();
+    assert_eq!(text, text2);
+}
+
 /// A literal TPMS scale this small used to be a `compile_error!` (the old
 /// `>= 1e-6` floor); it is a finite positive value now, so the macro must
 /// accept it at compile time (the `tpms_node` literal branch in

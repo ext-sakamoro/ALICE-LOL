@@ -81,10 +81,11 @@ For lightweight lattice infill, **prefer `lattice_infill` / `diamond_infill` / `
 ### Columnar
 - `columns_union(r, n, a, b, ...)`, `columns_intersection`, `columns_subtraction`
 
-## Transforms (<!-- num: syntax.transforms -->4)
+## Transforms (<!-- num: syntax.transforms -->5)
 
 - `translate(x, y, z, child)`
 - `rotate(rx, ry, rz, child)` — Euler degrees
+- `rotate_q(x, y, z, w, child)` — exact quaternion, bit-exact round trip. Needs ~8 significant digits per component (unit-length tolerance is tight); for a hand-written rotation use `rotate(x, y, z)` in degrees instead
 - `scale(s, child)` — uniform
 - `scale_non_uniform(sx, sy, sz, child)`
 

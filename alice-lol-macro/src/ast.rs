@@ -495,6 +495,13 @@ pub enum Expr {
         rz: V,
         child: Box<Self>,
     },
+    RotateQ {
+        qx: V,
+        qy: V,
+        qz: V,
+        qw: V,
+        child: Box<Self>,
+    },
     Scale {
         factor: V,
         child: Box<Self>,

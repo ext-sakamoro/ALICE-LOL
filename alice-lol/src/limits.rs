@@ -155,7 +155,21 @@ impl std::fmt::Display for FloatLimitError {
             f,
             "resource limit exceeded: kind={} limit={} {} value={} {}",
             self.kind, self.limit, self.unit, self.value, self.unit
-        )
+        )?;
+        // rotate_q's tolerance is tight enough (ROTATION_QUAT_UNIT_TOLERANCE) that a
+        // hand-typed literal with only 3-4 decimal digits is rejected far more often
+        // than not: say so here, where a human or an LLM actually reads the refusal,
+        // not only in the docs (LLM_REFERENCE.md / syntax.md).
+        if self.kind == "rotation_quat_unit" {
+            write!(
+                f,
+                " (rotate_q needs about 8 significant digits per component to land \
+                 inside this tolerance; for a hand-written rotation, use rotate(x, y, z) \
+                 in degrees instead -- rotate_q is meant for a machine-computed exact \
+                 quaternion, not one typed by hand)"
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -335,11 +349,101 @@ pub fn checked_tpms_fields(scale: f32, thickness: f32) -> Result<(f32, f32), Spe
     Ok((scale, thickness))
 }
 
+/// The unit-magnitude tolerance `rotate_q(x, y, z, w, child)`'s quaternion
+/// must fall within.
+///
+/// Derived, not guessed: `crate::angle::quat_from_euler_xyz` (the function
+/// `rotate(x, y, z, child)` itself builds its quaternion with) measured a
+/// maximum `||q|^2 - 1|` of `4.7139432e-7` (about `3.95 * f32::EPSILON`) over
+/// a dense 101^3 sweep of `[-pi, pi]^3` -- every quaternion `emit` ever
+/// writes out as `rotate_q(...)`, including one built from an ordinary
+/// `rotate(x, y, z, child)`, must still parse back through this same check.
+/// `8.0 * f32::EPSILON` gives about 2x headroom over that measured max (a
+/// finer sweep, or a future change to `quat_from_euler_xyz`'s formula, could
+/// plausibly land a few ulp further out without legitimately meaning
+/// "non-unit").
+pub const ROTATION_QUAT_UNIT_TOLERANCE: f32 = 8.0 * f32::EPSILON;
+
+/// The `rotate_q(x, y, z, w, child)` contract: `x`/`y`/`z`/`w` must all be
+/// finite, and `x^2 + y^2 + z^2 + w^2` must be within
+/// [`ROTATION_QUAT_UNIT_TOLERANCE`] of `1.0`.
+///
+/// Unlike [`checked_tpms_fields`], this does **not** normalise the result --
+/// the literal `x`/`y`/`z`/`w` the caller gave are returned unchanged (as a
+/// `glam::Quat`) when they pass. Renormalising would silently rewrite a
+/// value the user wrote to a DIFFERENT value, defeating the entire point of
+/// `rotate_q` (an exact, bit-preserving alternative to `rotate`'s lossy
+/// Euler-degrees form); it would also make `parse(emit(rotate_q(...)))`
+/// non-idempotent for any input that was not already exactly at its
+/// normalised form. A near-unit-but-not-exactly-unit quaternion is accepted
+/// as-is: `glam::Quat::mul_vec3` (what `eval`'s `Rotate` transform calls)
+/// applies it as given, and the tolerance above is tight enough that the
+/// resulting scale error is far below `eval`'s own `1e-4` parity threshold
+/// used elsewhere in this crate's oracles.
+///
+/// A quaternion further from unit than the tolerance is refused: unlike
+/// `alice_sdf::SdfNode::Scale`, which explicitly divides the evaluated
+/// distance back down by its `factor`, `Rotate`'s `eval` does
+/// nothing to correct for a non-unit quaternion's implicit scaling -- a
+/// `rotate_q` this crate silently accepted un-checked would, for any
+/// magnitude far enough from `1.0` to matter, break the distance-field
+/// Lipschitz bound every other primitive and modifier in this crate is
+/// expected to hold.
+///
+/// # Errors
+///
+/// [`SpecError`] if any of `x`/`y`/`z`/`w` is non-finite, or if
+/// `x^2 + y^2 + z^2 + w^2` is further than [`ROTATION_QUAT_UNIT_TOLERANCE`]
+/// from `1.0`.
+pub fn checked_rotation_quat(x: f32, y: f32, z: f32, w: f32) -> Result<glam::Quat, SpecError> {
+    if !(x.is_finite() && y.is_finite() && z.is_finite() && w.is_finite()) {
+        return Err(FloatLimitError {
+            kind: "rotation_quat_finite",
+            limit: 0.0,
+            value: if x.is_finite() {
+                if y.is_finite() {
+                    if z.is_finite() {
+                        w
+                    } else {
+                        z
+                    }
+                } else {
+                    y
+                }
+            } else {
+                x
+            },
+            unit: "unitless",
+        }
+        .into());
+    }
+    let mag2 = f64::from(x).mul_add(
+        f64::from(x),
+        f64::from(y).mul_add(
+            f64::from(y),
+            f64::from(z).mul_add(f64::from(z), f64::from(w) * f64::from(w)),
+        ),
+    );
+    let dev = (mag2 - 1.0).abs();
+    if dev > f64::from(ROTATION_QUAT_UNIT_TOLERANCE) {
+        #[allow(clippy::cast_possible_truncation)]
+        let dev_f32 = dev as f32;
+        return Err(FloatLimitError {
+            kind: "rotation_quat_unit",
+            limit: ROTATION_QUAT_UNIT_TOLERANCE,
+            value: dev_f32,
+            unit: "|q|^2-1",
+        }
+        .into());
+    }
+    Ok(glam::Quat::from_xyzw(x, y, z, w))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        checked_bounded, checked_positive_finite, checked_product, checked_tpms_fields, SpecError,
-        MAX_NODE_EXPANSION, MIN_PITCH_MM,
+        checked_bounded, checked_positive_finite, checked_product, checked_rotation_quat,
+        checked_tpms_fields, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
     };
 
     #[test]
@@ -564,5 +668,105 @@ mod tests {
                 "scale={scale} should be accepted"
             );
         }
+    }
+
+    #[test]
+    fn checked_rotation_quat_rejects_non_finite_components() {
+        for (x, y, z, w) in [
+            (f32::NAN, 0.0, 0.0, 1.0),
+            (0.0, f32::INFINITY, 0.0, 1.0),
+            (0.0, 0.0, f32::NEG_INFINITY, 1.0),
+            (0.0, 0.0, 0.0, f32::NAN),
+        ] {
+            assert!(
+                checked_rotation_quat(x, y, z, w).is_err(),
+                "({x},{y},{z},{w}) should be rejected (non-finite)"
+            );
+        }
+    }
+
+    #[test]
+    fn checked_rotation_quat_accepts_the_identity_and_an_ordinary_unit_quat() {
+        let q = checked_rotation_quat(0.0, 0.0, 0.0, 1.0).unwrap();
+        assert_eq!((q.x, q.y, q.z, q.w), (0.0, 0.0, 0.0, 1.0));
+        // (0.6, 0.8, 0.0, 0.0): 0.6^2 + 0.8^2 = 1.0 exactly in f32
+        let q = checked_rotation_quat(0.6, 0.8, 0.0, 0.0).unwrap();
+        assert_eq!((q.x, q.y, q.z, q.w), (0.6, 0.8, 0.0, 0.0));
+    }
+
+    #[test]
+    fn checked_rotation_quat_rejects_a_clearly_non_unit_quat() {
+        for (x, y, z, w) in [
+            (0.0_f32, 0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0, 0.0),
+        ] {
+            assert!(
+                checked_rotation_quat(x, y, z, w).is_err(),
+                "({x},{y},{z},{w}) is far from unit and should be rejected"
+            );
+        }
+    }
+
+    /// The rejection message itself says why a hand-typed `rotate_q` literal
+    /// is so often refused (the tolerance needs ~8 significant digits), not
+    /// just the bare numbers -- a reader (human or LLM) hitting this error
+    /// should not have to go find the docs to learn that `rotate(x, y, z)`
+    /// in degrees is the form meant for hand-written rotations.
+    #[test]
+    fn checked_rotation_quat_error_message_explains_the_digit_requirement() {
+        let e = checked_rotation_quat(1.0, 1.0, 0.0, 0.0).unwrap_err();
+        let s = e.to_string();
+        assert!(s.contains("significant digits"), "{s}");
+        assert!(s.contains("rotate(x, y, z)"), "{s}");
+    }
+
+    /// The boundary itself, at two ADJACENT `f32` bit patterns either side of
+    /// [`ROTATION_QUAT_UNIT_TOLERANCE`] (found by sweeping bit patterns near
+    /// `sqrt(1 + tolerance)` and computing each candidate's own `|q|^2-1` the
+    /// same way `checked_rotation_quat` does, not derived analytically --
+    /// `f32` rounding on the way to the boundary is exactly the thing a
+    /// formula-based construction would get wrong): pins the tolerance to an
+    /// exact value instead of only exercising "clearly inside" / "clearly
+    /// outside" cases, so a mutant that shifts the comparison by even one bit
+    /// (`>` vs `>=`, or a slightly different constant) is caught.
+    #[test]
+    fn checked_rotation_quat_boundary_is_exact() {
+        // x=y=z=0.0, so |q|^2-1 = w*w-1 exactly (0.mul_add(0, w*w) == w*w,
+        // no intermediate rounding): w_inside=1.0000004 (bits 0x3f800003)
+        // measures |q|^2-1 = 7.152558652023799e-7 (<= tol); the very next
+        // representable f32, w_outside=1.0000005 (bits 0x3f800004), measures
+        // 9.536745437799254e-7 (> tol = 9.5367431640625e-7 by a hair).
+        let w_inside = f32::from_bits(0x3f80_0003);
+        let w_outside = f32::from_bits(0x3f80_0004);
+        assert!(
+            checked_rotation_quat(0.0, 0.0, 0.0, w_inside).is_ok(),
+            "w={w_inside:?} (|q|^2-1 just inside tolerance) should be accepted"
+        );
+        assert!(
+            checked_rotation_quat(0.0, 0.0, 0.0, w_outside).is_err(),
+            "w={w_outside:?} (|q|^2-1 just outside tolerance) should be rejected"
+        );
+    }
+
+    /// Accepted input is returned bit-exact, never renormalised -- the
+    /// contract `rotate_q`'s emit/parse idempotence depends on.
+    #[test]
+    fn checked_rotation_quat_does_not_renormalise() {
+        // w is the exact "just inside tolerance" boundary value from
+        // checked_rotation_quat_boundary_is_exact (|q|^2-1 = 7.15e-7, not
+        // 0): close enough to unit to be accepted, far enough that
+        // normalising it would actually move the bits -- a quaternion
+        // this close to exactly unit (e.g. (0.6, 0.8, 0.0, 1e-6)) does NOT
+        // catch a `.normalize()` mutant, since the correction is far below
+        // f32's precision at that magnitude and the bits come out the same
+        // either way (confirmed: that weaker case passed even with
+        // `.normalize()` inserted into the accept path).
+        let (qx, qy, qz, qw) = (0.0_f32, 0.0, 0.0, f32::from_bits(0x3f80_0003));
+        let q = checked_rotation_quat(qx, qy, qz, qw).unwrap();
+        assert_eq!(q.x.to_bits(), qx.to_bits());
+        assert_eq!(q.y.to_bits(), qy.to_bits());
+        assert_eq!(q.z.to_bits(), qz.to_bits());
+        assert_eq!(q.w.to_bits(), qw.to_bits());
     }
 }

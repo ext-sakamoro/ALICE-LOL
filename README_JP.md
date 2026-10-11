@@ -123,7 +123,7 @@ exp_smooth_intersection exp_smooth_subtraction
 
 <!-- readme-sync: syntax-transforms -->
 ```text
-translate rotate scale scale_non_uniform
+translate rotate rotate_q scale scale_non_uniform
 ```
 
 モディファイア:

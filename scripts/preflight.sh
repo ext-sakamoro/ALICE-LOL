@@ -265,7 +265,20 @@ step "ci.yml / test: law test files are listed"
 scripts/law_tests.sh list
 
 if [[ $quick -eq 1 ]]; then
-  echo; echo "preflight --quick OK (test / bench suites skipped)"; exit 0
+  echo
+  echo "preflight --quick OK -- the following CI steps were NOT run (full preflight,"
+  echo "no --quick, runs all of them):"
+  echo "  - cargo test (default + llm-bridge/glsl,wgsl,hlsl/physics/roblox features)"
+  echo "  - law oracles (default + physics)"
+  echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
+  echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
+  echo "    a count/assertion here that is wrong locally still shows green)"
+  echo "A push that changes the grammar (SDF_SYNTAX / the macro parser / the gbnf)"
+  echo "needs the full run at least once: these are exactly the gates most likely"
+  echo "to catch a count that drifted from the new construct (rotate_q's own"
+  echo "landing missed degenerate_grid.rs's hard-coded SDF-name count this way,"
+  echo "since --quick never reaches that assertion)."
+  exit 0
 fi
 
 step "ci.yml / test: Test"

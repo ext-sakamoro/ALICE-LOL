@@ -31,7 +31,7 @@ use crate::limits::{
     checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
 };
 use alice_sdf::SdfNode;
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use std::sync::Arc;
 
 /// 個数 / index (`u32`) → 寸法計算用 `f32`
@@ -76,7 +76,7 @@ const fn cylinder(radius: f32, half_height: f32) -> SdfNode {
 fn cylinder_z(radius: f32, half_height: f32) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(cylinder(radius, half_height)),
-        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -89,7 +89,7 @@ fn cylinder_z(radius: f32, half_height: f32) -> SdfNode {
 fn to_z_up(y_up_node: SdfNode) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(y_up_node),
-        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -102,7 +102,7 @@ fn to_z_up(y_up_node: SdfNode) -> SdfNode {
 fn to_z_up_flipped(y_up_node: SdfNode) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(y_up_node),
-        rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(-std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -3840,7 +3840,7 @@ pub fn wrap_holder(spec: &WrapHolderSpec) -> SdfNode {
     // Y-axis → X-axis: Z 軸回りに π/2 回転
     let cradle_xaxis = SdfNode::Rotate {
         child: Arc::new(cradle_yaxis),
-        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_z(std::f32::consts::FRAC_PI_2),
     };
     let cradle = translate(cradle_xaxis, Vec3::new(0.0, cradle_offset_y, 0.0));
 
@@ -5198,7 +5198,7 @@ pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
     let upright_hz = spec.upright_thickness * 0.5;
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
-    let upright_rotation = Quat::from_rotation_x(-tilt_rad);
+    let upright_rotation = crate::angle::quat_from_rotation_x(-tilt_rad);
     let upright_offset_y = base_hy + upright_hy * tilt_rad.cos();
     let upright_offset_z = -base_hz + upright_hz + upright_hy * tilt_rad.sin();
 
@@ -5413,7 +5413,7 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let tear_offset_z = base_hz - 2.0;
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tear_rad = crate::angle::canon_angle_deg(spec.tear_angle_deg).to_radians();
-    let tear_rotation = Quat::from_rotation_x(tear_rad);
+    let tear_rotation = crate::angle::quat_from_rotation_x(tear_rad);
     let tear_raw = box3d(tear_hx, tear_hy, tear_hz);
     let tear = translate(
         SdfNode::Rotate {
@@ -5873,7 +5873,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
         let shelf_raw = box3d(shelf_hx, shelf_hy, shelf_hz);
         let shelf_rotated = SdfNode::Rotate {
             child: Arc::new(shelf_raw),
-            rotation: Quat::from_rotation_x(-tilt_rad),
+            rotation: crate::angle::quat_from_rotation_x(-tilt_rad),
         };
         let shelf = translate(shelf_rotated, Vec3::new(0.0, tier_y, 0.0));
 
@@ -6311,7 +6311,7 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
         let v_hole_raw = make_hole(spec.plate_thickness);
         let v_hole_rotated = SdfNode::Rotate {
             child: Arc::new(v_hole_raw),
-            rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+            rotation: crate::angle::quat_from_rotation_z(std::f32::consts::FRAC_PI_2),
         };
         result = subtract(
             result,
@@ -6395,7 +6395,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
     let h_hole = translate(hole.clone(), Vec3::new(0.0, 0.0, 0.0));
     let v_hole_rotated = SdfNode::Rotate {
         child: Arc::new(hole),
-        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_z(std::f32::consts::FRAC_PI_2),
     };
     let v_hole = translate(
         v_hole_rotated,
@@ -7330,7 +7330,7 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     // cylinder Y-axis → rotate X 90° で Z-axis alignment (rod と同軸)
     let cradle_hole = SdfNode::Rotate {
         child: Arc::new(cylinder(cradle_r, cradle_hh)),
-        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     };
 
     // 半円 cradle: box wrapper で rod pocket を作る (arm 上に乗る cylinder wall)
@@ -7338,7 +7338,7 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     let cradle_body_r = cradle_r + 3.0; // wall 3mm
     let cradle_body = SdfNode::Rotate {
         child: Arc::new(cylinder(cradle_body_r, cradle_hh)),
-        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     };
     let cradle_placed = translate(cradle_body, Vec3::new(cradle_x, cradle_y, 0.0));
     let hole_placed = translate(cradle_hole, Vec3::new(cradle_x, cradle_y, 0.0));
@@ -7348,7 +7348,7 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     // counterbore is Y-axis native、我々の wall plate は X-axis normal なので Z 軸周り 90° 回転
     let bore_rotated = SdfNode::Rotate {
         child: Arc::new(bore),
-        rotation: Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_z(std::f32::consts::FRAC_PI_2),
     };
     let bore_offset_y = plate_hy - 12.0;
     let bore_offset_z = plate_hz - 8.0;

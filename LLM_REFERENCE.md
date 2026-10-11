@@ -31,7 +31,7 @@ This compiles to an `SdfNode` tree that can be:
 
 ## Syntax Reference
 
-The language has <!-- num: syntax.core -->125 constructs, or <!-- num: syntax.all -->237 with the <!-- num: syntax.stdlib -->112 stdlib shortcuts. The tables below give the arguments of the common ones; README.md lists every name, and `lol.gbnf` accepts all of them.
+The language has <!-- num: syntax.core -->126 constructs, or <!-- num: syntax.all -->238 with the <!-- num: syntax.stdlib -->112 stdlib shortcuts. The tables below give the arguments of the common ones; README.md lists every name, and `lol.gbnf` accepts all of them.
 
 ### Primitives (<!-- num: ref.primitives_rows -->28 of <!-- num: syntax.primitives -->73 primitives, the common ones)
 
@@ -94,14 +94,17 @@ The language has <!-- num: syntax.core -->125 constructs, or <!-- num: syntax.al
 | `groove(ra, rb, a, b)` | two radii, two children | Groove at intersection |
 | `tongue(ra, rb, a, b)` | two radii, two children | Tongue-and-groove joint |
 
-### Transforms (<!-- num: syntax.transforms -->4)
+### Transforms (<!-- num: syntax.transforms -->5)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
 | `translate(x, y, z, child)` | offset X, Y, Z, child | Move shape |
 | `rotate(rx, ry, rz, child)` | degrees X, Y, Z, child | Rotate (Euler angles in degrees) |
+| `rotate_q(x, y, z, w, child)` | unit quaternion components, child | Rotate (exact quaternion, bit-exact round trip) |
 | `scale(s, child)` | uniform factor, child | Uniform scale |
 | `scale_non_uniform(sx, sy, sz, child)` | factors X, Y, Z, child | Non-uniform scale |
+
+`rotate_q`'s `x`/`y`/`z`/`w` must be unit length (`x^2+y^2+z^2+w^2`) to within `8 * f32::EPSILON`, a tolerance tight enough that a hand-typed literal needs about 8 significant digits per component to land inside it -- a shorter literal (3-4 decimal digits) is rejected almost every time. `rotate_q` is meant for a machine-computed exact quaternion (e.g. one `emit` already wrote), not a rotation typed by hand: use `rotate(x, y, z)` in degrees for that instead.
 
 ### Modifiers (<!-- num: syntax.modifiers -->20)
 

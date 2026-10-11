@@ -135,7 +135,11 @@ fn every_grammar_construct_matches_cpu_on_gpu() {
         checked,
         corpus.len()
     );
-    // 257 parser construct − Intent verb 18 − program/entities 2 = 237 (2026-09-14)
+    // a loose lower bound, not an exact count: `checked` is corpus.len() minus
+    // any keyword the corpus has no snippet() arm for (falls through to this
+    // test's own uncovered set instead), which drifts by a small amount
+    // whenever the grammar grows a construct before its corpus entry lands
+    // (e.g. rotate_q, added without one: 238 total SDF names, 237 checked here)
     assert!(checked >= 230, "only {checked} constructs ran on the GPU");
     eprintln!("GPU parity: {checked} grammar constructs within tolerance");
 }

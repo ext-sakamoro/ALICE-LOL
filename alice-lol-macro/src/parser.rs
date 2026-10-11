@@ -186,6 +186,20 @@ fn parse_3f_child(input: ParseStream) -> Result<(V, V, V, Expr)> {
     Ok((a, b, c, child))
 }
 
+fn parse_4f_child(input: ParseStream) -> Result<(V, V, V, V, Expr)> {
+    let a = parse_val(input)?;
+    eat_comma(input)?;
+    let b = parse_val(input)?;
+    eat_comma(input)?;
+    let c = parse_val(input)?;
+    eat_comma(input)?;
+    let d = parse_val(input)?;
+    eat_comma(input)?;
+    let child = parse_expr(input)?;
+    check_empty(input)?;
+    Ok((a, b, c, d, child))
+}
+
 fn parse_child_only(input: ParseStream) -> Result<Expr> {
     let child = parse_expr(input)?;
     check_empty(input)?;
@@ -671,6 +685,16 @@ fn parse_expr(input: ParseStream) -> Result<Expr> {
                 rx,
                 ry,
                 rz,
+                child: Box::new(child),
+            })
+        }
+        "rotate_q" => {
+            let (qx, qy, qz, qw, child) = parse_4f_child(&content)?;
+            Ok(Expr::RotateQ {
+                qx,
+                qy,
+                qz,
+                qw,
                 child: Box::new(child),
             })
         }

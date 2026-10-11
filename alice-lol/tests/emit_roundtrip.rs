@@ -75,7 +75,9 @@ fn every_grammar_construct_round_trips() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    // 257 parser construct − Intent verb 18 − program/entities 2 = 237 (2026-09-14)
+    // a loose lower bound, not an exact count: drifts by a small amount
+    // whenever the grammar grows a construct before its corpus entry lands
+    // (e.g. rotate_q, added without one: 238 total SDF names, 237 checked here)
     assert!(checked >= 230, "only {checked} constructs round-tripped");
 }
 
@@ -351,4 +353,99 @@ fn can_rack_dense_tilt_sweep_is_idempotent_and_agrees() {
         parity_fail, 0,
         "{parity_fail}/{tried} tilts broke eval parity"
     );
+}
+
+/// Cross-architecture determinism oracle for `stdlib` shapes that construct
+/// their own `SdfNode::Rotate` directly (not through `rotate`/`rotate_q`
+/// text): a fixed spec for `can_rack` (including a negative tilt, the shape
+/// of the actual regression -- `can_rack(3, 66, -151.5)`'s emitted `w`
+/// differed by 1 ulp arm64 vs `x86_64` before `stdlib` switched to
+/// `alice_lol::angle::quat_from_rotation_x`/`_y`/`_z`) and `phone_dock`,
+/// each hashed with `sha2` (the emitted text is hundreds of bytes, too long
+/// to usefully inline as a literal string -- a digest is the pin instead).
+/// This runs identically on every CI runner (`ubuntu-latest`/
+/// `windows-latest` are `x86_64`, `macos-latest` is `aarch64`), so a
+/// mismatch on any one of them is exactly the cross-architecture drift this
+/// test exists to catch.
+#[test]
+fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
+    use alice_lol::stdlib::hardsurface::pattern_sdf::{
+        can_rack, phone_dock, CanRackSpec, PhoneDockSpec,
+    };
+    use sha2::{Digest, Sha256};
+
+    fn hex_digest(text: &str) -> String {
+        use std::fmt::Write as _;
+        Sha256::digest(text.as_bytes())
+            .iter()
+            .fold(String::with_capacity(64), |mut s, b| {
+                let _ = write!(s, "{b:02x}");
+                s
+            })
+    }
+
+    let cases: &[(&str, &str)] = &[
+        (
+            "can_rack",
+            "c6b7906a6da1bc2fb92b77961159dd35d78dc60e715f5aeb2b176e014f314067",
+        ),
+        (
+            "can_rack_neg_tilt",
+            "41062e0306caa06e84a4c35b0f37cbbf96bd000b84b24b35a85ca4e67b5986f5",
+        ),
+        (
+            "phone_dock",
+            "d7460c34666061716e6a84239645d363ddbdbdd95dcc151a894370d093e29de4",
+        ),
+    ];
+    let texts: &[(&str, String)] = &[
+        (
+            "can_rack",
+            to_lol(&can_rack(&CanRackSpec {
+                rows: 3,
+                can_diameter: 66.0,
+                tilt_angle_deg: 3.0,
+                cans_per_row: 6,
+                wall_thickness: 3.0,
+                shelf_thickness: 3.0,
+                front_lip_height: 15.0,
+            }))
+            .unwrap(),
+        ),
+        (
+            "can_rack_neg_tilt",
+            to_lol(&can_rack(&CanRackSpec {
+                rows: 3,
+                can_diameter: 66.0,
+                tilt_angle_deg: -151.5,
+                cans_per_row: 6,
+                wall_thickness: 3.0,
+                shelf_thickness: 3.0,
+                front_lip_height: 15.0,
+            }))
+            .unwrap(),
+        ),
+        (
+            "phone_dock",
+            to_lol(&phone_dock(&PhoneDockSpec {
+                width: 80.0,
+                upright_height: 100.0,
+                cable_diameter: 8.0,
+                base_depth: 60.0,
+                base_thickness: 6.0,
+                upright_thickness: 4.0,
+                tilt_angle_deg: 15.0,
+            }))
+            .unwrap(),
+        ),
+    ];
+    for ((name, text), (expected_name, expected_digest)) in texts.iter().zip(cases) {
+        assert_eq!(name, expected_name);
+        let got = hex_digest(text);
+        assert_eq!(
+            &got, expected_digest,
+            "{name}: emitted text's sha256 changed (cross-architecture drift, or an \
+             intentional change that needs this pin regenerated): {text:?}"
+        );
+    }
 }

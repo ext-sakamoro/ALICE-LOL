@@ -3,8 +3,8 @@
 //! [`to_lol`] は tree を LOL DSL text に書き戻す 出力は `lol.gbnf` (LLM 経路
 //! grammar: comment なし、token 間 whitespace 1 文字) と `parse_lol` の両方が
 //! 受理する正規形で、`parse_lol(to_lol(n))` は `n` と **eval parity** を持つ
-//! (`Rotate` の Quat ↔ Euler 往復等で bit 一致はしないため、round-trip の判定は
-//! 数点 eval の一致で行う `tests/emit_roundtrip.rs`)
+//! (大半の variant は実際には bit 一致まで満たす、一致しないものの round-trip
+//! 判定は数点 eval の一致で行う `tests/emit_roundtrip.rs`)
 //!
 //! # 用途
 //!
@@ -26,16 +26,20 @@
 //! - 可変長 op (`union` / `smooth_union` 等) は parser の `fold_left` が作る
 //!   左結合 2 分木を平坦化して `union(a, b, c)` に戻す (同 op・同数値引数の
 //!   左 spine だけ) stdlib product の穴格子は nested だと深さ 2,400 になる
-//! - 角度は度 (parser 入力と同じ)、`Rotate` は `EulerRot::XYZ`
+//! - `Rotate` は常に exact quaternion 形 `rotate_q(x, y, z, w, child)` で書く
+//!   (`rotate(x, y, z, child)` という Euler 度の形で構築したものも含む全て)
+//!   quaternion の 4 成分は `fmt_f32` で faithful に書くため、emit/parse は
+//!   bit-exact round-trip する (旧 Euler 度への decompose は往復で 1 ulp 単位の
+//!   drift が生じたため廃止、詳細は [`crate::limits::checked_rotation_quat`])
 
 use std::fmt::Write as _;
 
 use crate::intent::Program;
 use crate::SdfNode;
-use glam::{EulerRot, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 
 /// [`to_lol`] のエラー
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum EmitError {
     /// LOL text 構文を持たない variant
@@ -47,6 +51,15 @@ pub enum EmitError {
     },
     /// 数値に NaN か ±∞ がある (LOL の数は有限の literal だけなので、書いても読み戻せない)
     NonFinite,
+    /// `SdfNode::Rotate` の quaternion が unit length でない (コード経由で直接構築された
+    /// node に限る、`.lol` text / `lol!` macro はどちらも [`crate::limits::checked_rotation_quat`]
+    /// で既に拒否済なので、この variant に到達するのは Rust 側で直接 `rotation: Quat` を
+    /// 渡した時だけ) そのまま `rotate_q(...)` として書くと、書いた text 自身が同じ検査で
+    /// reparse を拒否される (`parse(emit(n)) == n` の不変条件を破る) ため、書く前に拒否する
+    NonUnitRotation {
+        /// `|x^2+y^2+z^2+w^2 - 1|` (符号無し)
+        deviation: f32,
+    },
 }
 
 impl std::fmt::Display for EmitError {
@@ -59,6 +72,13 @@ impl std::fmt::Display for EmitError {
                 write!(
                     f,
                     "the tree holds a number that is NaN or infinite (LOL numbers are finite)"
+                )
+            }
+            Self::NonUnitRotation { deviation } => {
+                write!(
+                    f,
+                    "a Rotate node's quaternion is not unit length (|q|^2-1={deviation:e}): \
+                     use rotate(x, y, z) in degrees, or a normalised quaternion"
                 )
             }
         }
@@ -76,34 +96,13 @@ impl std::error::Error for EmitError {}
 /// (`ellipsoid(5e-7,...)` の eval が丸めの前後で 1.0 → 1.73 に変わる実測、
 /// `lidinoid(-0.0,1e8)` の符号消失による `eval` 不一致も同じ原因)
 /// 丸めが要らなくなった意味の無い `-0.0` ノイズ (stdlib product 展開の
-/// cos/sin から出る、[`canon_deg`] 自身の丸めが生む残差も含む) は、emit の
-/// 手前でなく**その値を計算している側**で `+ 0.0` して消す (構築時の正規化、
-/// 構築箇所は `alice-lol/src/stdlib/hardsurface/mount.rs` の `extrusion_profile`
-/// と `canon_deg` 自身)
+/// cos/sin から出る残差を含む) は、emit の手前でなく**その値を計算している側**
+/// で `+ 0.0` して消す (構築時の正規化、構築箇所は
+/// `alice-lol/src/stdlib/hardsurface/mount.rs` の `extrusion_profile`)
 /// `NaN` / `inf` はそのまま出す (parser は読まない) [`to_lol`] は書く前に [`EmitError::NonFinite`] で止める
 #[must_use]
 pub fn fmt_f32(v: f32) -> String {
     format!("{v:?}")
-}
-
-/// Euler 角 (度) の正規形: 1e-3 度に丸め、`(-180, 180]` に wrap、`±180` は `+180`
-///
-/// 度 → rad → `Quat` → rad → 度 の往復は 1 ulp ずつ流れる (`1.0 → 1.0000001 →
-/// 1.0000002`) ので、丸めないと `emit ∘ parse` が固定点にならない 1e-3 度
-/// (1.7e-5 rad) は round-trip の eval tolerance (1e-4) より小さい
-/// `(-180, ε, -180)` と `(180, ε, 180)` は同じ回転で `Quat::to_euler` は
-/// どちらも返しうるため片側に寄せる
-fn canon_deg(a: f32) -> f32 {
-    let mut a = (a * 1000.0).round() / 1000.0;
-    a = a.rem_euclid(360.0);
-    if a > 180.0 {
-        a -= 360.0;
-    }
-    if (a.abs() - 180.0).abs() < 1e-3 {
-        180.0
-    } else {
-        a + 0.0 // -0.0 -> 0.0: a residual this small has no rotational meaning
-    }
 }
 
 fn u(v: u32) -> String {
@@ -115,7 +114,8 @@ fn u(v: u32) -> String {
 /// # Errors
 ///
 /// tree 内に LOL 構文のない variant があると [`EmitError::Unsupported`]、
-/// NaN か ±∞ の数があると [`EmitError::NonFinite`] (parser は有限の数しか読まないので、
+/// NaN か ±∞ の数があると [`EmitError::NonFinite`]、`Rotate` の quaternion が unit length
+/// でないと [`EmitError::NonUnitRotation`] (parser が受理する形でしか書かないので、
 /// 書いた text は必ず読み戻せる)
 pub fn to_lol(node: &SdfNode) -> Result<String, EmitError> {
     let mut out = String::new();
@@ -569,13 +569,25 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         // ── Transforms ──
         SdfNode::Translate { child, offset } => modif!("translate", child, v3(*offset)),
         SdfNode::Rotate { child, rotation } => {
-            let (rx, ry, rz) = rotation.to_euler(EulerRot::XYZ);
+            // A node built directly in Rust (not through rotate(...)/rotate_q(...) text,
+            // both of which already refuse this at the language boundary) can hold a
+            // non-unit quaternion: writing it as rotate_q(...) anyway would produce text
+            // this crate's own parser refuses to read back, breaking parse(emit(n)) == n.
+            // Same contract as the parser's, via the same function -- not re-derived.
+            if let Err(crate::limits::SpecError::FloatLimit(fe)) =
+                crate::limits::checked_rotation_quat(rotation.x, rotation.y, rotation.z, rotation.w)
+            {
+                return Err(EmitError::NonUnitRotation {
+                    deviation: fe.value,
+                });
+            }
             modif!(
-                "rotate",
+                "rotate_q",
                 child,
-                f(canon_deg(rx.to_degrees())),
-                f(canon_deg(ry.to_degrees())),
-                f(canon_deg(rz.to_degrees()))
+                f(rotation.x),
+                f(rotation.y),
+                f(rotation.z),
+                f(rotation.w)
             )
         }
         SdfNode::Scale { child, factor } => modif!("scale", child, f(*factor)),
@@ -883,11 +895,20 @@ mod tests {
     }
 
     #[test]
-    fn rotate_round_trips_through_euler_degrees() {
+    fn rotate_with_euler_degrees_emits_as_rotate_q_and_round_trips_bit_exact() {
+        // rotate(x, y, z, child) (Euler degrees) still parses -- only the
+        // EMITTED form changed, from the old lossy Euler-decompose to the
+        // exact quaternion rotate_q(x, y, z, w, child), which round-trips
+        // bit-exact (not just eval-agreeing) from here on.
         let node = parse_lol("rotate(90.0, 0.0, 0.0, cylinder(1.0, 2.0))").unwrap();
         let text = to_lol(&node).unwrap();
-        assert!(text.starts_with("rotate("), "{text}");
+        assert!(text.starts_with("rotate_q("), "{text}");
         let back = parse_lol(&text).unwrap();
+        let text2 = to_lol(&back).unwrap();
+        assert_eq!(
+            text, text2,
+            "rotate_q must round-trip bit-exact, not just eval-agree"
+        );
         for p in [
             Vec3::new(0.0, 0.0, 1.5),
             Vec3::new(0.0, 1.5, 0.0),
@@ -895,6 +916,37 @@ mod tests {
         ] {
             assert!((crate::eval(&node, p) - crate::eval(&back, p)).abs() < 1e-4);
         }
+    }
+
+    /// A code-built (not parsed) `SdfNode::Rotate` with a non-unit quaternion
+    /// must not be silently written as unparsable text: `to_lol` would
+    /// otherwise write `rotate_q(0, 0, 0, 2, ...)` with `Ok`, and the very
+    /// next `parse_lol` on that text would refuse it (this crate's own
+    /// `rotate_q` grammar already enforces unit length) -- `to_lol` applies
+    /// the same `checked_rotation_quat` check the parser does, so emit
+    /// fails instead of producing text the parser disagrees with.
+    #[test]
+    fn to_lol_refuses_a_code_built_non_unit_rotation() {
+        let node = SdfNode::Rotate {
+            child: std::sync::Arc::new(SdfNode::Sphere { radius: 1.0 }),
+            rotation: glam::Quat::from_xyzw(0.0, 0.0, 0.0, 2.0),
+        };
+        let err = to_lol(&node).unwrap_err();
+        assert!(
+            matches!(err, EmitError::NonUnitRotation { .. }),
+            "expected NonUnitRotation, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn to_lol_accepts_a_code_built_unit_rotation() {
+        let node = SdfNode::Rotate {
+            child: std::sync::Arc::new(SdfNode::Sphere { radius: 1.0 }),
+            rotation: glam::Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),
+        };
+        let text = to_lol(&node).unwrap();
+        assert_eq!(text, "rotate_q(0.0, 0.0, 0.0, 1.0, sphere(1.0))");
+        assert!(parse_lol(&text).is_ok());
     }
 
     #[test]

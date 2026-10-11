@@ -8,7 +8,7 @@
 use alice_lol::{lol, SdfNode};
 
 /// the number of keywords in the macro's parser
-const KEYWORDS: usize = 124;
+const KEYWORDS: usize = 125;
 const _: () = assert!(KEYWORDS > 0, "no keyword compiled");
 
 #[rustfmt::skip]
@@ -67,6 +67,7 @@ fn every_kind() -> Vec<(&'static str, SdfNode)> {
         ("exp_smooth_subtraction", lol! { exp_smooth_subtraction(3.0, sphere(1.0), box3d(1.0, 1.0, 1.0)) }),
         ("translate", lol! { translate(3.0, 3.0, 3.0, sphere(1.0)) }),
         ("rotate", lol! { rotate(3.0, 3.0, 3.0, sphere(1.0)) }),
+        ("rotate_q", lol! { rotate_q(0.0, 0.0, 0.0, 1.0, sphere(1.0)) }),
         ("scale", lol! { scale(3.0, sphere(1.0)) }),
         ("scale_non_uniform", lol! { scale_non_uniform(3.0, 3.0, 3.0, sphere(1.0)) }),
         ("round", lol! { round(3.0, sphere(1.0)) }),

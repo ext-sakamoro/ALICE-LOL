@@ -26,6 +26,16 @@ NUM = "3.0"  # one value for every number: a size, a count of 3, an angle, a smo
 CHILD = "sphere(1.0)"
 CHILD2 = "box3d(1.0, 1.0, 1.0)"
 
+# a keyword whose numeric arguments are not independent (NUM filled into every
+# "n" slot would not satisfy a cross-argument constraint checked_* refuses):
+# the literal number tokens to use instead, in argument order (non-numeric
+# slots keep using CHILD/CHILD2 from `call` as normal). rotate_q's x/y/z/w
+# must be unit length within alice_lol::limits::ROTATION_QUAT_UNIT_TOLERANCE
+# -- (0, 0, 0, 1) is the identity quaternion, exactly unit.
+NUM_OVERRIDE = {
+    "rotate_q": ["0.0", "0.0", "0.0", "1.0"],
+}
+
 # argument reader -> what it reads, in order ("n" = a number, "c" = a child expression)
 SHAPES = {
     "parse_val": "n",
@@ -64,7 +74,9 @@ def keywords() -> list[tuple[str, str]]:
 
 def call(kw: str, shape: str) -> str:
     children = iter([CHILD, CHILD2, CHILD, CHILD2])
-    return f"{kw}({', '.join(NUM if a == 'n' else next(children) for a in shape)})"
+    nums = iter(NUM_OVERRIDE.get(kw, []))
+    args = [(next(nums, NUM) if a == "n" else next(children)) for a in shape]
+    return f"{kw}({', '.join(args)})"
 
 
 def render(kws: list[tuple[str, str]]) -> str:

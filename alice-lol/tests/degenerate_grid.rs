@@ -40,13 +40,15 @@
 //! Secondary generator (keyword-coverage fallback, not hazard-coverage): for
 //! any keyword the corpus does not generate a snippet for (its grammar
 //! bucket has no `snippet()` arm), a 0..=8-arg black-box sweep with every
-//! arg set to the same palette value. Measured: it currently fires 0 times
-//! -- `grammar_corpus()` already has a `snippet()` arm for every one of the
-//! 237 names, so there is nothing left for it to cover today. It stays as
-//! a safety net for a keyword a future grammar bucket doesn't have a
-//! mapping for: `uncovered.is_empty()` (below) is the actual guarantee that
-//! every name in `sdf_syntax_names()` is reached by (corpus union sweep),
-//! regardless of how that union is split between the two.
+//! arg set to the same palette value. Measured: it currently fires once
+//! (`rotate_q`, whose cross-argument unit-quaternion constraint has no
+//! `snippet()` arm yet -- a uniform palette value in every slot is almost
+//! never unit length, so this only ever exercises the rejection path for
+//! it, not an accepted-and-evaluated one). This is the safety net earning
+//! its keep: a keyword a future grammar bucket doesn't have a mapping for
+//! still gets *some* coverage. `uncovered.is_empty()` (below) is the actual
+//! guarantee that every name in `sdf_syntax_names()` is reached by (corpus
+//! union sweep), regardless of how that union is split between the two.
 //!
 //! CI: ubuntu only (job on `linux` already runs `cargo test --test
 //! degenerate_grid`). macOS and Windows are not covered: killing a
@@ -250,6 +252,48 @@ fn sdf_syntax_names() -> BTreeSet<String> {
     out
 }
 
+/// Runs `scripts/runtime_keywords.py` (the Python-side independent re-parse
+/// of the same two files `sdf_syntax_names` reads in Rust) and reads back
+/// the SDF-name count it measured, live -- not a literal duplicated here
+/// that would need updating by hand every time the grammar grows (exactly
+/// the drift that bit `rotate_q`'s own addition: this file's hardcoded
+/// count went stale because it only runs in a CI-gated job, invisible to
+/// an ordinary local `cargo test`).
+///
+/// # Panics
+///
+/// If `python3` is not on `PATH`, the script cannot be found at the
+/// expected path, or its stdout does not contain the `table N` line the
+/// script is known to print (a change to that output format, not a
+/// drifted count, would be the actual bug to chase down).
+fn runtime_keywords_table_count() -> usize {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("alice-lol/ has no parent directory");
+    let script = repo_root.join("scripts").join("runtime_keywords.py");
+    let output = Command::new("python3")
+        .arg(&script)
+        .current_dir(repo_root)
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run {}: {e}", script.display()));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find_map(|line| {
+            let rest = line.strip_prefix("runtime_keywords: parser ")?;
+            let (_parser_n, rest) = rest.split_once(" / table ")?;
+            rest.trim().parse::<usize>().ok()
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "could not find a \"runtime_keywords: parser N / table N\" line in \
+                 {}'s output:\nstdout:\n{stdout}\nstderr:\n{}",
+                script.display(),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })
+}
+
 struct GridResult {
     cases: usize,
     cases_by_generator: Vec<(&'static str, usize)>,
@@ -298,13 +342,22 @@ fn run_grid() -> GridResult {
     let covered_by_corpus: BTreeSet<String> = corpus.iter().map(|(n, _)| n.clone()).collect();
     let all_names = sdf_syntax_names();
     // the exact count, not just "more than a handful": this must agree with
-    // scripts/runtime_keywords.py's independent parse of the same two files
-    // (237, cross-validated against cargo test syntax_table::), a drift
-    // here means one of the two parsers broke, not that the language grew
+    // scripts/runtime_keywords.py's independent parse of the same two files.
+    // Read live at test time (not a hardcoded literal here): a literal
+    // needs a manual update every time the grammar grows, in lockstep with
+    // every OTHER place that counts the same grammar (SKILL.md/
+    // LLM_REFERENCE.md via doc_numbers.py's markers, syntax_table.rs's own
+    // test, this crate's macro_kinds.py-generated test) -- missing just one
+    // of those sites (rotate_q's addition missed this exact assertion,
+    // since this file only runs in a gated CI job a local `cargo test`
+    // does not reach) is exactly the failure mode a literal invites. A
+    // drift between the two independent counts still means one of the two
+    // parsers broke, not that the language grew.
+    let expected = runtime_keywords_table_count();
     assert_eq!(
         all_names.len(),
-        237,
-        "expected 237 SDF names (scripts/runtime_keywords.py's independent count), got {}: {all_names:?}",
+        expected,
+        "expected {expected} SDF names (scripts/runtime_keywords.py's independent count, read live), got {}: {all_names:?}",
         all_names.len()
     );
     assert!(

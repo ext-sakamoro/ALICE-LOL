@@ -115,7 +115,7 @@ pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
 fn peg_facing_back(hook_width: f32) -> SdfNode {
     SdfNode::Rotate {
         child: Arc::new(skadis_peg_and_shoulder(hook_width)),
-        rotation: glam::Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_y(-std::f32::consts::FRAC_PI_2),
     }
 }
 
@@ -155,7 +155,7 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
                     radius: tube_radius,
                     half_height: hook_width * 0.5,
                 }),
-                rotation: glam::Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
             };
             // edge の向き (局所 X) に len/2 だけ elongate → stadium の押出
             let elongated = SdfNode::Elongate {
@@ -165,7 +165,7 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
             let angle = edge.y.atan2(edge.x);
             let rotated = SdfNode::Rotate {
                 child: Arc::new(elongated),
-                rotation: glam::Quat::from_rotation_z(angle),
+                rotation: crate::angle::quat_from_rotation_z(angle),
             };
             let mid = (a + b) * 0.5;
             SdfNode::Translate {

@@ -1,0 +1,7 @@
+error: a rotate_q quaternion must be unit length within 9.5367431640625e-7, got |q|^2-1=1e0 for (0, 0, 0, 0) (rotate_q needs about 8 significant digits per component to land inside this tolerance; for a hand-written rotation, use rotate(x, y, z) in degrees instead -- rotate_q is meant for a machine-computed exact quaternion, not one typed by hand)
+ --> tests/compile_fail/rotate_q_all_zero.rs:4:13
+  |
+4 |     let _ = lol! { rotate_q(0.0, 0.0, 0.0, 0.0, sphere(1.0)) };
+  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `lol` (in Nightly builds, run with -Z macro-backtrace for more info)

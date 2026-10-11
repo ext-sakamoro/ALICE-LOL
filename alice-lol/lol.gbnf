@@ -163,6 +163,7 @@ expr ::= prim_1f
        | mod_1f_child
        | mod_2f_child
        | mod_3f_child
+       | mod_4f_child
        | mod_6f_child
        | mod_child_only
 
@@ -424,12 +425,14 @@ name_2f_ab ::= "groove"
 # mod_1f_child:    name(number, expr)
 # mod_2f_child:    name(number, number, expr)  — animate only
 # mod_3f_child:    name(number, number, number, expr)
+# mod_4f_child:    name(number, number, number, number, expr)  — rotate_q only
 # mod_6f_child:    name(number, number, number, number, number, number, expr)
 # mod_child_only:  name(expr)
 
 mod_1f_child ::= name_1f_child ws "(" ws number ws "," ws expr ws ")"
 mod_2f_child ::= name_2f_child ws "(" ws number ws "," ws number ws "," ws expr ws ")"
 mod_3f_child ::= name_3f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
+mod_4f_child ::= name_4f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
 mod_6f_child ::= name_6f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
 mod_child_only ::= name_child_only ws "(" ws expr ws ")"
 
@@ -459,6 +462,12 @@ name_3f_child ::= "translate"
                 | "lattice_infill"
                 | "diamond_infill"
                 | "schwarz_infill"
+
+# rotate_q's x/y/z/w must be unit length to within a tight tolerance (~8
+# significant digits per component needed); a model generating one should
+# copy an existing exact quaternion rather than invent decimal digits by
+# hand -- rotate(x, y, z) in degrees is the form for a hand-written rotation.
+name_4f_child ::= "rotate_q"
 
 name_6f_child ::= "repeat_finite" | "sweep_bezier"
 

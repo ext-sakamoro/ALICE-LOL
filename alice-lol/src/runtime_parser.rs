@@ -14,7 +14,7 @@
 use crate::audit_law::{sorted_values, AuditLaw, Clause};
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
 use crate::SdfNode;
-use glam::{EulerRot, Quat, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 use std::sync::Arc;
 
 /// LOL 数値引数 (`f32`) → 個数 / index / seed 用 `u32`
@@ -425,6 +425,22 @@ impl<'a> Parser<'a> {
         let child = self.parse_expr()?;
         self.expect_rparen()?;
         Ok((a, b, c, child))
+    }
+
+    /// f32 4 個 + 子ノード 1 個 (`rotate_q`)
+    #[allow(clippy::type_complexity)]
+    fn parse_4f_child(&mut self) -> Result<(f32, f32, f32, f32, SdfNode), ParseError> {
+        let a = self.expect_number()?;
+        self.expect_comma()?;
+        let b = self.expect_number()?;
+        self.expect_comma()?;
+        let c = self.expect_number()?;
+        self.expect_comma()?;
+        let d = self.expect_number()?;
+        self.expect_comma()?;
+        let child = self.parse_expr()?;
+        self.expect_rparen()?;
+        Ok((a, b, c, d, child))
     }
 
     /// 子ノードのみ
@@ -1082,15 +1098,25 @@ impl<'a> Parser<'a> {
             "rotate" => {
                 let (rx, ry, rz, child) = self.parse_3f_child()?;
                 // huge degree literals reduced before to_radians(): sin/cos has no
-                // accuracy guarantee at that magnitude (crate::angle module doc)
+                // accuracy guarantee at that magnitude (crate::angle module doc).
+                // quat_from_euler_xyz (not Quat::from_euler): deterministic across
+                // architectures, see its own doc comment.
                 Ok(SdfNode::Rotate {
                     child: Arc::new(child),
-                    rotation: Quat::from_euler(
-                        EulerRot::XYZ,
+                    rotation: crate::angle::quat_from_euler_xyz(
                         crate::angle::canon_angle_deg(rx).to_radians(),
                         crate::angle::canon_angle_deg(ry).to_radians(),
                         crate::angle::canon_angle_deg(rz).to_radians(),
                     ),
+                })
+            }
+            "rotate_q" => {
+                let (x, y, z, w, child) = self.parse_4f_child()?;
+                let rotation = crate::limits::checked_rotation_quat(x, y, z, w)
+                    .map_err(|e| self.spec_error(e))?;
+                Ok(SdfNode::Rotate {
+                    child: Arc::new(child),
+                    rotation,
                 })
             }
             "scale" => {

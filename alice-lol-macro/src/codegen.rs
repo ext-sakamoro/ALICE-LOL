@@ -98,6 +98,77 @@ fn tpms_node(
     }
 }
 
+/// Same unit-magnitude contract as
+/// `alice_lol::limits::checked_rotation_quat` (kept in sync manually, same
+/// reason as `tpms_literal_error`: a proc-macro crate cannot call a function
+/// from the crate it is generating code FOR at its own expansion time).
+/// `None` if valid, `Some(message)` otherwise.
+fn rotation_quat_literal_error(x: f32, y: f32, z: f32, w: f32) -> Option<String> {
+    // ROTATION_QUAT_UNIT_TOLERANCE's literal value, mirrored for the same
+    // reason as the finite check below (see alice_lol::limits's own doc
+    // comment on that constant for where `8.0` comes from).
+    const TOLERANCE: f64 = 8.0 * (f32::EPSILON as f64);
+    if !(x.is_finite() && y.is_finite() && z.is_finite() && w.is_finite()) {
+        return Some(format!(
+            "a rotate_q quaternion's x/y/z/w must all be finite, got ({x}, {y}, {z}, {w})"
+        ));
+    }
+    let mag2 = f64::from(x).mul_add(
+        f64::from(x),
+        f64::from(y).mul_add(
+            f64::from(y),
+            f64::from(z).mul_add(f64::from(z), f64::from(w) * f64::from(w)),
+        ),
+    );
+    let dev = (mag2 - 1.0).abs();
+    if dev > TOLERANCE {
+        return Some(format!(
+            "a rotate_q quaternion must be unit length within {TOLERANCE:e}, got |q|^2-1={dev:e} \
+             for ({x}, {y}, {z}, {w}) (rotate_q needs about 8 significant digits per component to \
+             land inside this tolerance; for a hand-written rotation, use rotate(x, y, z) in \
+             degrees instead -- rotate_q is meant for a machine-computed exact quaternion, not one \
+             typed by hand)"
+        ));
+    }
+    None
+}
+
+/// Builds `SdfNode::Rotate` from an exact quaternion (`rotate_q`'s own
+/// contract), literal-vs-captured split exactly like [`tpms_node`].
+fn rotate_q_node(
+    child: &TokenStream2,
+    x: &TokenStream2,
+    y: &TokenStream2,
+    z: &TokenStream2,
+    w: &TokenStream2,
+) -> TokenStream2 {
+    if let (Some(xf), Some(yf), Some(zf), Some(wf)) = (
+        literal_f32(x),
+        literal_f32(y),
+        literal_f32(z),
+        literal_f32(w),
+    ) {
+        return rotation_quat_literal_error(xf, yf, zf, wf).map_or_else(
+            || {
+                quote! {
+                    ::alice_lol::SdfNode::Rotate {
+                        child: ::std::sync::Arc::new(#child),
+                        rotation: ::alice_lol::Quat::from_xyzw(#x, #y, #z, #w),
+                    }
+                }
+            },
+            |msg| quote! { compile_error!(#msg) },
+        );
+    }
+    quote! {
+        ::alice_lol::SdfNode::Rotate {
+            child: ::std::sync::Arc::new(#child),
+            rotation: ::alice_lol::limits::checked_rotation_quat(#x, #y, #z, #w)
+                .unwrap_or_else(|e| panic!("{e}")),
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn codegen(expr: &Expr) -> TokenStream2 {
     match expr {
@@ -604,14 +675,23 @@ pub fn codegen(expr: &Expr) -> TokenStream2 {
             quote! {
                 ::alice_lol::SdfNode::Rotate {
                     child: ::std::sync::Arc::new(#c),
-                    rotation: ::alice_lol::Quat::from_euler(
-                        ::alice_lol::EulerRot::XYZ,
-                        (#rx as f32).to_radians(),
-                        (#ry as f32).to_radians(),
-                        (#rz as f32).to_radians(),
+                    rotation: ::alice_lol::angle::quat_from_euler_xyz(
+                        ::alice_lol::angle::canon_angle_deg(#rx as f32).to_radians(),
+                        ::alice_lol::angle::canon_angle_deg(#ry as f32).to_radians(),
+                        ::alice_lol::angle::canon_angle_deg(#rz as f32).to_radians(),
                     ),
                 }
             }
+        }
+        Expr::RotateQ {
+            qx,
+            qy,
+            qz,
+            qw,
+            child,
+        } => {
+            let c = codegen(child);
+            rotate_q_node(&c, qx, qy, qz, qw)
         }
         Expr::Scale { factor, child } => {
             let c = codegen(child);

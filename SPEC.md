@@ -453,7 +453,7 @@ Program {
 }
 ```
 
-- **SdfNode** = <!-- num: syntax.primitives -->73 primitive + <!-- num: syntax.csg -->23 CSG + <!-- num: syntax.transforms -->4 transform + <!-- num: syntax.modifiers -->20 modifier + <!-- num: syntax.print -->3 TPMS + <!-- num: syntax.time -->2 時間軸 の代数系
+- **SdfNode** = <!-- num: syntax.primitives -->73 primitive + <!-- num: syntax.csg -->23 CSG + <!-- num: syntax.transforms -->5 transform + <!-- num: syntax.modifiers -->20 modifier + <!-- num: syntax.print -->3 TPMS + <!-- num: syntax.time -->2 時間軸 の代数系
 - **`law::Constraint`** = <!-- num: law.constraints -->11 variant (§9.3)
 - **`intent::IntentNode`** = <!-- num: intent.variants -->18 variant (<!-- num: intent.l1_verbs -->14 verb + LatentIntent / Music + Sequence / Parallel、§9.4)
 

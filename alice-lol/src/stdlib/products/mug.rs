@@ -32,7 +32,7 @@
 //! - Y-axis 回転 (torus は XZ 平面に生成される、Y 軸 90° 回転で YZ 平面 = mug 側面)
 
 use alice_sdf::SdfNode;
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use std::sync::Arc;
 
 /// 標準壁厚 (mm)、内側くぼみの radius offset
@@ -101,7 +101,7 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
     // Y 軸を X 軸に向ける = X 軸周りに 90° 回転
     let handle_rotated = Arc::new(SdfNode::Rotate {
         child: handle_raw,
-        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     });
     // 取手を mug 外壁 (X = outer_r) の外側 (X = outer_r + handle_minor_r) に配置
     // 中央高さ (Z = 0、cylinder は原点中心) に translate

@@ -157,6 +157,10 @@ fn accepts_transforms_and_modifiers() {
     let g = lol_grammar();
     assert!(accepts(g, "translate(0.0, 1.0, 0.0, sphere(1.0))"));
     assert!(accepts(g, "rotate(0.0, 0.5, 0.0, box3d(0.5, 0.5, 0.5))"));
+    assert!(accepts(
+        g,
+        "rotate_q(0.0, 0.0, 0.0, 1.0, box3d(0.5, 0.5, 0.5))"
+    ));
     assert!(accepts(g, "scale(2.0, sphere(1.0))"));
     assert!(accepts(g, "scale_non_uniform(1.0, 2.0, 0.5, sphere(1.0))"));
     assert!(accepts(g, "twist(0.5, box3d(0.5, 0.5, 0.5))"));

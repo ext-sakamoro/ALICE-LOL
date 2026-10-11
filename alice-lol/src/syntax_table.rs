@@ -41,7 +41,7 @@ const SDF_SYNTAX: &[(&str, &[&str])] = &[
     (
         "transforms",
         &[
-            "translate", "rotate", "scale", "scale_non_uniform",
+            "translate", "rotate", "rotate_q", "scale", "scale_non_uniform",
         ],
     ),
     (
