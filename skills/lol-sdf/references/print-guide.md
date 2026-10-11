@@ -94,7 +94,7 @@ Before emitting, verify:
 
 ## Related
 
-- `syntax.md` — 124-construct DSL reference
+- `syntax.md` — <!-- num: syntax.core -->125-construct DSL reference
 - `lol.gbnf` — GBNF grammar for constrained decoding (prevents syntax-level errors)
 - Parent `LLM_PRINT_PROMPT.md` for the full system prompt with more worked examples
 - A separate, unpublished pipeline crate — LOL → SDF → physics validation → print / 3MF → slicer

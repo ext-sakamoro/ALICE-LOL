@@ -1,135 +1,222 @@
 # Numbers the documents state, and where each one is counted (scripts/doc_numbers.py)
 #
-# A document writes `<!-- num: KEY -->73` and the gate recomputes KEY from the
-# source below. A count without a marker, or a measured value without
+# A document writes `<!-- num: KEY -->73` next to the noun the source counts, and the gate
+# recomputes KEY from the source below. A count without a marker, or a measured value without
 # `<!-- measured: YYYY-MM-DD, how -->` in its block, fails.
 
 [scan]
-include = ["*.md", "**/*.md"]
+include = ["**/*.md"]
 # CHANGELOGs record what each release had at the time; their numbers are history, not claims about now
 # LICENSE files are legal text
-exclude = ["CHANGELOG.md", "*/CHANGELOG.md", "*/LICENSE*", "LICENSE*", "target/**", "*/target/**"]
+exclude = ["CHANGELOG.md", "*/CHANGELOG.md", "LICENSE*", "*/LICENSE*"]
 
 # ---------------------------------------------------------------- what counts as a count
 
-[[countable]]
-# "73 primitives", "23 CSG ops", "38 tests", "4 targets", "18 verbs", "130 variants"
-pattern = '''(?i)(?<![\w.#/-])(?P<n>\d[\d,]*)\s+(?:runtime-parseable |grammar |print |template |proc[_-]macro )?(?:constructs?|primitives?|CSG(?: ops?)?|transforms?|modifiers?|print intents|laws|constraints?|variants?|tests?|fuzz targets?|targets|examples|families|verbs?|verdicts|probes)\b'''
-
-[[countable]]
-# headings and lists: "Primitives (27)", "Modifiers (20)", "Laws (3)", "verb (14)", "Primitives (5, Phase 5.1)"
-pattern = '''(?i)\b(?:constructs?|primitives?|operations|CSG|transforms|modifiers|controls|intents?|laws|constraints?|variants?|verbs?|tests?|examples|families)\s*\(\s*(?:<!--[^>]*-->\s*)?(?P<n>\d+)\s*[),]'''
-
-[[countable]]
-# Japanese counters after a code noun: "テスト 11 件", "8 Constraint variant" is covered above
-pattern = '''(?:テスト|test|variant|verb|primitive|example|target)\s*(?P<n>\d+)\s*(?:件|個|種)'''
+[countable]
+# the nouns that name something the code has a number of (case-insensitive, singular or plural)
+nouns = '''constructs?|primitives?|CSG(?: op(?:eration)?s?)?|operations?|transforms?|modifiers?|print intents?|structural intents?|intents?|laws?|law files?|constraints?|variants?|verbs?|verdicts?|tests?|test files?|fuzz targets?|targets?|examples?|famil(?:y|ies)|probes?|keywords?|names|crates?|shapes?|entries|entry|types?|time controls?|stdlib shortcuts?|テスト|例|制約|動詞'''
+# Japanese counters
+counters = '''個|種類?|件|本|名'''
+# a number right after these is an ordinal, not a count ("Phase 2 Law", "Level 1", "form 3")
+ignore_before = '''Phase|Level|form|step|Track|v'''
 
 # ---------------------------------------------------------------- measured values
 
 [measured]
-# time, throughput and sizes of what the code produces; physical dimensions (mm, kgf, %) of printed parts are design inputs, not measurements of the code
-# a value after a comparison ("≤ 10ns", "> 10KB") or before 未満 / 以下 is a limit, not a measurement
+# a value after a comparison ("≤ 10ns", "> 10KB") or before 未満 / 以下 / "+" is a limit, not a measurement
 bound_before = '''≤|<=|<|≥|>=|>'''
-bound_after = '''未満|以下|以上'''
-units = '''(?:ns|µs|us|ms)(?:/point)?\b|samples/s\b|(?:triangles|tris)\b|(?:KB|MB|GB)\b|%\s+(?:DSL size|mesh|size)\s+reduction'''
+bound_after = '''未満|以下|以上|\+'''
+# time, throughput and sizes of what the code produces; physical dimensions (mm, kgf, %) of printed parts
+# are design inputs, not measurements of the code
+units = '''(?:ns|µs|us|ms)(?:/point)?\b|s\b(?!\w)|(?:samples|frames|tokens)/s\b|fps\b|(?:triangles|tris)\b|(?:KB|MB|GB)\b|lines\b|x\s+(?:faster|slower|smaller|larger)\b|%\s+(?:smaller|faster|slower|larger|(?:DSL size|mesh|size)\s+reduction)'''
 
 # ---------------------------------------------------------------- sources
 
 [sources."syntax.primitives"]
+noun = '''primitive'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"primitives",\s*&\[(.*?)\]'''
 
 [sources."syntax.csg"]
+noun = '''CSG|operation'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"csg",\s*&\[(.*?)\]'''
 
 [sources."syntax.transforms"]
+noun = '''transform'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"transforms",\s*&\[(.*?)\]'''
 
 [sources."syntax.modifiers"]
+noun = '''modifier'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"modifiers",\s*&\[(.*?)\]'''
 
 [sources."syntax.print"]
+noun = '''print|TPMS'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"print",\s*&\[(.*?)\]'''
 
 [sources."syntax.time"]
+noun = '''time|時間'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"time",\s*&\[(.*?)\]'''
 
 [sources."syntax.stdlib"]
+noun = '''stdlib'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''\(\s*"stdlib",\s*&\[(.*?)\]'''
 
 [sources."syntax.core"]
 # the language without the stdlib shortcuts
+noun = '''construct|total'''
 kind = "sum"
 of = ["syntax.primitives", "syntax.csg", "syntax.transforms", "syntax.modifiers", "syntax.print", "syntax.time"]
 
 [sources."syntax.all"]
+noun = '''construct|stdlib|grammar'''
 kind = "sum"
 of = ["syntax.core", "syntax.stdlib"]
 
 [sources."syntax.intent"]
+noun = '''intent|construct'''
 kind = "strings_in_block"
 file = "alice-lol/src/syntax_table.rs"
 block = '''const INTENT_SYNTAX[^=]*=\s*&\[(.*?)\];'''
 
 [sources."law.constraints"]
+noun = '''Constraint|制約|laws?\b'''
 kind = "rust_enum_variants"
 file = "alice-lol/src/law.rs"
 name = "Constraint"
 
+[sources."verdict.audit"]
+noun = '''verdict'''
+kind = "rust_enum_variants"
+file = "alice-lol/src/audit_law.rs"
+name = "Verdict"
+
 [sources."intent.variants"]
+noun = '''IntentNode|Intent'''
 kind = "rust_enum_variants"
 file = "alice-lol/src/intent.rs"
 name = "IntentNode"
 
 [sources."intent.composites"]
+noun = '''合成|composite'''
 kind = "distinct_matches"
 file = "alice-lol/src/intent.rs"
 pattern = '''(?m)^    (Sequence|Parallel)\('''
 
 [sources."intent.other"]
 # the variants that are neither an L1 physical verb nor a composite
+noun = '''L1 以外|LatentIntent'''
 kind = "distinct_matches"
 file = "alice-lol/src/intent.rs"
 pattern = '''(?m)^    (LatentIntent|Music)\b'''
 
 [sources."intent.l1_verbs"]
+noun = '''verb'''
 kind = "sum"
 of = ["intent.variants"]
 minus = ["intent.composites", "intent.other"]
 
 [sources."sdf.variants"]
 # every SdfNode variant emit::to_lol names (the emitter matches all of them, no wildcard arm)
+noun = '''SdfNode'''
 kind = "distinct_matches"
 file = "alice-lol/src/emit.rs"
 pattern = '''SdfNode::([A-Z][A-Za-z0-9]*)'''
 
 [sources."tests.law"]
+noun = '''law_tests|テスト'''
 kind = "rust_test_fns"
 file = "alice-lol/tests/law_tests.rs"
 
 [sources."fuzz.targets"]
+noun = '''target'''
 kind = "glob"
 glob = "fuzz/fuzz_targets/*.rs"
 
 [sources."datagen.families"]
+noun = '''famil'''
 kind = "rust_enum_variants"
 file = "alice-lol-datagen/src/families/mod.rs"
 name = "Family"
 
-# ---------------------------------------------------------------- counts that are history or plans, not claims about now
+[sources."ci.test_entries"]
+# the matrix entries of the Test job in ci.yml
+noun = '''entries|Test'''
+kind = "strings_in_block"
+file = ".github/workflows/ci.yml"
+block = '''^  test:\n.*?\n        include:\n(.*?)\n    steps:'''
+item = '''(?m)^          - os:'''
+
+# the tables of LLM_REFERENCE.md: which list every item of their group, and which list the common ones
+[sources."ref.primitives_rows"]
+noun = '''primitive'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### Primitives\b'''
+
+[sources."ref.csg_rows"]
+noun = '''CSG'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### CSG Operations\b'''
+
+[sources."ref.transforms_rows"]
+noun = '''transform'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### Transforms\b'''
+
+[sources."ref.modifiers_rows"]
+noun = '''modifier'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### Modifiers\b'''
+
+[sources."ref.print_rows"]
+noun = '''print'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### 3D Print Structural Intent\b'''
+
+[sources."ref.time_rows"]
+noun = '''time'''
+kind = "table_rows"
+file = "LLM_REFERENCE.md"
+heading = '''^### Time Controls\b'''
+
+[[complete]]
+rows = "ref.csg_rows"
+of = "syntax.csg"
+
+[[complete]]
+rows = "ref.transforms_rows"
+of = "syntax.transforms"
+
+[[complete]]
+rows = "ref.modifiers_rows"
+of = "syntax.modifiers"
+
+[[complete]]
+rows = "ref.print_rows"
+of = "syntax.print"
+
+[[complete]]
+rows = "ref.time_rows"
+of = "syntax.time"
+
+# ---------------------------------------------------------------- counts that are plans, operands or outside facts
 
 [[allow]]
 file = "SPEC.md"
@@ -142,39 +229,24 @@ text = "新 5 variant (Stress / Thermal / Contact / Continuity / VolumeConservat
 reason = "the five variants the A.2 sprint added, named in the same sentence"
 
 [[allow]]
-file = "SPEC.md"
-text = "physics_bridge + sim_bridge 11 test、regression 1272 test (alice-sdf 側)"
-reason = "part of the dated snapshot in §9.6 (2026-08-06); the 1272 are tests of another repository"
-
-[[allow]]
-file = "SPEC.md"
-text = "A.4 backend parity Level 1 (22 test)"
-reason = "what commit 4364dc1 added (§9.8 is a list of commits)"
-
-[[allow]]
-file = "SPEC.md"
-text = "B.1 IntentNode + Program 構造 (16 variant、10 test)"
-reason = "what commit ac675d5 added (§9.8 is a list of commits)"
-
-[[allow]]
 file = "LLM_REFERENCE.md"
 text = "### High-Level Hardsurface Primitives (5, Phase 5.1)"
 reason = "the five shortcuts Phase 5.1 added, one row each in the table below (a part of the stdlib group)"
 
 [[allow]]
-file = "docs/HUMANOID_TEMPLATE_DESIGN.md"
-text = "各 public API に minimal doctest 1 個"
-reason = "a rule per API (one doctest each), not a count"
+file = "LLM_REFERENCE.md"
+text = "**process_type は5種**"
+reason = "the laser process types of the printer's file format (an outside fact), named in the same line"
 
 [[allow]]
-file = "docs/HUMANOID_TEMPLATE_DESIGN.md"
-text = "各 Phase に対応 example 1 個"
-reason = "a rule per phase (one example each), not a count"
+file = "LLM_REFERENCE.md"
+text = "Morph between two shapes"
+reason = "the two operands of morph, not a count of the language"
 
 [[allow]]
-file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
-text = "smoke test 1 個"
-reason = "the plan for a crate not created yet (one smoke test)"
+file = "README.md"
+text = "evaluates two laws written in different units"
+reason = "the two operands of compare, not a count of the language"
 
 [[allow]]
 file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
@@ -188,20 +260,10 @@ reason = "the five shortcuts the Phase 5.1 plan was to add, listed right below"
 
 [[allow]]
 file = "docs/PIPELINE_COMPLETE.md"
-text = "- Primitive (71):"
-reason = "part of the snapshot dated 2026-08-05 in the heading above"
+text = "hook 3 種は実装済"
+reason = "the three hooks of Phase 3''.3.1 (skadis_hook_l / j / s), named in §5"
 
 [[allow]]
 file = "docs/PIPELINE_COMPLETE.md"
-text = "- Operations (23):"
-reason = "part of the snapshot dated 2026-08-05 in the heading above"
-
-[[allow]]
-file = "docs/PIPELINE_COMPLETE.md"
-text = "- Transforms (4):"
-reason = "part of the snapshot dated 2026-08-05 in the heading above"
-
-[[allow]]
-file = "docs/PIPELINE_COMPLETE.md"
-text = "- Modifiers (20):"
-reason = "part of the snapshot dated 2026-08-05 in the heading above"
+text = "— SKADIS hook 3 種"
+reason = "the three hooks named in the same line"

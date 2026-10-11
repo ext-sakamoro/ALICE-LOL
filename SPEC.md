@@ -519,6 +519,7 @@ CI matrix (2026-08-06 時点): macOS default / Ubuntu llm-bridge / Ubuntu glsl+w
 
 ### 9.6 テスト / 品質 (2026-08-06 snapshot)
 
+<!-- snapshot: 2026-08-06, the test counts of that day (current counts are in §9.1 and the CI) -->
 - lib tests: **123** (intent 10 追加)
 - integration tests: law 32 + backend parity 22 (Ubuntu backend-parity CI で実行)
 - CPU eval + GLSL/WGSL/HLSL 3 backend の structural parity 保証 (Level 1)
@@ -540,6 +541,7 @@ CI matrix (2026-08-06 時点): macOS default / Ubuntu llm-bridge / Ubuntu glsl+w
 
 ### 9.8 関連 commit (ALICE-LOL、2026-08-06 sprint)
 
+<!-- snapshot: 2026-08-06, what each commit of the sprint added -->
 - `4e78955` (ALICE-SDF) — A.1.0 physics feature 復帰
 - `a4bcfc7` (ALICE-LOL) — A.1.0 LOL 側 physics feature 連動
 - `37fa796` (ALICE-LOL) — Cargo.lock alice-physics 追加

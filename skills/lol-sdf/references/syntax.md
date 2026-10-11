@@ -114,7 +114,7 @@ For lightweight lattice infill, **prefer `lattice_infill` / `diamond_infill` / `
 ### Material
 - `with_material(mat_id, child)` — tag for downstream PBR pipeline
 
-## Time control (2)
+## Time control (<!-- num: syntax.time -->2)
 
 - `animate(track, child)` — keyframe animation
 - `morph(t, a, b)` — linear morph between two SDF trees at parameter `t`

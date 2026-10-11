@@ -199,6 +199,7 @@ Slice → G-code → Print
 ## 5. LOL DSL 完全 primitive リスト (Phase 5.1 完成後の状態)
 
 ### 既存 (2026-08-05 時点、runtime_parser.rs 実装済)
+<!-- snapshot: 2026-08-05, the groups of runtime_parser.rs that day (current counts: README.md / LLM_REFERENCE.md) -->
 - Primitive (71): sphere, box3d, rounded_box, cylinder, torus, cone, capsule, ellipsoid, plane, octahedron, rounded_cone, pyramid, hex_prism, link, capped_cone, capped_torus, rounded_cylinder, tube, barrel, heart, egg, helix, tetrahedron, box_frame, diamond, star_polygon, cross_shape, triangle, bezier, triangular_prism, cut_sphere, cut_hollow_sphere, death_star, solid_angle, rhombus, horseshoe, vesica, infinite_cylinder, infinite_cone, gyroid, chamfered_cube, schwarz_p, superellipsoid, rounded_x, pie, trapezoid, parallelogram, tunnel, uneven_capsule, arc_shape, moon, blobby_cross, parabola_segment, regular_polygon, stairs_prim, dodecahedron, icosahedron, truncated_octahedron, truncated_icosahedron, diamond_surface, neovius, lidinoid, iwp, frd, fischer_koch_s, pmy, circle_2d, rect_2d, segment_2d, rounded_rect_2d, annular_2d
 - Operations (23): union, smooth_union, intersection, smooth_intersection, subtract, smooth_subtract, chamfer_union, chamfer_intersection, chamfer_subtraction, stairs_union, stairs_intersection, stairs_subtraction, xor, pipe, engrave, groove, tongue, columns_union, columns_intersection, columns_subtraction, exp_smooth_union, exp_smooth_intersection, exp_smooth_subtraction
 - Transforms (4): translate, rotate, scale, scale_non_uniform

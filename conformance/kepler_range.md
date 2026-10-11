@@ -39,6 +39,7 @@ Inside the ranges the coarse grid has 28 520 cells for kdk (e <= 0.77) and 28 27
 
 `python3 conformance/kepler_sweep.py --check --rk4` needs `cc` and takes about 1 minute on 10 cores. Its output:
 
+<!-- snapshot: 2026-10-09, the output of the sweep recorded in 3bd820a -->
 ```
 kdk coarse: 30008 cells x 4 orders; first failure (e, n): new criteria (0.795, 101), old criteria (0.765, 101)
 kdk fine: 10201 cells x 4 orders; first failure (e, n): new criteria (0.794, 101), old criteria (0.764, 101)

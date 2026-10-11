@@ -49,19 +49,20 @@ The LLM literally cannot emit tokens that violate LOL syntax. Combined with the 
 - Free-form JSON tree: LLM often emits invalid JSON or wrong schema
 - LOL + GBNF: syntax invariant is enforced by the sampler; only semantic content is LLM responsibility
 
-## Available constructs (124 total)
+## Available constructs (<!-- num: syntax.core -->125 total; <!-- num: syntax.all -->237 with the stdlib)
 
 See `references/syntax.md` for full argument tables. Summary:
 
 | Category | Count | Examples |
 |--|--|--|
-| Primitives | 71 | `sphere`, `box3d`, `torus`, `gyroid`, `heart`, `helix`, TPMS surfaces |
-| CSG Operations | 23 | `union`, `smooth_union`, `subtract`, `chamfer_union`, `stairs_union` |
-| Transforms | 4 | `translate`, `rotate`, `scale`, `scale_non_uniform` |
-| Modifiers | 20 | `round`, `onion`, `twist`, `bend`, `mirror`, `repeat`, `noise`, `shell` |
-| 3D Print structural intent | 3 | `lattice_infill`, `diamond_infill`, `schwarz_infill` |
-| Time control | 2 | `animate`, `morph` |
-| Laws | 3 | `NonOverlap`, `Containment`, `MinThickness` |
+| Primitives | <!-- num: syntax.primitives -->73 | `sphere`, `box3d`, `torus`, `gyroid`, `heart`, `helix`, TPMS surfaces |
+| CSG Operations | <!-- num: syntax.csg -->23 | `union`, `smooth_union`, `subtract`, `chamfer_union`, `stairs_union` |
+| Transforms | <!-- num: syntax.transforms -->4 | `translate`, `rotate`, `scale`, `scale_non_uniform` |
+| Modifiers | <!-- num: syntax.modifiers -->20 | `round`, `onion`, `twist`, `bend`, `mirror`, `repeat`, `noise`, `shell` |
+| 3D Print structural intent | <!-- num: syntax.print -->3 | `lattice_infill`, `diamond_infill`, `schwarz_infill` |
+| Time control | <!-- num: syntax.time -->2 | `animate`, `morph` |
+| stdlib shortcuts | <!-- num: syntax.stdlib -->112 | `shopping_cart_coin`, `skadis_panel`, `skadis_hook_l`, `mug` |
+| Laws (Rust API, not the text grammar) | <!-- num: law.constraints -->11 | `NonOverlap`, `Containment`, `MinThickness`, `GradientBound`, `Reachable` |
 
 ## Workflow
 
@@ -150,7 +151,7 @@ After generating a print / laser / Roblox artifact, always report the file path.
 
 ## References
 
-- `references/syntax.md` — 124-construct reference (mirrors parent `LLM_REFERENCE.md`)
+- `references/syntax.md` — <!-- num: syntax.core -->125-construct reference (mirrors parent `LLM_REFERENCE.md`)
 - `references/print-guide.md` — 3D print system prompt (mirrors parent `LLM_PRINT_PROMPT.md`)
 - `references/lol.gbnf` — GBNF grammar for constrained decoding
 - Parent docs: `README.md`, `LLM_REFERENCE.md`, `LLM_PRINT_PROMPT.md`, `SPEC.md`

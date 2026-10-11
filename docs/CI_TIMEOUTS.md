@@ -25,7 +25,7 @@ without a warm cache still fits. Durations are from `gh run view --json jobs`
 
 | workflow | job | runs | longest (min) | limit (min) |
 |---|---|---|---|---|
-| ci.yml | Test (5 entries) | 15 | 15.9 | 45 |
+| ci.yml | Test (<!-- num: ci.test_entries -->5 entries) | 15 | 15.9 | 45 |
 | ci.yml | Clippy | 15 | 0.8 | 30 |
 | ci.yml | MSRV | 15 | 1.0 | 30 |
 | ci.yml | GPU parity (lavapipe) | 15 | 1.4 | 30 |

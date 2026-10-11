@@ -33,7 +33,7 @@ This compiles to an `SdfNode` tree that can be:
 
 The language has <!-- num: syntax.core -->125 constructs, or <!-- num: syntax.all -->237 with the <!-- num: syntax.stdlib -->112 stdlib shortcuts. The tables below give the arguments of the common ones; README.md lists every name, and `lol.gbnf` accepts all of them.
 
-### Primitives (<!-- num: syntax.primitives -->73 in the language, common ones below)
+### Primitives (<!-- num: ref.primitives_rows -->28 of <!-- num: syntax.primitives -->73 primitives, the common ones)
 
 | Syntax | Args | Description |
 |--------|------|-------------|
@@ -783,12 +783,12 @@ Alternative: laser command → G-code directly (rasterize → scanlines → G-co
 
 ## LOL vs JSON Comparison
 
-### JSON (verbose, 15 lines):
+### JSON (verbose):
 ```json
 {"Union": {"a": {"Sphere": {"radius": 1.0}}, "b": {"Union": {"a": {"Translate": {"child": {"Sphere": {"radius": 0.7}}, "offset": [0.0, 1.3, 0.0]}}, "b": {"Translate": {"child": {"Sphere": {"radius": 0.5}}, "offset": [0.0, 2.2, 0.0]}}}}}}
 ```
 
-### LOL (concise, 5 lines):
+### LOL (concise):
 ```
 union(
 sphere(1.0),
@@ -1485,4 +1485,4 @@ With `RenderConfig::default()`, this generates a shader with:
 - PBR lighting (Cook-Torrance GGX, 3 directional + 5 point lights)
 - Weather (fog, rain, lightning)
 - Post-processing (ACES, bloom, chromatic aberration, vignette)
-- ~600 lines of optimized GLSL ES 300
+- ~600 lines of optimized GLSL ES 300 <!-- measured: 2026-03-22, line count of the environment shader, recorded in 7eac1f0 -->
