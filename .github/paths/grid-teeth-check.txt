@@ -1,9 +1,29 @@
 # the paths that run .github/workflows/grid-teeth-check.yml (scripts/changed_paths.py decide)
 # on.pull_request.paths of the workflow must list the same patterns in the same order
 # (scripts/changed_paths.py sync)
+# the files the check script runs, mutates or compiles into the tests it runs; the rest of
+# alice-lol/src is covered by the weekly schedule (each run takes about 10 minutes) and
+# by ci.yml, which runs the grid on every push
 .github/workflows/grid-teeth-check.yml
 scripts/grid_teeth_check.sh
 alice-lol/examples/parse_one_lol.rs
 alice-lol/tests/degenerate_grid.rs
-alice-lol/tests/common/corpus.rs
+# the M3 target
+alice-lol/tests/finite_numbers.rs
+# `mod common` of both tests (common/mod.rs, common/corpus.rs)
+alice-lol/tests/common/**
+# include_str! in alice-lol/tests/common/corpus.rs
+examples/sword.lol
+# the mutated files: each mutant asserts its anchor text in one of them
+alice-lol/src/runtime_parser.rs
+alice-lol/src/stdlib/hardsurface/skadis_sdf.rs
+alice-lol/src/stdlib/hardsurface/pattern_sdf.rs
+# cargo build / test -p alice-lol load the workspace (every member manifest) and the lock
+Cargo.toml
+Cargo.lock
+*/Cargo.toml
+# the job runs cargo in the repository, where this file picks the toolchain
+rust-toolchain.toml
+# the changes and gate jobs
+scripts/changed_paths.py
 .github/paths/grid-teeth-check.txt

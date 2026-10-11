@@ -1,9 +1,14 @@
 # the paths that run .github/workflows/conformance.yml (scripts/changed_paths.py decide)
 # on.pull_request.paths of the workflow must list the same patterns in the same order
 # (scripts/changed_paths.py sync)
+# every file a job of the workflow executes or reads is listed: conformance/score.sh and
+# conformance/controls.sh read laws/spike and run scripts/law_corpus_cover.py, and
+# conformance/gen_corpus.py imports scripts/law_corners.py and scripts/law_schema.py
 conformance/**
 laws/**
 scripts/law_*.py
+# the changes and gate jobs
+scripts/changed_paths.py
 .github/workflows/conformance.yml
 .github/workflows/ci.yml
 .github/paths/conformance.txt

@@ -15,6 +15,12 @@ on:
     paths:
       - '**/src/**'
       - 'fuzz/**'
+      - 'Cargo.toml'
+      - 'alice-lol/Cargo.toml'
+      - 'alice-lol-macro/Cargo.toml'
+      - 'alice-lol/lol.gbnf'
+      - 'scripts/fuzz_runs.py'
+      - 'scripts/changed_paths.py'
       - '.github/workflows/fuzz.yml'
       - '.github/actions/**'
       - '.github/paths/fuzz.txt'
