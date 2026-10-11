@@ -18,12 +18,13 @@ A document states a number in one of these ways, and each has a rule:
   * countable  a number the config's `[countable]` nouns and counters make a
                count must carry a marker. The engine recognises these forms
                (NOUN = `nouns`, CTR = `counters`):
-                 `71 primitives`, `128 SdfNode variants` (one word between),
+                 `71 primitives`, `128 exhaustive SdfNode variants` (two words between),
                  `71-primitive`, `Primitives (71)`, `Primitives (71,`,
                  `Primitives: 71`, `tests: **123**`, `(124 total)`, a table row
                  whose first cell names a NOUN and whose cell is a bare number,
                  `71 個の primitive`, `primitive は 71 種類`, `テスト 7件`, `5種`,
-                 and a count written in words (`seventy-one primitives`, `五種`),
+                 and a count written in words (`seventy-one primitives`, `a dozen
+                 primitives`, `五種`),
                  which must be written in digits with a marker. A number after
                  `ignore_before` (an ordinal: "Phase 2 Law") or below `min`
                  (default 2: "1 件" reads as a singular) is not a count. An unmarked count fails unless
@@ -90,7 +91,7 @@ CLASSES = ("docs", "marked", "countable", "measured", "bounds", "history")
 EN_UNITS = ("two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
             "sixteen|seventeen|eighteen|nineteen")
 EN_TENS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
-EN_NUMBER = rf"(?:(?:{EN_TENS})(?:-(?:one|{EN_UNITS}))?|{EN_UNITS}|hundred)"
+EN_NUMBER = rf"(?:(?:{EN_TENS})(?:-(?:one|{EN_UNITS}))?|{EN_UNITS}|hundreds?|(?:a\s+)?dozens?(?:\s+of)?|a\s+score\s+of)"
 KANJI_NUMBER = "(?:[二三四五六七八九十百千]|一(?=[一二三四五六七八九十百千]))[一二三四五六七八九十百千]*"
 
 
@@ -257,8 +258,8 @@ def countable_patterns(cfg: dict) -> list[re.Pattern]:
     word = r"[^\s|()\[\]:,;*`-][^\s|()\[\]:,;*`]*"
     lead = r"(?<![A-Za-z0-9_.,/#-])"  # ASCII only: 「は5種」 has a Japanese letter before the number
     pats = [
-        # 71 primitives / 128 SdfNode variants (at most one word between)
-        rf"{lead}{num}\+?\s+(?:{word}\s+)?(?:{nouns})(?![\w-])",
+        # 71 primitives / 128 SdfNode variants / 128 exhaustive SdfNode variants (up to two words between)
+        rf"{lead}{num}\+?\s+(?:{word}\s+){{0,2}}?(?:{nouns})(?![\w-])",
         # 71-primitive / 124-construct
         rf"{lead}{num}-(?:{nouns})(?![\w-])",
         # Primitives (71) / Primitives (71, / Primitives: 71 / tests: **123**
@@ -300,7 +301,9 @@ def table_cells(line: str, nouns: str) -> list[tuple[int, str]]:
     if not cells:
         return []
     label = re.sub(r"[`*_]", "", cells[0][1]).strip()
-    if not re.fullmatch(rf"(?:[^\s|]+\s+){{0,3}}?(?:{nouns})(?:\s+[^\s|]+){{0,3}}", label, re.I):
+    # the noun anywhere in the label, as a whole ASCII word ("Latest" is not "test"); a CJK noun may be
+    # followed by more CJK ("テスト数")
+    if len(label.split()) > 6 or not re.search(rf"(?<![A-Za-z])(?:{nouns})(?![a-z])", label, re.I):
         return []
     for off, text in cells[1:]:
         m = re.fullmatch(r"\s*(?:<!--[^>]*-->\s*)?\**(\d+(?:,\d{3})*)\+?\**\s*", text)

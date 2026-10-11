@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,14 +43,14 @@ include = ["**/*.md"]
 exclude = ["CHANGELOG.md"]
 
 [countable]
-nouns = '''shapes?|ops?|rules?|tests?|examples?|names'''
+nouns = '''shapes?|ops?|rules?|tests?|examples?|names|テスト'''
 counters = '''個|種類?|件'''
 ignore_before = '''Phase'''
 
 [measured]
 bound_before = '''≤|<'''
 bound_after = '''未満|\\+'''
-units = '''ms\\b|s\\b(?!\\w)|samples/s\\b|fps\\b|lines\\b|x\\s+faster\\b|%\\s+smaller\\b'''
+units = '''ms\\b|s\\b(?!\\w)|k?\\s*samples(?:/s\\b|\\s+per\\s+second\\b)|fps\\b|lines\\b|x\\s+faster\\b|%\\s+smaller\\b'''
 
 [sources.shapes]
 noun = '''shape'''
@@ -126,6 +127,20 @@ Budget: ≤ 10 ms, and 20 ms 未満 for the whole run; at least 100+ tests by 1.
 """
 
 
+def remove(d: str) -> None:
+    """remove a fixture tree; git writes its objects read-only, which Windows refuses to delete"""
+    def clear_and_retry(func, path, _exc):
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(d, onexc=clear_and_retry)
+    else:
+        shutil.rmtree(d, onerror=clear_and_retry)
+    if os.path.exists(d):
+        raise AssertionError(f"fixture tree {d} was not removed")
+
+
 def swap(text: str, old: str, new: str) -> str:
     """replace exactly one occurrence (a replace that changes nothing would test nothing)"""
     assert text.count(old) == 1, old
@@ -159,7 +174,7 @@ def run(**kw) -> tuple[list[str], dict[str, int]]:
         with open(os.path.join(d, "scripts/doc_numbers.toml"), "rb") as f:
             return dn.check(tomllib.loads(f.read().decode()), d)
     finally:
-        shutil.rmtree(d)
+        remove(d)
 
 
 def errors(**kw) -> list[str]:
@@ -182,7 +197,7 @@ class Clean(unittest.TestCase):
             with open(os.path.join(d, "scripts/doc_numbers.toml"), "rb") as f:
                 vals = dn.resolve(tomllib.load(f)["sources"], d, dn.tracked(d))
         finally:
-            shutil.rmtree(d)
+            remove(d)
         self.assertEqual(vals, {"shapes": 3, "ops": 2, "all": 5, "not_ops": 3, "rules": 3, "tests": 2,
                                 "examples": 2, "shape_rows": 3})
 
@@ -262,6 +277,9 @@ class Countable(unittest.TestCase):
             "テスト rules 7件": "rules 7件",
             "形状は5種": "5種",
             "seventy-one shapes": "seventy-one shapes",
+            "a dozen shapes": "a dozen shapes",
+            "dozens of shapes": "dozens of shapes",
+            "It has 128 exhaustive enum rules.": "128 exhaustive enum rules",
             "五種": "五種",
         }
         for line, shown in forms.items():
@@ -287,6 +305,10 @@ class Countable(unittest.TestCase):
 
     def test_a_bound_count_is_a_requirement(self):
         self.assertEqual(unmarked("\n| Tests | 200+ |\n"), [])
+        _, counts = run(doc=DOC + "\n| テスト数 | 200+ |\n")
+        self.assertEqual(counts["bounds"], 4, "a label with the noun glued to more CJK is a table count")
+        self.assertTrue(unmarked("\n| テスト数 | 200 |\n"))
+        self.assertEqual(unmarked("\n| Latest | 200 |\n"), [], "the noun must be a whole word: Latest is not test")
         self.assertTrue(unmarked("\n| Tests | 200 |\n"))
         e = errors(doc=swap(DOC, "100+ tests", "100 tests"))
         self.assertTrue(any("unmarked count `100 tests`" in x for x in e), e)
@@ -302,6 +324,13 @@ class Countable(unittest.TestCase):
         e = errors(doc=DOC + "\nIn 0.1 there were 7 rules.\nNow 9 rules apply.\n", config=CONFIG + allow)
         self.assertTrue(any("unmarked count `9 rules`" in x for x in e), e)
         self.assertFalse(any("7 rules" in x for x in e), e)
+
+    def test_an_allow_entry_must_be_the_text_of_this_line(self):
+        # same file, the allowed text has the same number, but this line says something else
+        allow = '\n[[allow]]\nfile = "README.md"\ntext = "In 0.1 there were 7 rules"\nreason = "history"\n'
+        e = errors(doc=DOC + "\nIn 0.1 there were 7 rules.\n\nToday 7 rules apply.\n", config=CONFIG + allow)
+        self.assertTrue(any("unmarked count `7 rules`" in x and "README.md:" in x for x in e), e)
+        self.assertEqual(len([x for x in e if "7 rules" in x]), 1, e)
 
     def test_an_allow_entry_that_matches_nothing_fails(self):
         allow = '\n[[allow]]\nfile = "README.md"\ntext = "In 0.1 there were 7 rules"\nreason = "history"\n'
@@ -322,7 +351,8 @@ class Measured(unittest.TestCase):
     def test_every_unit_needs_a_note(self):
         for line, shown in {"Throughput is 5,000 samples/s.": "5,000 samples/s", "It runs at 60 fps.": "60 fps",
                             "It is 2x faster.": "2x faster", "Output is 93% smaller.": "93% smaller",
-                            "A build takes 8 s.": "8 s", "About ~600 lines of GLSL.": "600 lines"}.items():
+                            "A build takes 8 s.": "8 s", "About ~600 lines of GLSL.": "600 lines",
+                            "About 6.5k samples per second.": "6.5k samples per second"}.items():
             with self.subTest(line=line):
                 e = errors(doc=DOC + "\n" + line + "\n")
                 self.assertTrue(any(f"measured value `{shown}` without" in x for x in e), e)
@@ -409,13 +439,13 @@ class Cli(unittest.TestCase):
             try:
                 p = subprocess.run([sys.executable, script, "--root", d], capture_output=True, text=True)
             finally:
-                shutil.rmtree(d)
+                remove(d)
             self.assertEqual(p.returncode, code, p.stdout + p.stderr)
         d = tree(config=swap(CONFIG, 'kind = "glob"', 'kind = "globz"'))
         try:
             p = subprocess.run([sys.executable, script, "--root", d], capture_output=True, text=True)
         finally:
-            shutil.rmtree(d)
+            remove(d)
         self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
 
 

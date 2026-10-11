@@ -28,7 +28,7 @@ bound_before = '''≤|<=|<|≥|>=|>'''
 bound_after = '''未満|以下|以上|\+'''
 # time, throughput and sizes of what the code produces; physical dimensions (mm, kgf, %) of printed parts
 # are design inputs, not measurements of the code
-units = '''(?:ns|µs|us|ms)(?:/point)?\b|s\b(?!\w)|(?:samples|frames|tokens)/s\b|fps\b|(?:triangles|tris)\b|(?:KB|MB|GB)\b|lines\b|x\s+(?:faster|slower|smaller|larger)\b|%\s+(?:smaller|faster|slower|larger|(?:DSL size|mesh|size)\s+reduction)'''
+units = '''(?:ns|µs|us|ms)(?:/point)?\b|s\b(?!\w)|k?\s*(?:samples|frames|tokens)(?:/s\b|\s+per\s+second\b)|fps\b|(?:triangles|tris)\b|(?:KB|MB|GB)\b|lines\b|x\s+(?:faster|slower|smaller|larger)\b|%\s+(?:smaller|faster|slower|larger|(?:DSL size|mesh|size)\s+reduction)'''
 
 # ---------------------------------------------------------------- sources
 
