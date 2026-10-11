@@ -110,6 +110,19 @@ law file は他の言語の実装も読む公開の仕様なので、読み方�
 
 ### Added
 
+#### `SdfNode` 評価の意味論を pin する識別子 (`geometry_id`)
+
+`law_id::LOL_SEMANTICS_ID` は監査 Law / 研究 Law の意味論専用で、`SdfNode` 自身の
+数値評価 (上流の `alice-det-math` の算術世代、`canon_angle_deg` の度数正規化、
+`rotate`/`rotate_q` の quaternion 構築、TPMS の `scale`/`thickness` 受理境界、`emit`
+の `fmt_f32` canonical form) は対象外だった (`rotate_q` 着地で算術が 2 箇所変わった
+が、どちらも識別子に現れなかった) `geometry_id::LOL_GEOMETRY_SEMANTICS_ID` がその
+別の識別子 `law_id` と同じ設計 (pin は振る舞いから計算する digest、書き下した定数
+ではない) を踏襲し、`LOL_SEMANTICS_ID` とは独立した値を持つ (片方の変更が他方を
+動かさない) 初版なので遡及は無し (この識別子の導入前に landing 済の 3 件の意味論変更
+— TPMS floor 緩和・`rotate_q` + Euler の det-math 切替・`fmt_f32` の完全 round-trip —
+は前史として扱う) example: `geometry_id_demo`、oracle: `tests/geometry_id_oracle.rs`
+
 #### 公開版と同じ依存で macro の全 keyword を compile する gate (`scripts/registry_consumer.sh` / `scripts/macro_kinds.py` / `scripts/published_source_check.py`)
 
 他の job は sibling crate を path (各 repo の main) で引くので、公開した `alice-lol` が crates.io から解決する版では一度も build されていなかった

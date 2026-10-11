@@ -159,6 +159,121 @@ pub fn quat_from_rotation_z(angle: f32) -> glam::Quat {
     glam::Quat::from_xyzw(0.0, 0.0, s, c)
 }
 
+/// The single source of truth for [`canon_angle_deg`]'s representative
+/// inputs (already-canonical, negative-non-integer, zero, the `+/-180`
+/// choice, multi-turn huge values, subnormals, and the non-finite inputs) --
+/// shared between the existing per-case unit tests above and
+/// `geometry_id`'s pin digest.
+pub(crate) const CANON_ANGLE_DEG_PROBE_VALUES: &[f32] = &[
+    10.0,
+    -15.0,
+    -0.1,
+    0.0,
+    180.0,
+    -180.0,
+    1e9,
+    -1e9,
+    f32::MAX,
+    f32::MIN_POSITIVE / 2.0,
+    -(f32::MIN_POSITIVE / 2.0),
+    f32::NAN,
+    f32::INFINITY,
+    f32::NEG_INFINITY,
+];
+
+/// One row of [`EULER_XYZ_PROBE_TABLE`]: an `(x, y, z)` Euler-radian input
+/// mapped to the exact `f32` bit pattern [`quat_from_euler_xyz`] must produce.
+pub(crate) type EulerXyzProbeRow = ((f32, f32, f32), (u32, u32, u32, u32));
+
+/// The single source of truth for [`quat_from_euler_xyz`]'s cross-architecture
+/// oracle (`tests::quat_from_euler_xyz_is_bit_identical_across_architectures`)
+/// and `geometry_id`'s pin digest -- both read this same table, so there is
+/// exactly one place that decides what "the probe set" is.
+pub(crate) const EULER_XYZ_PROBE_TABLE: &[EulerXyzProbeRow] = &[
+    (
+        (0.0, 0.0, 0.0),
+        (0x0000_0000, 0x8000_0000, 0x0000_0000, 0x3f80_0000),
+    ),
+    (
+        (std::f32::consts::FRAC_PI_2, 0.0, 0.0),
+        (0x3f35_04f4, 0x8000_0000, 0x0000_0000, 0x3f35_04f3),
+    ),
+    (
+        (0.0, std::f32::consts::FRAC_PI_4, 0.0),
+        (0x0000_0000, 0x3ec3_ef16, 0x0000_0000, 0x3f6c_835e),
+    ),
+    (
+        (0.0, 0.0, std::f32::consts::FRAC_PI_6),
+        (0x0000_0000, 0x8000_0000, 0x3e84_83ee, 0x3f77_46ea),
+    ),
+    (
+        (0.174_532_92, 0.349_065_84, std::f32::consts::FRAC_PI_6),
+        (0x3e02_be66, 0x3e14_5aef, 0x3e89_7d87, 0x3f71_9743),
+    ),
+    (
+        (
+            -std::f32::consts::FRAC_PI_4,
+            std::f32::consts::FRAC_PI_3,
+            -2.094_395_2,
+        ),
+        (0xbf10_d58a, 0xbd65_8d0f, 0xbf49_e06a, 0x3e6f_f811),
+    ),
+    (
+        (std::f32::consts::PI, 0.0, 0.0),
+        (0x3f80_0000, 0x8000_0000, 0x8000_0000, 0xb33b_bd2e),
+    ),
+    (
+        (1.0, -2.0, 3.5),
+        (0xbf45_d6a5, 0xbdfc_6f29, 0x3f09_d982, 0x3e9f_f8d0),
+    ),
+];
+
+/// One row of [`ROTATION_AXIS_PROBE_TABLE`]: an angle mapped to the exact
+/// `f32` bit patterns [`quat_from_rotation_x`]/[`quat_from_rotation_y`]/
+/// [`quat_from_rotation_z`] must each produce.
+pub(crate) type RotationAxisProbeRow = (
+    f32,
+    (u32, u32, u32, u32),
+    (u32, u32, u32, u32),
+    (u32, u32, u32, u32),
+);
+
+/// The single source of truth for the single-axis builders' cross-architecture
+/// oracle and `geometry_id`'s pin digest (same sharing rationale as
+/// [`EULER_XYZ_PROBE_TABLE`]).
+pub(crate) const ROTATION_AXIS_PROBE_TABLE: &[RotationAxisProbeRow] = &[
+    (
+        0.0,
+        (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+        (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+        (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
+    ),
+    (
+        std::f32::consts::FRAC_PI_2,
+        (0x3f35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
+        (0x0000_0000, 0x3f35_04f4, 0x0000_0000, 0x3f35_04f3),
+        (0x0000_0000, 0x0000_0000, 0x3f35_04f4, 0x3f35_04f3),
+    ),
+    (
+        -std::f32::consts::FRAC_PI_2,
+        (0xbf35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
+        (0x0000_0000, 0xbf35_04f4, 0x0000_0000, 0x3f35_04f3),
+        (0x0000_0000, 0x0000_0000, 0xbf35_04f4, 0x3f35_04f3),
+    ),
+    (
+        std::f32::consts::PI,
+        (0x3f80_0000, 0x0000_0000, 0x0000_0000, 0xb33b_bd2e),
+        (0x0000_0000, 0x3f80_0000, 0x0000_0000, 0xb33b_bd2e),
+        (0x0000_0000, 0x0000_0000, 0x3f80_0000, 0xb33b_bd2e),
+    ),
+    (
+        -2.670_354, // a representative non-special angle (a can_rack-like tilt)
+        (0xbf78_ed3d, 0x0000_0000, 0x0000_0000, 0x3e6f_0c49),
+        (0x0000_0000, 0xbf78_ed3d, 0x0000_0000, 0x3e6f_0c49),
+        (0x0000_0000, 0x0000_0000, 0xbf78_ed3d, 0x3e6f_0c49),
+    ),
+];
+
 #[cfg(test)]
 mod tests {
     use super::canon_angle_deg;
@@ -459,47 +574,7 @@ mod quat_from_euler_xyz_tests {
     /// loosened to a tolerance.
     #[test]
     fn quat_from_euler_xyz_is_bit_identical_across_architectures() {
-        type Row = ((f32, f32, f32), (u32, u32, u32, u32));
-        use std::f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI};
-        // FRAC_PI_2/FRAC_PI_4/FRAC_PI_6/FRAC_PI_3 are bit-identical to
-        // 90/45/30/60 .to_radians() (confirmed separately) -- the inputs
-        // below really are those degree values, just spelled as the named
-        // constant clippy wants here.
-        let table: &[Row] = &[
-            (
-                (0.0, 0.0, 0.0),
-                (0x0000_0000, 0x8000_0000, 0x0000_0000, 0x3f80_0000),
-            ),
-            (
-                (FRAC_PI_2, 0.0, 0.0),
-                (0x3f35_04f4, 0x8000_0000, 0x0000_0000, 0x3f35_04f3),
-            ),
-            (
-                (0.0, FRAC_PI_4, 0.0),
-                (0x0000_0000, 0x3ec3_ef16, 0x0000_0000, 0x3f6c_835e),
-            ),
-            (
-                (0.0, 0.0, FRAC_PI_6),
-                (0x0000_0000, 0x8000_0000, 0x3e84_83ee, 0x3f77_46ea),
-            ),
-            (
-                (0.174_532_92, 0.349_065_84, FRAC_PI_6),
-                (0x3e02_be66, 0x3e14_5aef, 0x3e89_7d87, 0x3f71_9743),
-            ),
-            (
-                (-FRAC_PI_4, FRAC_PI_3, -2.094_395_2),
-                (0xbf10_d58a, 0xbd65_8d0f, 0xbf49_e06a, 0x3e6f_f811),
-            ),
-            (
-                (PI, 0.0, 0.0),
-                (0x3f80_0000, 0x8000_0000, 0x8000_0000, 0xb33b_bd2e),
-            ),
-            (
-                (1.0, -2.0, 3.5),
-                (0xbf45_d6a5, 0xbdfc_6f29, 0x3f09_d982, 0x3e9f_f8d0),
-            ),
-        ];
-        for &((x, y, z), (ex, ey, ez, ew)) in table {
+        for &((x, y, z), (ex, ey, ez, ew)) in super::EULER_XYZ_PROBE_TABLE {
             let q = quat_from_euler_xyz(x, y, z);
             assert_eq!(q.x.to_bits(), ex, "x component at ({x}, {y}, {z})");
             assert_eq!(q.y.to_bits(), ey, "y component at ({x}, {y}, {z})");
@@ -516,46 +591,9 @@ mod quat_from_euler_xyz_tests {
     /// need the same guarantee `rotate(...)` itself has.
     #[test]
     fn quat_from_rotation_axes_are_bit_identical_across_architectures() {
-        use std::f32::consts::{FRAC_PI_2, PI};
-        type Row = (
-            f32,
-            (u32, u32, u32, u32),
-            (u32, u32, u32, u32),
-            (u32, u32, u32, u32),
-        );
-        let table: &[Row] = &[
-            (
-                0.0,
-                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
-                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
-                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
-            ),
-            (
-                FRAC_PI_2,
-                (0x3f35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
-                (0x0000_0000, 0x3f35_04f4, 0x0000_0000, 0x3f35_04f3),
-                (0x0000_0000, 0x0000_0000, 0x3f35_04f4, 0x3f35_04f3),
-            ),
-            (
-                -FRAC_PI_2,
-                (0xbf35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
-                (0x0000_0000, 0xbf35_04f4, 0x0000_0000, 0x3f35_04f3),
-                (0x0000_0000, 0x0000_0000, 0xbf35_04f4, 0x3f35_04f3),
-            ),
-            (
-                PI,
-                (0x3f80_0000, 0x0000_0000, 0x0000_0000, 0xb33b_bd2e),
-                (0x0000_0000, 0x3f80_0000, 0x0000_0000, 0xb33b_bd2e),
-                (0x0000_0000, 0x0000_0000, 0x3f80_0000, 0xb33b_bd2e),
-            ),
-            (
-                -2.670_354, // a representative non-special angle (a can_rack-like tilt)
-                (0xbf78_ed3d, 0x0000_0000, 0x0000_0000, 0x3e6f_0c49),
-                (0x0000_0000, 0xbf78_ed3d, 0x0000_0000, 0x3e6f_0c49),
-                (0x0000_0000, 0x0000_0000, 0xbf78_ed3d, 0x3e6f_0c49),
-            ),
-        ];
-        for &(a, (xx, xy, xz, xw), (yx, yy, yz, yw), (zx, zy, zz, zw)) in table {
+        for &(a, (xx, xy, xz, xw), (yx, yy, yz, yw), (zx, zy, zz, zw)) in
+            super::ROTATION_AXIS_PROBE_TABLE
+        {
             let qx = quat_from_rotation_x(a);
             assert_eq!(
                 (
