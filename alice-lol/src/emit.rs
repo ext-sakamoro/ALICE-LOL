@@ -105,6 +105,12 @@ pub fn fmt_f32(v: f32) -> String {
     format!("{v:?}")
 }
 
+/// The single source of truth for [`fmt_f32`]'s representative-form test
+/// (`fmt_f32_forms`, below) and `geometry_id`'s pin digest: values chosen to
+/// cover the ordinary decimal form, a negative value, a fraction, signed
+/// zero, and the exponential-notation threshold.
+pub(crate) const FMT_F32_FIDELITY_PROBE_VALUES: &[f32] = &[1.0, -2.0, 0.5, 1.25, 0.1, -0.0, 4e-7];
+
 fn u(v: u32) -> String {
     format!("{v}.0")
 }
