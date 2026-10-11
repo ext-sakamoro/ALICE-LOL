@@ -18,6 +18,7 @@ on:
       - 'conformance/**'
       - 'laws/**'
       - 'scripts/law_*.py'
+      - 'scripts/changed_paths.py'
       - '.github/workflows/conformance.yml'
       - '.github/workflows/ci.yml'
       - '.github/paths/conformance.txt'

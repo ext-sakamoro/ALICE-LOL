@@ -9,7 +9,8 @@ name: Grid teeth check
 #
 # A path-filtered push trigger covers the one case that actually needs
 # per-push confirmation: a change to the grid itself, the probe, the shared
-# corpus, this workflow, or the check script. `workflow_dispatch` can only
+# corpus, the files the mutants edit, the manifests, this workflow, or the
+# check script (.github/paths/grid-teeth-check.txt). `workflow_dispatch` can only
 # target a workflow that already exists on the default branch (confirmed:
 # dispatching this file from a feature branch before it lands 404s --
 # "workflow ... not found on the default branch"), so a push-triggered run

@@ -1,8 +1,23 @@
 # the paths that run .github/workflows/fuzz.yml (scripts/changed_paths.py decide)
 # on.pull_request.paths of the workflow must list the same patterns in the same order
 # (scripts/changed_paths.py sync)
+# every file a job of the workflow executes or reads is listed: a missing one skips the
+# fuzz run on a change that alters it
+# fuzz/**: targets, seeds, fuzz/Cargo.toml / Cargo.lock (fuzz/ is its own workspace, so
+# the root Cargo.lock is not read)
 **/src/**
 fuzz/**
+# fuzz/Cargo.toml depends on alice-lol by path, alice-lol on alice-lol-macro by path, and
+# cargo loads the root manifest as the workspace of both
+Cargo.toml
+alice-lol/Cargo.toml
+alice-lol-macro/Cargo.toml
+# include_str! in alice-lol/src/lib.rs
+alice-lol/lol.gbnf
+# the check step reads the run log with this script
+scripts/fuzz_runs.py
+# the changes and gate jobs
+scripts/changed_paths.py
 .github/workflows/fuzz.yml
 .github/actions/**
 .github/paths/fuzz.txt
