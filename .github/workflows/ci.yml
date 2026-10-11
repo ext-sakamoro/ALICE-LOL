@@ -488,6 +488,34 @@ jobs:
         working-directory: ALICE-LOL
         run: cargo test --test degenerate_grid -- --ignored --nocapture
 
+  # TEMPORARY: diagnostic dump for a cross-platform digest mismatch, removed
+  # once the differing stage is found (not part of the oracle suite)
+  canon-angle-deg-diag-tmp:
+    name: TEMP canon_angle_deg diagnostic dump (ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+
+      - name: Dump canon_angle_deg stages
+        working-directory: ALICE-LOL
+        run: cargo test -p alice-lol --test canon_angle_deg_diag_tmp -- --ignored --nocapture
+
   # 2 通りに評価されうる) 状態を止める (既存分は scripts/lock-duplicates-baseline.txt)
   # 併せて算術ガード: 判定を出す file で platform の libm (値が IEEE 754 で規定されて
   # いない超越関数) を直呼びしている状態を止める (= 同じ実測で判定が機械ごとに割れる)
