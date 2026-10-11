@@ -373,7 +373,15 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
             child: Arc::new(t_slot.clone()),
             rotation: Quat::from_rotation_y(angle),
         };
-        let offset = Vec3::new(face_offset * angle.cos(), 0.0, -face_offset * angle.sin());
+        // + 0.0 (via mul_add's addend): at i=0, angle.sin() is exactly 0.0, so
+        // -face_offset * 0.0 is exactly -0.0 -- a sign with no geometric meaning
+        // (this face's T-slot truly has no Z offset), normalized here rather than
+        // carried into the emitted text
+        let offset = Vec3::new(
+            face_offset * angle.cos(),
+            0.0,
+            (-face_offset).mul_add(angle.sin(), 0.0),
+        );
         let placed = SdfNode::Translate {
             child: Arc::new(rotated),
             offset,
@@ -444,6 +452,23 @@ mod tests {
 
     fn approx_eq(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4
+    }
+
+    /// At `i=0`, `angle.sin()` is exactly `0.0`, so `-face_offset * angle.sin()`
+    /// is exactly `-0.0` (negating a positive product of a positive value and
+    /// a positive zero) -- a sign with no geometric meaning, normalized away
+    /// with `+ 0.0` at this construction site. No round-trip property
+    /// (idempotence, parity) depends on this: it only keeps the emitted text
+    /// free of noise that a human or an LLM reading it would have no reason
+    /// to attach meaning to.
+    #[test]
+    fn extrusion_profile_i0_t_slot_offset_has_no_negative_zero() {
+        let node = profile_2020(300.0);
+        let text = crate::emit::to_lol(&node).unwrap();
+        assert!(
+            !text.contains("-0.0"),
+            "profile_2020's emitted text has a -0.0: {text:?}"
+        );
     }
 
     #[test]

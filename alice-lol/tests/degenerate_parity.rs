@@ -73,11 +73,6 @@ fn parity_failure(src: &str) -> Option<(f32, String)> {
 }
 
 #[test]
-#[ignore = "known defect AUD-LOL-ZERO-001: 17 cases across 8 constructors \
-            (blobby_cross/terrain/ellipsoid/parabola_segment/helix/ \
-            uneven_capsule/columns_intersection/surface_roughness) beyond \
-            the 9 TPMS surfaces fail this same way -- reported, scope of \
-            the fix for these 8 is a separate, pending decision"]
 fn one_at_a_time_degenerate_values_agree_after_one_emit_reparse_round_trip() {
     let corpus = grammar_corpus();
     assert!(!corpus.is_empty(), "grammar_corpus produced 0 entries");

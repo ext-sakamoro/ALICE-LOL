@@ -67,30 +67,23 @@ impl std::fmt::Display for EmitError {
 
 impl std::error::Error for EmitError {}
 
-/// `f32` を LOL 数値リテラルに (`1` → `1.0`、それ以外は shortest repr)
+/// `f32` を LOL 数値リテラルに (`1` → `1.0`、それ以外は shortest round-trip repr)
 ///
-/// 正規形のため `|v| < 1e-6` (stdlib の product 展開で cos/sin から出る
-/// `-0.0` / `4e-7` 級のノイズ) は `0.0` に丸める mm / rad どちらの単位でも
-/// 実用上の差はなく、round-trip の冪等性 (`emit ∘ parse ∘ emit = emit`) に必要
+/// `{v:?}` (`Debug`) は Rust の f32 の shortest round-trip 実装そのもの
+/// (`parse::<f32>(fmt_f32(v)) == v` が全有限値で bit 一致、`-0.0` も符号を保つ)
+/// 旧実装は `|v| < 1e-6` (`-0.0` 含む) を符号ごと `0.0` に丸めていたが、これは
+/// `parse(emit(n)) == n` という faithful round-trip の不変条件そのものを破る
+/// (`ellipsoid(5e-7,...)` の eval が丸めの前後で 1.0 → 1.73 に変わる実測、
+/// `lidinoid(-0.0,1e8)` の符号消失による `eval` 不一致も同じ原因)
+/// 丸めが要らなくなった意味の無い `-0.0` ノイズ (stdlib product 展開の
+/// cos/sin から出る、[`canon_deg`] 自身の丸めが生む残差も含む) は、emit の
+/// 手前でなく**その値を計算している側**で `+ 0.0` して消す (構築時の正規化、
+/// 構築箇所は `alice-lol/src/stdlib/hardsurface/mount.rs` の `extrusion_profile`
+/// と `canon_deg` 自身)
 /// `NaN` / `inf` はそのまま出す (parser は読まない) [`to_lol`] は書く前に [`EmitError::NonFinite`] で止める
 #[must_use]
 pub fn fmt_f32(v: f32) -> String {
-    let v = canon(v);
-    if v.fract() == 0.0 && v.is_finite() && v.abs() < 1e15 {
-        format!("{v:.1}")
-    } else {
-        format!("{v}")
-    }
-}
-
-/// the value [`fmt_f32`] writes: `|v| < 1e-6` is `0.0` (a choice between two text forms is
-/// made on this value too, or the form read back would differ from the one written)
-fn canon(v: f32) -> f32 {
-    if v.abs() < 1e-6 {
-        0.0
-    } else {
-        v
-    }
+    format!("{v:?}")
 }
 
 /// Euler 角 (度) の正規形: 1e-3 度に丸め、`(-180, 180]` に wrap、`±180` は `+180`
@@ -109,7 +102,7 @@ fn canon_deg(a: f32) -> f32 {
     if (a.abs() - 180.0).abs() < 1e-3 {
         180.0
     } else {
-        a
+        a + 0.0 // -0.0 -> 0.0: a residual this small has no rotational meaning
     }
 }
 
@@ -208,14 +201,17 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             radius,
         } => {
             // capsule(r, h) は Y 軸対称 (0,-h,0)-(0,h,0) の短縮形、それ以外は capsule_ab
-            // 判定は書く値 (canon) で行う: 1e-30 のような 0 に丸める座標で判定すると、
-            // 書いた text を読み戻した時に別の形になる
-            let h = canon(point_b.y);
-            let symmetric = canon(point_a.x) == 0.0
-                && canon(point_a.z) == 0.0
-                && canon(point_b.x) == 0.0
-                && canon(point_b.z) == 0.0
-                && (canon(point_a.y) + h).abs() <= f32::EPSILON * h.abs().max(1.0);
+            // short form は X/Z の座標を書かない (読み戻すと常に 0.0) ので、判定は
+            // 書く値そのもので行う exact 0.0 (`== 0.0` は `-0.0` も含めて真になる、
+            // IEEE754 の符号無し比較) fmt_f32 が faithful になった今、ここで近傍 0 を
+            // 0 扱いにすると、1e-30 のような非 0 座標の short form が round-trip で
+            // その座標を失う (`capsule_ab` のまま書くべき形を short form に丸めてしまう)
+            let h = point_b.y;
+            let symmetric = point_a.x == 0.0
+                && point_a.z == 0.0
+                && point_b.x == 0.0
+                && point_b.z == 0.0
+                && (point_a.y + h).abs() <= f32::EPSILON * h.abs().max(1.0);
             if symmetric {
                 prim!("capsule", f(*radius), f(h))
             } else {
@@ -727,13 +723,14 @@ fn write_variadic(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
     // 左 spine: 同 name・同数値引数の間だけ潰す (k が違う smooth_union は別 op)
     let mut rev_children: Vec<&SdfNode> = vec![b];
     while let Some((n2, args2, a2, b2)) = variadic_parts(a) {
-        // compare the values as written (canon), or two ops that print the same would be
-        // kept apart here and merged once the text is read back
+        // bit-exact: fmt_f32 is now a faithful (lossless) round-trip, so two values
+        // that print the same text are, by construction, bit-identical -- comparing
+        // the raw bits already matches "the same as written"
         let same = args2.len() == args.len()
             && args2
                 .iter()
                 .zip(&args)
-                .all(|(x, y)| canon(*x).to_bits() == canon(*y).to_bits());
+                .all(|(x, y)| x.to_bits() == y.to_bits());
         if n2 != name || !same {
             break;
         }
@@ -802,8 +799,8 @@ mod tests {
         assert_eq!(fmt_f32(0.5), "0.5");
         assert_eq!(fmt_f32(1.25), "1.25");
         assert_eq!(fmt_f32(0.1), "0.1");
-        assert_eq!(fmt_f32(-0.0), "0.0");
-        assert_eq!(fmt_f32(4e-7), "0.0");
+        assert_eq!(fmt_f32(-0.0), "-0.0");
+        assert_eq!(fmt_f32(4e-7), "4e-7");
     }
 
     #[test]
