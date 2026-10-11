@@ -14,6 +14,10 @@ alice-lol/tests/finite_numbers.rs
 alice-lol/tests/common/**
 # include_str! in alice-lol/tests/common/corpus.rs
 examples/sword.lol
+# include_str! in alice-lol/tests/degenerate_grid.rs
+alice-lol/src/syntax_table.rs
+# include_str! in alice-lol/src/lib.rs
+alice-lol/lol.gbnf
 # the mutated files: each mutant asserts its anchor text in one of them
 alice-lol/src/runtime_parser.rs
 alice-lol/src/stdlib/hardsurface/skadis_sdf.rs

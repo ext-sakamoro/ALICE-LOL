@@ -8,10 +8,9 @@
 **/src/**
 fuzz/**
 # fuzz/Cargo.toml depends on alice-lol by path, alice-lol on alice-lol-macro by path, and
-# cargo loads the root manifest as the workspace of both
+# cargo loads the root manifest as the workspace of both; every member manifest is listed
 Cargo.toml
-alice-lol/Cargo.toml
-alice-lol-macro/Cargo.toml
+*/Cargo.toml
 # include_str! in alice-lol/src/lib.rs
 alice-lol/lol.gbnf
 # the check step reads the run log with this script
