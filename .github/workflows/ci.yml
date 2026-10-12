@@ -527,6 +527,10 @@ jobs:
         run: python scripts/test_det_math_guard.py
       - name: det-math-guard (判定経路に platform 依存の超越関数が無い)
         run: python scripts/det_math_guard.py
+      - name: fma-guard oracle (検査器自身の試験)
+        run: python scripts/test_no_outer_fneg_of_fma.py
+      - name: fma-guard (mul_add の結果全体を negate する形が無い)
+        run: python scripts/no_outer_fneg_of_fma.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
       - name: fuzz-runs oracle (fuzz の log の検査器自身の試験)

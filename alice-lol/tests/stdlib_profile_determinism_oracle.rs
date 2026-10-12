@@ -14,6 +14,7 @@ use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::mesh::Mesh;
 use glam::Vec3;
 use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
 
 struct Case {
     lol: &'static str,
@@ -22,8 +23,8 @@ struct Case {
     resolution: usize,
 }
 
-/// 04 の 12 PARITY_CASES (text-to-print-ios `rust-bridge/src/lib.rs`) に `skadis_hook_j()` を足した
-/// 13 ケース bounds は alice-lol 自身の `node_to_mesh`(PrintConfig) 向けに個別に見積もった値
+/// text-to-print-ios `rust-bridge/src/lib.rs` の 12 `PARITY_CASES` に `skadis_hook_j()` を足した
+/// 13 ケース bounds は alice-lol 自身の `node_to_mesh`(`PrintConfig`) 向けに個別に見積もった値
 /// (text-to-print-ios 側は tight AABB 自動fit を使うため、ここの digest は golden 含め別物)
 const CASES: &[Case] = &[
     Case {
@@ -107,7 +108,10 @@ const CASES: &[Case] = &[
 ];
 
 fn hex32(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 
 /// 頂点の位置 (f32 の bits、little endian) と index の SHA-256
@@ -160,18 +164,27 @@ fn stdlib_mesh_digest_matches_release_profile_golden() {
                 "{}: 0 三角形 (bounds / resolution を見直す)",
                 c.lol
             );
-            (c.lol.to_string(), (mesh.indices.len() / 3) as u64, mesh_digest(&mesh))
+            (
+                c.lol.to_string(),
+                (mesh.indices.len() / 3) as u64,
+                mesh_digest(&mesh),
+            )
         })
         .collect();
 
     if std::env::var("LOL_DIGEST_RECORD").as_deref() == Ok("1") {
-        if cfg!(debug_assertions) {
-            panic!("golden は --release で記録する (release を正典とする既存の device-parity golden と合わせる)");
+        // deliberately a build-profile-constant condition, not a runtime one
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(
+                !cfg!(debug_assertions),
+                "golden は --release で記録する (release を正典とする既存の device-parity golden と合わせる)"
+            );
         }
-        let text: String = now
-            .iter()
-            .map(|(lol, tri, d)| format!("{lol}|{tri}|{d}\n"))
-            .collect();
+        let text: String = now.iter().fold(String::new(), |mut s, (lol, tri, d)| {
+            let _ = writeln!(s, "{lol}|{tri}|{d}");
+            s
+        });
         std::fs::write(golden_path(), text).unwrap();
         return;
     }
@@ -186,7 +199,10 @@ fn stdlib_mesh_digest_matches_release_profile_golden() {
     for ((lol, tri, digest), (w_lol, w_tri, w_digest)) in now.iter().zip(want.iter()) {
         assert_eq!(lol, w_lol, "ケース順が golden と違う");
         assert_eq!(tri, w_tri, "{lol}: 三角形数が golden と違う");
-        assert_eq!(digest, w_digest, "{lol}: mesh digest が golden と違う (最初に違った形)");
+        assert_eq!(
+            digest, w_digest,
+            "{lol}: mesh digest が golden と違う (最初に違った形)"
+        );
         compared += 1;
     }
 
