@@ -12,9 +12,11 @@ Rust の既定 (nsz を立てない) codegen に対しても適用するため�
 **呼び出し結果全体を negate する形だけ** 引数を negate してから渡す形
 (`a.mul_add(b, -c)`、FMSUB 相当) やネストした引数内の negate は対象外
 
-⚠️ **全部を禁止しない**: 既知の許容は `scripts/no-outer-fneg-of-fma-allowlist.txt` に
-`<file>:<line>` + 理由で記載 (`(-a).mul_add(b, -c)` 形への書き換えが Law の検討対象に
-なるまでの一時許容、または mesh 抽出の中間量で persisted rotate と無関係と判定済みの箇所)
+⚠️ **lib `src/` には allowance が無い**: `src/` 配下 (path の構成要素に `src` を含む
+file) で見つかった形は allowlist に書いても fail する — Law form への書き換えのみが
+正しい直し方 既知の許容は `tests/` / `examples/` 配下の oracle file 限定
+(`scripts/no-outer-fneg-of-fma-allowlist.txt` に `<file>:<line>` + 理由、わざと旧形を
+比較用の基準として使っている箇所だけ)
 
 ⚠️ 検査対象の file が 1 つも読めなければ fail する (path が壊れて空振りするのを防ぐ)
 同じ理由で、スキャンした `.mul_add(` 呼び出しが 0 件でも fail する
@@ -22,6 +24,10 @@ Rust の既定 (nsz を立てない) codegen に対しても適用するため�
 
 Usage: `python3 scripts/no_outer_fneg_of_fma.py` (exit 1 on any finding)
 `--root DIR` で別の tree を検査する
+`--src DIR` (複数可) で検査対象の相対 dir を上書きする (既定は
+`alice-lol/src alice-lol/tests alice-lol/examples`、Physics 等 他 repo では
+`--src src tests examples` のように repo ごとに渡す、この file 自体は
+全 repo で byte 同一のまま複製する)
 """
 
 from __future__ import annotations
@@ -30,8 +36,18 @@ import os
 import sys
 
 ALLOWLIST = "scripts/no-outer-fneg-of-fma-allowlist.txt"
-SRC_DIRS = ("alice-lol/src",)
+SRC_DIRS_DEFAULT = ("alice-lol/src", "alice-lol/tests", "alice-lol/examples")
+# allowlist が効くのはこの 2 つの path 構成要素を持つ file だけ src/ 配下は
+# Law form への書き換えのみを正解とし、allowlist を無効化する (lib の本体コードに
+# 既知の例外を残さない)
+ALLOWLIST_SCOPE_DIRS = ("tests", "examples")
 IDENT_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.[]")
+
+
+def is_allowlist_eligible(rel: str) -> bool:
+    """この file の違反は allowlist で抑制してよいか (tests/ か examples/ 配下のみ)."""
+    parts = rel.replace("\\", "/").split("/")
+    return any(p in ALLOWLIST_SCOPE_DIRS for p in parts)
 
 
 def read_allowlist(root: str) -> set[str]:
@@ -146,11 +162,11 @@ def scan_file(path: str, rel: str) -> tuple[list[tuple[int, str]], int]:
     return violations, mul_add_calls
 
 
-def scan(root: str) -> tuple[list[str], int, int]:
+def scan(root: str, src_dirs: tuple[str, ...]) -> tuple[list[str], int, int]:
     found: list[str] = []
     files = 0
     calls = 0
-    for src_dir in SRC_DIRS:
+    for src_dir in src_dirs:
         base = os.path.join(root, src_dir)
         if not os.path.isdir(base):
             continue
@@ -168,28 +184,37 @@ def scan(root: str) -> tuple[list[str], int, int]:
     return found, files, calls
 
 
-def check(root: str) -> tuple[list[str], dict[str, int]]:
+def check(root: str, src_dirs: tuple[str, ...] = SRC_DIRS_DEFAULT) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
-    found, files, calls = scan(root)
+    found, files, calls = scan(root, src_dirs)
     allowlist = read_allowlist(root)
+    allowed = 0
 
     if files == 0:
         errors.append(
-            f"error: src file を 1 つも読めなかった — 検査が空振りしている (対象: {', '.join(SRC_DIRS)})"
+            f"error: src file を 1 つも読めなかった — 検査が空振りしている (対象: {', '.join(src_dirs)})"
         )
-        return errors, {"files": files, "calls": calls, "violations": len(found)}
+        return errors, {"files": files, "calls": calls, "violations": len(found), "allowed": allowed}
     if calls == 0:
         errors.append(f"error: .mul_add( 呼び出しが 0 件 — file 一覧か scan が壊れている (読めた file {files} 件)")
 
     for entry in found:
         key = entry.split(": ", 1)[0]
-        if key not in allowlist:
-            errors.append(f"error: {entry}  (呼び出し結果全体を negate する fma、禁止形)")
+        rel = key.rsplit(":", 1)[0]
+        if key in allowlist:
+            if is_allowlist_eligible(rel):
+                allowed += 1
+                continue
+            errors.append(
+                f"error: {entry}  (src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す)"
+            )
+            continue
+        errors.append(f"error: {entry}  (呼び出し結果全体を negate する fma、禁止形)")
 
     for key in sorted(allowlist - {e.split(": ", 1)[0] for e in found}):
         errors.append(f"error: {key}: allowlist にあるが実物が無い — 行を消す")
 
-    return errors, {"files": files, "calls": calls, "violations": len(found)}
+    return errors, {"files": files, "calls": calls, "violations": len(found), "allowed": allowed}
 
 
 def main() -> int:
@@ -201,10 +226,19 @@ def main() -> int:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if "--root" in sys.argv:
         root = sys.argv[sys.argv.index("--root") + 1]
-    errors, counts = check(root)
+    src_dirs = SRC_DIRS_DEFAULT
+    if "--src" in sys.argv:
+        src_dirs = tuple(a for a in sys.argv[sys.argv.index("--src") + 1 :] if not a.startswith("--"))
+        if not src_dirs:
+            print("error: --src には 1 つ以上の dir を渡す", file=sys.stderr)
+            return 2
+    errors, counts = check(root, src_dirs)
     for e in errors:
         print(e)
-    print(f"compared: files {counts['files']}, mul_add calls {counts['calls']}, outer-fneg sites {counts['violations']}")
+    print(
+        f"compared: files {counts['files']}, mul_add calls {counts['calls']}, "
+        f"outer-fneg sites {counts['violations']}, allowed (tests/examples) {counts['allowed']}"
+    )
     if errors:
         print(f"no-outer-fneg-of-fma: {len(errors)} violation(s)")
         return 1
