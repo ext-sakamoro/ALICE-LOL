@@ -527,9 +527,13 @@ jobs:
         run: python scripts/test_det_math_guard.py
       - name: det-math-guard (判定経路に platform 依存の超越関数が無い)
         run: python scripts/det_math_guard.py
-      - name: fma-guard oracle (検査器自身の試験)
+      - name: fma-guard oracle (syn AST、検査器自身の試験)
+        run: cargo test --quiet --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
+      - name: fma-guard (syn AST、mul_add の結果全体を negate する形が無い、主検査)
+        run: cargo run --quiet --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
+      - name: fma-guard oracle (regex 版、副検査、検査器自身の試験)
         run: python scripts/test_no_outer_fneg_of_fma.py
-      - name: fma-guard (mul_add の結果全体を negate する形が無い)
+      - name: fma-guard (regex 版、副検査、安価な独立経路として併走)
         run: python scripts/no_outer_fneg_of_fma.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
