@@ -115,7 +115,11 @@ step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越�
 python3 scripts/test_det_math_guard.py
 python3 scripts/det_math_guard.py
 
-step "ci.yml / fma-guard: oracle + Law code に mul_add の結果全体を negate する形が無い"
+step "ci.yml / fma-guard: oracle + Law code に mul_add の結果全体を negate する形が無い (syn AST、主検査)"
+cargo test --quiet --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
+cargo run --quiet --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
+
+step "ci.yml / fma-guard: 同上、regex 版 (副検査、安価な独立経路として併走)"
 python3 scripts/test_no_outer_fneg_of_fma.py
 python3 scripts/no_outer_fneg_of_fma.py
 
