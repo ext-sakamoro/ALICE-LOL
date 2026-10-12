@@ -958,12 +958,16 @@ fn probe_ball(node: &SdfNode, centre: Vec3, radius: f32) -> BallProbe {
 /// 届く倍率を取る)
 fn surface_distance(node: &SdfNode, p: Vec3, floor: f32) -> Option<f32> {
     let field = sdf_eval(node, p).abs();
-    let cap = floor.max(field * SURFACE_SEARCH_SLACK).max(f32::EPSILON);
-    let mut r = field.max(cap * 1.0e-3);
+    let cap = crate::det_math::max(
+        crate::det_math::max(floor, field * SURFACE_SEARCH_SLACK),
+        f32::EPSILON,
+    );
+    let mut r = crate::det_math::max(field, cap * 1.0e-3);
     // 回数で切る (`cap` までの倍増は高々 log2(SURFACE_SEARCH_SLACK) + 余裕、
     // 浮動小数を while の条件にすると NaN で止まらなくなる)
     for _ in 0..SURFACE_SEARCH_STEPS {
-        if let BallProbe::Crossing { distance } = probe_ball(node, p, r.min(cap)) {
+        if let BallProbe::Crossing { distance } = probe_ball(node, p, crate::det_math::min(r, cap))
+        {
             return Some(distance);
         }
         if r >= cap {
@@ -1140,7 +1144,10 @@ fn refine_with_lipschitz(bx: Vec3Interval, iv: Interval, f_centre: f32, l: f32) 
     let Some(e) = lipschitz_enclosure(bx, f_centre, l) else {
         return Refined::Enclosure(iv);
     };
-    let (lo, hi) = (iv.lo.max(e.lo), iv.hi.min(e.hi));
+    let (lo, hi) = (
+        crate::det_math::max(iv.lo, e.lo),
+        crate::det_math::min(iv.hi, e.hi),
+    );
     if lo > hi {
         return Refined::Contradiction;
     }
@@ -1198,6 +1205,10 @@ fn probe_pair(
             continue;
         }
         if witness(fa, fb) {
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+            )]
             let r = residual(fa, fb).min(-f32::EPSILON);
             if worst.is_none_or(|(w, _)| r < w) {
                 worst = Some((r, c));
@@ -1280,7 +1291,7 @@ fn check_non_overlap(
             &|ia, ib| ia.lo >= 0.0 || ib.lo >= 0.0,
             &|fa, fb| fa < 0.0 && fb < 0.0,
             // 証拠を選ぶ順位付けにだけ場の値を使う (安い) 残差は後で実距離に直す
-            &|fa, fb| fa.max(fb),
+            &|fa, fb| crate::det_math::max(fa, fb),
         ) {
             PairProbe::Clear => {}
             PairProbe::Witness { point, residual } => match &worst {
@@ -1301,12 +1312,16 @@ fn check_non_overlap(
         let depth = surface_distance(a, point, cap)
             .into_iter()
             .chain(surface_distance(b, point, cap))
-            .fold(f32::INFINITY, f32::min);
+            .fold(f32::INFINITY, crate::det_math::min);
         let residual = if depth.is_finite() {
             -depth
         } else {
             field // どちらの表面も検査範囲内で見つからない時だけ場の値に戻す
         };
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+        )]
         (residual.min(-f32::EPSILON), point, region)
     });
 
@@ -1358,6 +1373,10 @@ fn check_containment(
     let cap = search_cap(config);
     let worst = worst.map(|(field, point, region)| {
         let residual = surface_distance(outer, point, cap).map_or(field, |d| -d);
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+        )]
         (residual.min(-f32::EPSILON), point, region)
     });
 
@@ -1416,6 +1435,10 @@ fn check_stress(
         }
 
         for &(lp, force) in load_points {
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+            )]
             let search_radius = force.max(1.0);
             if center.distance(lp) > search_radius {
                 continue;
@@ -1502,7 +1525,7 @@ fn contact_upper_bound(
     #[allow(clippy::cast_precision_loss)]
     let cell_diag =
         ((config.aabb_max - config.aabb_min) / config.resolution.max(1) as f32).length();
-    let radius = max_distance.max(min_distance) + cell_diag;
+    let radius = crate::det_math::max(max_distance, min_distance) + cell_diag;
     let mut upper: Option<(f32, Vec3, Vec3Interval)> = None;
     for (center, bounds) in GridSampler::new(config) {
         let (fa, fb) = (sdf_eval(a, center), sdf_eval(b, center));
@@ -2028,7 +2051,7 @@ fn material_fraction(node: &SdfNode, p: Vec3, r: f32) -> f32 {
         #[allow(clippy::cast_precision_loss)]
         let t = (i as f32 + 0.5) / FRACTION_SAMPLES as f32;
         let z = 2.0f32.mul_add(-t, 1.0);
-        let rho = (1.0 - z * z).max(0.0).sqrt();
+        let rho = crate::det_math::max(1.0 - z * z, 0.0).sqrt();
         #[allow(clippy::cast_precision_loss)]
         let theta = GOLDEN_ANGLE * i as f32;
         let (sin_t, cos_t) = alice_det_math::sin_cos(theta);
@@ -2143,7 +2166,7 @@ fn solve_peak_temperature(
         return None;
     }
     // 安全率 0.5 (温度上昇で α が増えても CFL を割らないため)
-    let dt = (dt_max * 0.5).min(duration_s);
+    let dt = crate::det_math::min(dt_max * 0.5, duration_s);
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let steps = (duration_s / dt).ceil() as u32;
     if steps > THERMAL_MAX_STEPS {
@@ -2215,7 +2238,7 @@ fn solve_peak_temperature(
         .iter()
         .zip(solid)
         .filter_map(|(v, &is_solid)| is_solid.then_some(*v))
-        .fold(f32::NEG_INFINITY, f32::max);
+        .fold(f32::NEG_INFINITY, crate::det_math::max);
     peak.is_finite().then_some(peak)
 }
 
@@ -2315,6 +2338,10 @@ fn check_thermal_field(
         return unusable("格子が各軸 3 セル未満 (transient_step_3d が解かない)");
     }
     // `transient_step_3d` は dx を 1 つしか取らない = 立方セルが前提
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "both operands are .abs() results, never negative zero"
+    )]
     let aniso = (step.x - step.y).abs().max((step.x - step.z).abs());
     if aniso > step.x.abs() * 1.0e-4 {
         return unusable("セルが立方でない (検査 AABB を立方体にする)");
@@ -2400,7 +2427,12 @@ fn check_thermal_field(
 ///
 /// `max(0.0)` で負と NaN を 0 に寄せてから truncation、上限は `min(n - 1)` で clamp
 /// (`n >= 1` 前提、`n` は `CheckConfig` の grid 解像度で小さい)
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    reason = "max(0.0) result is cast to usize immediately below, which erases the sign"
+)]
 fn grid_index(coord: f32, n: usize) -> usize {
     (coord.max(0.0) as usize).min(n - 1)
 }
@@ -2719,6 +2751,10 @@ enum CellSign {
 /// slack が 0 の両側を未定にするため
 fn classify_cells(node: &SdfNode, config: &CheckConfig, step: Vec3) -> Vec<CellSign> {
     let n = config.resolution;
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+    )]
     let slack = INTERVAL_SLACK * step.length().max(1.0);
     let mut out = vec![CellSign::Undecided; n * n * n];
     for (ix, iy, iz, idx) in grid_indices(n) {
@@ -2767,6 +2803,10 @@ fn check_reachable(
     let step = extent / (n as f32);
 
     // 区間演算による 3 分類 (INTERVAL_SLACK の余裕つき、境界は未定に倒す)
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+    )]
     let slack = INTERVAL_SLACK * step.length().max(1.0);
     let mut proven_inside = vec![false; n * n * n];
     let mut proven_outside = vec![false; n * n * n];

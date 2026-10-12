@@ -819,7 +819,14 @@ pub fn elements_to_svg(
 ///
 /// `f64 → usize` の単一 audit 点: `ceil().max(0.0)` 後なので符号なし、mm 単位の
 /// 板サイズ / cell 幅で 2^53 を超えることはない
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+/// (`max(0.0)` の等しいゼロの符号は platform で割れうるが、直後の `as usize` が
+/// 符号を消すので歯に関わらない)
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::disallowed_methods,
+    reason = "max(0.0) result is cast to usize immediately below, which erases the sign"
+)]
 fn cell_count(extent: f64, cell: f64) -> usize {
     (extent / cell).ceil().max(0.0) as usize
 }

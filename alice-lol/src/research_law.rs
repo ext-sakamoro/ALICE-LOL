@@ -1663,7 +1663,11 @@ impl ResearchLaw {
             let observed = finite(o.value)?;
             let d = observed - self.evaluate_with(&borrowed_conditions(&o.conditions), params)?;
             sum_sq += d * d;
-            max_abs = max_abs.max(d.abs());
+            {
+                // max_abs starts at 0.0 and both operands are always .abs()-derived, never negative zero
+                #![allow(clippy::disallowed_methods)]
+                max_abs = max_abs.max(d.abs());
+            }
         }
         Ok(ResidualStats {
             n: observations.len(),
@@ -1696,6 +1700,10 @@ impl ResearchLaw {
             r.push(o.value - self.evaluate_with(&cond, p).ok()?);
             let mut row = Vec::with_capacity(p.len());
             for j in 0..p.len() {
+                #[allow(
+                    clippy::disallowed_methods,
+                    reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+                )]
                 let h = GN_FD_STEP * p[j].abs().max(1.0);
                 shifted[j] = p[j] + h;
                 let up = self.evaluate_with(&cond, &shifted).ok()?;
@@ -1749,6 +1757,10 @@ impl ResearchLaw {
             let Some((cand, c_ssr)) = accepted else {
                 break;
             };
+            #[allow(
+                clippy::disallowed_methods,
+                reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+            )]
             let converged = cand
                 .iter()
                 .zip(&p)
@@ -1798,7 +1810,7 @@ impl ResearchLaw {
         if outside > 0 {
             return ResearchVerdict::OutOfRange { outside };
         }
-        let band = policy.abs_tolerance.max(self.residual.rms);
+        let band = crate::det_math::max64(policy.abs_tolerance, self.residual.rms);
         let Ok(stats) = self.residual_over(observations, &self.param_values()) else {
             return ResearchVerdict::OutOfRange {
                 outside: observations.len(),
@@ -1898,6 +1910,10 @@ fn normal_matrix(jac: &[Vec<f64>], k: usize) -> Vec<Vec<f64>> {
 #[allow(clippy::needless_range_loop, clippy::suboptimal_flops)]
 fn solve(mut m: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Option<Vec<f64>> {
     let k = rhs.len();
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "every folded value is .abs()-derived and the seed is +0.0, never negative zero"
+    )]
     let scale = (0..k).map(|i| m[i][i].abs()).fold(0.0_f64, f64::max);
     if !scale.is_finite() || scale <= 0.0 {
         return None;
@@ -2055,6 +2071,10 @@ pub fn compare(
     let b_value = b.evaluate(&b_conditions)?;
     let b_value_in_a_unit = finite(b_value * b.output_unit.scale / a.output_unit.scale)?;
     let difference = finite(a_value - b_value_in_a_unit)?;
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "both operands are .abs() results, never negative zero"
+    )]
     let denom = a_value.abs().max(b_value_in_a_unit.abs());
     let relative = if denom == 0.0 {
         0.0
