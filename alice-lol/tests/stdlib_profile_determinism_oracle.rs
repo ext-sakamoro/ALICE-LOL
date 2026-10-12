@@ -1,0 +1,213 @@
+//! stdlib (skadis hook 形状) の platform libm 直呼びによる debug/release 間の mesh 非決定性 oracle
+//!
+//! `hardsurface/skadis_sdf.rs` は centerline の点列を `.sin()`/`.cos()` の直呼びで組み立てており、
+//! release では LLVM が build 機の libm で定数畳み込みする一方、debug は実行時の libm を呼ぶため、
+//! 最後の bit が profile によって変わる (このため `cargo test` と `cargo test --release` を両方
+//! 実行して初めて検出できる、どちらか一方だけでは green に見える)
+//!
+//! 他の形状 (基本 primitive / CSG / rotate / rotate_q / twist / 薄物コイン) は det-math 経由か
+//! sin/cos を含まないので、本 oracle では一致側の対照として並べている (空振り検査)
+//!
+//! golden は release の build で記録する (`LOL_DIGEST_RECORD=1 cargo test --release --test stdlib_profile_determinism_oracle`)
+//! 直ったら (debug でも一致したら) 下の試験が red になるので、その形状を `PROFILE_DIVERGENT` から消す
+
+use alice_lol::print_export::{node_to_mesh, PrintConfig};
+use alice_lol::runtime_parser::parse_lol;
+use alice_sdf::mesh::Mesh;
+use glam::Vec3;
+use sha2::{Digest, Sha256};
+
+struct Case {
+    lol: &'static str,
+    bounds_min: Vec3,
+    bounds_max: Vec3,
+    resolution: usize,
+}
+
+/// 04 の 12 PARITY_CASES (text-to-print-ios `rust-bridge/src/lib.rs`) に `skadis_hook_j()` を足した
+/// 13 ケース bounds は alice-lol 自身の `node_to_mesh`(PrintConfig) 向けに個別に見積もった値
+/// (text-to-print-ios 側は tight AABB 自動fit を使うため、ここの digest は golden 含め別物)
+const CASES: &[Case] = &[
+    Case {
+        lol: "box3d(5, 5, 2.5)",
+        bounds_min: Vec3::new(-4.0, -4.0, -4.0),
+        bounds_max: Vec3::new(4.0, 4.0, 4.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "sphere(8)",
+        bounds_min: Vec3::splat(-9.0),
+        bounds_max: Vec3::splat(9.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "rotate(90, 0, 0, cylinder(3, 6))",
+        bounds_min: Vec3::splat(-8.0),
+        bounds_max: Vec3::splat(8.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "rotate(180, 0, 0, box3d(4, 2, 1))",
+        bounds_min: Vec3::splat(-4.0),
+        bounds_max: Vec3::splat(4.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "rotate(-0.0, 0, 0, torus(6, 1.5))",
+        bounds_min: Vec3::splat(-9.0),
+        bounds_max: Vec3::splat(9.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "rotate(30, 45, 60, box3d(6, 3, 2))",
+        bounds_min: Vec3::splat(-5.0),
+        bounds_max: Vec3::splat(5.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "smooth_union(1.5, sphere(4), translate(5, 0, 0, sphere(3)))",
+        bounds_min: Vec3::new(-5.0, -5.0, -5.0),
+        bounds_max: Vec3::new(9.0, 5.0, 5.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "subtract(box3d(8, 8, 4), translate(0, 0, 2, cylinder(3, 4)))",
+        bounds_min: Vec3::splat(-5.0),
+        bounds_max: Vec3::splat(5.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "twist(0.2, box3d(3, 3, 10))",
+        bounds_min: Vec3::splat(-6.0),
+        bounds_max: Vec3::splat(6.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "rotate_q(0, 0, 0.7071068, 0.7071068, box3d(5, 2, 1))",
+        bounds_min: Vec3::splat(-4.0),
+        bounds_max: Vec3::splat(4.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "shopping_cart_coin(22.8, 1.7)",
+        bounds_min: Vec3::new(-12.0, -12.0, -2.0),
+        bounds_max: Vec3::new(12.0, 12.0, 2.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "skadis_hook_s()",
+        bounds_min: Vec3::new(-5.0, -48.0, -6.0),
+        bounds_max: Vec3::new(30.0, 6.0, 6.0),
+        resolution: 64,
+    },
+    Case {
+        lol: "skadis_hook_j()",
+        bounds_min: Vec3::new(-6.0, -74.0, -9.0),
+        bounds_max: Vec3::new(36.0, 6.0, 9.0),
+        resolution: 64,
+    },
+];
+
+/// debug でも release と一致してしまったら、本 oracle が red になって報せる (= 欠陥が直った合図)
+#[cfg(debug_assertions)]
+const PROFILE_DIVERGENT: &[&str] = &["skadis_hook_s()", "skadis_hook_j()"];
+
+fn hex32(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// 頂点の位置 (f32 の bits、little endian) と index の SHA-256
+fn mesh_digest(mesh: &Mesh) -> String {
+    let mut h = Sha256::new();
+    for v in &mesh.vertices {
+        for c in v.position.to_array() {
+            h.update(c.to_bits().to_le_bytes());
+        }
+    }
+    for i in &mesh.indices {
+        h.update(i.to_le_bytes());
+    }
+    hex32(&h.finalize())
+}
+
+fn golden_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/stdlib_profile_digest_golden.txt")
+}
+
+/// `<lol>|<triangles>|<mesh_sha256>` を 1 行 1 ケース (JSON 依存を避ける、golden は人が読める形のまま)
+fn parse_golden(text: &str) -> Vec<(String, u64, String)> {
+    text.lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            let mut parts = l.splitn(3, '|');
+            let lol = parts.next().unwrap().to_string();
+            let tri: u64 = parts.next().unwrap().parse().unwrap();
+            let digest = parts.next().unwrap().to_string();
+            (lol, tri, digest)
+        })
+        .collect()
+}
+
+#[test]
+fn stdlib_mesh_digest_matches_release_profile_golden() {
+    let now: Vec<(String, u64, String)> = CASES
+        .iter()
+        .map(|c| {
+            let node = parse_lol(c.lol).unwrap_or_else(|e| panic!("{}: parse failed: {e}", c.lol));
+            let config = PrintConfig {
+                resolution: c.resolution,
+                bounds_min: c.bounds_min,
+                bounds_max: c.bounds_max,
+                scale_mm: 1.0,
+            };
+            let mesh = node_to_mesh(&node, &config);
+            assert!(
+                !mesh.indices.is_empty(),
+                "{}: 0 三角形 (bounds / resolution を見直す)",
+                c.lol
+            );
+            (c.lol.to_string(), (mesh.indices.len() / 3) as u64, mesh_digest(&mesh))
+        })
+        .collect();
+
+    if std::env::var("LOL_DIGEST_RECORD").as_deref() == Ok("1") {
+        if cfg!(debug_assertions) {
+            panic!("golden は --release で記録する (release を正典とする既存の device-parity golden と合わせる)");
+        }
+        let text: String = now
+            .iter()
+            .map(|(lol, tri, d)| format!("{lol}|{tri}|{d}\n"))
+            .collect();
+        std::fs::write(golden_path(), text).unwrap();
+        return;
+    }
+
+    let golden_text = std::fs::read_to_string(golden_path()).expect(
+        "golden 未記録 (先に `LOL_DIGEST_RECORD=1 cargo test --release --test stdlib_profile_determinism_oracle` を実行する)",
+    );
+    let want = parse_golden(&golden_text);
+    assert_eq!(now.len(), want.len(), "ケース数が golden と違う");
+
+    let mut compared = 0;
+    for ((lol, tri, digest), (w_lol, w_tri, w_digest)) in now.iter().zip(want.iter()) {
+        assert_eq!(lol, w_lol, "ケース順が golden と違う");
+
+        #[cfg(debug_assertions)]
+        if PROFILE_DIVERGENT.contains(&lol.as_str()) {
+            assert!(
+                tri != w_tri || digest != w_digest,
+                "{lol} が debug でも release の golden と一致した: 欠陥が直ったので PROFILE_DIVERGENT から消す"
+            );
+            continue;
+        }
+
+        assert_eq!(tri, w_tri, "{lol}: 三角形数が golden と違う");
+        assert_eq!(digest, w_digest, "{lol}: mesh digest が golden と違う (最初に違った形)");
+        compared += 1;
+    }
+
+    #[cfg(debug_assertions)]
+    assert_eq!(compared, CASES.len() - PROFILE_DIVERGENT.len());
+    #[cfg(not(debug_assertions))]
+    assert_eq!(compared, CASES.len());
+}
