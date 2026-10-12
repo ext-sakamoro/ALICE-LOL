@@ -46,6 +46,9 @@ pub mod families;
 pub mod rng;
 pub mod sample;
 
+// crate-internal, deterministic max/min (clippy-lib gate forbids f32::max/min directly)
+mod det_math;
+
 pub use families::{Family, ALL_FAMILIES};
 pub use rng::Rng;
 pub use sample::{OraclePoint, Sample, Side, VerifyError};

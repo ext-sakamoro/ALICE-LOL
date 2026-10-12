@@ -25,7 +25,7 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
     let cut_h = t * 2.0; // 貫通させる cutter の全高
     match rng.int(0, 2) {
         0 => {
-            let r = rng.stepped(3.0, (w / 4.0).floor().max(3.0), 1.0);
+            let r = rng.stepped(3.0, crate::det_math::max((w / 4.0).floor(), 3.0), 1.0);
             let lol = format!("subtract({plate}, cylinder({r}, {cut_h}))");
             let en = format!(
                 "{plate_en}, with a vertical cylindrical hole of radius {} through its center (subtract a Y cylinder of radius {} and total height {}).",
@@ -48,7 +48,7 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
         1 => {
             let n = rng.int(3, 8) as u32;
             let ring_r = (w / 3.0).floor();
-            let hole_r = (ring_r * 0.25).floor().max(2.0);
+            let hole_r = crate::det_math::max((ring_r * 0.25).floor(), 2.0);
             let lol = format!(
                 "subtract({plate}, polar_repeat({n}, translate({ring_r}, 0, 0, cylinder({hole_r}, {cut_h}))))"
             );
@@ -75,8 +75,8 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
             let cz = rng.int(2, 6) as u32;
             let (kx, kz) = (cx / 2, cz / 2);
             let (n_x, n_z) = (2 * kx + 1, 2 * kz + 1);
-            let pitch = (w / (n_x.max(n_z) as f32 + 1.0)).floor().max(4.0);
-            let r = (pitch * 0.25).floor().max(1.0);
+            let pitch = crate::det_math::max((w / (n_x.max(n_z) as f32 + 1.0)).floor(), 4.0);
+            let r = crate::det_math::max((pitch * 0.25).floor(), 1.0);
             let lol = format!(
                 "subtract({plate}, repeat_finite({cx}, 1, {cz}, {pitch}, 0, {pitch}, cylinder({r}, {cut_h})))"
             );

@@ -18,6 +18,11 @@ def write(root: str, rel: str, text: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
+    # a minimal [workspace] so g.check()'s member discovery has something to
+    # find; writing it unconditionally on every write() call is harmless
+    # (same content each time) and keeps every test self-contained
+    with open(os.path.join(root, "Cargo.toml"), "w", encoding="utf-8") as f:
+        f.write('[workspace]\nmembers = ["alice-lol"]\n')
 
 
 SRC = "alice-lol/src/lib.rs"

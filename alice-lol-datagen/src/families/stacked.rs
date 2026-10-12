@@ -21,7 +21,7 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
     let mut widest = 0.0f32;
     for i in 0..n {
         if spheres {
-            let r = (dim(rng) / 2.0).max(5.0);
+            let r = crate::det_math::max(dim(rng) / 2.0, 5.0);
             if i > 0 {
                 // 前の要素の上面 - 少し埋め込む
                 y = top - r * 0.3;
@@ -43,9 +43,9 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
             ));
             oracle.push(OraclePoint::inside(0.0, y, 0.0));
             top = y + r;
-            widest = widest.max(r);
+            widest = crate::det_math::max(widest, r);
         } else {
-            let r = (dim(rng) / 2.0).max(5.0);
+            let r = crate::det_math::max(dim(rng) / 2.0, 5.0);
             let h = dim(rng);
             if i > 0 {
                 y = top + h / 2.0;
@@ -69,7 +69,7 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
             ));
             oracle.push(OraclePoint::inside(0.0, y, 0.0));
             top = y + h / 2.0;
-            widest = widest.max(r);
+            widest = crate::det_math::max(widest, r);
         }
     }
     oracle.push(OraclePoint::outside(0.0, top + 5.0, 0.0));

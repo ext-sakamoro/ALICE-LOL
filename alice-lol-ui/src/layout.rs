@@ -46,7 +46,10 @@ pub fn flex_row(children: &[Sized], gap: f32, cross_align: CrossAlign) -> Result
     if gap < 0.0 {
         return Err(UiError::LayoutInvalid("flex_row: gap must be >= 0"));
     }
-    let max_h = children.iter().map(|(_, _, h)| *h).fold(0.0_f32, f32::max);
+    let max_h = children
+        .iter()
+        .map(|(_, _, h)| *h)
+        .fold(0.0_f32, crate::det_math::max);
     let mut cursor_x = 0.0_f32;
     let mut nodes: Vec<SdfNode> = Vec::with_capacity(children.len());
     for (node, w, h) in children {
@@ -75,7 +78,10 @@ pub fn flex_col(children: &[Sized], gap: f32, cross_align: CrossAlign) -> Result
     if gap < 0.0 {
         return Err(UiError::LayoutInvalid("flex_col: gap must be >= 0"));
     }
-    let max_w = children.iter().map(|(_, w, _)| *w).fold(0.0_f32, f32::max);
+    let max_w = children
+        .iter()
+        .map(|(_, w, _)| *w)
+        .fold(0.0_f32, crate::det_math::max);
     let mut cursor_y = 0.0_f32;
     let mut nodes: Vec<SdfNode> = Vec::with_capacity(children.len());
     for (node, w, h) in children {
@@ -121,8 +127,14 @@ pub fn grid(children: &[Sized], cols: usize, gap: f32) -> Result<SdfNode, UiErro
     if gap < 0.0 {
         return Err(UiError::LayoutInvalid("grid: gap must be >= 0"));
     }
-    let max_w = children.iter().map(|(_, w, _)| *w).fold(0.0_f32, f32::max);
-    let max_h = children.iter().map(|(_, _, h)| *h).fold(0.0_f32, f32::max);
+    let max_w = children
+        .iter()
+        .map(|(_, w, _)| *w)
+        .fold(0.0_f32, crate::det_math::max);
+    let max_h = children
+        .iter()
+        .map(|(_, _, h)| *h)
+        .fold(0.0_f32, crate::det_math::max);
     let mut nodes: Vec<SdfNode> = Vec::with_capacity(children.len());
     for (i, (node, _, _)) in children.iter().enumerate() {
         let col = i % cols;

@@ -133,7 +133,7 @@ impl UiLaw {
         label: &'static str,
         violations: &mut Vec<UiViolation>,
     ) {
-        let min_side = width.min(height);
+        let min_side = crate::det_math::min(width, height);
         if min_side < self.min_touch_target {
             violations.push(UiViolation {
                 rule: "TouchTargetTooSmall",
@@ -154,7 +154,7 @@ impl UiLaw {
         label: &'static str,
         violations: &mut Vec<UiViolation>,
     ) {
-        let max_r = width.min(height) * 0.5;
+        let max_r = crate::det_math::min(width, height) * 0.5;
         // pill 形 (radius = height/2) は正当なので strict overflow のみ拒否
         if corner_radius > max_r + 1e-3 {
             violations.push(UiViolation {

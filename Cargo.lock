@@ -90,6 +90,7 @@ dependencies = [
 name = "alice-lol-ui"
 version = "0.1.0"
 dependencies = [
+ "alice-det-math 0.5.0",
  "alice-lol",
  "alice-sdf",
  "glam",

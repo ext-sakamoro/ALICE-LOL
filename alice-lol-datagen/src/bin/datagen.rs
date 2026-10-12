@@ -73,11 +73,16 @@ fn main() {
     for (f, e) in &rejected {
         *rej.entry(format!("{f}: {e}")).or_default() += 1;
     }
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "nonzero-const: operand 1e-9 is a nonzero constant, the equal-zero tie cannot occur"
+    )]
+    let rate = samples.len() as f64 / elapsed.as_secs_f64().max(1e-9);
     eprintln!(
         "generated {} samples in {:.2}s ({:.0}/s), rejected {}",
         samples.len(),
         elapsed.as_secs_f64(),
-        samples.len() as f64 / elapsed.as_secs_f64().max(1e-9),
+        rate,
         rejected.len()
     );
     for (f, c) in &per_family {
