@@ -86,7 +86,7 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
         }
         _ => {
             let big = dim(rng) / 2.0 + 5.0;
-            let small = (big / 4.0).max(1.0).floor();
+            let small = crate::det_math::max(big / 4.0, 1.0).floor();
             (
                 format!("torus({big}, {small})"),
                 format!(

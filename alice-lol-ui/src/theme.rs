@@ -94,7 +94,7 @@ pub fn relative_luminance(color: [f32; 3]) -> f32 {
         if c <= 0.039_285 {
             c / 12.92
         } else {
-            ((c + 0.055) / 1.055).powf(2.4)
+            alice_det_math::powf((c + 0.055) / 1.055, 2.4)
         }
     }
     let r = channel(color[0]);

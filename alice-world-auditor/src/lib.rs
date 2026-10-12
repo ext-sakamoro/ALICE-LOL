@@ -65,6 +65,11 @@
 
 pub use alice_world_auditor_types::{Aabb, Goal, Verdict};
 
+// crate-internal, deterministic max64 (clippy-lib gate forbids f64::max directly)
+// only used by audit() below, which is itself behind the physics feature
+#[cfg(feature = "physics")]
+mod det_math;
+
 /// 1-D kinematic state along the goal-relevant axis (position, velocity).
 ///
 /// The MVP action space
@@ -768,9 +773,10 @@ pub fn audit(
     let vel_x = body.velocity.x.to_f32();
     let unit_v = f64::from(params.a_max_axis) * f64::from(params.dt);
     let unit_p = unit_v * f64::from(params.dt);
-    let far = f64::from(target.min.x - pos_x)
-        .abs()
-        .max(f64::from(target.max.x - pos_x).abs());
+    let far = crate::det_math::max64(
+        f64::from(target.min.x - pos_x).abs(),
+        f64::from(target.max.x - pos_x).abs(),
+    );
     let s_mag = f64::from(vel_x).abs() / unit_v;
     let d_mag = far / unit_p;
     if !(s_mag.is_finite() && d_mag.is_finite()) || s_mag > MAX_LATTICE_S || d_mag > MAX_LATTICE_D {

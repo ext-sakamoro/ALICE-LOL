@@ -17,8 +17,8 @@ pub(crate) fn generate(rng: &mut Rng) -> Result<Sample, VerifyError> {
 fn mug(rng: &mut Rng) -> Result<Sample, VerifyError> {
     let r = rng.stepped(20.0, 45.0, 5.0);
     let h = rng.stepped(60.0, 120.0, 10.0);
-    let major = (r * 0.5).floor().max(8.0);
-    let minor = (major / 3.0).floor().max(2.0);
+    let major = crate::det_math::max((r * 0.5).floor(), 8.0);
+    let minor = crate::det_math::max((major / 3.0).floor(), 2.0);
     let lol = format!(
         "union(cylinder({r}, {}), translate({r}, 0, 0, torus({major}, {minor})))",
         h / 2.0
@@ -92,7 +92,10 @@ fn arch(rng: &mut Rng) -> Result<Sample, VerifyError> {
     let h = rng.stepped(30.0, 80.0, 10.0);
     let d = rng.stepped(10.0, 30.0, 5.0);
     // 穴の天井 (2r) が箱の上面 (h) より 8 以上低いことを保証 (oracle 点 (0, h-2, 0) が材料に残る)
-    let r = (w / 4.0).floor().min(((h - 8.0) / 2.0).floor()).max(5.0);
+    let r = crate::det_math::max(
+        crate::det_math::min((w / 4.0).floor(), ((h - 8.0) / 2.0).floor()),
+        5.0,
+    );
     let cy = r; // 円柱中心の高さ = 半径 → 底まで貫通
     let lol = format!(
         "subtract(translate(0, {}, 0, box3d({}, {}, {})), translate(0, {cy}, 0, rotate(90, 0, 0, cylinder({r}, {}))))",

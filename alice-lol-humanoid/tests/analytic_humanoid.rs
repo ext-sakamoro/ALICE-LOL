@@ -14,6 +14,12 @@
 //!
 //! 期待値はすべて式から書いており、実装を呼んで作った値は無い
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "closed-form oracle computing its own independent reference values with platform \
+    libm, not the implementation under test"
+)]
+
 use alice_lol::{Quat, Vec3};
 use alice_lol_humanoid::bvh::BvhFile;
 use alice_lol_humanoid::{HumanoidTemplate, Joint, MorphologyParams};
