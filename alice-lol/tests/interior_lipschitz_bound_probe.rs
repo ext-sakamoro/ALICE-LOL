@@ -48,6 +48,12 @@
 //    結果の bit が変わるので、bit 一致を要求する系では使えない (罠 `mul-add-breaks-bit-exactness`)
 //    本 test は SDF の値を直接比べるので同じ規律を適用する
 #![allow(clippy::cast_precision_loss, clippy::suboptimal_flops)]
+// sample point 生成のみ (Fibonacci 球面標本)、src を 1 行も変えずに測る本 file の方針どおり
+// production の mesh digest 経路ではないので対象外
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test-only sample point generator, not the mesh-digest production path"
+)]
 
 mod common;
 

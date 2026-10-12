@@ -2031,7 +2031,8 @@ fn material_fraction(node: &SdfNode, p: Vec3, r: f32) -> f32 {
         let rho = (1.0 - z * z).max(0.0).sqrt();
         #[allow(clippy::cast_precision_loss)]
         let theta = GOLDEN_ANGLE * i as f32;
-        let dir = Vec3::new(rho * theta.cos(), rho * theta.sin(), z);
+        let (sin_t, cos_t) = alice_det_math::sin_cos(theta);
+        let dir = Vec3::new(rho * cos_t, rho * sin_t, z);
         if sdf_eval(node, p + dir * r) < 0.0 {
             inside += 1;
         }

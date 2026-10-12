@@ -371,7 +371,7 @@ pub fn countersink(size: MetricSize, plate_thickness: f32) -> SdfNode {
     // 形状が変わらない = 下流から見える宣言が実装と繋がっていない状態)
     // 90° では `tan(45°) = 1` なので値は従来と厳密に一致する
     let half_angle = (COUNTERSUNK_TAPER_ANGLE_DEG * 0.5).to_radians();
-    let cone_h = head_dia * 0.5 / half_angle.tan();
+    let cone_h = head_dia * 0.5 / alice_det_math::tan(half_angle);
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
     // cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);

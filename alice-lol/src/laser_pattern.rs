@@ -64,6 +64,10 @@ impl Bounds {
 /// `bounds`: クリッピング矩形
 ///
 /// 矩形内を平行線で埋める。角度は反時計回り。
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 #[must_use]
 pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
     if spacing <= 0.0 {
@@ -131,6 +135,10 @@ pub fn crosshatch(spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
 /// `density_fn`: (x, y) → 0.0..1.0 の密度関数。1.0=最密、0.0=最疎
 #[must_use]
 #[allow(clippy::while_float)] // 線間隔が密度で変わるので整数 index で刻めない
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 pub fn density_hatch(
     min_spacing: f64,
     max_spacing: f64,
@@ -486,6 +494,10 @@ fn dither_ordered(
 /// `steps`: 描画ステップ数（多いほど滑らか）
 /// `bounds`: クリッピング（中心をboundsの中心に配置）
 #[must_use]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 pub fn guilloche(
     big_r: f64,
     small_r: f64,
@@ -525,6 +537,10 @@ pub fn guilloche(
 /// `steps`: 描画ステップ数
 /// `bounds`: 中心配置用
 #[must_use]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 pub fn lissajous(
     freq_a: f64,
     freq_b: f64,
@@ -559,6 +575,10 @@ pub fn lissajous(
 /// `bounds`: 中心配置用
 #[must_use]
 #[allow(clippy::many_single_char_names)] // rhodonea 標準記法 r = a·cos(kθ)
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserElement> {
     if steps == 0 {
         return Vec::new();
@@ -587,6 +607,10 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
 /// `scale`: スケール係数（大きいほど広がる）
 /// `bounds`: 中心配置用
 #[must_use]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+)]
 pub fn phyllotaxis(n: u32, scale: f64, bounds: &Bounds) -> Vec<LaserElement> {
     let (cx, cy) = bounds.center();
     let golden_angle = 137.508_f64.to_radians();

@@ -34,6 +34,12 @@
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss
 )]
+// 本 file 全体が「独立した参照実装としての platform libm」を使う閉形式 oracle (教科書の式を
+// そのまま評価する、実装関数を呼んで期待値を作ってはいない) なので disallowed_methods の対象外
+#![allow(
+    clippy::disallowed_methods,
+    reason = "closed-form oracle computing its own independent reference values with platform libm, not the implementation under test"
+)]
 
 use alice_lol::laser_pattern::{
     crosshatch, density_hatch, dither, guilloche, halftone, hatch, lissajous, phyllotaxis, rose,
