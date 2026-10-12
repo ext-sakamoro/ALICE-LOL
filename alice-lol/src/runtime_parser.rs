@@ -2992,7 +2992,7 @@ impl<'a> Parser<'a> {
                     flange_overhang: 4.0,
                     #[allow(
                         clippy::disallowed_methods,
-                        reason = "operand 4.0 is a nonzero constant, the equal-zero tie cannot occur"
+                        reason = "nonzero-const: operand 4.0 is a nonzero constant, the equal-zero tie cannot occur"
                     )]
                     inner_dia: (od - 10.0).max(4.0),
                 };

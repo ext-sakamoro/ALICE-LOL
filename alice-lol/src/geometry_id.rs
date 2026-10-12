@@ -470,7 +470,10 @@ mod tests {
 
     /// The same Law form but with the platform's `sin_cos` in place of
     /// `alice_det_math` (the routing the identifier has to see).
-    #[allow(clippy::disallowed_methods)] // the platform libm is the alternative under test
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "test-probe-alternative: the platform libm is the alternative under test, not production code"
+    )]
     fn platform_trig(x: f32, y: f32, z: f32) -> glam::Quat {
         let (si, ci) = black_box(x * 0.5).sin_cos();
         let (sj, cj) = black_box((-y) * 0.5).sin_cos();
