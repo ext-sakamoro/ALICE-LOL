@@ -611,7 +611,7 @@ jobs:
         run: python scripts/det_math_minmax_blob_sync.py
       - name: disallowed-methods-allow-reasons oracle (検査器自身の試験)
         run: python scripts/test_disallowed_methods_allow_reasons.py
-      - name: disallowed-methods-allow-reasons (個別 allow の reason が既知の prefix を持つ)
+      - name: disallowed-methods-allow-reasons (個別 allow の reason が既知 prefix + 隠れた libm 呼び出し無し)
         run: python scripts/disallowed_methods_allow_reasons.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check

@@ -114,6 +114,58 @@ class Check(unittest.TestCase):
             self.assertEqual(counts["int-cast:"], 1)
 
 
+class LibmHiddenByAllow(unittest.TestCase):
+    def test_a_libm_call_in_the_same_statement_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "fn f(a: f32, b: f32) -> f32 { a.max(1.0) + b.sin() }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("libm 呼び出し" in e for e in errors))
+
+    def test_a_path_form_libm_call_in_the_same_statement_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "both-abs: x")]\n'
+                "fn f(a: f32, b: f32) -> f32 { a.max(f32::cos(b)) }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("libm 呼び出し" in e for e in errors))
+
+    def test_no_libm_call_passes(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "fn f(a: f32) -> f32 { a.max(1.0) }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertEqual(errors, [])
+
+    def test_a_libm_call_in_a_later_unrelated_statement_does_not_fail(self):
+        # the allow is on the `let` statement itself, not the enclosing fn,
+        # so a later statement in the same body is out of its scope
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                "fn f(a: f32, b: f32) -> f32 {\n"
+                '    #[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "    let r = a.max(1.0);\n"
+                "    r + b.sin()\n"
+                "}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertEqual(errors, [])
+
+    def test_test_probe_alternative_is_exempt_from_this_check(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
+                "fn f(a: f32) -> f32 { a.sin() }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertEqual(errors, [])
+
+
 class RealRepo(unittest.TestCase):
     def test_the_real_repo_passes(self):
         errors, counts = g.check(g.DEFAULT_ROOT)
