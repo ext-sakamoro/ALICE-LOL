@@ -153,6 +153,17 @@ pub fn quat_from_euler_xyz(x: f32, y: f32, z: f32) -> glam::Quat {
     // `scripts/no_outer_fneg_of_fma.py` for the lint that keeps this
     // expression shape (and every other Law-bearing fma) from regressing
     // back to negating a whole fma call.
+    //
+    // This form carries the *sign of the input*: a `y` of exactly `-0.0`
+    // (both `cj * ss` and `sj * cc` rounding to `-0.0` for that input)
+    // produces a `y` component of `-0.0`, debug/release-identically, the
+    // same way `+0.0` produces `+0.0`. The debug/release guarantee is
+    // "the sign of an exact-cancellation output matches the sign the IEEE
+    // arithmetic prescribes for that exact input, on every optimization
+    // level" -- not "every cancellation is forced to `+0.0` regardless of
+    // input sign". The oracle table and the cancellation lattice below only
+    // exercise `+0.0`-signed inputs, so every row they check reads `+0.0`;
+    // that is a property of the inputs chosen, not an unconditional sign.
     glam::Quat::from_xyzw(
         cj.mul_add(sc, -(sj * cs)),
         (-cj).mul_add(ss, -(sj * cc)),
@@ -489,6 +500,23 @@ mod quat_from_euler_xyz_tests {
                 q.y.to_bits()
             );
         }
+    }
+
+    #[test]
+    fn y_component_cancellation_preserves_a_negative_zero_input() {
+        // Same lattice as the `+0.0` test above, but with a `y` of exactly
+        // `-0.0`: this form carries the *sign of the input* through an
+        // exact cancellation, it does not force every cancellation to
+        // `+0.0`. See the `quat_from_euler_xyz` doc comment's "carries the
+        // sign of the input" paragraph for why this is the correct,
+        // intended behavior rather than a defect.
+        let q = quat_from_euler_xyz(0.0, -0.0, 0.0);
+        assert_eq!(
+            q.y.to_bits(),
+            (-0.0f32).to_bits(),
+            "(x=0.0, y=-0.0, z=0.0): y = {:08x}, expected -0.0 (0x80000000)",
+            q.y.to_bits()
+        );
     }
 
     /// Non-finite inputs must not panic and must propagate as NaN on every
