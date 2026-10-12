@@ -529,9 +529,10 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     let cavity_z_offset = spec.floor_thickness * 0.5;
     for slot in &spec.slots {
         let sw = slot.width * scale;
-        let sd = slot
-            .min_depth
-            .min(2.0f32.mul_add(-spec.wall_thickness, spec.depth));
+        let sd = crate::det_math::min(
+            slot.min_depth,
+            2.0f32.mul_add(-spec.wall_thickness, spec.depth),
+        );
         let sd_half = sd * 0.5;
         let sw_half = sw * 0.5 - 0.5; // pipeline drawer.rs の inset 相当
         for i in 0..slot.count {
@@ -6261,7 +6262,15 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
     use crate::stdlib::hardsurface::fastener::{counterbore, screw_hole};
     use crate::stdlib::hardsurface::mount::bracket_l;
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand plate_thickness + 1.0 is always >= 1.0, the equal-zero tie cannot occur"
+    )]
     let arm_width = spec.arm_width.max(spec.plate_thickness + 1.0);
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand plate_thickness + 1.0 is always >= 1.0, the equal-zero tie cannot occur"
+    )]
     let arm_height = spec.arm_height.max(spec.plate_thickness + 1.0);
     let holes = spec.holes_per_arm.clamp(1, 4);
 
@@ -6286,7 +6295,7 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
         .hole_size
         .head_diameter_socket()
         .mul_add(0.5, spec.plate_thickness);
-    let usable_z = 2.0f32.mul_add(-z_margin, spec.depth).max(0.0);
+    let usable_z = crate::det_math::max(2.0f32.mul_add(-z_margin, spec.depth), 0.0);
     let step_z = if holes > 1 {
         usable_z / n_f32(holes - 1)
     } else {
@@ -6383,6 +6392,10 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
     use crate::stdlib::hardsurface::fastener::{counterbore, MetricSize};
     use crate::stdlib::hardsurface::mount::bracket_l;
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand plate_thickness + 5.0 is always >= 5.0, the equal-zero tie cannot occur"
+    )]
     let arm = spec.arm_size.max(spec.plate_thickness + 5.0);
     let bracket = bracket_l(
         arm,
@@ -6943,6 +6956,10 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let plate = box3d(outer_hx, outer_hy, outer_hz);
 
     let screw_nominal = spec.screw_size.nominal_diameter();
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+    )]
     let boss_body_height = (spec.boss_height - spec.base_thickness).max(1.0);
     let boss_template = boss(screw_nominal, boss_body_height);
     let boss_y = outer_hy + boss_body_height * 0.5;
@@ -7134,7 +7151,8 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
     };
     let with_pocket = if spec.style == 2 {
         // Blind pocket with shoulder: bottom は plate 内 (shoulder 残す = plate_t - 1mm 深)
-        let physical_depth = width.min(spec.plate_thickness - 1.0).max(1.0);
+        let physical_depth =
+            crate::det_math::max(crate::det_math::min(width, spec.plate_thickness - 1.0), 1.0);
         subtract_blind_pocket(
             plate,
             pocket_dia,

@@ -114,6 +114,9 @@ pub mod intent;
 // 実プリント検証済みの機械要素 primitive (fastener/joint/reinforcement/mount) を SdfNode helper で提供
 pub mod stdlib;
 
+// ── crate 内専用の決定論的 max / min (clippy-lib gate が f32/f64::max/min 直呼びを禁止) ──
+mod det_math;
+
 // ── Re-export the proc_macro ──
 pub use alice_lol_macro::lol;
 
