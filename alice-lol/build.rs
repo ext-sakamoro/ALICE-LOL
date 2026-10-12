@@ -23,7 +23,7 @@ use std::process::Command;
 fn main() {
     let manifest_dir =
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    let lock_path = manifest_dir.join("..").join("Cargo.lock");
+    let lock_path = find_lock_path(&manifest_dir);
     println!("cargo:rerun-if-changed={}", lock_path.display());
 
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
@@ -88,6 +88,30 @@ fn main() {
     };
 
     println!("cargo:rustc-env=ALICE_DET_MATH_LOCKED_VERSION={resolved}");
+}
+
+/// Walk up from the crate's own manifest directory looking for `Cargo.lock`.
+///
+/// `CARGO_MANIFEST_DIR` is not always exactly one directory below the
+/// lockfile: inside this workspace it is (`alice-lol/Cargo.lock` one level
+/// up), but a downstream consumer's own `Cargo.lock` sits at *their*
+/// workspace root, wherever that is relative to the extracted dependency —
+/// and `scripts/registry_consumer.sh`'s throwaway workspace nests the
+/// packaged crate inside `pkg/alice-lol-<version>/`, two levels below its
+/// own `Cargo.lock`. A fixed `../Cargo.lock` only ever matched the first of
+/// these (and would panic on every real downstream build, which the
+/// registry-consumer CI job caught).
+fn find_lock_path(manifest_dir: &std::path::Path) -> PathBuf {
+    for dir in manifest_dir.ancestors().skip(1) {
+        let candidate = dir.join("Cargo.lock");
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    panic!(
+        "Cargo.lock が見つからない ({} から上の祖先 directory を探索した)",
+        manifest_dir.display()
+    );
 }
 
 struct Package {
