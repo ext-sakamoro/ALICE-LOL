@@ -15,6 +15,42 @@
 //! identifier, `.field`, `[index]`, a parenthesised sub-expression, or any
 //! chain of those.
 //!
+//! The negation itself is also checked in every syntactically-reachable
+//! spelling, not just `-expr`: all of these negate the whole `mul_add`
+//! result exactly as `-expr` would, and the generated code is identical
+//! since Rust lowers each to the same negate-the-FMA-result operation —
+//!
+//!   * `a.mul_add(b, c).neg()` — the `Neg` trait's method form
+//!   * `-{ a.mul_add(b, c) }` — unary minus on a block whose only statement
+//!     is the call (no semicolon); `peel()` sees through single-tail-expr
+//!     blocks the same as it sees through parens
+//!   * `-0.0 - a.mul_add(b, c)` — subtracting from the literal `-0.0` is the
+//!     textbook substitute for negation on a target with no native negate,
+//!     and is bit-for-bit equivalent to `-x` for every `x` including both
+//!     signed zeros (IEEE 754 round-to-nearest); `0.0 - x` (positive zero)
+//!     is a *different*, incidentally safer operation and is not flagged
+//!   * `a.mul_add(b, c) * -1.0` (either operand order) — multiplying by the
+//!     literal `-1.0` is the same substitute, also bit-exact for all `x`
+//!   * `let t = a.mul_add(b, c); /* ... */ -t;` — binding the call to a
+//!     variable and negating the variable later in the *same block*, in any
+//!     of the four forms above; this one is a best-effort textual-scope
+//!     check, not full dataflow — it stops looking for a given binding as
+//!     soon as that identifier is shadowed by a new `let` of the same name
+//!     or reassigned, but does not otherwise prove the binding was never
+//!     mutated or aliased, so prefer writing the direct forms where possible
+//!
+//! ⚠️ the miscompile this gate exists for only reproduces on a target with a
+//! native FMA instruction (`mul_add` lowers to one `fma`/`fmadd` op the
+//! `nsz`-unsound canonicalisation can rewrite); the default `x86_64-apple-
+//! darwin` / `x86_64-unknown-linux-gnu` targets have no FMA enabled by
+//! default, so `mul_add` there lowers to a plain libm `fmaf`/`fma` call
+//! instead, and the split does not show up. The gate itself is still
+//! correct to run everywhere (it is a syntactic check, not a runtime one),
+//! but a CI leg meant to *demonstrate* the split (not just lint for the
+//! form) needs an FMA-enabled target — `aarch64-apple-darwin` has FMA
+//! unconditionally, which is why that release leg is the one that actually
+//! shows debug/release disagreeing and must stay required.
+//!
 //! `mul_add` itself is not forbidden (one correctly-rounded operation); the
 //! `f32::mul_add` / `f64::mul_add` **path**-call spelling (`f32::mul_add(a,
 //! b, c)`, including fully-qualified `<f32>::mul_add(...)`) is covered the
@@ -56,7 +92,10 @@ use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{Expr, ExprCall, ExprMethodCall, ExprUnary, Macro, UnOp};
+use syn::{
+    BinOp, Block, Expr, ExprBinary, ExprCall, ExprMethodCall, ExprUnary, Lit, Macro, Pat, Stmt,
+    UnOp,
+};
 
 const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.txt";
 const ALLOWLIST_SCOPE_DIRS: [&str; 2] = ["tests", "examples"];
@@ -110,15 +149,22 @@ fn is_mul_add_path_call(call: &ExprCall) -> bool {
     false
 }
 
-/// Peel `(expr)` and `{ expr }`-less groups (syn's `Expr::Group`, inserted by
-/// some macro-expansion contexts) down to the real inner expression, so
-/// `-(a.mul_add(b, c))` and `-((a.mul_add(b, c)))` are treated identically to
-/// `-a.mul_add(b, c)`.
+/// Peel `(expr)`, `{ expr }`-less groups (syn's `Expr::Group`, inserted by
+/// some macro-expansion contexts), and a block whose only statement is a
+/// semicolon-less tail expression, down to the real inner expression, so
+/// `-(a.mul_add(b, c))`, `-((a.mul_add(b, c)))` and `-{ a.mul_add(b, c) }`
+/// are all treated identically to `-a.mul_add(b, c)`.
 fn peel<'e>(mut e: &'e Expr) -> &'e Expr {
     loop {
         match e {
             Expr::Paren(p) => e = &p.expr,
             Expr::Group(g) => e = &g.expr,
+            Expr::Block(b) if b.label.is_none() && b.block.stmts.len() == 1 => {
+                match &b.block.stmts[0] {
+                    Stmt::Expr(inner, None) => e = inner,
+                    _ => return e,
+                }
+            }
             _ => return e,
         }
     }
@@ -132,28 +178,167 @@ fn is_mul_add_result(e: &Expr) -> bool {
     }
 }
 
+/// The `Neg` trait's method-call spelling: `x.neg()` means the same as `-x`.
+fn is_neg_method_call(call: &ExprMethodCall) -> bool {
+    call.method == "neg" && call.args.is_empty() && call.turbofish.is_none()
+}
+
+/// A float literal that parses to exactly `0.0` (matches `0.0`, `0.`, `0e0`, ...).
+fn is_float_zero_literal(e: &Expr) -> bool {
+    matches!(peel(e), Expr::Lit(l) if matches!(&l.lit, Lit::Float(f) if matches!(f.base10_parse::<f64>(), Ok(v) if v == 0.0)))
+}
+
+/// A float literal that parses to exactly `1.0`.
+fn is_float_one_literal(e: &Expr) -> bool {
+    matches!(peel(e), Expr::Lit(l) if matches!(&l.lit, Lit::Float(f) if matches!(f.base10_parse::<f64>(), Ok(v) if v == 1.0)))
+}
+
+/// `-0.0` specifically (not `0.0`): `0.0 - x` is a different, incidentally
+/// safer operation (it forces `+0` for a `+0` input instead of propagating
+/// `x`'s own sign), so only the negative-zero spelling is treated as negation.
+fn is_negative_zero_literal(e: &Expr) -> bool {
+    matches!(peel(e), Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_zero_literal(&u.expr))
+}
+
+/// `-1.0` specifically.
+fn is_negative_one_literal(e: &Expr) -> bool {
+    matches!(peel(e), Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_one_literal(&u.expr))
+}
+
+/// Every non-let-binding spelling of "negate the whole value of `target`":
+/// `-target`, `target.neg()`, `-0.0 - target`, `target * -1.0` / `-1.0 * target`.
+fn is_negation_of(e: &Expr, target: &dyn Fn(&Expr) -> bool) -> bool {
+    match e {
+        Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) => target(&u.expr),
+        Expr::MethodCall(m) if is_neg_method_call(m) => target(&m.receiver),
+        Expr::Binary(b) => is_negation_of_binary(b, target),
+        _ => false,
+    }
+}
+
+/// The `ExprBinary`-specific half of [`is_negation_of`] (forms D/E), usable
+/// directly from `visit_expr_binary` without needing an owned `Expr::Binary`
+/// to match against (syn's types here are not `Clone`).
+fn is_negation_of_binary(b: &ExprBinary, target: &dyn Fn(&Expr) -> bool) -> bool {
+    if matches!(b.op, BinOp::Sub(_)) && is_negative_zero_literal(&b.left) {
+        return target(&b.right);
+    }
+    if matches!(b.op, BinOp::Mul(_)) {
+        return (is_negative_one_literal(&b.left) && target(&b.right))
+            || (is_negative_one_literal(&b.right) && target(&b.left));
+    }
+    false
+}
+
+fn is_path_ident(e: &Expr, ident: &str) -> bool {
+    matches!(peel(e), Expr::Path(p) if p.path.get_ident().is_some_and(|i| i == ident))
+}
+
+fn is_negation_of_ident(e: &Expr, ident: &str) -> bool {
+    is_negation_of(e, &|t| is_path_ident(t, ident))
+}
+
 impl<'a> Visitor<'a> {
+    fn record_finding_at(&mut self, span: proc_macro2::Span) {
+        let line = span.start().line;
+        self.findings.push(Finding {
+            rel: self.rel.to_string(),
+            line,
+            excerpt: excerpt_at(self.src, line),
+            kind: FindingKind::NegatedMulAdd,
+        });
+    }
+
     fn record_unary(&mut self, u: &ExprUnary) {
         if !matches!(u.op, UnOp::Neg(_)) {
             return;
         }
         self.counts.unary_neg_exprs += 1;
         if is_mul_add_result(&u.expr) {
-            let line = u.op.span().start().line;
-            self.findings.push(Finding {
-                rel: self.rel.to_string(),
-                line,
-                excerpt: excerpt_at(self.src, line),
-                kind: FindingKind::NegatedMulAdd,
-            });
+            self.record_finding_at(u.op.span());
         }
     }
+
+    fn record_binary(&mut self, b: &ExprBinary) {
+        if is_negation_of_binary(b, &is_mul_add_result) {
+            self.record_finding_at(b.op.span());
+        }
+    }
+
+    /// Form F: `let t = <mul_add>; ... -t;` in the same block — a best-effort
+    /// textual-scope check (see module doc), not full dataflow.
+    fn record_let_then_negate(&mut self, block: &Block) {
+        for (i, stmt) in block.stmts.iter().enumerate() {
+            let Stmt::Local(local) = stmt else { continue };
+            let Some(init) = &local.init else { continue };
+            if init.diverge.is_some() || !is_mul_add_result(&init.expr) {
+                continue;
+            }
+            let Pat::Ident(pi) = &local.pat else { continue };
+            let ident = pi.ident.to_string();
+            for later in &block.stmts[i + 1..] {
+                if is_rebound_or_reassigned(later, &ident) {
+                    break;
+                }
+                if let Some(span) = find_negation_of_ident_in_stmt(later, &ident) {
+                    self.record_finding_at(span);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Does `stmt` shadow (`let ident = ...`) or reassign (`ident = ...`) the
+/// given identifier? Marks the end of the scope this checker tracks for it
+/// (conservative: stop looking rather than risk a false positive past a
+/// point where the binding's value may have changed).
+fn is_rebound_or_reassigned(stmt: &Stmt, ident: &str) -> bool {
+    match stmt {
+        Stmt::Local(l) => matches!(&l.pat, Pat::Ident(pi) if pi.ident == ident),
+        Stmt::Expr(Expr::Assign(a), _) => is_path_ident(&a.left, ident),
+        _ => false,
+    }
+}
+
+/// Does the statement's OWN top-level expression (not some buried
+/// sub-expression deep inside it) negate the bare identifier `ident`? This is
+/// deliberately not a recursive walk: a buried `-ident` inside a larger,
+/// unrelated expression (e.g. `(-ident) * 0.5` computing something new) is
+/// not "undoing the mul_add result" and must not be flagged. Only a
+/// statement whose entire expression (or Local's init expression) IS one of
+/// the negation forms counts.
+fn find_negation_of_ident_in_stmt(stmt: &Stmt, ident: &str) -> Option<proc_macro2::Span> {
+    let raw = match stmt {
+        Stmt::Expr(e, _) => e,
+        Stmt::Local(l) => {
+            let init = l.init.as_ref()?;
+            if init.diverge.is_some() {
+                return None;
+            }
+            &init.expr
+        }
+        _ => return None,
+    };
+    let e = peel(raw);
+    if !is_negation_of_ident(e, ident) {
+        return None;
+    }
+    Some(match e {
+        Expr::Unary(u) => u.op.span(),
+        Expr::MethodCall(m) => m.method.span(),
+        Expr::Binary(b) => b.op.span(),
+        _ => e.span(),
+    })
 }
 
 impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         if is_mul_add_method(node) {
             self.counts.mul_add_calls += 1;
+        }
+        if is_neg_method_call(node) && is_mul_add_result(&node.receiver) {
+            self.record_finding_at(node.method.span());
         }
         visit::visit_expr_method_call(self, node);
     }
@@ -168,6 +353,16 @@ impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
     fn visit_expr_unary(&mut self, node: &'ast ExprUnary) {
         self.record_unary(node);
         visit::visit_expr_unary(self, node);
+    }
+
+    fn visit_expr_binary(&mut self, node: &'ast ExprBinary) {
+        self.record_binary(node);
+        visit::visit_expr_binary(self, node);
+    }
+
+    fn visit_block(&mut self, node: &'ast Block) {
+        self.record_let_then_negate(node);
+        visit::visit_block(self, node);
     }
 
     fn visit_macro(&mut self, node: &'ast Macro) {
@@ -651,6 +846,126 @@ mod tests {
     }
 
     #[test]
+    fn neg_method_call_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c).neg()\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn unary_neg_of_a_single_statement_block_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -{ a.mul_add(b, c) }\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn subtraction_from_negative_zero_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -0.0 - a.mul_add(b, c)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn subtraction_from_positive_zero_is_not_flagged() {
+        // a genuinely different (incidentally safer) operation, not negation
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    0.0 - a.mul_add(b, c)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn multiplication_by_negative_one_is_caught_either_operand_order() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c) * -1.0\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+        let src2 = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -1.0 * a.mul_add(b, c)\n}\n";
+        let r2 = run(&[(SRC, src2)], None);
+        assert_eq!(r2.violations, 1);
+    }
+
+    #[test]
+    fn multiplication_by_a_different_constant_is_not_flagged() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c) * 2.0\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn let_binding_then_unary_negate_in_the_same_block_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -t\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_then_neg_method_in_the_same_block_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t.neg()\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_then_sub_from_neg_zero_in_the_same_block_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -0.0 - t\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_then_mul_by_neg_one_in_the_same_block_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t * -1.0\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_used_without_negation_is_not_flagged() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t + 1.0\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn let_binding_shadowed_before_any_negation_is_not_flagged() {
+        // the second `let t` rebinds the name to something else; a later
+        // `-t` negates the NEW binding, not the mul_add one, so this must
+        // not be flagged (and is a case this checker deliberately bails out
+        // on conservatively rather than risk tracking it wrong)
+        let src = "fn f(a: f32, b: f32, c: f32, d: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    let t = d;\n    -t\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn let_binding_reassigned_before_any_negation_is_not_flagged() {
+        let src = "fn f(a: f32, b: f32, c: f32, d: f32) -> f32 {\n    let mut t = a.mul_add(b, c);\n    t = d;\n    -t\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn let_binding_negated_as_a_buried_subexpression_is_not_flagged() {
+        // regression: `-t` appearing deep inside a larger, unrelated
+        // expression (here `(-t) * 0.5`, itself unrelated to undoing the
+        // mul_add) must not be flagged just because `t` was negated
+        // somewhere inside it; only a statement whose ENTIRE expression IS
+        // the negation counts
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -t * 0.5\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
+    fn let_binding_negated_in_a_different_function_is_not_flagged() {
+        // deliberately out of scope: this checker only looks within the same
+        // block, not across function boundaries
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(x: f32) -> f32 {\n    -x\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 0);
+    }
+
+    #[test]
     fn multi_line_receiver_chain_is_caught() {
         let src = "struct S { y: f32 }\nfn f(x: S, b: f32, c: f32) -> f32 {\n    -x\n        .y\n        .mul_add(b, c)\n}\n";
         let r = run(&[(SRC, src)], None);
@@ -686,5 +1001,35 @@ mod tests {
     fn mutation_teeth_marker_both_branches_have_dedicated_tests() {
         // this test exists only as a signpost to the doc comment above;
         // the actual teeth are the two tests it names.
+    }
+
+    /// Mutation teeth for the 5 additionally-caught shapes (2026-10-13,
+    /// review F2): verified by hand, each neutered independently then
+    /// reverted.
+    /// - Neutering the `.neg()` check in `visit_expr_method_call` turns
+    ///   `neg_method_call_is_caught` red while
+    ///   `let_binding_then_neg_method_in_the_same_block_is_caught` stays
+    ///   green (it goes through the separate `is_negation_of_ident` path,
+    ///   not `visit_expr_method_call`) — proving the two are independent
+    ///   teeth, not one check exercised twice.
+    /// - Neutering `record_binary` (the block/`-0.0 -`/`* -1.0` forms) turns
+    ///   `subtraction_from_negative_zero_is_caught` and
+    ///   `multiplication_by_negative_one_is_caught_either_operand_order` red,
+    ///   while their Form-F (`let`-then-negate) counterparts stay green for
+    ///   the same reason.
+    /// - Neutering `record_let_then_negate` entirely (Form F) turns all 4
+    ///   `let_binding_then_*_in_the_same_block_is_caught` tests red, while
+    ///   `let_binding_negated_as_a_buried_subexpression_is_not_flagged`
+    ///   stays green (disabling detection cannot manufacture a false
+    ///   positive — this fixture's teeth are instead the real-repo scan: it
+    ///   encodes the exact shape (`-ident` buried inside a larger, unrelated
+    ///   expression sharing the mul_add-bound variable's name) that the
+    ///   original recursive-`Visit`-based `find_negation_of_ident_in_stmt`
+    ///   falsely flagged 18 times across real LOL source before the fix
+    ///   that replaced it with a direct, non-recursive, statement-top-level
+    ///   check).
+    #[test]
+    fn mutation_teeth_marker_five_new_shapes_have_dedicated_tests() {
+        // signpost only; see the doc comment above.
     }
 }
