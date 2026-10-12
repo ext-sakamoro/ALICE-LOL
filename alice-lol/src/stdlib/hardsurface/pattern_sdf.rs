@@ -6262,16 +6262,8 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
     use crate::stdlib::hardsurface::fastener::{counterbore, screw_hole};
     use crate::stdlib::hardsurface::mount::bracket_l;
 
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "nonzero-const: operand plate_thickness + 1.0 is always >= 1.0"
-    )]
-    let arm_width = spec.arm_width.max(spec.plate_thickness + 1.0);
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "nonzero-const: operand plate_thickness + 1.0 is always >= 1.0"
-    )]
-    let arm_height = spec.arm_height.max(spec.plate_thickness + 1.0);
+    let arm_width = crate::det_math::max(spec.arm_width, spec.plate_thickness + 1.0);
+    let arm_height = crate::det_math::max(spec.arm_height, spec.plate_thickness + 1.0);
     let holes = spec.holes_per_arm.clamp(1, 4);
 
     let bracket = bracket_l(
@@ -6392,11 +6384,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
     use crate::stdlib::hardsurface::fastener::{counterbore, MetricSize};
     use crate::stdlib::hardsurface::mount::bracket_l;
 
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "nonzero-const: operand plate_thickness + 5.0 is always >= 5.0"
-    )]
-    let arm = spec.arm_size.max(spec.plate_thickness + 5.0);
+    let arm = crate::det_math::max(spec.arm_size, spec.plate_thickness + 5.0);
     let bracket = bracket_l(
         arm,
         arm,

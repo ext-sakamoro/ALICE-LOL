@@ -2,11 +2,13 @@
 """Every `#[allow(clippy::disallowed_methods, reason = "...")]` names its pattern.
 
 A per-site exemption from the `disallowed_methods` lint (libm direct calls, or
-the `f32`/`f64` `max`/`min` equal-zero tie, see `alice-lol/clippy.toml` and
-`.github/clippy-lib/clippy.toml`) is only as good as the proof behind it, and
-free-text `reason` strings cannot be checked by a machine. This script
-requires every reason to start with one of a fixed set of prefixes, each
-naming the specific pattern that makes the exemption safe:
+the `f32`/`f64` `max`/`min` equal-zero tie, see `clippy.toml` at the
+repository root and `.github/clippy-lib/clippy.toml`) is only as good as the
+proof behind it, and free-text `reason` strings cannot be checked by a
+machine. This script scans every workspace member's `src/` (discovered from
+the root `Cargo.toml`, not hand-maintained — a new member is covered the
+moment it joins) and requires every reason to start with one of a fixed set
+of prefixes, each naming the specific pattern that makes the exemption safe:
 
   * `nonzero-const:` — the other operand is a literal or an expression that is
     provably never zero, so the equal-zero tie cannot occur
@@ -61,9 +63,29 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
-SRC_DIR = os.path.join("alice-lol", "src")
 
 PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:"]
+
+MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
+MEMBER_NAME_RE = re.compile(r'"([^"]+)"')
+
+
+def workspace_members(root: str) -> list[str]:
+    """Every `[workspace] members` entry in the root `Cargo.toml` (the gate
+    covers the whole workspace, not just alice-lol — see F1 in the LOL r2
+    review: other members had no clippy.toml at all, so this list is
+    discovered, not hand-maintained, so a new member is covered the moment
+    it joins the workspace)."""
+    path = os.path.join(root, "Cargo.toml")
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return []
+    m = MEMBERS_RE.search(text)
+    if not m:
+        return []
+    return MEMBER_NAME_RE.findall(m.group("body"))
 
 # matches `#[allow(...)]` / `#![allow(...)]` spanning possibly several lines
 # (rustfmt wraps long attribute lists), capturing everything between the
@@ -122,49 +144,56 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
     counts = {p: 0 for p in PREFIXES}
     files = 0
     sites = 0
-    base = os.path.join(root, SRC_DIR)
-    if not os.path.isdir(base):
-        return [f"error: {SRC_DIR}: 読めなかった"], counts
+    members = workspace_members(root)
+    if not members:
+        return ["error: Cargo.toml: [workspace] members を読めなかった"], counts
+    src_dirs = [os.path.join(root, member, "src") for member in members]
+    missing = [d for d in src_dirs if not os.path.isdir(d)]
+    if missing:
+        rels = ", ".join(os.path.relpath(d, root) for d in missing)
+        return [f"error: {rels}: 読めなかった"], counts
 
-    for path in iter_rs_files(base):
-        rel = os.path.relpath(path, root).replace("\\", "/")
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        files += 1
-        for m in ALLOW_RE.finditer(text):
-            body = m.group("body")
-            if "disallowed_methods" not in body:
-                continue
-            rm = REASON_RE.search(body)
-            line = text.count("\n", 0, m.start()) + 1
-            if rm is None:
-                errors.append(f"error: {rel}:{line}: disallowed_methods の allow に reason が無い")
-                continue
-            sites += 1
-            text_reason = rm.group("text")
-            matched = [p for p in PREFIXES if text_reason.startswith(p)]
-            if not matched:
-                errors.append(
-                    f"error: {rel}:{line}: reason が既知の prefix で始まっていない "
-                    f"({', '.join(PREFIXES)} のどれか) — 内容: {text_reason[:60]!r}"
-                )
-                continue
-            prefix = matched[0]
-            counts[prefix] += 1
-            if prefix != "test-probe-alternative:":
-                stmt = statement_after(text, m.end())
-                lm = LIBM_CALL_RE.search(stmt)
-                if lm:
+    for base in src_dirs:
+        for path in iter_rs_files(base):
+            rel = os.path.relpath(path, root).replace("\\", "/")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            files += 1
+            for m in ALLOW_RE.finditer(text):
+                body = m.group("body")
+                if "disallowed_methods" not in body:
+                    continue
+                rm = REASON_RE.search(body)
+                line = text.count("\n", 0, m.start()) + 1
+                if rm is None:
+                    errors.append(f"error: {rel}:{line}: disallowed_methods の allow に reason が無い")
+                    continue
+                sites += 1
+                text_reason = rm.group("text")
+                matched = [p for p in PREFIXES if text_reason.startswith(p)]
+                if not matched:
                     errors.append(
-                        f"error: {rel}:{line}: {prefix} の allow が隠す statement に libm 呼び出し "
-                        f"({lm.group(0)!r}) が含まれる — この statement は libm 禁止の対象外にならない、"
-                        "libm 呼び出しを allow の外 (別 statement) に出す"
+                        f"error: {rel}:{line}: reason が既知の prefix で始まっていない "
+                        f"({', '.join(PREFIXES)} のどれか) — 内容: {text_reason[:60]!r}"
                     )
+                    continue
+                prefix = matched[0]
+                counts[prefix] += 1
+                if prefix != "test-probe-alternative:":
+                    stmt = statement_after(text, m.end())
+                    lm = LIBM_CALL_RE.search(stmt)
+                    if lm:
+                        errors.append(
+                            f"error: {rel}:{line}: {prefix} の allow が隠す statement に libm 呼び出し "
+                            f"({lm.group(0)!r}) が含まれる — この statement は libm 禁止の対象外にならない、"
+                            "libm 呼び出しを allow の外 (別 statement) に出す"
+                        )
 
+    scanned = ", ".join(os.path.relpath(d, root) for d in src_dirs)
     if files == 0:
-        errors.append(f"error: {SRC_DIR}: file を 1 つも読めなかった — 検査が空振りしている")
+        errors.append(f"error: {scanned}: file を 1 つも読めなかった — 検査が空振りしている")
     elif sites == 0 and not errors:
-        errors.append(f"error: {SRC_DIR}: disallowed_methods の allow が 1 件も見つからなかった — 検査が空振りしている")
+        errors.append(f"error: {scanned}: disallowed_methods の allow が 1 件も見つからなかった — 検査が空振りしている")
     return errors, counts
 
 

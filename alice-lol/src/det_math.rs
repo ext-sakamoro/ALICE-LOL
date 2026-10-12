@@ -20,7 +20,12 @@
 /// 0.0)` and `max(0.0, -0.0)` are `+0.0`
 #[inline]
 #[must_use]
-pub fn max(a: f32, b: f32) -> f32 {
+#[allow(
+    clippy::redundant_pub_crate,
+    reason = "pub(crate) is intentional defense-in-depth, not an oversight: mod det_math is \
+    private today, but pub(crate) keeps these crate-only even if that ever changes, unlike pub"
+)]
+pub(crate) fn max(a: f32, b: f32) -> f32 {
     if a.is_nan() || b > a {
         b
     } else if b.is_nan() || a > b || !a.is_sign_negative() {
@@ -34,7 +39,8 @@ pub fn max(a: f32, b: f32) -> f32 {
 /// 0.0)` and `min(0.0, -0.0)` are `-0.0`
 #[inline]
 #[must_use]
-pub fn min(a: f32, b: f32) -> f32 {
+#[allow(clippy::redundant_pub_crate, reason = "see max() above")]
+pub(crate) fn min(a: f32, b: f32) -> f32 {
     if a.is_nan() || b < a {
         b
     } else if b.is_nan() || a < b || a.is_sign_negative() {
@@ -47,7 +53,8 @@ pub fn min(a: f32, b: f32) -> f32 {
 /// [`max`] for `f64`
 #[inline]
 #[must_use]
-pub fn max64(a: f64, b: f64) -> f64 {
+#[allow(clippy::redundant_pub_crate, reason = "see max() above")]
+pub(crate) fn max64(a: f64, b: f64) -> f64 {
     if a.is_nan() || b > a {
         b
     } else if b.is_nan() || a > b || !a.is_sign_negative() {
@@ -60,10 +67,8 @@ pub fn max64(a: f64, b: f64) -> f64 {
 /// [`min`] for `f64`
 #[inline]
 #[must_use]
-// ALLOW-UNWIRED: kept for symmetry with the blob-synced physics copy, no f64 min site yet
-// ALLOW-DEAD: kept for symmetry with the blob-synced physics copy, no f64 min site yet
-#[allow(dead_code, reason = "symmetry with the blob-synced physics copy")]
-pub fn min64(a: f64, b: f64) -> f64 {
+#[allow(clippy::redundant_pub_crate, reason = "see max() above")]
+pub(crate) fn min64(a: f64, b: f64) -> f64 {
     if a.is_nan() || b < a {
         b
     } else if b.is_nan() || a < b || a.is_sign_negative() {

@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
-"""`alice-lol/src/det_math.rs`'s max/min/max64/min64 bodies match the pinned reference.
+"""Every crate-internal `det_math.rs`'s max/min bodies match the pinned reference.
 
-`alice-lol` and `alice-physics` each keep their own crate-internal
-`max`/`min`/`max64`/`min64` (the std functions leave an equal pair of zeros
-unspecified and the targets disagree, see the module doc of
-`alice-lol/src/det_math.rs`) — independent implementations of the same IEEE
-754-2019 rule, not a shared dependency, so nothing stops one repo's copy from
-drifting from the other's silently. This script pins the function bodies as
-of the port (`alice-physics` commit `98f104a6`) and fails if LOL's copy
-differs from that frozen text, forcing a deliberate re-sync (update both the
-pin below and LOL's file in the same commit) instead of a silent edit.
+`alice-physics` and, following it, each LOL-workspace member that needs a
+`max`/`min`/`max64`/`min64` of its own (the std functions leave an equal pair
+of zeros unspecified and the targets disagree — see the module doc of
+`alice-lol/src/det_math.rs`) keep a crate-internal copy: not a shared
+dependency, so nothing stops one copy from drifting from the others
+silently. This script pins the function bodies as of the port
+(`alice-physics` commit `98f104a6`) and fails if any copy differs from that
+frozen text, forcing a deliberate re-sync (update both the pin below and the
+file in the same commit) instead of a silent edit.
+
+Each target lists only the functions it actually needs (`alice-lol` has all
+four; `alice-lol-ui` / `alice-lol-datagen` only call `max`/`min` on `f32`
+today; `alice-world-auditor` only calls `max64` on `f64`) — a target is not
+required to carry a function it has no site for, but every function it does
+carry must match the pin byte-for-byte, and a target file that cannot be
+read, or that has none of its expected functions, is a hard failure so the
+check is never silently skipped.
 
 This cannot fetch `alice-physics`'s live file at CI time (no cross-repo
 network access in CI) — re-pinning is a manual step when either side's rule
-changes; what this guards against is LOL's own file quietly diverging from
-what was last verified to match.
+changes; what this guards against is one of LOL's own files quietly
+diverging from what was last verified to match.
 
 Usage: `python3 scripts/det_math_minmax_blob_sync.py` (exit 1 on any mismatch)
 `--root DIR` to check a different tree (used by the test)
@@ -28,7 +36,14 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
-TARGET_REL = os.path.join("alice-lol", "src", "det_math.rs")
+
+# crate -> which of max/min/max64/min64 it is expected to carry
+TARGETS = {
+    os.path.join("alice-lol", "src", "det_math.rs"): ["max", "min", "max64", "min64"],
+    os.path.join("alice-lol-ui", "src", "det_math.rs"): ["max", "min"],
+    os.path.join("alice-lol-datagen", "src", "det_math.rs"): ["max", "min"],
+    os.path.join("alice-world-auditor", "src", "det_math.rs"): ["max64"],
+}
 
 FUNCS = ["max", "min", "max64", "min64"]
 
@@ -99,40 +114,47 @@ def extract_fn(text: str, name: str) -> str | None:
     return text[start:p]
 
 
-def check(root: str) -> list[str]:
-    path = os.path.join(root, TARGET_REL)
+def check(root: str) -> tuple[list[str], int]:
+    """Errors, and the total number of functions compared across all targets."""
     errors: list[str] = []
-    try:
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return [f"error: {TARGET_REL}: 読めなかった"]
-
-    found = 0
-    for name in FUNCS:
-        actual = extract_fn(text, name)
-        if actual is None:
-            errors.append(f"error: {TARGET_REL}: fn {name} が見つからない")
+    compared = 0
+    for target_rel, expected in TARGETS.items():
+        path = os.path.join(root, target_rel)
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            errors.append(f"error: {target_rel}: 読めなかった")
             continue
-        found += 1
-        if actual != PINNED[name]:
+
+        found = 0
+        for name in expected:
+            actual = extract_fn(text, name)
+            if actual is None:
+                errors.append(f"error: {target_rel}: fn {name} が見つからない")
+                continue
+            found += 1
+            compared += 1
+            if actual != PINNED[name]:
+                errors.append(
+                    f"error: {target_rel}: fn {name} が pin と一致しない "
+                    "(alice-physics の実体を確認し、意図的な差分なら pin も同じ commit で更新する)"
+                )
+        if found == 0:
             errors.append(
-                f"error: {TARGET_REL}: fn {name} が pin と一致しない "
-                "(alice-physics の実体を確認し、意図的な差分なら pin も同じ commit で更新する)"
+                f"error: {target_rel}: 期待する {len(expected)} 関数のうち 1 つも見つからなかった — 検査が空振りしている"
             )
-    if found == 0:
-        errors.append(f"error: {TARGET_REL}: {len(FUNCS)} 関数のうち 1 つも見つからなかった — 検査が空振りしている")
-    return errors
+    return errors, compared
 
 
 def main(argv: list[str]) -> int:
     root = DEFAULT_ROOT
     if "--root" in argv:
         root = argv[argv.index("--root") + 1]
-    errors = check(root)
+    errors, compared = check(root)
     for e in errors:
         print(e, file=sys.stderr)
-    print(f"compared: functions {len(FUNCS)}, mismatches {len(errors)}")
+    print(f"compared: targets {len(TARGETS)}, functions {compared}, mismatches {len(errors)}")
     if errors:
         return 1
     print("det-math-minmax-blob-sync: ok")

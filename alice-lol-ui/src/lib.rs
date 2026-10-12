@@ -42,6 +42,9 @@ pub mod layout;
 pub mod primitives;
 pub mod theme;
 
+// crate-internal, deterministic max/min (clippy-lib gate forbids f32::max/min directly)
+mod det_math;
+
 pub use error::{UiError, UiViolation};
 pub use law::UiLaw;
 pub use primitives::{Badge, Button, Card, Chip, Divider, Icon, InputField, Panel};
