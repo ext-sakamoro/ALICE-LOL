@@ -183,7 +183,11 @@ def scan(root: str, src_dirs: tuple[str, ...]) -> tuple[list[str], int, int]:
                 if not name.endswith(".rs"):
                     continue
                 path = os.path.join(dirpath, name)
-                rel = os.path.relpath(path, root)
+                # os.path.relpath uses the platform separator (backslash on Windows);
+                # every consumer of `rel` (error messages, allowlist matching, the
+                # test suite's expected strings) is written against the POSIX form,
+                # so normalise once here rather than patch each consumer separately
+                rel = os.path.relpath(path, root).replace(os.sep, "/")
                 files += 1
                 violations, mul_add_calls = scan_file(path, rel)
                 calls += mul_add_calls
