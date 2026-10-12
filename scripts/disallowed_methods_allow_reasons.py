@@ -15,10 +15,6 @@ naming the specific pattern that makes the exemption safe:
     it is always `+0` or positive, never `-0`
   * `int-cast:`        — the result is cast to an integer type immediately
     after, which erases the sign before anything observes it
-  * `svg-pipeline-exempt:` — the call is in the SVG-only pipeline
-    (`laser_pattern.rs`), which the mesh digest oracle does not cover (an
-    established exemption that predates the max/min gate, carried over so
-    every `disallowed_methods` allow in the crate uses the same scheme)
   * `test-probe-alternative:` — a `#[cfg(test)]` function that deliberately
     calls the forbidden form as the comparison baseline for an oracle (e.g.
     `geometry_id.rs`'s `platform_trig`, which exists to show the routed and
@@ -29,6 +25,15 @@ pattern cannot be named this way is not actually proven safe — fix the call
 site or widen the pattern list deliberately, in the same commit, not by
 leaving the reason unprefixed). So does a file with `#[allow(dead_code)]`'s
 unrelated reason being miscounted here, or zero sites found at all.
+
+No `svg-pipeline-exempt:`-style blanket "this output isn't covered by an
+oracle so the platform difference doesn't matter" prefix exists here on
+purpose: `laser_pattern.rs`'s libm calls were exempted that way once (the SVG
+output is itself a Law-governed artifact — laser-cut instructions a platform
+difference would silently change) and are routed through `alice_det_math`
+instead as of the fix that retired it. A call that genuinely cannot be
+routed is not exempted here at all; it goes on the 基準's explicit
+out-of-scope list with a reason and a plan.
 
 Usage: `python3 scripts/disallowed_methods_allow_reasons.py`
 `--root DIR` to check a different tree (used by the test)
@@ -44,7 +49,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 SRC_DIR = os.path.join("alice-lol", "src")
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "svg-pipeline-exempt:", "test-probe-alternative:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:"]
 
 # matches `#[allow(...)]` / `#![allow(...)]` spanning possibly several lines
 # (rustfmt wraps long attribute lists), capturing everything between the

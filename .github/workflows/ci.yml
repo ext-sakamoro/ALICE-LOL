@@ -228,6 +228,7 @@ jobs:
           run --lib y_component_cancellation_preserves_a_negative_zero_input
           run --test geometry_id_oracle
           run --test stdlib_profile_determinism_oracle
+          run --test laser_pattern_digest_golden
 
   clippy:
     name: Clippy

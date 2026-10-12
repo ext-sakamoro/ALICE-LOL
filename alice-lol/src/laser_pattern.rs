@@ -64,10 +64,6 @@ impl Bounds {
 /// `bounds`: クリッピング矩形
 ///
 /// 矩形内を平行線で埋める。角度は反時計回り。
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 #[must_use]
 pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
     if spacing <= 0.0 {
@@ -75,8 +71,8 @@ pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement>
     }
 
     let angle = angle_deg.to_radians();
-    let cos_a = angle.cos();
-    let sin_a = angle.sin();
+    let cos_a = alice_det_math::cos64(angle);
+    let sin_a = alice_det_math::sin64(angle);
 
     // 矩形の4頂点
     let corners = [
@@ -91,11 +87,14 @@ pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement>
         .iter()
         .map(|&(cx, cy)| (-sin_a).mul_add(cx, cos_a * cy))
         .collect();
-    let proj_min = projections.iter().copied().fold(f64::INFINITY, f64::min);
+    let proj_min = projections
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, crate::det_math::min64);
     let proj_max = projections
         .iter()
         .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
+        .fold(f64::NEG_INFINITY, crate::det_math::max64);
 
     let mut elements = Vec::new();
     let d0 = (proj_min / spacing).ceil() * spacing;
@@ -135,10 +134,6 @@ pub fn crosshatch(spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
 /// `density_fn`: (x, y) → 0.0..1.0 の密度関数。1.0=最密、0.0=最疎
 #[must_use]
 #[allow(clippy::while_float)] // 線間隔が密度で変わるので整数 index で刻めない
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 pub fn density_hatch(
     min_spacing: f64,
     max_spacing: f64,
@@ -151,8 +146,8 @@ pub fn density_hatch(
     }
 
     let angle = angle_deg.to_radians();
-    let cos_a = angle.cos();
-    let sin_a = angle.sin();
+    let cos_a = alice_det_math::cos64(angle);
+    let sin_a = alice_det_math::sin64(angle);
 
     let corners = [
         (bounds.x, bounds.y),
@@ -164,11 +159,14 @@ pub fn density_hatch(
         .iter()
         .map(|&(cx, cy)| (-sin_a).mul_add(cx, cos_a * cy))
         .collect();
-    let proj_min = projections.iter().copied().fold(f64::INFINITY, f64::min);
+    let proj_min = projections
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, crate::det_math::min64);
     let proj_max = projections
         .iter()
         .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
+        .fold(f64::NEG_INFINITY, crate::det_math::max64);
 
     let mut elements = Vec::new();
     let mut d = proj_min;
@@ -494,10 +492,6 @@ fn dither_ordered(
 /// `steps`: 描画ステップ数（多いほど滑らか）
 /// `bounds`: クリッピング（中心をboundsの中心に配置）
 #[must_use]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 pub fn guilloche(
     big_r: f64,
     small_r: f64,
@@ -520,8 +514,14 @@ pub fn guilloche(
         let t = f64::from(i) * dt;
         let diff = big_r - small_r;
         let ratio = diff / small_r;
-        let x = pen_d.mul_add((ratio * t).cos(), diff.mul_add(t.cos(), cx));
-        let y = pen_d.mul_add(-(ratio * t).sin(), diff.mul_add(t.sin(), cy));
+        let x = pen_d.mul_add(
+            alice_det_math::cos64(ratio * t),
+            diff.mul_add(alice_det_math::cos64(t), cx),
+        );
+        let y = pen_d.mul_add(
+            -alice_det_math::sin64(ratio * t),
+            diff.mul_add(alice_det_math::sin64(t), cy),
+        );
         points.push((x, y));
     }
 
@@ -537,10 +537,6 @@ pub fn guilloche(
 /// `steps`: 描画ステップ数
 /// `bounds`: 中心配置用
 #[must_use]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 pub fn lissajous(
     freq_a: f64,
     freq_b: f64,
@@ -559,8 +555,8 @@ pub fn lissajous(
     let mut points = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
         let t = f64::from(i) * dt;
-        let x = amplitude.mul_add(freq_a.mul_add(t, delta).sin(), cx);
-        let y = amplitude.mul_add((freq_b * t).sin(), cy);
+        let x = amplitude.mul_add(alice_det_math::sin64(freq_a.mul_add(t, delta)), cx);
+        let y = amplitude.mul_add(alice_det_math::sin64(freq_b * t), cy);
         points.push((x, y));
     }
 
@@ -575,10 +571,6 @@ pub fn lissajous(
 /// `bounds`: 中心配置用
 #[must_use]
 #[allow(clippy::many_single_char_names)] // rhodonea 標準記法 r = a·cos(kθ)
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserElement> {
     if steps == 0 {
         return Vec::new();
@@ -592,9 +584,9 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
     let mut points = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
         let t = f64::from(i) * dt;
-        let r = amplitude * (k * t).cos();
-        let x = cx + r * t.cos();
-        let y = cy + r * t.sin();
+        let r = amplitude * alice_det_math::cos64(k * t);
+        let x = cx + r * alice_det_math::cos64(t);
+        let y = cy + r * alice_det_math::sin64(t);
         points.push((x, y));
     }
 
@@ -607,10 +599,6 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
 /// `scale`: スケール係数（大きいほど広がる）
 /// `bounds`: 中心配置用
 #[must_use]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
-)]
 pub fn phyllotaxis(n: u32, scale: f64, bounds: &Bounds) -> Vec<LaserElement> {
     let (cx, cy) = bounds.center();
     let golden_angle = 137.508_f64.to_radians();
@@ -619,8 +607,8 @@ pub fn phyllotaxis(n: u32, scale: f64, bounds: &Bounds) -> Vec<LaserElement> {
     for i in 0..n {
         let theta = f64::from(i) * golden_angle;
         let r = scale * f64::from(i).sqrt();
-        let x = r.mul_add(theta.cos(), cx);
-        let y = r.mul_add(theta.sin(), cy);
+        let x = r.mul_add(alice_det_math::cos64(theta), cx);
+        let y = r.mul_add(alice_det_math::sin64(theta), cy);
 
         if bounds.contains(x, y) {
             dots.push(LaserElement::Dot(x, y));
