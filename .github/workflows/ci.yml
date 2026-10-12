@@ -566,8 +566,37 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    # clippy-lib's --all-features resolves alice-lol's optional llm-bridge/physics
+    # features, which need the sibling path dependencies on disk (same siblings
+    # geometry-digest already checks out); every run: step below is relative to
+    # ALICE-LOL via this job-level default rather than repeating working-directory
+    defaults:
+      run:
+        working-directory: ALICE-LOL
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
