@@ -21,6 +21,12 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
     calls the forbidden form as the comparison baseline for an oracle (e.g.
     `geometry_id.rs`'s `platform_trig`, which exists to show the routed and
     platform-libm forms disagree) — never production code
+  * `raw-helper:` — the one definition of a named `raw_max_f32`/`raw_min_f32`-
+    style helper in `src/raw_minmax.rs`: every *caller* of that helper is a
+    provably-safe site (one of the three reasons above, or an int-cast),
+    counted and named by `scripts/raw_minmax_manifest.py`'s own manifest —
+    this prefix only ever appears on the helper's own definition, never on a
+    caller
 
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
@@ -64,7 +70,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:"]
 
 MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
 MEMBER_NAME_RE = re.compile(r'"([^"]+)"')

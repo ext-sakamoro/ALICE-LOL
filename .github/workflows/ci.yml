@@ -651,6 +651,10 @@ jobs:
         run: python scripts/test_disallowed_methods_allow_reasons.py
       - name: disallowed-methods-allow-reasons (個別 allow の reason が既知 prefix + 隠れた libm 呼び出し無し)
         run: python scripts/disallowed_methods_allow_reasons.py
+      - name: raw-minmax-manifest oracle (検査器自身の試験)
+        run: python scripts/test_raw_minmax_manifest.py
+      - name: raw-minmax-manifest (raw_minmax の呼び出し元を file ごとに数える、G2、default-deny)
+        run: python scripts/raw_minmax_manifest.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
       - name: fuzz-runs oracle (fuzz の log の検査器自身の試験)

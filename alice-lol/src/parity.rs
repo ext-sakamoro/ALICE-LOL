@@ -17,16 +17,13 @@
 /// An infinity agrees only with the same infinity; NaN agrees only with NaN; `-0.0` and
 /// `0.0` agree (their difference is 0).
 #[must_use]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "both-abs: both operands are .abs() results and the final one is the constant 1.0"
-)]
 pub fn agrees(a: f32, b: f32, rel_tol: f32) -> bool {
     a.to_bits() == b.to_bits()
         || (a.is_nan() && b.is_nan())
         // the tolerance is only for two finite values: with an infinite `a` it is itself ∞,
         // and `inf` would agree with `-inf` and with every finite number
-        || (a.is_finite() && b.is_finite() && (a - b).abs() <= rel_tol * a.abs().max(b.abs()).max(1.0))
+        || (a.is_finite() && b.is_finite() && (a - b).abs()
+            <= rel_tol * crate::raw_minmax::raw_max_f32(crate::raw_minmax::raw_max_f32(a.abs(), b.abs()), 1.0))
 }
 
 #[cfg(test)]

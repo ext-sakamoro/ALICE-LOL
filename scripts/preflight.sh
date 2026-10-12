@@ -141,6 +141,10 @@ step "ci.yml / disallowed-methods-allow-reasons: 個別 allow の reason が既�
 python3 scripts/test_disallowed_methods_allow_reasons.py
 python3 scripts/disallowed_methods_allow_reasons.py
 
+step "ci.yml / raw-minmax-manifest: raw_minmax の呼び出し元を file ごとに数える (G2、default-deny)"
+python3 scripts/test_raw_minmax_manifest.py
+python3 scripts/raw_minmax_manifest.py
+
 step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check

@@ -6944,11 +6944,8 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let plate = box3d(outer_hx, outer_hy, outer_hz);
 
     let screw_nominal = spec.screw_size.nominal_diameter();
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
-    )]
-    let boss_body_height = (spec.boss_height - spec.base_thickness).max(1.0);
+    let boss_body_height =
+        crate::raw_minmax::raw_max_f32(spec.boss_height - spec.base_thickness, 1.0);
     let boss_template = boss(screw_nominal, boss_body_height);
     let boss_y = outer_hy + boss_body_height * 0.5;
 

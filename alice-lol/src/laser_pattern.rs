@@ -809,14 +809,9 @@ pub fn elements_to_svg(
 /// 板サイズ / cell 幅で 2^53 を超えることはない
 /// (`max(0.0)` の等しいゼロの符号は platform で割れうるが、直後の `as usize` が
 /// 符号を消すので歯に関わらない)
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::disallowed_methods,
-    reason = "int-cast: max(0.0) result is cast to usize immediately below, which erases the sign"
-)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn cell_count(extent: f64, cell: f64) -> usize {
-    (extent / cell).ceil().max(0.0) as usize
+    crate::raw_minmax::raw_max_f64((extent / cell).ceil(), 0.0) as usize
 }
 
 /// cell index → cell 中心の座標 (`origin + (i + 0.5) * cell`)

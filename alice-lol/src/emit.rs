@@ -213,15 +213,12 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             // 0 扱いにすると、1e-30 のような非 0 座標の short form が round-trip で
             // その座標を失う (`capsule_ab` のまま書くべき形を short form に丸めてしまう)
             let h = point_b.y;
-            #[allow(
-                clippy::disallowed_methods,
-                reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
-            )]
             let symmetric = point_a.x == 0.0
                 && point_a.z == 0.0
                 && point_b.x == 0.0
                 && point_b.z == 0.0
-                && (point_a.y + h).abs() <= f32::EPSILON * h.abs().max(1.0);
+                && (point_a.y + h).abs()
+                    <= f32::EPSILON * crate::raw_minmax::raw_max_f32(h.abs(), 1.0);
             if symmetric {
                 prim!("capsule", f(*radius), f(h))
             } else {
