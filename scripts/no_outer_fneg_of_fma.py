@@ -11,8 +11,6 @@ Rust の既定 (nsz を立てない) codegen に対しても適用するため�
 `scripts/det_math_guard.py` も deterministic 側として扱う) 禁止するのは
 **呼び出し結果全体を negate する形だけ** 引数を negate してから渡す形
 (`a.mul_add(b, -c)`、FMSUB 相当) やネストした引数内の negate は対象外
-(詳細 memory [[feedback_fma_negation_debug_release_divergence]] /
-[[feedback_fneg_of_fma_signed_zero_debug_release_split]])
 
 ⚠️ **全部を禁止しない**: 既知の許容は `scripts/no-outer-fneg-of-fma-allowlist.txt` に
 `<file>:<line>` + 理由で記載 (`(-a).mul_add(b, -c)` 形への書き換えが Law の検討対象に
