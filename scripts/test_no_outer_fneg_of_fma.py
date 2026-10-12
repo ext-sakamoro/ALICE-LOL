@@ -80,10 +80,26 @@ class Teeth(unittest.TestCase):
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 0)
 
-    def test_the_same_site_passes_when_the_allowlist_carries_it(self):
+    def test_a_src_site_fails_even_when_the_allowlist_carries_it(self):
+        # lib src/ には allowance が無い: Law form への書き換えのみが正解
         e, c = run({SRC: OUTER_NEG}, allowlist=f"# 理由を書く場所\n{SRC}:2\n")
+        self.assertEqual(c["violations"], 1)
+        self.assertEqual(c["allowed"], 0)
+        self.assertTrue(any("allowlist 不可" in x for x in e), e)
+
+    def test_a_tests_dir_site_passes_when_the_allowlist_carries_it(self):
+        oracle = "alice-lol/tests/oracle.rs"
+        e, c = run({oracle: OUTER_NEG}, allowlist=f"# 比較用の旧形を意図的に使う\n{oracle}:2\n")
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 1)
+        self.assertEqual(c["allowed"], 1)
+
+    def test_an_examples_dir_site_passes_when_the_allowlist_carries_it(self):
+        oracle = "alice-lol/examples/compare_forms.rs"
+        e, c = run({oracle: OUTER_NEG}, allowlist=f"# 比較用の旧形を意図的に使う\n{oracle}:2\n")
+        self.assertEqual(e, [])
+        self.assertEqual(c["violations"], 1)
+        self.assertEqual(c["allowed"], 1)
 
     def test_an_allowlist_entry_without_the_site_fails(self):
         e, _ = run({SRC: CLEAN}, allowlist=f"{SRC}:2\n")
@@ -117,6 +133,20 @@ class Teeth(unittest.TestCase):
         e, c = run({SRC: law})
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 0)
+
+
+    def test_src_dirs_can_be_overridden_for_other_repos(self):
+        # Physics 等 他 repo は "alice-lol/src" でなく "src" を渡す想定
+        with tempfile.TemporaryDirectory() as root:
+            path = os.path.join(root, "src", "lib.rs")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(CLEAN)
+            e_default, c_default = g.check(root)  # 既定 "alice-lol/src" では見つからない
+            self.assertEqual(c_default["files"], 0)
+            e_override, c_override = g.check(root, src_dirs=("src",))
+            self.assertEqual(e_override, [])
+            self.assertEqual(c_override["files"], 1)
 
 
 class RealRepo(unittest.TestCase):
