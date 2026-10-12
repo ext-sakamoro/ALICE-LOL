@@ -1159,7 +1159,7 @@ pub fn under_desk_mount(spec: &UnderDeskMountSpec) -> SdfNode {
     let jaw_hy = spec.clamp_wall_thickness * 0.5;
     let jaw_hz = spec.clamp_depth * 0.5;
     let top_y = spec.desk_thickness.mul_add(0.5, jaw_hy);
-    let bottom_y = -spec.desk_thickness.mul_add(0.5, jaw_hy);
+    let bottom_y = (-spec.desk_thickness).mul_add(0.5, -jaw_hy);
     let stem_hx = spec.clamp_width * 0.5;
     let stem_hy = 2.0f32.mul_add(spec.clamp_wall_thickness, spec.desk_thickness) * 0.5;
     let stem_hz = spec.clamp_wall_thickness * 0.5;

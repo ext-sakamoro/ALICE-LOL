@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """`-(x.mul_add(y, z))` (結果全体を negate する fma) を src/ 全体で禁止する.
 
+⚠️ **副検査**: 主検査は `tools/no-outer-fneg-of-fma` (`syn` で実際の Rust 構文木を
+読む) この file は行の括弧対応だけを見る簡易実装で、`-(x.mul_add(y, z))` の
+括弧付きの形しか見つけられず、`-x.mul_add(y, z)` のような括弧の無い同じ式
+(メソッド呼び出しは単項マイナスより結合が強いので同じ構文木になる) を見落とす
+(2026-10-12 実測、実害: この file 自体の検査対象 tree に実例が 1 件あった)
+副検査として残すのは、安価に動く独立経路としての価値があるため 新規実装では
+`tools/no-outer-fneg-of-fma` だけを信頼する
+
 実測 (2026-10-12、`rustc 1.98.1`、LLVM 22.1.8、`aarch64-apple-darwin`): この形は
 `-C opt-level=0` と `opt-level>=1` で signed zero の結果が割れる LLVM が
 `fneg(fma(x,y,z)) -> fma(x,-y,-z)` という `nsz` (no-signed-zeros) 専用の sink を、

@@ -13,3 +13,6 @@ __pycache__/
 
 # conformance/ の corpus 生成用の Python 環境
 .venv-conformance/
+
+# tools/no-outer-fneg-of-fma の build 出力 (own [workspace]、root target/ に含まれない)
+/tools/no-outer-fneg-of-fma/target/
