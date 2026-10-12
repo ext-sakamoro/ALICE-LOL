@@ -55,6 +55,23 @@
 //! this point on, every behavioural change among the probes below needs a
 //! deliberate identifier move in the same commit, with a `CHANGELOG.md` line
 //! saying so.
+//!
+//! # What the identifier does not attest: routing
+//!
+//! The identifier moves if and only if a probed result's bits move. It does
+//! not attest *how* a result was computed: replacing an `alice_det_math` call
+//! with the platform's libm leaves every pin unchanged wherever the two agree
+//! on the probed inputs. Measured on macOS (aarch64 and `x86_64`), reverting
+//! one routed call at a time to the platform function: `atan2` in the hook
+//! profile moved the `stdlib` pin, while a `sin_cos` in the hook centreline, the
+//! dovetail taper's `sin_cos` and the countersink's `tan` left it unchanged (the
+//! platform result equals `alice_det_math` there; another libm may not).
+//!
+//! Routing is therefore enforced by the gates, not by this identifier:
+//! `clippy.toml`'s `disallowed-methods` rejects a platform transcendental call
+//! anywhere in this crate, and the oracles behind these pins run on Linux
+//! `x86_64`, Windows and macOS aarch64 in both debug and release, so a result
+//! that depends on the platform shows up as a digest mismatch between them.
 
 use sha2::{Digest, Sha256};
 
@@ -124,30 +141,62 @@ fn dense_euler_grid(n: usize) -> impl Iterator<Item = (f32, f32, f32)> {
     })
 }
 
-/// `quat_from_euler_xyz` の固定 probe set (`angle::EULER_XYZ_PROBE_TABLE` の
-/// 特別な角度 8 件 + `[-pi, pi]^3` の 15^3 = 3,375 件の密な格子) に対する
-/// 出力を hash した digest — **振る舞いから計算する**
+/// The signed-zero and exact-cancellation lattice for Euler angles: every
+/// `(x, y, z)` drawn from `{+0, -0, ±pi/6, ±pi/4, ±pi/2, ±pi}` (10^3 = 1,000
+/// triples).
 ///
-/// 格子を足す理由は [`dense_euler_grid`] の doc 参照 (8 件の特別な角度だけでは
-/// 捕まらない算術のみの変更が実測で見つかった)
-#[must_use]
-pub fn euler_xyz_quat_probe_digest() -> [u8; 32] {
+/// The dense grid above samples the interior, but the arithmetic choices that
+/// matter most for a persisted rotation sit on this lattice: an input of `-0`
+/// or a pair of angles whose products cancel exactly makes a quaternion
+/// component an exact zero, and *which* zero (`+0` or `-0`) depends on the
+/// arithmetic form (an fma with negated operands, a negated fma result, or an
+/// unfused combine each give a different sign there). Hashing this lattice is
+/// what makes the pin move for such a change; the grid alone does not reliably
+/// hit a cancellation.
+fn signed_zero_euler_lattice() -> impl Iterator<Item = (f32, f32, f32)> {
+    use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, PI};
+    const L: [f32; 10] = [
+        0.0, -0.0, FRAC_PI_6, -FRAC_PI_6, FRAC_PI_4, -FRAC_PI_4, FRAC_PI_2, -FRAC_PI_2, PI, -PI,
+    ];
+    L.into_iter().flat_map(|x| {
+        L.into_iter()
+            .flat_map(move |y| L.into_iter().map(move |z| (x, y, z)))
+    })
+}
+
+/// The Euler probe digest for any quaternion builder with
+/// [`quat_from_euler_xyz`]'s signature; the pin passes the real function and
+/// the unit tests pass alternative arithmetic to prove the pin moves for it.
+fn euler_xyz_quat_probe_digest_of(f: fn(f32, f32, f32) -> glam::Quat) -> [u8; 32] {
     let mut h = Sha256::new();
-    for &((x, y, z), _) in EULER_XYZ_PROBE_TABLE {
-        let q = quat_from_euler_xyz(x, y, z);
+    let mut put = |q: glam::Quat| {
         h.update(q.x.to_bits().to_le_bytes());
         h.update(q.y.to_bits().to_le_bytes());
         h.update(q.z.to_bits().to_le_bytes());
         h.update(q.w.to_bits().to_le_bytes());
+    };
+    for &((x, y, z), _) in EULER_XYZ_PROBE_TABLE {
+        put(f(x, y, z));
     }
     for (x, y, z) in dense_euler_grid(15) {
-        let q = quat_from_euler_xyz(x, y, z);
-        h.update(q.x.to_bits().to_le_bytes());
-        h.update(q.y.to_bits().to_le_bytes());
-        h.update(q.z.to_bits().to_le_bytes());
-        h.update(q.w.to_bits().to_le_bytes());
+        put(f(x, y, z));
+    }
+    for (x, y, z) in signed_zero_euler_lattice() {
+        put(f(x, y, z));
     }
     h.finalize().into()
+}
+
+/// `quat_from_euler_xyz` の固定 probe set (`angle::EULER_XYZ_PROBE_TABLE` の
+/// 特別な角度 8 件 + `[-pi, pi]^3` の 15^3 = 3,375 件の密な格子 + 符号付き 0 と
+/// 打ち消しの格子 1,000 件) に対する出力を hash した digest — **振る舞いから計算する**
+///
+/// 格子を足す理由は [`dense_euler_grid`] と [`signed_zero_euler_lattice`] の doc
+/// 参照 (8 件の特別な角度だけでは捕まらない算術のみの変更が実測で見つかった、
+/// 打ち消しで 0 になる成分の符号は算術の形で変わる)
+#[must_use]
+pub fn euler_xyz_quat_probe_digest() -> [u8; 32] {
+    euler_xyz_quat_probe_digest_of(quat_from_euler_xyz)
 }
 
 /// A dense, deterministic sweep of degree values spanning `[-1080.0, 1080.0]`
@@ -274,6 +323,51 @@ pub fn fmt_f32_fidelity_probe_digest() -> [u8; 32] {
     h.finalize().into()
 }
 
+/// The `stdlib` constructs whose geometry is built with transcendental
+/// functions (the hook centrelines, the countersink cone, the dovetail taper,
+/// the phone dock's tilt): each routes `sin`/`cos`/`tan`/`atan2` through
+/// `alice_det_math` (the platform libm is not bit-identical across targets or
+/// even between `-C opt-level=0` and `>=1`, since release builds constant-fold
+/// it with the build machine's libm).
+const STDLIB_TRANSCENDENTAL_PROBE_LOL: &[&str] = &[
+    "skadis_hook_s()",
+    "skadis_hook_j()",
+    "countersink(4, 6)",
+    "dovetail(10, 6, 8)",
+    "phone_dock(80, 100, 6)",
+];
+
+/// `stdlib` の超越関数の経路の pin: [`STDLIB_TRANSCENDENTAL_PROBE_LOL`] の各構成を
+/// `[-40, 40]^3` の 17^3 点の格子で評価した距離の bit を hash した digest
+///
+/// 超越関数を platform libm に戻す・別の実装に替える等で形状の bit が変われば
+/// この digest が動く (`alice-det-math` の pin は算術そのものの世代を、こちらは
+/// 「stdlib がその算術を通っているか」を畳む)
+///
+/// # Panics
+///
+/// probe の LOL text が parse できない時 (probe set の誤り、build の度に検出される)
+#[must_use]
+pub fn stdlib_transcendental_probe_digest() -> [u8; 32] {
+    #[allow(clippy::cast_precision_loss)] // 17 steps, far below f32's exact-integer range
+    let coord = |i: usize| -> f32 { 80.0_f32.mul_add(i as f32 / 16.0, -40.0) };
+    let mut h = Sha256::new();
+    for lol in STDLIB_TRANSCENDENTAL_PROBE_LOL {
+        let node = crate::runtime_parser::parse_lol(lol)
+            .unwrap_or_else(|e| panic!("stdlib probe {lol:?} does not parse: {e:?}"));
+        length_prefixed(&mut h, lol.as_bytes());
+        for i in 0..17 {
+            for j in 0..17 {
+                for k in 0..17 {
+                    let p = glam::Vec3::new(coord(i), coord(j), coord(k));
+                    h.update(alice_sdf::eval(&node, p).to_bits().to_le_bytes());
+                }
+            }
+        }
+    }
+    h.finalize().into()
+}
+
 /// 幾何評価の算術・受理境界・canonical form の pin
 ///
 /// ⚠️ 値は振る舞いから計算する (各 probe digest 関数の現在の出力)
@@ -288,7 +382,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
     (
         "rotate: euler-to-quat arithmetic",
-        hex32("502373bfd649717d10189fd7ad9ffeb60b19080acacc59b7ffe763459995f080"),
+        hex32("c9a026178c53c29c8ccdb5413fd1d66ce51e0703ea7ec4e3c82d86ef505030de"),
     ),
     (
         "rotate: single-axis quaternion arithmetic",
@@ -303,6 +397,10 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         hex32("cfb95b75cfc0d47ed745c31e963d37bb6ec5d605d5584ea0b636413f72e008c1"),
     ),
     (
+        "stdlib: transcendental routing through alice_det_math",
+        hex32("e161067d3da77c1ad3449f03a5108f8124e9a352513ad922e99fda7429f50d44"),
+    ),
+    (
         "emit: fmt_f32 round-trip fidelity class",
         hex32("4744995b02057f35d13e18e149c8f1d9880cf0b3f4ebab3515f5529d99a70553"),
     ),
@@ -311,4 +409,129 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
 /// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    hex32("88aa2a3d9e46266033d32c3278fd4e0c829ccbc8d6a1c31f22c8ccc30b14c04c");
+    hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d");
+
+#[cfg(test)]
+mod tests {
+    //! The Euler pin must move for every arithmetic change that alters a
+    //! persisted bit: these alternatives each differ from
+    //! [`quat_from_euler_xyz`] in exactly one way, and the probe digest has to
+    //! see each of them.
+
+    use super::{euler_xyz_quat_probe_digest, euler_xyz_quat_probe_digest_of};
+    use std::hint::black_box;
+
+    /// The shared part of every alternative below (the same half-angle
+    /// products [`crate::angle::quat_from_euler_xyz`] forms).
+    fn parts(x: f32, y: f32, z: f32) -> (f32, f32, f32, f32, f32, f32) {
+        let (si, ci) = alice_det_math::sin_cos(x * 0.5);
+        let (sj, cj) = alice_det_math::sin_cos((-y) * 0.5);
+        let (sh, ch) = alice_det_math::sin_cos(z * 0.5);
+        (cj, sj, ci * ch, ci * sh, si * ch, si * sh)
+    }
+
+    /// `y` as the negated result of the fma (the shape LLVM rewrites only at
+    /// `opt-level >= 1`); `black_box` keeps the literal negation, so the
+    /// exact-cancellation zero is `-0` at every optimisation level.
+    fn outer_negated_fma(x: f32, y: f32, z: f32) -> glam::Quat {
+        let (cj, sj, cc, cs, sc, ss) = parts(x, y, z);
+        glam::Quat::from_xyzw(
+            cj.mul_add(sc, -(sj * cs)),
+            -black_box(cj.mul_add(ss, sj * cc)),
+            cj.mul_add(cs, -(sj * sc)),
+            cj.mul_add(cc, sj * ss),
+        )
+    }
+
+    /// `y` unfused (two roundings, and `-0` at cancellation).
+    #[allow(clippy::suboptimal_flops)] // the unfused combine is the alternative under test
+    fn unfused_y(x: f32, y: f32, z: f32) -> glam::Quat {
+        let (cj, sj, cc, cs, sc, ss) = parts(x, y, z);
+        glam::Quat::from_xyzw(
+            cj.mul_add(sc, -(sj * cs)),
+            -(cj * ss + sj * cc),
+            cj.mul_add(cs, -(sj * sc)),
+            cj.mul_add(cc, sj * ss),
+        )
+    }
+
+    /// `x` unfused (the measured case: 22.4% of random triples change, none of
+    /// the 8 curated rows).
+    #[allow(clippy::suboptimal_flops)] // the unfused combine is the alternative under test
+    fn unfused_x(x: f32, y: f32, z: f32) -> glam::Quat {
+        let (cj, sj, cc, cs, sc, ss) = parts(x, y, z);
+        glam::Quat::from_xyzw(
+            cj * sc - sj * cs,
+            (-cj).mul_add(ss, -(sj * cc)),
+            cj.mul_add(cs, -(sj * sc)),
+            cj.mul_add(cc, sj * ss),
+        )
+    }
+
+    /// The same Law form but with the platform's `sin_cos` in place of
+    /// `alice_det_math` (the routing the identifier has to see).
+    #[allow(clippy::disallowed_methods)] // the platform libm is the alternative under test
+    fn platform_trig(x: f32, y: f32, z: f32) -> glam::Quat {
+        let (si, ci) = black_box(x * 0.5).sin_cos();
+        let (sj, cj) = black_box((-y) * 0.5).sin_cos();
+        let (sh, ch) = black_box(z * 0.5).sin_cos();
+        let (cc, cs, sc, ss) = (ci * ch, ci * sh, si * ch, si * sh);
+        glam::Quat::from_xyzw(
+            cj.mul_add(sc, -(sj * cs)),
+            (-cj).mul_add(ss, -(sj * cc)),
+            cj.mul_add(cs, -(sj * sc)),
+            cj.mul_add(cc, sj * ss),
+        )
+    }
+
+    #[test]
+    fn the_euler_pin_is_the_digest_of_the_real_builder() {
+        // guards the refactor: the parameterised digest with the real function
+        // is the pin's digest (otherwise the alternatives below prove nothing)
+        assert_eq!(
+            euler_xyz_quat_probe_digest_of(crate::angle::quat_from_euler_xyz),
+            euler_xyz_quat_probe_digest()
+        );
+    }
+
+    #[test]
+    fn the_euler_pin_moves_for_each_arithmetic_change() {
+        let real = euler_xyz_quat_probe_digest();
+        for (name, alt) in [
+            (
+                "outer-negated fma (signed zero)",
+                outer_negated_fma as fn(f32, f32, f32) -> glam::Quat,
+            ),
+            ("unfused y (signed zero + double rounding)", unfused_y),
+            ("unfused x (fused -> unfused)", unfused_x),
+            ("platform trig instead of alice_det_math", platform_trig),
+        ] {
+            assert_ne!(
+                euler_xyz_quat_probe_digest_of(alt),
+                real,
+                "{name}: the Euler pin did not move"
+            );
+        }
+    }
+
+    #[test]
+    fn the_signed_zero_lattice_alone_sees_the_zero_sign() {
+        // the lattice is what carries the sign: with only the table and the
+        // grid an outer-negated fma must still be distinguishable here
+        let lattice_only = |f: fn(f32, f32, f32) -> glam::Quat| -> Vec<u32> {
+            super::signed_zero_euler_lattice()
+                .map(|(x, y, z)| f(x, y, z).y.to_bits())
+                .collect()
+        };
+        let real = lattice_only(crate::angle::quat_from_euler_xyz);
+        let alt = lattice_only(outer_negated_fma);
+        let differ = real.iter().zip(&alt).filter(|(a, b)| a != b).count();
+        assert!(differ > 0, "no lattice point separates +0 from -0");
+        assert!(
+            real.iter()
+                .zip(&alt)
+                .all(|(a, b)| a == b || (a ^ b) == 0x8000_0000),
+            "outside the zero sign the two forms should agree on the lattice"
+        );
+    }
+}
