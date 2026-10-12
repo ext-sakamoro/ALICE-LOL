@@ -1207,7 +1207,7 @@ fn probe_pair(
         if witness(fa, fb) {
             #[allow(
                 clippy::disallowed_methods,
-                reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+                reason = "nonzero-const: operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
             )]
             let r = residual(fa, fb).min(-f32::EPSILON);
             if worst.is_none_or(|(w, _)| r < w) {
@@ -1320,7 +1320,7 @@ fn check_non_overlap(
         };
         #[allow(
             clippy::disallowed_methods,
-            reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+            reason = "nonzero-const: operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
         )]
         (residual.min(-f32::EPSILON), point, region)
     });
@@ -1375,7 +1375,7 @@ fn check_containment(
         let residual = surface_distance(outer, point, cap).map_or(field, |d| -d);
         #[allow(
             clippy::disallowed_methods,
-            reason = "operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
+            reason = "nonzero-const: operand -f32::EPSILON is a nonzero constant, the equal-zero tie cannot occur"
         )]
         (residual.min(-f32::EPSILON), point, region)
     });
@@ -1437,7 +1437,7 @@ fn check_stress(
         for &(lp, force) in load_points {
             #[allow(
                 clippy::disallowed_methods,
-                reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+                reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
             )]
             let search_radius = force.max(1.0);
             if center.distance(lp) > search_radius {
@@ -2340,7 +2340,7 @@ fn check_thermal_field(
     // `transient_step_3d` は dx を 1 つしか取らない = 立方セルが前提
     #[allow(
         clippy::disallowed_methods,
-        reason = "both operands are .abs() results, never negative zero"
+        reason = "both-abs: both operands are .abs() results, never negative zero"
     )]
     let aniso = (step.x - step.y).abs().max((step.x - step.z).abs());
     if aniso > step.x.abs() * 1.0e-4 {
@@ -2431,7 +2431,7 @@ fn check_thermal_field(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
-    reason = "max(0.0) result is cast to usize immediately below, which erases the sign"
+    reason = "int-cast: max(0.0) result is cast to usize immediately below, which erases the sign"
 )]
 fn grid_index(coord: f32, n: usize) -> usize {
     (coord.max(0.0) as usize).min(n - 1)
@@ -2753,7 +2753,7 @@ fn classify_cells(node: &SdfNode, config: &CheckConfig, step: Vec3) -> Vec<CellS
     let n = config.resolution;
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
     )]
     let slack = INTERVAL_SLACK * step.length().max(1.0);
     let mut out = vec![CellSign::Undecided; n * n * n];
@@ -2805,7 +2805,7 @@ fn check_reachable(
     // 区間演算による 3 分類 (INTERVAL_SLACK の余裕つき、境界は未定に倒す)
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
     )]
     let slack = INTERVAL_SLACK * step.length().max(1.0);
     let mut proven_inside = vec![false; n * n * n];

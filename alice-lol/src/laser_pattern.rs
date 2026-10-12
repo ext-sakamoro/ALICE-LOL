@@ -66,7 +66,7 @@ impl Bounds {
 /// 矩形内を平行線で埋める。角度は反時計回り。
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 #[must_use]
 pub fn hatch(angle_deg: f64, spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
@@ -137,7 +137,7 @@ pub fn crosshatch(spacing: f64, bounds: &Bounds) -> Vec<LaserElement> {
 #[allow(clippy::while_float)] // 線間隔が密度で変わるので整数 index で刻めない
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 pub fn density_hatch(
     min_spacing: f64,
@@ -496,7 +496,7 @@ fn dither_ordered(
 #[must_use]
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 pub fn guilloche(
     big_r: f64,
@@ -539,7 +539,7 @@ pub fn guilloche(
 #[must_use]
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 pub fn lissajous(
     freq_a: f64,
@@ -577,7 +577,7 @@ pub fn lissajous(
 #[allow(clippy::many_single_char_names)] // rhodonea 標準記法 r = a·cos(kθ)
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserElement> {
     if steps == 0 {
@@ -609,7 +609,7 @@ pub fn rose(k: f64, amplitude: f64, steps: u32, bounds: &Bounds) -> Vec<LaserEle
 #[must_use]
 #[allow(
     clippy::disallowed_methods,
-    reason = "SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
+    reason = "svg-pipeline-exempt: SVG 専用の laser pattern pipeline (f64、mesh digest oracle の対象外) 出力の profile 間決定性は追跡していない"
 )]
 pub fn phyllotaxis(n: u32, scale: f64, bounds: &Bounds) -> Vec<LaserElement> {
     let (cx, cy) = bounds.center();
@@ -825,7 +825,7 @@ pub fn elements_to_svg(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
-    reason = "max(0.0) result is cast to usize immediately below, which erases the sign"
+    reason = "int-cast: max(0.0) result is cast to usize immediately below, which erases the sign"
 )]
 fn cell_count(extent: f64, cell: f64) -> usize {
     (extent / cell).ceil().max(0.0) as usize
