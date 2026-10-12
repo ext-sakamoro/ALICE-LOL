@@ -103,7 +103,7 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 
 /// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
 pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("0734b285d6725ebd1a8f064e2b38e6365abb9ed10689809954dc3034e911fb85");
+    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421");
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///
