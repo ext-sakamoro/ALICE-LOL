@@ -13,6 +13,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "alice-det-math"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98c80b31a6e6751c58fd3f2794a12dbb5304946f1cd5bf791840b4df041444d2"
+
+[[package]]
 name = "alice-kinematics"
 version = "0.2.0"
 dependencies = [
@@ -31,7 +37,7 @@ dependencies = [
 name = "alice-lol"
 version = "0.4.0"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.5.0",
  "alice-llm",
  "alice-lol-macro",
  "alice-physics",
@@ -41,6 +47,7 @@ dependencies = [
  "naga",
  "sha2",
  "stacker",
+ "trybuild",
 ]
 
 [[package]]
@@ -62,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "alice-lol-macro"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -90,9 +97,9 @@ dependencies = [
 
 [[package]]
 name = "alice-physics"
-version = "2.2.0"
+version = "3.0.0"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.5.0",
  "sha2",
 ]
 
@@ -100,7 +107,7 @@ dependencies = [
 name = "alice-sdf"
 version = "5.1.1"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.4.0",
  "bincode",
  "bytemuck",
  "crc32fast",
@@ -134,9 +141,9 @@ dependencies = [
 
 [[package]]
 name = "alice-zip"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
- "alice-det-math",
+ "alice-det-math 0.5.0",
  "libm",
  "rand",
  "rand_chacha",
@@ -517,6 +524,12 @@ checksum = "8babf46d4c1c9d92deac9f7be466f76dfc4482b6452fc5024b5e8daf6ffeb3ee"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "glow"
@@ -1084,6 +1097,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_spanned"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1194,6 +1216,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "target-tuple"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "876fef147edbcbddc8ac5cbbba92c7b86519e314e86638596c09673b2ed01e7f"
+
+[[package]]
 name = "termcolor"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1240,6 +1268,60 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.4",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.8+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_parser",
+ "toml_writer",
+ "winnow",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "1.1.2+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b86d767906c6c42421dcba507eb9d203e779497710a47782a224bb871653053"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
+name = "toml_parser"
+version = "1.1.5+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
+dependencies = [
+ "winnow",
+]
+
+[[package]]
+name = "toml_writer"
+version = "1.1.3+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
+
+[[package]]
+name = "trybuild"
+version = "1.0.122"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62db9c92d704393fbf2132041720cc80b689f2d3f28521015c2ac866223c11b8"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-tuple",
+ "termcolor",
+ "toml",
 ]
 
 [[package]]
@@ -1619,6 +1701,12 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winnow"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 
 [[package]]
 name = "xml-rs"
