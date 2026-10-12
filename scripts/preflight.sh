@@ -123,6 +123,17 @@ step "ci.yml / fma-guard: 同上、regex 版 (副検査、安価な独立経路�
 python3 scripts/test_no_outer_fneg_of_fma.py
 python3 scripts/no_outer_fneg_of_fma.py
 
+step "ci.yml / clippy-lib: lib 専用 clippy 設定の生成物一致 + canary"
+python3 scripts/test_clippy_lib_gate.py
+python3 scripts/clippy_lib_gate.py
+
+step "ci.yml / clippy-lib: lib 本体 (f32/f64 max/min 直呼びが無い、--all-features)"
+CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods
+
+step "ci.yml / det-math-minmax-blob-sync: alice-lol の det_math max/min が alice-physics の実装と一致する"
+python3 scripts/test_det_math_minmax_blob_sync.py
+python3 scripts/det_math_minmax_blob_sync.py
+
 step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check

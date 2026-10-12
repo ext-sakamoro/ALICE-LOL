@@ -16,3 +16,6 @@ __pycache__/
 
 # tools/no-outer-fneg-of-fma の build 出力 (own [workspace]、root target/ に含まれない)
 /tools/no-outer-fneg-of-fma/target/
+
+# scripts/clippy-lib-canary の build 出力 (own [workspace]、CARGO_TARGET_DIR 未設定時)
+/scripts/clippy-lib-canary/target/

@@ -2990,6 +2990,10 @@ impl<'a> Parser<'a> {
                     height: h,
                     flange_thickness: 3.0,
                     flange_overhang: 4.0,
+                    #[allow(
+                        clippy::disallowed_methods,
+                        reason = "operand 4.0 is a nonzero constant, the equal-zero tie cannot occur"
+                    )]
                     inner_dia: (od - 10.0).max(4.0),
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::cable_grommet(
@@ -3178,7 +3182,7 @@ impl Parser<'_> {
     /// そのまま入る経路なので、境界で `ParseError` にする 非有限値も弾く
     fn count(&self, v: f32, min: f32) -> Result<u32, ParseError> {
         let v = self.bounded_count(v)?;
-        Ok(lol_u32(v.round().max(min)))
+        Ok(lol_u32(crate::det_math::max(v.round(), min)))
     }
 
     /// 個数を取るが、生成器が `smooth_union` を 1 個ずつ重ねる (非結合なので balanced fold に

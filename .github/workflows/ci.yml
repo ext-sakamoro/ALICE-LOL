@@ -535,6 +535,16 @@ jobs:
         run: python scripts/test_no_outer_fneg_of_fma.py
       - name: fma-guard (regex 版、副検査、安価な独立経路として併走)
         run: python scripts/no_outer_fneg_of_fma.py
+      - name: clippy-lib oracle (生成物一致 + canary、検査器自身の試験)
+        run: python scripts/test_clippy_lib_gate.py
+      - name: clippy-lib (lib 専用 clippy 設定の生成物一致 + canary)
+        run: python scripts/clippy_lib_gate.py
+      - name: clippy-lib (lib 本体、f32/f64 max/min 直呼びが無い、--all-features)
+        run: CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods
+      - name: det-math-minmax-blob-sync oracle (検査器自身の試験)
+        run: python scripts/test_det_math_minmax_blob_sync.py
+      - name: det-math-minmax-blob-sync (alice-lol の det_math max/min が alice-physics の実装と一致する)
+        run: python scripts/det_math_minmax_blob_sync.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
       - name: fuzz-runs oracle (fuzz の log の検査器自身の試験)

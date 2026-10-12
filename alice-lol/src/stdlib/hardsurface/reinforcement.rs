@@ -208,7 +208,7 @@ pub fn honeycomb_infill(
     // hex_prism は Y 軸押出、板は Y = 板厚方向想定 (rib と揃える)
     let hex_r = cell_size / 3.0_f32.sqrt();
     // wall_thickness 分だけ hex を縮小して壁を残す (cell 間ギャップ = wall)
-    let cell_effective_r = wall_thickness.mul_add(-0.5, hex_r).max(0.0);
+    let cell_effective_r = crate::det_math::max(wall_thickness.mul_add(-0.5, hex_r), 0.0);
     let hex = SdfNode::HexPrism {
         hex_radius: cell_effective_r,
         half_height: 1000.0, // container で切るので大きめに取る

@@ -17,6 +17,10 @@
 /// An infinity agrees only with the same infinity; NaN agrees only with NaN; `-0.0` and
 /// `0.0` agree (their difference is 0).
 #[must_use]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "both operands are .abs() results and the final one is the constant 1.0, the equal-zero tie cannot occur"
+)]
 pub fn agrees(a: f32, b: f32, rel_tol: f32) -> bool {
     a.to_bits() == b.to_bits()
         || (a.is_nan() && b.is_nan())
