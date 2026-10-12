@@ -162,7 +162,7 @@ pub fn capsule_polyline_sdf(pts: &[glam::Vec2], tube_radius: f32, hook_width: f3
                 child: Arc::new(puck),
                 amount: Vec3::new(len * 0.5, 0.0, 0.0),
             };
-            let angle = edge.y.atan2(edge.x);
+            let angle = alice_det_math::atan2(edge.y, edge.x);
             let rotated = SdfNode::Rotate {
                 child: Arc::new(elongated),
                 rotation: crate::angle::quat_from_rotation_z(angle),
@@ -206,9 +206,10 @@ pub fn skadis_hook_l_sdf() -> SdfNode {
     for i in 1..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
         pts.push(glam::Vec2::new(
-            8.0f32.mul_add(a.sin(), reach - 8.0),
-            8.0 * (1.0 - a.cos()),
+            8.0f32.mul_add(sin_a, reach - 8.0),
+            8.0 * (1.0 - cos_a),
         ));
     }
 
@@ -241,7 +242,8 @@ pub fn skadis_hook_j_sdf() -> SdfNode {
     for i in 0..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
-        pts.push(glam::Vec2::new(reach * a.sin(), -reach * (1.0 - a.cos())));
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
+        pts.push(glam::Vec2::new(reach * sin_a, -reach * (1.0 - cos_a)));
     }
     // 下方 straight (Y = curve_end_y から drop 分下がる)
     let curve_end_y = pts.last().map_or(0.0, |v| v.y);
@@ -252,9 +254,10 @@ pub fn skadis_hook_j_sdf() -> SdfNode {
     for i in 0..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * 0.75 * i as f32 / n as f32;
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
         pts.push(glam::Vec2::new(
-            tip_r.mul_add(a.cos(), reach - tip_r),
-            tip_r.mul_add(a.sin(), tip_y),
+            tip_r.mul_add(cos_a, reach - tip_r),
+            tip_r.mul_add(sin_a, tip_y),
         ));
     }
 
@@ -283,7 +286,8 @@ pub fn skadis_hook_s_sdf() -> SdfNode {
     for i in 0..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
-        pts.push(glam::Vec2::new(reach * a.sin(), -reach * (1.0 - a.cos())));
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
+        pts.push(glam::Vec2::new(reach * sin_a, -reach * (1.0 - cos_a)));
     }
     let curve_end_y = pts.last().map_or(0.0, |v| v.y);
     let tip_base_y = curve_end_y - (drop - reach);
@@ -293,9 +297,10 @@ pub fn skadis_hook_s_sdf() -> SdfNode {
     for i in 0..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * 0.7 * i as f32 / n as f32;
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
         pts.push(glam::Vec2::new(
-            tip_r.mul_add(a.cos(), reach - tip_r),
-            tip_r.mul_add(a.sin(), tip_base_y),
+            tip_r.mul_add(cos_a, reach - tip_r),
+            tip_r.mul_add(sin_a, tip_base_y),
         ));
     }
 
@@ -847,9 +852,10 @@ pub fn skadis_elastic_cord_sdf() -> SdfNode {
     for i in 1..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
         top_pts.push(glam::Vec2::new(
-            (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R).mul_add(a.sin(), ht),
-            ELASTIC_CORD_HOOK_R.mul_add(-(1.0 - a.cos()), -8.0),
+            (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R).mul_add(sin_a, ht),
+            ELASTIC_CORD_HOOK_R.mul_add(-(1.0 - cos_a), -8.0),
         ));
     }
     let top_hook = capsule_polyline_sdf(&top_pts, ht, hook_width);
@@ -859,9 +865,10 @@ pub fn skadis_elastic_cord_sdf() -> SdfNode {
     for i in 1..=n {
         #[allow(clippy::cast_precision_loss)]
         let a = std::f32::consts::FRAC_PI_2 * i as f32 / n as f32;
+        let (sin_a, cos_a) = alice_det_math::sin_cos(a);
         bot_pts.push(glam::Vec2::new(
-            (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R).mul_add(a.sin(), ht),
-            ELASTIC_CORD_HOOK_R.mul_add(1.0 - a.cos(), -ELASTIC_CORD_PEG_PITCH + 8.0),
+            (ELASTIC_CORD_HOOK_REACH - ELASTIC_CORD_HOOK_R).mul_add(sin_a, ht),
+            ELASTIC_CORD_HOOK_R.mul_add(1.0 - cos_a, -ELASTIC_CORD_PEG_PITCH + 8.0),
         ));
     }
     let bot_hook = capsule_polyline_sdf(&bot_pts, ht, hook_width);

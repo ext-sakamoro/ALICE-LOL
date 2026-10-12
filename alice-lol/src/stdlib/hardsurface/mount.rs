@@ -373,15 +373,12 @@ fn extrusion_profile(size: f32, length: f32, center_bore_dia: f32) -> SdfNode {
             child: Arc::new(t_slot.clone()),
             rotation: crate::angle::quat_from_rotation_y(angle),
         };
-        // + 0.0 (via mul_add's addend): at i=0, angle.sin() is exactly 0.0, so
+        // + 0.0 (via mul_add's addend): at i=0, sin_a is exactly 0.0, so
         // -face_offset * 0.0 is exactly -0.0 -- a sign with no geometric meaning
         // (this face's T-slot truly has no Z offset), normalized here rather than
         // carried into the emitted text
-        let offset = Vec3::new(
-            face_offset * angle.cos(),
-            0.0,
-            (-face_offset).mul_add(angle.sin(), 0.0),
-        );
+        let (sin_a, cos_a) = alice_det_math::sin_cos(angle);
+        let offset = Vec3::new(face_offset * cos_a, 0.0, (-face_offset).mul_add(sin_a, 0.0));
         let placed = SdfNode::Translate {
             child: Arc::new(rotated),
             offset,

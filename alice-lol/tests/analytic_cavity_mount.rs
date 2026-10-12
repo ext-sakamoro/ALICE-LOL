@@ -18,6 +18,11 @@
 #![allow(clippy::many_single_char_names)]
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::if_not_else)]
+// 本 file 全体が独立の閉形式オラクル (platform libm で自前の参照値を作る、実装の出力は見ない)
+#![allow(
+    clippy::disallowed_methods,
+    reason = "closed-form oracle computing its own independent reference values with platform libm, not the implementation under test"
+)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]

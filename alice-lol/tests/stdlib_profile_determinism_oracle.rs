@@ -1,15 +1,13 @@
-//! stdlib (skadis hook 形状) の platform libm 直呼びによる debug/release 間の mesh 非決定性 oracle
+//! stdlib の debug/release 間 mesh digest 一致 oracle (platform libm 直呼び回帰の歯止め)
 //!
-//! `hardsurface/skadis_sdf.rs` は centerline の点列を `.sin()`/`.cos()` の直呼びで組み立てており、
-//! release では LLVM が build 機の libm で定数畳み込みする一方、debug は実行時の libm を呼ぶため、
-//! 最後の bit が profile によって変わる (このため `cargo test` と `cargo test --release` を両方
-//! 実行して初めて検出できる、どちらか一方だけでは green に見える)
-//!
-//! 他の形状 (基本 primitive / CSG / rotate / rotate_q / twist / 薄物コイン) は det-math 経由か
-//! sin/cos を含まないので、本 oracle では一致側の対照として並べている (空振り検査)
+//! 以前は `hardsurface/skadis_sdf.rs` が centerline の点列を `.sin()`/`.cos()` の直呼びで
+//! 組み立てており、release では LLVM が build 機の libm で定数畳み込みする一方、debug は実行時の
+//! libm を呼ぶため、同じ LOL から profile によって異なる mesh bytes が出ていた (`skadis_hook_s()` /
+//! `skadis_hook_j()`) すべての超越関数呼び出しを `alice_det_math` 経由に routing し
+//! (`clippy.toml` の `disallowed-methods` が回帰を止める)、本 oracle で全ケース一致を確認している
 //!
 //! golden は release の build で記録する (`LOL_DIGEST_RECORD=1 cargo test --release --test stdlib_profile_determinism_oracle`)
-//! 直ったら (debug でも一致したら) 下の試験が red になるので、その形状を `PROFILE_DIVERGENT` から消す
+//! 再び profile 間で不一致になったら、どのケースかがこの試験の失敗メッセージに出る
 
 use alice_lol::print_export::{node_to_mesh, PrintConfig};
 use alice_lol::runtime_parser::parse_lol;
@@ -108,10 +106,6 @@ const CASES: &[Case] = &[
     },
 ];
 
-/// debug でも release と一致してしまったら、本 oracle が red になって報せる (= 欠陥が直った合図)
-#[cfg(debug_assertions)]
-const PROFILE_DIVERGENT: &[&str] = &["skadis_hook_s()", "skadis_hook_j()"];
-
 fn hex32(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -191,23 +185,10 @@ fn stdlib_mesh_digest_matches_release_profile_golden() {
     let mut compared = 0;
     for ((lol, tri, digest), (w_lol, w_tri, w_digest)) in now.iter().zip(want.iter()) {
         assert_eq!(lol, w_lol, "ケース順が golden と違う");
-
-        #[cfg(debug_assertions)]
-        if PROFILE_DIVERGENT.contains(&lol.as_str()) {
-            assert!(
-                tri != w_tri || digest != w_digest,
-                "{lol} が debug でも release の golden と一致した: 欠陥が直ったので PROFILE_DIVERGENT から消す"
-            );
-            continue;
-        }
-
         assert_eq!(tri, w_tri, "{lol}: 三角形数が golden と違う");
         assert_eq!(digest, w_digest, "{lol}: mesh digest が golden と違う (最初に違った形)");
         compared += 1;
     }
 
-    #[cfg(debug_assertions)]
-    assert_eq!(compared, CASES.len() - PROFILE_DIVERGENT.len());
-    #[cfg(not(debug_assertions))]
     assert_eq!(compared, CASES.len());
 }

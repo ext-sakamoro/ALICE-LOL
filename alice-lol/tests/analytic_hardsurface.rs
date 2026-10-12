@@ -31,6 +31,11 @@
 #![allow(clippy::doc_markdown)]
 // 符号の反転を見る判定は `!=` のまま書く方が「符号が変わった」と読める
 #![allow(clippy::if_not_else)]
+// 本 file 全体が独立の閉形式オラクル (platform libm で自前の参照値を作る、実装の出力は見ない)
+#![allow(
+    clippy::disallowed_methods,
+    reason = "closed-form oracle computing its own independent reference values with platform libm, not the implementation under test"
+)]
 
 use alice_lol::stdlib::hardsurface::fastener::{
     bolt, counterbore, countersink, dowel_hole, heat_set_insert_hole, screw_hole, tap_hole,

@@ -1,0 +1,46 @@
+# 決定論ゲート stdlib の形状 (skadis hook 等) が centerline の点列を sin/cos/atan2 の
+# platform libm 直呼びで組み立てており、release では LLVM が build 機の libm で定数畳み込みを
+# する一方 debug は実行時に呼ぶため、同じ LOL から profile によって異なる mesh bytes が出る
+# (`tests/stdlib_profile_determinism_oracle.rs` が現状の欠陥を pin している)
+#
+# IEEE 754 は超越関数の正しい丸めを要求しないので、platform libm は OS / CPU / compiler で
+# 結果が変わりうる 本 crate の幾何はすべて f32 だが、`alice-det-math` 0.5 の f64 相当品 (`*64`)
+# が存在するものは f32/f64 両方を禁止リストに載せる (`cbrt64`/`hypot64`/`tanh64` は 0.5 に無いため
+# f64 側は対象外、無い物を禁止リストに載せない)
+#
+# `sqrt` / `powi` は対象外 (`sqrt` は IEEE 754 で正しい丸めが保証された単一命令、`powi` は
+# 整数乗の繰り返し二乗で portable、どちらも機種間で bit が揃う)
+#
+# 例外は箇所ごとの `#[allow(clippy::disallowed_methods, reason = ..)]` で明示する
+# (`laser_pattern.rs` は mesh digest oracle の対象外の SVG 専用 pipeline)
+disallowed-methods = [
+    { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::sin" },
+    { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cos" },
+    { path = "f32::sin_cos", reason = "two platform libm calls, not cross-platform bit-exact; use alice_det_math::sin_cos" },
+    { path = "f32::tan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::tan" },
+    { path = "f32::tanh", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::tanh" },
+    { path = "f32::cbrt", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cbrt" },
+    { path = "f32::hypot", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::hypot" },
+    { path = "f32::atan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::atan" },
+    { path = "f32::atan2", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::atan2" },
+    { path = "f32::asin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::asin" },
+    { path = "f32::acos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::acos" },
+    { path = "f32::exp", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::exp" },
+    { path = "f32::ln", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::ln" },
+    { path = "f32::log2", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::log2" },
+    { path = "f32::log10", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::log10" },
+    { path = "f32::powf", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::powf" },
+    { path = "f64::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::sin64" },
+    { path = "f64::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cos64" },
+    { path = "f64::sin_cos", reason = "two platform libm calls, not cross-platform bit-exact; use alice_det_math::sin_cos64" },
+    { path = "f64::tan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::tan64" },
+    { path = "f64::atan", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::atan64" },
+    { path = "f64::atan2", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::atan2_64" },
+    { path = "f64::asin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::asin64" },
+    { path = "f64::acos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::acos64" },
+    { path = "f64::exp", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::exp64" },
+    { path = "f64::ln", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::ln64" },
+    { path = "f64::log2", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::log2_64" },
+    { path = "f64::log10", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::log10_64" },
+    { path = "f64::powf", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::powf64" },
+]

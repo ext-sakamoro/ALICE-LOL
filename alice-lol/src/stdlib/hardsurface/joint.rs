@@ -337,8 +337,7 @@ pub const DOVETAIL_TAPER_DEG: f32 = 10.0;
 #[must_use]
 pub fn dovetail(base_width: f32, height: f32, depth: f32) -> SdfNode {
     let taper_rad = DOVETAIL_TAPER_DEG.to_radians();
-    let cos_t = taper_rad.cos();
-    let sin_t = taper_rad.sin();
+    let (sin_t, cos_t) = alice_det_math::sin_cos(taper_rad);
     // Base box: 底辺 base_width の rectangle
     let base = SdfNode::Box3d {
         half_extents: Vec3::new(base_width * 0.5, height * 0.5, depth * 0.5),

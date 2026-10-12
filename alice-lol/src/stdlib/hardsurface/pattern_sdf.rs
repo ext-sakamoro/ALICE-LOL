@@ -5199,8 +5199,9 @@ pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
     let upright_rotation = crate::angle::quat_from_rotation_x(-tilt_rad);
-    let upright_offset_y = base_hy + upright_hy * tilt_rad.cos();
-    let upright_offset_z = -base_hz + upright_hz + upright_hy * tilt_rad.sin();
+    let (sin_tilt, cos_tilt) = alice_det_math::sin_cos(tilt_rad);
+    let upright_offset_y = base_hy + upright_hy * cos_tilt;
+    let upright_offset_z = -base_hz + upright_hz + upright_hy * sin_tilt;
 
     let base = rounded_box(base_hx, base_hy, base_hz, 2.0);
     let upright_raw = rounded_box(upright_hx, upright_hy, upright_hz, 2.0);
