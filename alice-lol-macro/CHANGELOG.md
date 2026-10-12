@@ -6,15 +6,15 @@ The changes of the whole repository, `alice-lol` included, are in the root `CHAN
 
 ## [Unreleased]
 
-## [0.2.1] - 未公開 (公開日を入れる)
+## [0.3.0] - 未公開 (公開日を入れる)
 
-`alice-lol` 0.4.0 と同時に公開する (公開の順は macro 0.2.1 → `alice-lol` 0.4.0) `alice-lol` 0.4.0 は macro 0.2.1 を要求する
+`alice-lol` 0.4.0 より前に公開する (公開の順は macro 0.3.0 → `alice-lol` 0.4.0) `alice-lol` 0.4.0 は macro 0.3 を要求する このバージョン自身は `alice-lol` を含むどの ALICE-* crate にも依存しない (`syn` / `quote` / `proc-macro2` のみ)
 
 ### Fixed
 
-- `taper` が `SdfNode::Taper { child, factor }` の struct literal を生成していた `alice-sdf` 5.x の `Taper` は field `reach` を持つので、0.2.0 で `taper(..)` を書くと compile できない 0.2.1 は `SdfNode::taper(child, factor)` を呼ぶ
-- 4 つの keyword (`rect2d` / `segment2d` / `rounded_rect2d` / `sweep_bezier`) が `::glam::Vec2` を生成していた `glam` に直接依存しない crate では compile できない 0.2.1 は `::alice_lol::Vec2` を生成する (`alice-lol` 0.4.0 が `Vec2` を再公開する)
-- 0.2.0 の package は license の text を含んでいなかった 0.2.1 の package は `LICENSE-APACHE` / `NOTICE` / `TRADEMARK_NOTICE` を含む
+- `taper` が `SdfNode::Taper { child, factor }` の struct literal を生成していた `alice-sdf` 5.x の `Taper` は field `reach` を持つので、0.2.0 で `taper(..)` を書くと compile できない 0.3.0 は `SdfNode::taper(child, factor)` を呼ぶ
+- 4 つの keyword (`rect2d` / `segment2d` / `rounded_rect2d` / `sweep_bezier`) が `::glam::Vec2` を生成していた `glam` に直接依存しない crate では compile できない 0.3.0 は `::alice_lol::Vec2` を生成する (`alice-lol` 0.4.0 が `Vec2` を再公開する)
+- 0.2.0 の package は license の text を含んでいなかった 0.3.0 の package は `LICENSE-APACHE` / `NOTICE` / `TRADEMARK_NOTICE` を含む
 
 ### Changed
 
@@ -24,6 +24,6 @@ The changes of the whole repository, `alice-lol` included, are in the root `CHAN
 
 最初の公開版 内容は root の `CHANGELOG.md` の `alice-lol` 0.2.0 / 0.3.0 の節を参照
 
-[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-macro-v0.2.1...HEAD
-[0.2.1]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-macro-v0.2.0...alice-lol-macro-v0.2.1
+[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-macro-v0.3.0...HEAD
+[0.3.0]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-macro-v0.2.0...alice-lol-macro-v0.3.0
 [0.2.0]: https://github.com/ext-sakamoro/ALICE-LOL/releases/tag/alice-lol-macro-v0.2.0
