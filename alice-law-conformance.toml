@@ -1,0 +1,90 @@
+# ALICE-Law conformance manifest for this crate (alice-lol). One entry per
+# gate defined in ALICE-Law's conformance/gates.toml. Schema (status /
+# evidence / since / note / reference_repo) is docs/CONFORMANCE.md's
+# "Manifest" section in that repository.
+#
+# Entries here are written from what this repository's own commits, CI
+# workflow and test suite actually show, checked directly rather than
+# assumed: a gate without concrete evidence is `missing`, not guessed `pass`.
+
+[G1]
+status = "pass"
+evidence = ["clippy.toml (repository root)", ".github/clippy-lib/clippy.toml", "scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py", ".github/workflows/ci.yml wiring-guard job"]
+since = "3d0b4be352f70f33e6a837f4434eebdd9af7fe0b"
+note = "type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a violation in a non-alice-lol workspace member"
+reference_repo = ""
+
+[G2]
+status = "missing"
+note = "f32/f64 max/min correctness is met today (crate-internal det_math.rs, lattice-tested, wired for all production call sites) but not through the canonical mechanism this gate specifies: still the interim per-call #[allow(clippy::disallowed_methods, reason = \"...\")] scheme (scripts/disallowed_methods_allow_reasons.py), not named raw_* helpers plus a default-deny manifest. Migrating to raw_max_f32/raw_min_f32 + manifest is a required precondition of this crate's alice-lol 0.4.0 publish (not a someday item), waiting on the reference implementation (ALICE-SDF) landing first."
+reference_repo = "ALICE-SDF"
+
+[G3]
+status = "pass"
+evidence = ["tools/no-outer-fneg-of-fma/", "scripts/no_outer_fneg_of_fma.py", ".github/workflows/ci.yml wiring-guard job fma-guard steps"]
+since = "0349ebb"
+note = "syn-based checker catches all 5 outer-negation shapes (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one either side) plus the same-block let-then-negate form; a universal fma-result-normalising wrapper was measured as an alternative and rejected (it regresses a deliberate sign-carrying cancellation form in angle.rs's quat_from_euler_xyz, see docs/CONFORMANCE.md's G3 residual)"
+reference_repo = ""
+
+[G4]
+status = "pass"
+evidence = [".github/workflows/ci.yml geometry-digest job (3 OS x 2 profiles)", "alice-lol/src/angle.rs quat_from_euler_xyz_tests", "alice-lol/tests/geometry_id_oracle.rs", "alice-lol/tests/stdlib_profile_determinism_oracle.rs", "alice-lol/tests/laser_pattern_digest_golden.rs"]
+since = ""
+note = "the signed-zero/cancellation lattice this gate requires is exercised specifically for the quat_from_euler_xyz y-component (the case this crate's G3 residual concerns); coverage for other arithmetic paths in this crate is not separately confirmed"
+reference_repo = ""
+
+[G5]
+status = "pass"
+evidence = [".github/workflows/ci.yml geometry-digest job"]
+since = ""
+note = "matrix includes a release-profile macOS leg (macos-latest, aarch64 on GitHub-hosted runners); job has no continue-on-error and fail-fast: false, but this repository has no branch-protection rule making it a required status check (confirmed via the GitHub API returning 404 for branch protection) -- requiredness here is enforced by local preflight.sh plus the hook that blocks a push on a failing preflight, not by a server-side required check"
+reference_repo = ""
+
+[G6]
+status = "missing"
+note = "LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the toolchain-plus-version staleness guard this gate specifically requires was not individually confirmed"
+reference_repo = ""
+
+[G7]
+status = "missing"
+note = "not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were not surveyed for this gate"
+reference_repo = ""
+
+[G8]
+status = "missing"
+note = "geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's in-process one (rather than the same identifier serving both roles) was not confirmed"
+reference_repo = ""
+
+[G9]
+status = "missing"
+note = "not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) was not audited against this gate's definition"
+reference_repo = ""
+
+[G10]
+status = "missing"
+note = "a search of alice-lol/src for Uuid, SystemTime::now, Instant::now, and unseeded RNG constructors found none, but there is no durable CI check enforcing their absence going forward -- the absence is a manual snapshot, not a gate"
+reference_repo = ""
+
+[G11]
+status = "pass"
+evidence = ["tools/no-outer-fneg-of-fma/src/main.rs #[cfg(test)] mod tests (canary + zero-scanned-fails pattern)", "scripts/clippy_lib_gate.py + scripts/test_clippy_lib_gate.py (canary)", "scripts/det_math_minmax_blob_sync.py (cross-repo byte-identity of the det_math.rs copies in alice-lol, alice-lol-ui, alice-lol-datagen, alice-world-auditor)"]
+since = ""
+note = "canary and zero-scanned-fails patterns are present on the gates this crate implements (G1, G3); not audited for every gate uniformly"
+reference_repo = ""
+
+[G12]
+status = "pass"
+evidence = ["scripts/docs_lint.py", "scripts/test_docs_lint.py"]
+since = ""
+note = "this crate's own docs_lint.py is the equivalent of ALICE-Law's public_text_check; not confirmed to share the same vocabulary list, only that an equivalent check exists and runs"
+reference_repo = "ALICE-Law"
+
+[G13]
+status = "missing"
+note = "alice-lol/src/print_export.rs uses HashMap and HashSet for mesh vertex/edge deduplication; whether their iteration order (as opposed to membership/lookup alone) ever reaches persisted or compared output was not individually traced"
+reference_repo = ""
+
+[G14]
+status = "missing"
+note = "no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the round-to-nearest-even / no-flush-to-zero assumption to be asserted by a test, not merely relied upon implicitly in doc comments (which several modules do, e.g. angle.rs, geometry_id.rs) -- no such dedicated assertion test was found"
+reference_repo = ""
