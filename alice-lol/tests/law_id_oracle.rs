@@ -267,7 +267,7 @@ const PREVIOUS_AUDIT_ORDER_PIN: [u8; 32] =
 
 /// 上の pin を fold した旧世代の `LOL_SEMANTICS_ID` (理由は同じ)
 const PREVIOUS_SEMANTICS_ID: [u8; 32] =
-    alice_lol::law_id::hex32("673481121a3ed4ba1efb33c2ca62c8e6d2febded9d47e21e79294148d63f6a6f");
+    alice_lol::law_id::hex32("4a3730c680b5f7e04667e391a81af0e710aa4905f8d4312d200f1c4a2c53ea3f");
 
 #[test]
 fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
@@ -312,7 +312,7 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
 /// 識別子が**本当に動いた**ことを固定するため (読み方は識別子の外にあると、同じ識別子・
 /// 同じ request で判定が変わる)
 const SEMANTICS_ID_BEFORE_INPUT_READING: [u8; 32] =
-    alice_lol::law_id::hex32("bc2befdcd5c0e1e190a145eb3f0e15c5f5698886e946dd6aecf33e406c39b71a");
+    alice_lol::law_id::hex32("65462378889cf5527427f352db37db99d5a156188a36d3005a369b15027371c7");
 
 #[test]
 fn the_input_reading_pin_is_the_measured_behaviour() {
@@ -374,7 +374,7 @@ fn the_type_of_an_input_is_part_of_the_law() {
 ///
 /// 残す理由: 式の関数を足した時に識別子が**本当に動いた**ことを固定するため
 const SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS: [u8; 32] =
-    alice_lol::law_id::hex32("e1b05c475eaa4209264d7e74211baa68f8d5e550359bfa05f812d645af9a6e3c");
+    alice_lol::law_id::hex32("4fb859fdc0d7af5ec652fa42ca7af59870640b6e4871543fb5370d847b812b07");
 
 #[test]
 fn the_expression_functions_pin_is_the_measured_behaviour() {
@@ -408,7 +408,7 @@ fn adding_expression_functions_moved_the_identifier() {
 ///
 /// 残す理由: 導出を LOL が読むようにした時に識別子が**本当に動いた**ことを固定するため
 const SEMANTICS_ID_BEFORE_DERIVATIONS: [u8; 32] =
-    alice_lol::law_id::hex32("764a737399d4a1eac0e390fed351fe731a8d537a8ed3c5b071b3cc0f1a3568fc");
+    alice_lol::law_id::hex32("2b4bef45cc55ef3f868dffb78d3a3cb7959e5d961c8d90ede4338fb7f1d2ce49");
 
 #[test]
 fn the_derivation_pin_is_the_measured_behaviour() {
