@@ -6264,12 +6264,12 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
 
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand plate_thickness + 1.0 is always >= 1.0, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand plate_thickness + 1.0 is always >= 1.0"
     )]
     let arm_width = spec.arm_width.max(spec.plate_thickness + 1.0);
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand plate_thickness + 1.0 is always >= 1.0, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand plate_thickness + 1.0 is always >= 1.0"
     )]
     let arm_height = spec.arm_height.max(spec.plate_thickness + 1.0);
     let holes = spec.holes_per_arm.clamp(1, 4);
@@ -6394,7 +6394,7 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
 
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand plate_thickness + 5.0 is always >= 5.0, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand plate_thickness + 5.0 is always >= 5.0"
     )]
     let arm = spec.arm_size.max(spec.plate_thickness + 5.0);
     let bracket = bracket_l(
@@ -6958,7 +6958,7 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let screw_nominal = spec.screw_size.nominal_diameter();
     #[allow(
         clippy::disallowed_methods,
-        reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+        reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
     )]
     let boss_body_height = (spec.boss_height - spec.base_thickness).max(1.0);
     let boss_template = boss(screw_nominal, boss_body_height);

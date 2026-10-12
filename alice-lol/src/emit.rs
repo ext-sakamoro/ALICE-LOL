@@ -215,7 +215,7 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             let h = point_b.y;
             #[allow(
                 clippy::disallowed_methods,
-                reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+                reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
             )]
             let symmetric = point_a.x == 0.0
                 && point_a.z == 0.0

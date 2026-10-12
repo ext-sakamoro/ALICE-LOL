@@ -19,7 +19,7 @@
 #[must_use]
 #[allow(
     clippy::disallowed_methods,
-    reason = "both operands are .abs() results and the final one is the constant 1.0, the equal-zero tie cannot occur"
+    reason = "both-abs: both operands are .abs() results and the final one is the constant 1.0"
 )]
 pub fn agrees(a: f32, b: f32, rel_tol: f32) -> bool {
     a.to_bits() == b.to_bits()

@@ -1664,8 +1664,10 @@ impl ResearchLaw {
             let d = observed - self.evaluate_with(&borrowed_conditions(&o.conditions), params)?;
             sum_sq += d * d;
             {
-                // max_abs starts at 0.0 and both operands are always .abs()-derived, never negative zero
-                #![allow(clippy::disallowed_methods)]
+                #![allow(
+                    clippy::disallowed_methods,
+                    reason = "both-abs: max_abs starts at 0.0 and both operands are always .abs()-derived"
+                )]
                 max_abs = max_abs.max(d.abs());
             }
         }
@@ -1702,7 +1704,7 @@ impl ResearchLaw {
             for j in 0..p.len() {
                 #[allow(
                     clippy::disallowed_methods,
-                    reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+                    reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
                 )]
                 let h = GN_FD_STEP * p[j].abs().max(1.0);
                 shifted[j] = p[j] + h;
@@ -1759,7 +1761,7 @@ impl ResearchLaw {
             };
             #[allow(
                 clippy::disallowed_methods,
-                reason = "operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
+                reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
             )]
             let converged = cand
                 .iter()
@@ -1912,7 +1914,7 @@ fn solve(mut m: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Option<Vec<f64>> {
     let k = rhs.len();
     #[allow(
         clippy::disallowed_methods,
-        reason = "every folded value is .abs()-derived and the seed is +0.0, never negative zero"
+        reason = "both-abs: every folded value is .abs()-derived and the seed is +0.0, never negative zero"
     )]
     let scale = (0..k).map(|i| m[i][i].abs()).fold(0.0_f64, f64::max);
     if !scale.is_finite() || scale <= 0.0 {
@@ -2073,7 +2075,7 @@ pub fn compare(
     let difference = finite(a_value - b_value_in_a_unit)?;
     #[allow(
         clippy::disallowed_methods,
-        reason = "both operands are .abs() results, never negative zero"
+        reason = "both-abs: both operands are .abs() results, never negative zero"
     )]
     let denom = a_value.abs().max(b_value_in_a_unit.abs());
     let relative = if denom == 0.0 {
