@@ -125,6 +125,20 @@ law file は他の言語の実装も読む公開の仕様なので、読み方�
 — TPMS floor 緩和・`rotate_q` + Euler の det-math 切替・`fmt_f32` の完全 round-trip —
 は前史として扱う) example: `geometry_id_demo`、oracle: `tests/geometry_id_oracle.rs`
 
+pin は 8 本 (`alice-det-math` の識別子、度数正規化、Euler → quaternion、単軸 quaternion、
+単位長の受理境界、TPMS の受理境界、`stdlib` の超越関数の経路、`fmt_f32`) で、
+`LOL_GEOMETRY_SEMANTICS_ID` は `251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d`
+Euler の pin は特別な角度 8 件・`[-pi, pi]^3` の 15^3 格子に加えて、符号付き 0 と打ち消しの格子
+(`{±0, ±pi/6, ±pi/4, ±pi/2, ±pi}^3` の 1,000 件) を hash する 打ち消しで 0 になる成分の
+符号は算術の形 (fma の引数側の符号反転 / fma の結果の符号反転 / fma を使わない形) で変わるので、
+その違いで pin が動くことを unit test が 4 通りの別実装 (結果の符号反転、y の非 fma、x の非 fma、
+platform の `sin_cos`) で確かめる `stdlib` の pin は超越関数を使う 5 構成 (`skadis_hook_s` /
+`skadis_hook_j` / `countersink` / `dovetail` / `phone_dock`) を 17^3 点で評価した距離の bit
+識別子は振る舞いだけを名乗り、計算の経路は名乗らない (platform の libm と `alice-det-math` が
+probe の入力で一致すれば、経路を戻しても pin は動かない) 経路は `clippy.toml` の
+`disallowed-methods` と、新しい CI job `geometry-digest` (Linux x86_64 / Windows / macOS aarch64
+× debug / release で同じ記録値と比べる、どの試験も 1 件以上実行されることを確かめる) が担う
+
 #### 公開版と同じ依存で macro の全 keyword を compile する gate (`scripts/registry_consumer.sh` / `scripts/macro_kinds.py` / `scripts/published_source_check.py`)
 
 他の job は sibling crate を path (各 repo の main) で引くので、公開した `alice-lol` が crates.io から解決する版では一度も build されていなかった

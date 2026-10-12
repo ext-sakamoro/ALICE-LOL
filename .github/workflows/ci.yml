@@ -166,6 +166,69 @@ jobs:
         shell: bash
         run: python3 conformance/law_line_fuzz.py --pairs 150 -- python3 conformance/ref_impl.py -- target/debug/examples/audit_conformance
 
+  # The geometry identifier (`geometry_id`) pins results, not how they were
+  # computed, so its oracles have to run where a platform-dependent result
+  # would differ: Linux x86_64, Windows and macOS aarch64, debug and release.
+  # Every leg compares against the same recorded constants, so all six agree
+  # or one goes red. Each named test must run at least one test (a renamed or
+  # filtered-out target would otherwise pass with 0 tests).
+  geometry-digest:
+    name: Geometry digests (${{ matrix.os }}${{ matrix.profile }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        profile: ["", " --release"]
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+      - name: Geometry identifier and digest oracles
+        working-directory: ALICE-LOL
+        shell: bash
+        run: |
+          set -euo pipefail
+          run() {
+            out=$(cargo test -p alice-lol${{ matrix.profile }} "$@" 2>&1) || { printf '%s\n' "$out"; exit 1; }
+            printf '%s\n' "$out" | grep -E '^test result'
+            n=$(printf '%s\n' "$out" | sed -nE 's/^test result: ok\. ([0-9]+) passed.*/\1/p' | awk '{s+=$1} END {print s+0}')
+            [ "$n" -gt 0 ] || { echo "no test ran for: $*"; exit 1; }
+          }
+          run --lib geometry_id
+          run --lib quat_from_euler_xyz_is_bit_identical_across_architectures
+          run --lib y_component_cancellation_preserves_a_negative_zero_input
+          run --test geometry_id_oracle
+          run --test stdlib_profile_determinism_oracle
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
