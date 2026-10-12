@@ -27,17 +27,19 @@
 //!
 //! `syn` does not expand macros; a macro invocation (`foo!(...)`,
 //! `assert_eq!(...)`, a custom proc-macro call, etc.) is parsed as an opaque
-//! token stream, not as Rust expressions, so the AST walk below cannot see a
-//! `mul_add` call sitting inside one. As a cheap secondary (not a
-//! replacement — this cannot tell unary from binary minus across a macro's
-//! own comma-separated argument boundaries, so it is advisory only and never
-//! fails the gate by itself) this tool renders every macro invocation's
-//! token stream back to text and runs the same unary/binary-minus heuristic
-//! textually, reporting any hit as `note:` rather than `error:`. A repo that
-//! actually puts a `.mul_add(` call inside a macro body should audit those
-//! `note:` lines by hand; none of the sites this tool has been run against
-//! so far do (checked by grepping `.mul_add(` against known macro-body
-//! regions before relying on this tool as the sole gate).
+//! token stream, not as Rust expressions, so the AST walk above cannot tell
+//! whether a `mul_add` mention inside one is negated, safely negated-operand,
+//! or unrelated — unlike everywhere else this tool looks, it genuinely
+//! cannot verify the site. Rather than leave that as a silent blind spot,
+//! any macro invocation whose token stream contains the text `mul_add` is a
+//! **hard failure by default**, exactly like an unreviewed violation: it
+//! must be listed in the allowlist (`<file>:<line>` of the macro invocation,
+//! with a reason) before it passes, and — the same rule as everywhere else
+//! — a `src/`-scoped site has **no allowlist escape at all**: the only fix
+//! there is to pull the expression out of the macro call so the AST walk can
+//! verify it directly. The allowlist entry only ever means "a human looked
+//! at this specific macro invocation and confirmed it is safe", never
+//! "this form is fine in general".
 //!
 //! ⚠️ `src/` has no escape hatch: a `src/`-scoped finding with an allowlist
 //! entry is still a hard failure — rewriting to the Law form is the only fix
@@ -60,15 +62,19 @@ const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.txt";
 const ALLOWLIST_SCOPE_DIRS: [&str; 2] = ["tests", "examples"];
 const DEFAULT_SRC_DIRS: [&str; 3] = ["alice-lol/src", "alice-lol/tests", "alice-lol/examples"];
 
-struct Violation {
+enum FindingKind {
+    /// `-x.mul_add(y, z)` (any receiver shape) found directly by the AST walk.
+    NegatedMulAdd,
+    /// a macro invocation's token stream mentions `mul_add` — AST-unverified,
+    /// hard fail unless allowlisted (never allowlistable in `src/`).
+    MacroMulAdd,
+}
+
+struct Finding {
     rel: String,
     line: usize,
     excerpt: String,
-}
-
-struct MacroNote {
-    rel: String,
-    line_hint: usize,
+    kind: FindingKind,
 }
 
 struct FileCounts {
@@ -79,9 +85,16 @@ struct FileCounts {
 struct Visitor<'a> {
     rel: &'a str,
     src: &'a str,
-    violations: Vec<Violation>,
-    macro_notes: Vec<MacroNote>,
+    findings: Vec<Finding>,
     counts: FileCounts,
+}
+
+fn excerpt_at(src: &str, line: usize) -> String {
+    src.lines()
+        .nth(line.saturating_sub(1))
+        .unwrap_or("")
+        .trim()
+        .to_string()
 }
 
 fn is_mul_add_method(call: &ExprMethodCall) -> bool {
@@ -127,17 +140,11 @@ impl<'a> Visitor<'a> {
         self.counts.unary_neg_exprs += 1;
         if is_mul_add_result(&u.expr) {
             let line = u.op.span().start().line;
-            let excerpt = self
-                .src
-                .lines()
-                .nth(line.saturating_sub(1))
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            self.violations.push(Violation {
+            self.findings.push(Finding {
                 rel: self.rel.to_string(),
                 line,
-                excerpt,
+                excerpt: excerpt_at(self.src, line),
+                kind: FindingKind::NegatedMulAdd,
             });
         }
     }
@@ -165,14 +172,16 @@ impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
 
     fn visit_macro(&mut self, node: &'ast Macro) {
         // syn does not expand macros: the tokens inside are opaque to the
-        // AST walk above. Textual fallback only (see module doc) — never a
-        // hard error, always `note:`.
+        // AST walk above, so this cannot tell negated from safe — hard fail
+        // by default (see module doc), never allowlistable in src/.
         let rendered = node.tokens.to_string();
         if rendered.contains("mul_add") {
             let line = node.span().start().line;
-            self.macro_notes.push(MacroNote {
+            self.findings.push(Finding {
                 rel: self.rel.to_string(),
-                line_hint: line,
+                line,
+                excerpt: excerpt_at(self.src, line),
+                kind: FindingKind::MacroMulAdd,
             });
         }
         visit::visit_macro(self, node);
@@ -224,7 +233,8 @@ struct Report {
     mul_add_calls: usize,
     violations: usize,
     allowed: usize,
-    macro_notes: usize,
+    macro_hits: usize,
+    macro_allowed: usize,
 }
 
 fn check(root: &Path, src_dirs: &[String]) -> Report {
@@ -232,8 +242,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
     let mut files = 0usize;
     let mut unary_neg_exprs = 0usize;
     let mut mul_add_calls = 0usize;
-    let mut found: Vec<Violation> = Vec::new();
-    let mut macro_notes: Vec<MacroNote> = Vec::new();
+    let mut found: Vec<Finding> = Vec::new();
 
     for src_dir in src_dirs {
         let base = root.join(src_dir);
@@ -265,8 +274,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             let mut visitor = Visitor {
                 rel: &rel,
                 src: &src,
-                violations: Vec::new(),
-                macro_notes: Vec::new(),
+                findings: Vec::new(),
                 counts: FileCounts {
                     unary_neg_exprs: 0,
                     mul_add_calls: 0,
@@ -275,8 +283,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             visitor.visit_file(&parsed);
             unary_neg_exprs += visitor.counts.unary_neg_exprs;
             mul_add_calls += visitor.counts.mul_add_calls;
-            found.extend(visitor.violations);
-            macro_notes.extend(visitor.macro_notes);
+            found.extend(visitor.findings);
         }
     }
 
@@ -290,9 +297,10 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             files,
             unary_neg_exprs,
             mul_add_calls,
-            violations: found.len(),
+            violations: 0,
             allowed: 0,
-            macro_notes: macro_notes.len(),
+            macro_hits: 0,
+            macro_allowed: 0,
         };
     }
     if mul_add_calls == 0 {
@@ -303,39 +311,45 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
 
     let allowlist = read_allowlist(root);
     let mut allowed = 0usize;
+    let mut macro_allowed = 0usize;
+    let mut violations = 0usize;
+    let mut macro_hits = 0usize;
     let found_keys: BTreeSet<String> = found
         .iter()
         .map(|v| format!("{}:{}", v.rel, v.line))
         .collect();
 
-    for v in &found {
-        let key = format!("{}:{}", v.rel, v.line);
+    for f in &found {
+        let key = format!("{}:{}", f.rel, f.line);
+        let (default_label, src_blocked_label) = match f.kind {
+            FindingKind::NegatedMulAdd => {
+                violations += 1;
+                ("呼び出し結果全体を negate する fma、禁止形", "src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す")
+            }
+            FindingKind::MacroMulAdd => {
+                macro_hits += 1;
+                (
+                    "macro 呼び出しの中に mul_add がある、AST 未検証 — allowlist に理由付きで明記する",
+                    "src/ 配下は allowlist 不可、macro 呼び出しの外に出して書き直す — allowlist の行も消す",
+                )
+            }
+        };
         if allowlist.contains(&key) {
-            if is_allowlist_eligible(&v.rel) {
-                allowed += 1;
+            if is_allowlist_eligible(&f.rel) {
+                match f.kind {
+                    FindingKind::NegatedMulAdd => allowed += 1,
+                    FindingKind::MacroMulAdd => macro_allowed += 1,
+                }
                 continue;
             }
-            errors.push(format!(
-                "error: {}:{}: {}  (src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す)",
-                v.rel, v.line, v.excerpt
-            ));
+            errors.push(format!("error: {}:{}: {}  ({})", f.rel, f.line, f.excerpt, src_blocked_label));
             continue;
         }
-        errors.push(format!(
-            "error: {}:{}: {}  (呼び出し結果全体を negate する fma、禁止形)",
-            v.rel, v.line, v.excerpt
-        ));
+        errors.push(format!("error: {}:{}: {}  ({})", f.rel, f.line, f.excerpt, default_label));
     }
 
     for key in allowlist.difference(&found_keys) {
         errors.push(format!("error: {key}: allowlist にあるが実物が無い — 行を消す"));
-    }
-
-    for note in &macro_notes {
-        println!(
-            "note: {}:{}: macro 呼び出しの中に mul_add が見える (textual、AST 未検証、手で確認)",
-            note.rel, note.line_hint
-        );
     }
 
     Report {
@@ -343,9 +357,10 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
         files,
         unary_neg_exprs,
         mul_add_calls,
-        violations: found.len(),
+        violations,
         allowed,
-        macro_notes: macro_notes.len(),
+        macro_hits,
+        macro_allowed,
     }
 }
 
@@ -376,13 +391,14 @@ fn main() {
         println!("{e}");
     }
     println!(
-        "compared: files {}, unary-neg exprs examined {}, mul_add calls {}, mul_add under neg {}, allowed (tests/examples) {}, macro notes {}",
+        "compared: files {}, unary-neg exprs examined {}, mul_add calls {}, mul_add under neg {}, allowed (tests/examples) {}, macro mul_add mentions {}, macro allowed {}",
         report.files,
         report.unary_neg_exprs,
         report.mul_add_calls,
         report.violations,
         report.allowed,
-        report.macro_notes
+        report.macro_hits,
+        report.macro_allowed
     );
     if !report.errors.is_empty() {
         println!("no-outer-fneg-of-fma: {} violation(s)", report.errors.len());
@@ -588,14 +604,50 @@ mod tests {
     }
 
     #[test]
-    fn macro_body_is_a_note_not_an_error() {
-        // documented blind spot: textual note only, never fails the gate by
-        // itself (the macro arguments are not valid standalone Rust exprs
-        // in general, e.g. assert_eq!'s comma-separated args)
-        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", -a.mul_add(b, c));\n}\n";
+    fn macro_mul_add_mention_is_a_hard_fail_by_default() {
+        // documented blind spot: the AST walk cannot verify a macro's
+        // argument tokens, so any mul_add mention there fails by default,
+        // not just a note — the gate must not stay silently blind to new
+        // code that hides a negation inside a macro call.
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
         let r = run(&[(SRC, src)], None);
-        assert_eq!(r.violations, 0, "macro body must not count as an AST violation");
-        assert_eq!(r.macro_notes, 1);
+        assert_eq!(r.violations, 0, "the macro mention itself is not an AST-level negation");
+        assert_eq!(r.macro_hits, 1);
+        assert_eq!(r.macro_allowed, 0);
+        assert!(!r.errors.is_empty(), "unreviewed macro mul_add mention must fail");
+    }
+
+    #[test]
+    fn macro_hidden_negation_is_also_a_hard_fail() {
+        // the specific danger case: a negated mul_add hidden inside a macro
+        // invocation — the AST walk cannot see it is negated at all (it is
+        // opaque tokens), so it must still fail, same as the plain mention.
+        let src = "fn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", -a.mul_add(b, c));\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.macro_hits, 1);
+        assert!(r.errors.iter().any(|e| e.contains("macro 呼び出しの中に mul_add")));
+    }
+
+    #[test]
+    fn macro_mul_add_in_src_fails_even_with_an_allowlist_entry() {
+        // same no-escape-hatch rule as a direct src/ violation: a macro
+        // mention in src/ cannot be allowlisted away, only rewritten out of
+        // the macro so the AST walk can verify it directly.
+        let src = "fn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
+        let r = run(&[(SRC, src)], Some(&format!("# 理由\n{SRC}:2\n")));
+        assert_eq!(r.macro_hits, 1);
+        assert_eq!(r.macro_allowed, 0);
+        assert!(r.errors.iter().any(|e| e.contains("macro 呼び出しの外に出して書き直す")));
+    }
+
+    #[test]
+    fn macro_mul_add_in_tests_dir_passes_with_an_allowlist_entry() {
+        let oracle = "alice-lol/tests/oracle.rs";
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
+        let r = run(&[(oracle, src)], Some(&format!("# 比較用\n{oracle}:5\n")));
+        assert_eq!(r.errors, Vec::<String>::new());
+        assert_eq!(r.macro_hits, 1);
+        assert_eq!(r.macro_allowed, 1);
     }
 
     #[test]
