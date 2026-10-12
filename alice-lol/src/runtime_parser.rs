@@ -2990,11 +2990,7 @@ impl<'a> Parser<'a> {
                     height: h,
                     flange_thickness: 3.0,
                     flange_overhang: 4.0,
-                    #[allow(
-                        clippy::disallowed_methods,
-                        reason = "nonzero-const: operand 4.0 is a nonzero constant, the equal-zero tie cannot occur"
-                    )]
-                    inner_dia: (od - 10.0).max(4.0),
+                    inner_dia: crate::raw_minmax::raw_max_f32(od - 10.0, 4.0),
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::cable_grommet(
                     &spec,

@@ -1663,13 +1663,7 @@ impl ResearchLaw {
             let observed = finite(o.value)?;
             let d = observed - self.evaluate_with(&borrowed_conditions(&o.conditions), params)?;
             sum_sq += d * d;
-            {
-                #![allow(
-                    clippy::disallowed_methods,
-                    reason = "both-abs: max_abs starts at 0.0 and both operands are always .abs()-derived"
-                )]
-                max_abs = max_abs.max(d.abs());
-            }
+            max_abs = crate::raw_minmax::raw_max_f64(max_abs, d.abs());
         }
         Ok(ResidualStats {
             n: observations.len(),
@@ -1702,11 +1696,7 @@ impl ResearchLaw {
             r.push(o.value - self.evaluate_with(&cond, p).ok()?);
             let mut row = Vec::with_capacity(p.len());
             for j in 0..p.len() {
-                #[allow(
-                    clippy::disallowed_methods,
-                    reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
-                )]
-                let h = GN_FD_STEP * p[j].abs().max(1.0);
+                let h = GN_FD_STEP * crate::raw_minmax::raw_max_f64(p[j].abs(), 1.0);
                 shifted[j] = p[j] + h;
                 let up = self.evaluate_with(&cond, &shifted).ok()?;
                 shifted[j] = p[j] - h;
@@ -1759,14 +1749,9 @@ impl ResearchLaw {
             let Some((cand, c_ssr)) = accepted else {
                 break;
             };
-            #[allow(
-                clippy::disallowed_methods,
-                reason = "nonzero-const: operand 1.0 is a nonzero constant, the equal-zero tie cannot occur"
-            )]
-            let converged = cand
-                .iter()
-                .zip(&p)
-                .all(|(new, old)| (new - old).abs() <= GN_TOLERANCE * old.abs().max(1.0));
+            let converged = cand.iter().zip(&p).all(|(new, old)| {
+                (new - old).abs() <= GN_TOLERANCE * crate::raw_minmax::raw_max_f64(old.abs(), 1.0)
+            });
             p = cand;
             ssr = c_ssr;
             if converged {
@@ -1912,11 +1897,9 @@ fn normal_matrix(jac: &[Vec<f64>], k: usize) -> Vec<Vec<f64>> {
 #[allow(clippy::needless_range_loop, clippy::suboptimal_flops)]
 fn solve(mut m: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Option<Vec<f64>> {
     let k = rhs.len();
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "both-abs: every folded value is .abs()-derived and the seed is +0.0, never negative zero"
-    )]
-    let scale = (0..k).map(|i| m[i][i].abs()).fold(0.0_f64, f64::max);
+    let scale = (0..k)
+        .map(|i| m[i][i].abs())
+        .fold(0.0_f64, crate::raw_minmax::raw_max_f64);
     if !scale.is_finite() || scale <= 0.0 {
         return None;
     }
@@ -2073,11 +2056,7 @@ pub fn compare(
     let b_value = b.evaluate(&b_conditions)?;
     let b_value_in_a_unit = finite(b_value * b.output_unit.scale / a.output_unit.scale)?;
     let difference = finite(a_value - b_value_in_a_unit)?;
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "both-abs: both operands are .abs() results, never negative zero"
-    )]
-    let denom = a_value.abs().max(b_value_in_a_unit.abs());
+    let denom = crate::raw_minmax::raw_max_f64(a_value.abs(), b_value_in_a_unit.abs());
     let relative = if denom == 0.0 {
         0.0
     } else {
