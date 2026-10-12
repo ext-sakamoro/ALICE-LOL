@@ -115,6 +115,10 @@ step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越�
 python3 scripts/test_det_math_guard.py
 python3 scripts/det_math_guard.py
 
+step "ci.yml / fma-guard: oracle + Law code に mul_add の結果全体を negate する形が無い"
+python3 scripts/test_no_outer_fneg_of_fma.py
+python3 scripts/no_outer_fneg_of_fma.py
+
 step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check

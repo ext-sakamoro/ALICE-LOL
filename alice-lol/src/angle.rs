@@ -119,9 +119,43 @@ pub fn quat_from_euler_xyz(x: f32, y: f32, z: f32) -> glam::Quat {
     let sc = si * ch;
     let ss = si * sh;
     // XYZ: parity_even = true -> parity = -1.0, (i, j, k) = (x, y, z)
+    //
+    // The `y` component is deliberately *not* `-(cj.mul_add(ss, sj * cc))`
+    // (negating the *result* of a fused multiply-add): at exact cancellation
+    // (`cj * ss + sj * cc` rounds to exactly zero, which happens whenever
+    // `y` is `+0.0` or `-0.0`, since that is exactly when `cj.mul_add(ss, sj
+    // * cc)` and `sj * cc` are both zero-valued), round-to-nearest-even
+    // defines the fma's result as `+0.0`, so the IEEE-correct value of the
+    // outer negation is `-0.0`. `rustc 1.98.1` (LLVM 22.1.8,
+    // `aarch64-apple-darwin`) computes exactly that at `-C opt-level=0`
+    // (`bl mul_add; fneg s0, s0`, a literal negate of the already-rounded
+    // result) but at `opt-level>=1` applies LLVM's `fneg(fma(x,y,z)) ->
+    // fma(x,-y,-z)` sink -- which is an `nsz`-only-valid transform that
+    // Rust's default (no-`nsz`) codegen has no business applying -- turning
+    // it into a single `fnmadd` instruction whose cancellation result is
+    // `+0.0`. That is a real behavior split between `-C opt-level=0` and
+    // `>=1` for this exact expression shape (confirmed via `rustc
+    // --emit=asm`), independent of `alice-det-math`'s own version.
+    //
+    // `(-cj).mul_add(ss, -(sj * cc))` is not the same expression: negating
+    // both fma operands before the call, rather than negating the call's
+    // result, is `fma(-cj, ss, -(sj*cc)) = round(-(cj*ss) - sj*cc)`, whose
+    // cancellation result is `+0.0` by the same round-to-nearest-even rule
+    // -- and this value is what every optimization level computes (the
+    // `-nsz` sink above only rewrites an *outer* negation; there is none
+    // here for it to rewrite). It keeps the fma's single rounding (unlike
+    // unfused `-(cj * ss + sj * cc)`, which double-rounds and is pinned to
+    // the *other* IEEE-correct zero, `-0.0`, on every level -- also stable,
+    // but not the form chosen here). `+0.0` is the canonical sign Law code
+    // persists for an exact-cancellation rotation component; see
+    // `quat_from_euler_xyz_tests` for the debug/release and cancellation
+    // lattice this is checked against, and
+    // `scripts/no_outer_fneg_of_fma.py` for the lint that keeps this
+    // expression shape (and every other Law-bearing fma) from regressing
+    // back to negating a whole fma call.
     glam::Quat::from_xyzw(
         cj.mul_add(sc, -(sj * cs)),
-        -(cj.mul_add(ss, sj * cc)),
+        (-cj).mul_add(ss, -(sj * cc)),
         cj.mul_add(cs, -(sj * sc)),
         cj.mul_add(cc, sj * ss),
     )
@@ -387,6 +421,137 @@ mod quat_from_euler_xyz_tests {
     };
     use glam::{EulerRot, Quat};
 
+    /// The `alice-det-math` version the oracle table literals below were
+    /// measured against (see the table's own doc comment)
+    const DET_MATH_PINNED_VERSION: &str = "0.5.0";
+
+    /// The `rustc --version` output the `y`-component formula's
+    /// debug/release stability (and the oracle table literals) were last
+    /// verified under. The instruction selection that turned the previous
+    /// formula's bug on (`fneg(fma) -> fma(x,-y,-z)`, an `nsz`-only-valid
+    /// LLVM sink applied without `nsz`) is an LLVM-version behavior, not
+    /// something `alice-det-math`'s own version tracks -- a rustc/LLVM
+    /// upgrade could reintroduce an analogous miscompile for a *different*
+    /// expression shape even with this fix in place, so this is checked
+    /// independently of [`DET_MATH_PINNED_VERSION`]
+    const RUSTC_PINNED_VERSION: &str = "rustc 1.98.1 (48a229cea 2026-09-01)";
+
+    /// Every row here is an exact-cancellation input for `y` (euler `y` is
+    /// `+0.0`, so `tj` is `-0.0`, so `cj.mul_add(ss, sj * cc)` rounds to
+    /// exactly zero) across a sweep of `x`/`z` at 0, pi/2, and a 45 degree
+    /// off-axis case, per the signed-zero + cancellation lattice this
+    /// regression (2026-10-12, see the function's own doc comment) needs
+    /// covered. `x`/`z` = `PI` is deliberately excluded: `std::f32::consts::PI`
+    /// is not an exact representation of the true period, so `cos(PI *
+    /// 0.5)` is not exactly `0.0` there and this is not actually a clean
+    /// cancellation input -- it is already covered separately (and still
+    /// pinned to `-0.0`, unaffected by this fix) by the main oracle table's
+    /// `(PI, 0.0, 0.0)` row. Checked against the canonical sign (`+0.0`) directly,
+    /// not against a hand-computed pin, and run under both `cargo test` and
+    /// `cargo test --release` in CI -- the debug/release oracle this
+    /// regression needed.
+    ///
+    /// Note: euler `y = -0.0` is *not* folded into this same lattice as "the
+    /// same rotation, so it must agree" -- it does not. `tj` flips sign
+    /// with `y` (`-(-0.0) = +0.0`), so `sj = sin_cos(tj).0` flips sign too,
+    /// and the canonical-`+0.0` form chosen here gives `-0.0` for that input
+    /// (measured, debug/release-identical either way): a quaternion
+    /// component's sign of zero is not required to be invariant under
+    /// `y -> -y` the way the rotation it represents is invariant under
+    /// `0.0 == -0.0`; `glam`'s own `Quat` does not canonicalize zero signs.
+    #[test]
+    fn y_component_cancellation_lattice_is_debug_release_identical_and_canonical() {
+        use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+        // every row has `x == 0.0` or `z == 0.0` (or both): that is what
+        // makes `si * sh` (== `ss`) exactly zero and so makes this an exact
+        // cancellation input at all -- `(-FRAC_PI_4, -FRAC_PI_4)` is *not*
+        // in this lattice because with both nonzero, `ss` is a genuine
+        // nonzero value and `y` does not cancel to zero (measured: it is a
+        // real, debug/release-identical nonzero `y`, just not this test's
+        // canonical-zero property)
+        let lattice: &[(f32, f32)] = &[
+            (0.0, 0.0),
+            (FRAC_PI_2, 0.0),
+            (0.0, FRAC_PI_2),
+            (-FRAC_PI_2, 0.0),
+            (0.0, -FRAC_PI_2),
+            (FRAC_PI_4, 0.0),
+            (0.0, FRAC_PI_4),
+            (-FRAC_PI_4, 0.0),
+            (0.0, -FRAC_PI_4),
+        ];
+        for &(x, z) in lattice {
+            let q = quat_from_euler_xyz(x, 0.0, z);
+            assert_eq!(
+                q.y.to_bits(),
+                0.0f32.to_bits(),
+                "(x={x}, y=+0.0, z={z}): y = {:08x}, expected the canonical +0.0 (0x00000000)",
+                q.y.to_bits()
+            );
+        }
+    }
+
+    /// Non-finite inputs must not panic and must propagate as NaN on every
+    /// component, in every direction (`inf`, `-inf`, `NaN`), for both the
+    /// zero-input-adjacent `y` path this module's other tests target and the
+    /// general case
+    #[test]
+    fn non_finite_euler_angles_propagate_as_nan_without_panicking() {
+        let non_finite: &[f32] = &[f32::INFINITY, f32::NEG_INFINITY, f32::NAN];
+        for &bad in non_finite {
+            for (x, y, z) in [(bad, 0.0, 0.0), (0.0, bad, 0.0), (0.0, 0.0, bad)] {
+                let q = quat_from_euler_xyz(x, y, z);
+                assert!(
+                    q.x.is_nan() && q.y.is_nan() && q.z.is_nan() && q.w.is_nan(),
+                    "(x={x}, y={y}, z={z}) -> {q:?} (expected all-NaN)"
+                );
+            }
+        }
+    }
+
+    /// `build.rs` reads `Cargo.lock` and fails the build if it can't find
+    /// exactly one resolvable `alice-det-math` version for this crate; this
+    /// asserts that version is the one the oracle table was pinned for, so a
+    /// dependency bump that changes `alice-det-math`'s rounding fails this
+    /// test instead of silently invalidating stale literals
+    #[test]
+    fn oracle_table_pinned_version_matches_resolved_det_math() {
+        let resolved = env!("ALICE_DET_MATH_LOCKED_VERSION");
+        assert!(
+            !resolved.is_empty(),
+            "build.rs emitted an empty version (should have panicked instead)"
+        );
+        assert_eq!(
+            resolved, DET_MATH_PINNED_VERSION,
+            "Cargo.lock resolves alice-det-math {resolved} but the oracle table below was pinned \
+             for {DET_MATH_PINNED_VERSION} -- re-measure every row (not just the first one that \
+             fails), then update both this constant and the table"
+        );
+    }
+
+    /// `build.rs` runs `rustc --version` and fails the build if it produces
+    /// an empty or unreadable result; this asserts that version is the one
+    /// `quat_from_euler_xyz`'s `y`-component formula (and the oracle table)
+    /// were last verified debug/release-identical under, so a rustc/LLVM
+    /// upgrade that changes instruction selection for this expression shape
+    /// fails this test instead of silently going undetected until a report
+    /// of debug/release mismatch comes in again
+    #[test]
+    fn oracle_table_pinned_version_matches_resolved_rustc() {
+        let resolved = env!("RUSTC_LOCKED_VERSION");
+        assert!(
+            !resolved.is_empty(),
+            "build.rs emitted an empty version (should have panicked instead)"
+        );
+        assert_eq!(
+            resolved, RUSTC_PINNED_VERSION,
+            "building with {resolved} but the y-component formula's debug/release stability was \
+             last verified under {RUSTC_PINNED_VERSION} -- re-run \
+             y_component_cancellation_lattice_is_debug_release_identical_and_canonical under both \
+             `cargo test` and `cargo test --release` before trusting it, then update this constant"
+        );
+    }
+
     /// This is a different trig backend (`alice_det_math::sin_cos`, not
     /// `glam`'s own libm-backed one) computing the SAME Shoemake XYZ formula,
     /// so an exact bit match is not expected -- only that the two stay within
@@ -453,10 +618,44 @@ mod quat_from_euler_xyz_tests {
     /// `x86_64`, `macos-latest` is `aarch64`), so a mismatch on any one of
     /// them is exactly the cross-architecture drift `alice_det_math::sin_cos`
     /// exists to prevent (unlike `glam::Quat::from_euler`, which dispatches
-    /// to a different SIMD/libm backend per target). If `alice_det_math`
-    /// ever changes its own rounding, this is the test that should be
-    /// re-generated (see the module doc's "Why this exists" for how), not
-    /// loosened to a tolerance.
+    /// to a different SIMD/libm backend per target).
+    ///
+    /// # Pinned for `alice-det-math` 0.5.0
+    ///
+    /// The literal bits below are only valid for the exact rounding
+    /// `alice-det-math` 0.5.0 produces; a dependency bump that changes its
+    /// own rounding invalidates this table silently unless something checks
+    /// the version. [`oracle_table_pinned_version_matches_resolved_det_math`]
+    /// is that check: it fails the build (via `build.rs`) if it can't read
+    /// `Cargo.lock`, and fails the test (not just a silent pass) if the
+    /// crate resolves a different `alice-det-math` than the one named here.
+    /// If `alice_det_math` ever changes its own rounding again, re-measure
+    /// every row of this table (not just the one a CI failure happens to
+    /// point at first), update [`DET_MATH_PINNED_VERSION`], and re-run both
+    /// checks.
+    ///
+    /// # Pinned for `rustc` 1.98.1 (LLVM 22.1.8)
+    ///
+    /// The 3 rows below whose `y` is an exact-cancellation zero (`y` input
+    /// is `+0.0` or `-0.0`) depend on `quat_from_euler_xyz`'s `y` formula
+    /// being the specific fma-operand-negation shape documented on that
+    /// function, not any equivalent-looking rewrite of it -- see that
+    /// function's doc comment for why the three candidate forms are not
+    /// interchangeable, and `scripts/no_outer_fneg_of_fma.py` for the lint
+    /// that keeps Law code from regressing to the one that isn't.
+    ///
+    /// History (2026-10-12), because the same row was mis-diagnosed twice:
+    /// the regression (`y` differing between `-C opt-level=0` and `>=1`)
+    /// was first mis-attributed to `alice-det-math` 0.4.0 -> 0.5.0's
+    /// `sin(-0.0)` sign fix, and "fixed" by flipping 3 rows' pins to
+    /// `+0.0`. That was wrong -- the actual cause was independent of
+    /// `alice-det-math`'s version. The second attempt (unfused
+    /// multiply-add) was debug/release-stable but pins the *other*
+    /// IEEE-correct zero (`-0.0`, from double-rounding); it was replaced by
+    /// the fma-operand-negation form, which is both debug/release-stable
+    /// *and* keeps the fma's single rounding, pinning `+0.0` -- the
+    /// canonical sign this codebase persists for an exact-cancellation
+    /// rotation component.
     #[test]
     fn quat_from_euler_xyz_is_bit_identical_across_architectures() {
         type Row = ((f32, f32, f32), (u32, u32, u32, u32));
@@ -468,11 +667,11 @@ mod quat_from_euler_xyz_tests {
         let table: &[Row] = &[
             (
                 (0.0, 0.0, 0.0),
-                (0x0000_0000, 0x8000_0000, 0x0000_0000, 0x3f80_0000),
+                (0x0000_0000, 0x0000_0000, 0x0000_0000, 0x3f80_0000),
             ),
             (
                 (FRAC_PI_2, 0.0, 0.0),
-                (0x3f35_04f4, 0x8000_0000, 0x0000_0000, 0x3f35_04f3),
+                (0x3f35_04f4, 0x0000_0000, 0x0000_0000, 0x3f35_04f3),
             ),
             (
                 (0.0, FRAC_PI_4, 0.0),
@@ -480,7 +679,7 @@ mod quat_from_euler_xyz_tests {
             ),
             (
                 (0.0, 0.0, FRAC_PI_6),
-                (0x0000_0000, 0x8000_0000, 0x3e84_83ee, 0x3f77_46ea),
+                (0x0000_0000, 0x0000_0000, 0x3e84_83ee, 0x3f77_46ea),
             ),
             (
                 (0.174_532_92, 0.349_065_84, FRAC_PI_6),
