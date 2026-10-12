@@ -134,7 +134,7 @@ step "ci.yml / det-math-minmax-blob-sync: alice-lol の det_math max/min が ali
 python3 scripts/test_det_math_minmax_blob_sync.py
 python3 scripts/det_math_minmax_blob_sync.py
 
-step "ci.yml / disallowed-methods-allow-reasons: 個別 allow の reason が既知の prefix を持つ"
+step "ci.yml / disallowed-methods-allow-reasons: 個別 allow の reason が既知 prefix + 隠れた libm 呼び出し無し"
 python3 scripts/test_disallowed_methods_allow_reasons.py
 python3 scripts/disallowed_methods_allow_reasons.py
 

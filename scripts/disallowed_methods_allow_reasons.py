@@ -26,6 +26,20 @@ site or widen the pattern list deliberately, in the same commit, not by
 leaving the reason unprefixed). So does a file with `#[allow(dead_code)]`'s
 unrelated reason being miscounted here, or zero sites found at all.
 
+⚠️ An `#[allow(clippy::disallowed_methods, ...)]` silences the lint for the
+*whole annotated statement*, not just the one method call the reason is
+about — the libm ban (`f32`/`f64` `sin`/`cos`/`tan`/`atan`/`exp`/`ln`/`log`/
+`powf`/... in `alice-lol/clippy.toml`) shares the same lint name, so a
+`nonzero-const:`/`both-abs:`/`int-cast:` allow sitting on a statement that
+*also* happens to call one of those would silently let it through too. This
+script therefore also scans the statement each such allow actually covers
+(a cheap text scan: from the end of the attribute to the next top-level `;`
+or enclosing `}`, not a real parse) for any libm method/path name, and fails
+if one is found — that statement is not exempt from the libm ban, whatever
+the max/min reason says. `test-probe-alternative:` is the one prefix this
+does not apply to: a probe exists specifically to call the forbidden libm
+form as a comparison baseline, so finding one there is the point, not a leak.
+
 No `svg-pipeline-exempt:`-style blanket "this output isn't covered by an
 oracle so the platform difference doesn't matter" prefix exists here on
 purpose: `laser_pattern.rs`'s libm calls were exempted that way once (the SVG
@@ -56,6 +70,44 @@ PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:
 # outer parens so a reason inside is found regardless of argument order
 ALLOW_RE = re.compile(r"#\s*!?\s*\[\s*allow\s*\((?P<body>.*?)\)\s*\]", re.S)
 REASON_RE = re.compile(r'reason\s*=\s*"(?P<text>(?:[^"\\]|\\.)*)"')
+
+# the libm ban in alice-lol/clippy.toml, as method-call and path-call forms;
+# a cheap name list (not every entry there), matching 6e's "sin/cos/tan/atan/
+# exp/ln/log/powf" plus the few close relatives already in that file
+LIBM_NAMES = (
+    "sin_cos", "sin", "cos", "tan", "atan2", "atan", "asin", "acos",
+    "exp2", "exp_m1", "exp", "ln_1p", "ln", "log2", "log10", "log",
+    "powf", "cbrt", "hypot", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+)
+LIBM_CALL_RE = re.compile(
+    r"\.(?:" + "|".join(LIBM_NAMES) + r")\(|\b(?:f32|f64)::(?:" + "|".join(LIBM_NAMES) + r")\("
+)
+
+MAX_STATEMENT_SCAN = 3000
+
+
+def statement_after(text: str, pos: int) -> str:
+    """Cheap, non-parsing capture of the statement starting at `pos`: up to
+    the next top-level `;` (bracket/paren/brace-depth 0) or an enclosing `}`
+    reached at depth 0 (a semicolon-less tail expression), capped so a
+    malformed file cannot make this scan the rest of the file."""
+    depth = 0
+    n = min(len(text), pos + MAX_STATEMENT_SCAN)
+    i = pos
+    while i < n:
+        c = text[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]":
+            depth -= 1
+        elif c == "}":
+            if depth == 0:
+                return text[pos:i]
+            depth -= 1
+        elif c == ";" and depth == 0:
+            return text[pos : i + 1]
+        i += 1
+    return text[pos:n]
 
 
 def iter_rs_files(base: str):
@@ -97,7 +149,17 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     f"({', '.join(PREFIXES)} のどれか) — 内容: {text_reason[:60]!r}"
                 )
                 continue
-            counts[matched[0]] += 1
+            prefix = matched[0]
+            counts[prefix] += 1
+            if prefix != "test-probe-alternative:":
+                stmt = statement_after(text, m.end())
+                lm = LIBM_CALL_RE.search(stmt)
+                if lm:
+                    errors.append(
+                        f"error: {rel}:{line}: {prefix} の allow が隠す statement に libm 呼び出し "
+                        f"({lm.group(0)!r}) が含まれる — この statement は libm 禁止の対象外にならない、"
+                        "libm 呼び出しを allow の外 (別 statement) に出す"
+                    )
 
     if files == 0:
         errors.append(f"error: {SRC_DIR}: file を 1 つも読めなかった — 検査が空振りしている")
