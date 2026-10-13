@@ -655,6 +655,10 @@ jobs:
         run: python scripts/test_raw_minmax_manifest.py
       - name: raw-minmax-manifest (raw_minmax_here!() を呼ぶ module を一覧する、G2、drift 検知)
         run: python scripts/raw_minmax_manifest.py
+      - name: print-export-no-hashmap-iteration oracle (検査器自身の試験)
+        run: python scripts/test_print_export_no_hashmap_iteration.py
+      - name: print-export-no-hashmap-iteration (print_export.rs の HashMap/HashSet local は lookup/len のみ、G13)
+        run: python scripts/print_export_no_hashmap_iteration.py
       - name: libm-hidden-check oracle (検査器自身の試験)
         run: python scripts/test_libm_hidden_check.py
       - name: libm-hidden-check (disallowed_methods の allow を全部外し、libm が src/ scope に漏れていないか clippy で検査)

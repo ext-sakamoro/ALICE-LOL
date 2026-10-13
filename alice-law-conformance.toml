@@ -82,8 +82,10 @@ note = "this crate's own docs_lint.py is the equivalent of ALICE-Law's public_te
 reference_repo = "ALICE-Law"
 
 [G13]
-status = "missing"
-note = "alice-lol/src/print_export.rs uses HashMap and HashSet for mesh vertex/edge deduplication; whether their iteration order (as opposed to membership/lookup alone) ever reaches persisted or compared output was not individually traced"
+status = "pass"
+evidence = ["scripts/print_export_no_hashmap_iteration.py + scripts/test_print_export_no_hashmap_iteration.py (closed static check: the HashMap/HashSet type is named nowhere in print_export.rs outside its two pinned locals' own declarations, and those two locals are never referenced except through a short whitelist of lookup methods)", "alice-lol/examples/print_export_probe.rs + alice-lol/tests/print_export_determinism.rs (the same scene exported by two separate processes under RAYON_NUM_THREADS=1 and =3, byte-identical STL+3MF)"]
+since = ""
+note = "print_export.rs's HashSet<(u32,u32)> (euler_characteristic, local name edges) is only measured (.len()); its HashMap<[u32; 3], usize> (weld_coincident_vertices, local name id) is only looked up (.entry()), with output vertices pushed in raw.vertices's own order, not the map's. The static check is closed on both the type (HashMap/HashSet is named nowhere else in the file, not via an untyped declaration, a full path, a type alias, a struct field, or a function parameter) and the two pinned names (every other appearance of id/edges must be an immediate whitelisted call, so a reference, an argument, an alias, or a trait-method-call-by-path all fail); renaming either local is itself a violation, by design. The runtime evidence specifically needs the 3MF output, not STL: STL writes each triangle's three vertices in full with no shared vertex list, so a HashMap-bucket-order-driven renumbering of vertices does not reach STL bytes at all, only 3MF's shared, indexed one -- verified by hand (a mutant deciding output order from the map's own iteration failed both checks, STL stayed identical across runs and only 3MF differed; reverted, not committed)"
 reference_repo = ""
 
 [G14]

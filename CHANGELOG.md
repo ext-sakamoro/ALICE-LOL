@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `docs/LOL_CONJUGATION_GLOSSARY.md`: `lol` を動詞として活用した時の各活用形が、この crate 自身の適合状態 (`alice-law-conformance.toml` の G1-G14) のどの段階を指すかの用語集 未然・連用・終止・連体・仮定・命令の 6 形 + 受身・可能、派生形 (サ変・使役・継続・完了強調) と英語側の活用 (lol/lols/lolled/lolling、lol'd は非正典) を含む README / README_JP には要約と本章への link のみを追加
+- G13 (no-unspecified-order) の証跡 2 点を追加し `alice-law-conformance.toml` の `[G13]` を pass に: `scripts/print_export_no_hashmap_iteration.py` (`print_export.rs` の `HashMap`/`HashSet` 型そのものが固定した import 行 + 2 行の宣言以外に一度も出ない、かつその 2 local (`id`/`edges`) への参照は全て lookup method の許可一覧のみ、という 2 条件を file 全体で検査、未型付け宣言・full path・type alias・struct field・参照渡し・`use ... as` 別名 import・二重 import など 11 種の迂回形を red にすることを self test で固定、他 crate の API 経由で来る HashMap はこの textual 検査の原理的な死角で `tests/print_export_determinism.rs` が backstop と明記) と `tests/print_export_determinism.rs` + `examples/print_export_probe.rs` (同一 scene を別 process・別 `RAYON_NUM_THREADS` で export し STL/3MF が byte 一致することを検査、頂点順が変わる変異は indexed な 3MF にだけ現れ非 indexed な STL には現れない) いずれも、反復に書き換える変異で手動検証済み (red になることを確認し元に戻した)
 
 ### Fixed
 

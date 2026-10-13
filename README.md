@@ -414,6 +414,7 @@ the full vocabulary and worked examples against this crate's own
 | [`llm_bench`](alice-lol/examples/llm_bench.rs) | pass rate of grammar-constrained decoding against a think-then-grammar prompt (feature `llm-bridge`) |
 | [`gridfinity_untrusted_input`](alice-lol/examples/gridfinity_untrusted_input.rs) | the fallible `try_gridfinity_bin` entry point refusing a degenerate dividers count instead of panicking |
 | [`parse_one_lol`](alice-lol/examples/parse_one_lol.rs) | a one-shot `parse_lol` probe with a memory-capped allocator, used by `tests/degenerate_grid.rs` to run each generated case in its own process |
+| [`print_export_probe`](alice-lol/examples/print_export_probe.rs) | exports one scene's STL + 3MF to a given directory, used by `tests/print_export_determinism.rs` to run the same scene in two separate processes |
 
 Run one with `cargo run -p alice-lol --example <name>`.
 
