@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       ref:
-        description: 'Commit to check out instead of the tag (to try a release before its tag exists); empty = the tag'
+        description: 'Commit (full 40-character SHA), branch or tag to check out instead of the tag (to try a release before its tag exists); empty = the tag'
         required: false
         type: string
         default: ''
@@ -60,6 +60,14 @@ jobs:
           ref: ${{ inputs.ref || inputs.tag || github.ref }}
           path: ALICE-LOL
 
+      # the sibling tool comes from this workflow's own commit: a tag made before the tool
+      # existed does not contain it
+      - uses: actions/checkout@v5
+        with:
+          path: release-tools
+          sparse-checkout: scripts/release_siblings.py
+          sparse-checkout-cone-mode: false
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -76,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 ALICE-LOL/scripts/release_siblings.py --root ALICE-LOL --resolve > siblings.txt
+          python3 release-tools/scripts/release_siblings.py --root ALICE-LOL --resolve > siblings.txt
           cat siblings.txt
           n=0
           while read -r dir _package _version tag; do
