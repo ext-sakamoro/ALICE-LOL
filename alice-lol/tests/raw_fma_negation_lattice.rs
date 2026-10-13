@@ -57,8 +57,9 @@ fn negated_operands_mul_add_lands_on_positive_zero_at_exact_cancellation_f32() {
     for &(a, s, k) in lattice {
         // sanity: this triple really is an exact-cancellation input for the
         // OLD form too, not just for the rewritten one
+        let exact = a.mul_add(s, k);
         assert_eq!(
-            a.mul_add(s, k),
+            exact,
             0.0,
             "(a={a}, s={s}, k={k}): not actually an exact-cancellation input, lattice entry is wrong"
         );
@@ -84,11 +85,8 @@ fn negated_operands_mul_add_lands_on_positive_zero_at_exact_cancellation_f32() {
 fn negated_operands_mul_add_lands_on_positive_zero_at_exact_cancellation_f64() {
     let lattice: &[(f64, f64, f64)] = &[(2.0, 3.0, -6.0), (-2.0, 3.0, 6.0), (0.5, 4.0, -2.0)];
     for &(a, s, k) in lattice {
-        assert_eq!(
-            a.mul_add(s, k),
-            0.0,
-            "(a={a}, s={s}, k={k}): lattice entry is wrong"
-        );
+        let exact = a.mul_add(s, k);
+        assert_eq!(exact, 0.0, "(a={a}, s={s}, k={k}): lattice entry is wrong");
         let old_form = -(a.mul_add(s, k));
         let new_form = a.mul_add(-s, -k);
         assert_eq!(old_form.to_bits(), (-0.0f64).to_bits());
@@ -141,9 +139,9 @@ fn two_negated_subexpression_operands_also_land_on_positive_zero_at_exact_cancel
     for &(row_f, max_h, gap) in lattice {
         let k = max_h * 0.5;
         let s = max_h + gap;
+        let exact = row_f.mul_add(s, k);
         assert_eq!(
-            row_f.mul_add(s, k),
-            0.0,
+            exact, 0.0,
             "(row_f={row_f}, max_h={max_h}, gap={gap}): lattice entry is wrong"
         );
         let new_form = row_f.mul_add(-s, -k);
