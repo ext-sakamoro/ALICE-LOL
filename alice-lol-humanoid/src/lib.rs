@@ -412,6 +412,12 @@ impl HumanoidTemplate {
         let shoulder_x = h * params.shoulder_ratio * 0.5;
         let arm_len = h * params.arm_ratio;
         let elbow_x = arm_len.mul_add(0.5, shoulder_x);
+        // Left side: the fma of the negated terms, not the negated fma. Same
+        // bits wherever the sum is nonzero; a zero sum is the IEEE sum of the
+        // negated terms (-0 only if both terms are +0), the same on every target
+        // and optimisation level (a negated fma result is rewritten by LLVM into
+        // this form at -O on aarch64 and left alone at -O0).
+        let elbow_x_left = (-arm_len).mul_add(0.5, -shoulder_x);
         let wrist_x = shoulder_x + arm_len;
         let hip_x = h * params.hip_ratio * 0.5;
 
@@ -422,7 +428,7 @@ impl HumanoidTemplate {
         joints.insert(Joint::Waist, [0.0, waist_y, 0.0]);
         joints.insert(Joint::LShoulder, [-shoulder_x, shoulder_y, 0.0]);
         joints.insert(Joint::RShoulder, [shoulder_x, shoulder_y, 0.0]);
-        joints.insert(Joint::LElbow, [-elbow_x, shoulder_y, 0.0]);
+        joints.insert(Joint::LElbow, [elbow_x_left, shoulder_y, 0.0]);
         joints.insert(Joint::RElbow, [elbow_x, shoulder_y, 0.0]);
         joints.insert(Joint::LWrist, [-wrist_x, shoulder_y, 0.0]);
         joints.insert(Joint::RWrist, [wrist_x, shoulder_y, 0.0]);
@@ -951,8 +957,9 @@ mod tests {
             let s = t_s.joints[&j];
             let t = t_t.joints[&j];
             for i in 0..3 {
+                let diff = s[i].mul_add(-2.0, t[i]);
                 assert!(
-                    s[i].mul_add(-2.0, t[i]).abs() < 1e-4,
+                    diff.abs() < 1e-4,
                     "joint {j:?} axis {i}: short {} → tall {}, expected 2x",
                     s[i],
                     t[i]
@@ -1120,5 +1127,56 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The left elbow is the fma of the negated terms: bit-identical to the
+    /// negated right elbow wherever the sum is nonzero, and on an exact-zero
+    /// sum the IEEE sum of the negated terms (-0 only when both terms are +0).
+    /// Expected values come from that rule, not from the function under test.
+    #[test]
+    fn left_elbow_follows_the_negated_terms_rule_on_the_zero_lattice() {
+        let values = [0.0_f32, -0.0, 1.0, 1.75];
+        let ratios = [0.0_f32, -0.0, 0.25, 0.4];
+        let mut compared = 0;
+        let mut zero_cells = 0;
+        for &height in &values {
+            for &shoulder_ratio in &ratios {
+                for &arm_ratio in &ratios {
+                    let p = MorphologyParams {
+                        height,
+                        arm_ratio,
+                        shoulder_ratio,
+                        ..MorphologyParams::default()
+                    };
+                    let t = HumanoidTemplate::from_morphology(&p);
+                    let left = t.joints[&Joint::LElbow][0];
+                    let right = t.joints[&Joint::RElbow][0];
+                    let arm_term = height * arm_ratio * 0.5;
+                    let shoulder_term = height * shoulder_ratio * 0.5;
+                    let expected = if arm_term == 0.0 && shoulder_term == 0.0 {
+                        zero_cells += 1;
+                        // IEEE: (-a) + (-s) is -0 only when both are -0
+                        if !arm_term.is_sign_negative() && !shoulder_term.is_sign_negative() {
+                            -0.0_f32
+                        } else {
+                            0.0_f32
+                        }
+                    } else {
+                        -right
+                    };
+                    assert_eq!(
+                        left.to_bits(),
+                        expected.to_bits(),
+                        "h={height:?} shoulder={shoulder_ratio:?} arm={arm_ratio:?}: left {left:?}, expected {expected:?}"
+                    );
+                    compared += 1;
+                }
+            }
+        }
+        assert_eq!(compared, 64);
+        assert!(
+            zero_cells > 0,
+            "the lattice must reach the exact-zero cells"
+        );
     }
 }

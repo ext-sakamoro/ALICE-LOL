@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `alice-lol-humanoid`: `HumanoidTemplate::from_morphology` の左肘 x 座標を、fma の結果の符号反転でなく符号反転した項の fma で求めるようにした 和が 0 でない所は同じ bit、和がちょうど 0 になる所は符号反転した項の IEEE の和 (両方の項が +0 の時だけ -0) で、target と最適化 level によらず同じ値になる
+- `tools/no-outer-fneg-of-fma`: 走査対象を固定の dir 一覧から、root の `Cargo.toml` の workspace member すべての `src` / `tests` / `examples` / `benches` に広げた
+- `scripts/raw_minmax_manifest.py`: `raw_minmax.rs` が定義する `pub(crate) fn impl_*` の名前が他の file に現れたら失敗する (直接呼び出し・alias import・関数 pointer で macro と manifest を迂回できた)
 - `raw_minmax`: 既存の `pub(crate)` な `raw_max_f32`/`raw_min_f32`/`raw_max_f64` を、呼び出し側 module ごとに private な item を生成する `raw_minmax_here!()` macro に置き換えた どの module が呼んでよいかは `clippy::disallowed_macros` (macro の定義 path を列挙) が compiler 側で強制する: 呼び出す module 自身に理由付きの `#![allow(clippy::disallowed_macros, ...)]` が無ければ clippy error になる `scripts/raw_minmax_manifest.py` は file ごとの呼び出し回数でなく、どの module が authorized か (どの helper を生成しているか) を追跡するようになった
 - `scripts/disallowed_methods_allow_reasons.py`: `test-probe-alternative:` prefix を `#[cfg(test)] mod { }` の中 (または `tests/` 配下) でしか名乗れないようにし、`raw-helper:` を `alice-lol/src/raw_minmax.rs` 以外の file では名乗れないようにした (これまでは reason の文字列が正しい prefix で始まっていれば、実際の配置を見ずに通していた) 内側の `#![allow(...)]` (module 全体を覆う inner attribute) の libm 検査 scope も、次の statement までではなく file の終端まで広げた 検査対象の正規表現にも bare な関数参照 (`.fold(acc, f32::sin)`) と完全修飾呼び出し (`<f32>::cos(x)`) を追加した
 - CI / preflight に `scripts/libm_hidden_check.py` を追加した `clippy::disallowed_methods` の allow を全部外して clippy を再実行し、`src/` scope (`cargo clippy --lib`、`#[cfg(test)]`/`tests/` は対象外) に libm 呼び出し (`sin`/`cos`/`tan`/`atan`/`exp`/`ln`/`log`/`powf` 等) が allow の下に隠れていないかを型 level で検査する (`f32`/`f64` の `max`/`min` は対象外、既存の `nonzero-const:`/`both-abs:`/`int-cast:` class の方で個別に審査済)

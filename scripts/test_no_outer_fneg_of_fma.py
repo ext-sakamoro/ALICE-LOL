@@ -182,5 +182,28 @@ class RealRepo(unittest.TestCase):
         self.assertGreater(c["calls"], 0)
 
 
+class WorkspaceScope(unittest.TestCase):
+    def test_every_member_is_scanned(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "Cargo.toml"), "w", encoding="utf-8") as f:
+                f.write('[workspace]\nmembers = ["a", "b-crate"]\n')
+            dirs = g.workspace_src_dirs(d)
+            self.assertEqual(len(dirs), 8)
+            self.assertIn("b-crate/src", dirs)
+            os.makedirs(os.path.join(d, "b-crate", "src"))
+            with open(os.path.join(d, "b-crate", "src", "lib.rs"), "w", encoding="utf-8") as f:
+                f.write(OUTER_NEG)
+            errors, counts = g.check(d, dirs)
+            self.assertEqual(counts["violations"], 1, errors)
+
+    def test_no_workspace_gives_no_dirs(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(g.workspace_src_dirs(d), ())
+
+    def test_the_real_workspace_covers_more_than_alice_lol(self):
+        dirs = g.workspace_src_dirs(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.assertIn("alice-lol-humanoid/src", dirs)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

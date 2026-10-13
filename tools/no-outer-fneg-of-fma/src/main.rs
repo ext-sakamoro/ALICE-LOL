@@ -111,6 +111,13 @@ use syn::{
 
 const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.txt";
 const ALLOWLIST_SCOPE_DIRS: [&str; 2] = ["tests", "examples"];
+/// Directories scanned inside each workspace member.
+const MEMBER_SUBDIRS: [&str; 4] = ["src", "tests", "examples", "benches"];
+
+/// Fixed directory set used only by this tool's own unit tests (their
+/// fixtures have no workspace `Cargo.toml`); the binary scans every
+/// workspace member instead, see [`workspace_src_dirs`].
+#[cfg(test)]
 const DEFAULT_SRC_DIRS: [&str; 5] = [
     "alice-lol/src",
     "alice-lol/tests",
@@ -118,6 +125,37 @@ const DEFAULT_SRC_DIRS: [&str; 5] = [
     "alice-lol-ui/src",
     "alice-lol-ui/examples",
 ];
+
+/// `src` / `tests` / `examples` / `benches` of every member listed in the
+/// root `Cargo.toml`'s `[workspace] members` (read from the file, not
+/// hand-maintained, so a new member is scanned the moment it joins). An
+/// empty result means the members could not be read; the caller fails on it.
+fn workspace_src_dirs(root: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(root.join("Cargo.toml")) else {
+        return Vec::new();
+    };
+    let Some(start) = text.find("members") else {
+        return Vec::new();
+    };
+    let rest = &text[start..];
+    let (Some(open), Some(close)) = (rest.find('['), rest.find(']')) else {
+        return Vec::new();
+    };
+    if close < open {
+        return Vec::new();
+    }
+    let mut dirs = Vec::new();
+    for member in rest[open + 1..close]
+        .split(',')
+        .map(|m| m.trim().trim_matches('"'))
+        .filter(|m| !m.is_empty())
+    {
+        for sub in MEMBER_SUBDIRS {
+            dirs.push(format!("{member}/{sub}"));
+        }
+    }
+    dirs
+}
 
 enum FindingKind {
     /// `-x.mul_add(y, z)` (any receiver shape) found directly by the AST walk.
@@ -572,7 +610,10 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
         let (default_label, src_blocked_label) = match f.kind {
             FindingKind::NegatedMulAdd => {
                 violations += 1;
-                ("呼び出し結果全体を negate する fma、禁止形", "src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す")
+                (
+                    "呼び出し結果全体を negate する fma、禁止形",
+                    "src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す",
+                )
             }
             FindingKind::MacroMulAdd => {
                 macro_hits += 1;
@@ -590,14 +631,22 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
                 }
                 continue;
             }
-            errors.push(format!("error: {}:{}: {}  ({})", f.rel, f.line, f.excerpt, src_blocked_label));
+            errors.push(format!(
+                "error: {}:{}: {}  ({})",
+                f.rel, f.line, f.excerpt, src_blocked_label
+            ));
             continue;
         }
-        errors.push(format!("error: {}:{}: {}  ({})", f.rel, f.line, f.excerpt, default_label));
+        errors.push(format!(
+            "error: {}:{}: {}  ({})",
+            f.rel, f.line, f.excerpt, default_label
+        ));
     }
 
     for key in allowlist.difference(&found_keys) {
-        errors.push(format!("error: {key}: allowlist にあるが実物が無い — 行を消す"));
+        errors.push(format!(
+            "error: {key}: allowlist にあるが実物が無い — 行を消す"
+        ));
     }
 
     Report {
@@ -620,7 +669,7 @@ fn main() {
     if let Some(i) = args.iter().position(|a| a == "--root") {
         root = PathBuf::from(&args[i + 1]);
     }
-    let mut src_dirs: Vec<String> = DEFAULT_SRC_DIRS.iter().map(|s| s.to_string()).collect();
+    let mut src_dirs: Vec<String> = workspace_src_dirs(&root);
     if let Some(i) = args.iter().position(|a| a == "--src") {
         let rest: Vec<String> = args[i + 1..]
             .iter()
@@ -632,6 +681,13 @@ fn main() {
             std::process::exit(2);
         }
         src_dirs = rest;
+    }
+    if src_dirs.is_empty() {
+        eprintln!(
+            "error: {}/Cargo.toml の [workspace] members を読めなかった (走査する dir が無い)",
+            root.display()
+        );
+        std::process::exit(2);
     }
 
     let report = check(&root, &src_dirs);
@@ -723,7 +779,8 @@ mod tests {
 
     #[test]
     fn field_access_receiver_is_caught() {
-        let src = "struct S { y: f32 }\nfn f(x: S, b: f32, c: f32) -> f32 {\n    -x.y.mul_add(b, c)\n}\n";
+        let src =
+            "struct S { y: f32 }\nfn f(x: S, b: f32, c: f32) -> f32 {\n    -x.y.mul_add(b, c)\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.violations, 1);
     }
@@ -815,7 +872,10 @@ mod tests {
     fn a_tests_dir_site_passes_when_the_allowlist_carries_it() {
         let oracle = "alice-lol/tests/oracle.rs";
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
-        let r = run(&[(oracle, src)], Some(&format!("# 比較用の旧形\n{oracle}:2\n")));
+        let r = run(
+            &[(oracle, src)],
+            Some(&format!("# 比較用の旧形\n{oracle}:2\n")),
+        );
         assert_eq!(r.errors, Vec::<String>::new());
         assert_eq!(r.violations, 1);
         assert_eq!(r.allowed, 1);
@@ -825,7 +885,10 @@ mod tests {
     fn an_examples_dir_site_passes_when_the_allowlist_carries_it() {
         let oracle = "alice-lol/examples/compare_forms.rs";
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
-        let r = run(&[(oracle, src)], Some(&format!("# 比較用の旧形\n{oracle}:2\n")));
+        let r = run(
+            &[(oracle, src)],
+            Some(&format!("# 比較用の旧形\n{oracle}:2\n")),
+        );
         assert_eq!(r.errors, Vec::<String>::new());
         assert_eq!(r.violations, 1);
         assert_eq!(r.allowed, 1);
@@ -834,7 +897,10 @@ mod tests {
     #[test]
     fn an_allowlist_entry_without_the_site_fails() {
         let r = run(&[(SRC, CLEAN)], Some(&format!("{SRC}:2\n")));
-        assert!(r.errors.iter().any(|e| e.contains("allowlist にあるが実物が無い")));
+        assert!(r
+            .errors
+            .iter()
+            .any(|e| e.contains("allowlist にあるが実物が無い")));
     }
 
     #[test]
@@ -859,10 +925,16 @@ mod tests {
         // code that hides a negation inside a macro call.
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
         let r = run(&[(SRC, src)], None);
-        assert_eq!(r.violations, 0, "the macro mention itself is not an AST-level negation");
+        assert_eq!(
+            r.violations, 0,
+            "the macro mention itself is not an AST-level negation"
+        );
         assert_eq!(r.macro_hits, 1);
         assert_eq!(r.macro_allowed, 0);
-        assert!(!r.errors.is_empty(), "unreviewed macro mul_add mention must fail");
+        assert!(
+            !r.errors.is_empty(),
+            "unreviewed macro mul_add mention must fail"
+        );
     }
 
     #[test]
@@ -873,7 +945,10 @@ mod tests {
         let src = "fn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", -a.mul_add(b, c));\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.macro_hits, 1);
-        assert!(r.errors.iter().any(|e| e.contains("macro 呼び出しの中に mul_add")));
+        assert!(r
+            .errors
+            .iter()
+            .any(|e| e.contains("macro 呼び出しの中に mul_add")));
     }
 
     #[test]
@@ -885,7 +960,10 @@ mod tests {
         let r = run(&[(SRC, src)], Some(&format!("# 理由\n{SRC}:2\n")));
         assert_eq!(r.macro_hits, 1);
         assert_eq!(r.macro_allowed, 0);
-        assert!(r.errors.iter().any(|e| e.contains("macro 呼び出しの外に出して書き直す")));
+        assert!(r
+            .errors
+            .iter()
+            .any(|e| e.contains("macro 呼び出しの外に出して書き直す")));
     }
 
     #[test]
@@ -946,14 +1024,16 @@ mod tests {
 
     #[test]
     fn let_binding_then_unary_negate_in_the_same_block_is_caught() {
-        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -t\n}\n";
+        let src =
+            "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -t\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.violations, 1);
     }
 
     #[test]
     fn let_binding_then_neg_method_in_the_same_block_is_caught() {
-        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t.neg()\n}\n";
+        let src =
+            "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t.neg()\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.violations, 1);
     }
@@ -974,7 +1054,8 @@ mod tests {
 
     #[test]
     fn let_binding_used_without_negation_is_not_flagged() {
-        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t + 1.0\n}\n";
+        let src =
+            "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    t + 1.0\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.violations, 0);
     }
@@ -1078,6 +1159,38 @@ mod tests {
         let src = "struct S { y: f32 }\nfn f(x: S, b: f32, c: f32) -> f32 {\n    -x\n        .y\n        .mul_add(b, c)\n}\n";
         let r = run(&[(SRC, src)], None);
         assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn every_workspace_member_is_scanned_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a\", \"b-crate\"]\nresolver = \"2\"\n",
+        )
+        .unwrap();
+        let dirs = workspace_src_dirs(dir.path());
+        assert_eq!(dirs.len(), 8);
+        assert!(dirs.contains(&"b-crate/src".to_string()));
+        assert!(dirs.contains(&"a/benches".to_string()));
+        // a violation in a member that is not alice-lol is found
+        let path = dir.path().join("b-crate/src/lib.rs");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -a.mul_add(b, c)\n}\n",
+        )
+        .unwrap();
+        let r = check(dir.path(), &dirs);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn unreadable_members_give_no_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(workspace_src_dirs(dir.path()).is_empty());
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        assert!(workspace_src_dirs(dir.path()).is_empty());
     }
 
     #[test]

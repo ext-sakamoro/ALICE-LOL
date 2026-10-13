@@ -41,10 +41,28 @@ Usage: `python3 scripts/no_outer_fneg_of_fma.py` (exit 1 on any finding)
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 ALLOWLIST = "scripts/no-outer-fneg-of-fma-allowlist.txt"
 SRC_DIRS_DEFAULT = ("alice-lol/src", "alice-lol/tests", "alice-lol/examples")
+MEMBER_SUBDIRS = ("src", "tests", "examples", "benches")
+
+
+def workspace_src_dirs(root: str) -> tuple[str, ...]:
+    """`src` / `tests` / `examples` / `benches` of every member in the root
+    `Cargo.toml`'s `[workspace] members` (same scope as the AST checker).
+    Empty when the members cannot be read; the caller fails on that."""
+    try:
+        with open(os.path.join(root, "Cargo.toml"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return ()
+    m = re.search(r"members\s*=\s*\[(?P<body>[^\]]*)\]", text)
+    if not m:
+        return ()
+    members = re.findall(r'"([^"]+)"', m.group("body"))
+    return tuple(f"{member}/{sub}" for member in members for sub in MEMBER_SUBDIRS)
 # allowlist が効くのはこの 2 つの path 構成要素を持つ file だけ src/ 配下は
 # Law form への書き換えのみを正解とし、allowlist を無効化する (lib の本体コードに
 # 既知の例外を残さない)
@@ -253,12 +271,15 @@ def main() -> int:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if "--root" in sys.argv:
         root = sys.argv[sys.argv.index("--root") + 1]
-    src_dirs = SRC_DIRS_DEFAULT
+    src_dirs = workspace_src_dirs(root)
     if "--src" in sys.argv:
         src_dirs = tuple(a for a in sys.argv[sys.argv.index("--src") + 1 :] if not a.startswith("--"))
         if not src_dirs:
             print("error: --src には 1 つ以上の dir を渡す", file=sys.stderr)
             return 2
+    if not src_dirs:
+        print(f"error: {root}/Cargo.toml の [workspace] members を読めなかった (走査する dir が無い)", file=sys.stderr)
+        return 2
     errors, counts = check(root, src_dirs)
     for e in errors:
         print(e)
