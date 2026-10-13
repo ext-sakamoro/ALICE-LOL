@@ -20,13 +20,18 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
   * `test-probe-alternative:` — a `#[cfg(test)]` function that deliberately
     calls the forbidden form as the comparison baseline for an oracle (e.g.
     `geometry_id.rs`'s `platform_trig`, which exists to show the routed and
-    platform-libm forms disagree) — never production code
+    platform-libm forms disagree) — never production code. This prefix is
+    only accepted when the allow's own line actually falls inside a
+    `#[cfg(test)] mod ... { }` block in the SAME file, or the file itself is
+    under a `tests/` directory — not on the word `reason` alone, which would
+    accept the prefix on an un-gated production function that merely claims
+    to be a test probe
   * `raw-helper:` — the one definition of a named `raw_max_f32`/`raw_min_f32`-
     style helper in `src/raw_minmax.rs`: every *caller* of that helper is a
     provably-safe site (one of the three reasons above, or an int-cast),
     counted and named by `scripts/raw_minmax_manifest.py`'s own manifest —
-    this prefix only ever appears on the helper's own definition, never on a
-    caller
+    this prefix is only accepted on that one file (`RAW_HELPER_FILE_REL`
+    below), never on a caller claiming the same prefix elsewhere
 
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
@@ -34,19 +39,40 @@ site or widen the pattern list deliberately, in the same commit, not by
 leaving the reason unprefixed). So does a file with `#[allow(dead_code)]`'s
 unrelated reason being miscounted here, or zero sites found at all.
 
-⚠️ An `#[allow(clippy::disallowed_methods, ...)]` silences the lint for the
-*whole annotated statement*, not just the one method call the reason is
-about — the libm ban (`f32`/`f64` `sin`/`cos`/`tan`/`atan`/`exp`/`ln`/`log`/
-`powf`/... in `alice-lol/clippy.toml`) shares the same lint name, so a
-`nonzero-const:`/`both-abs:`/`int-cast:` allow sitting on a statement that
-*also* happens to call one of those would silently let it through too. This
-script therefore also scans the statement each such allow actually covers
-(a cheap text scan: from the end of the attribute to the next top-level `;`
-or enclosing `}`, not a real parse) for any libm method/path name, and fails
-if one is found — that statement is not exempt from the libm ban, whatever
-the max/min reason says. `test-probe-alternative:` is the one prefix this
-does not apply to: a probe exists specifically to call the forbidden libm
-form as a comparison baseline, so finding one there is the point, not a leak.
+⚠️ An `#[allow(clippy::disallowed_methods, ...)]` (an *outer* attribute, on one
+item/statement) silences the lint for the *whole annotated statement*, not
+just the one method call the reason is about — the libm ban (`f32`/`f64`
+`sin`/`cos`/`tan`/`atan`/`exp`/`ln`/`log`/`powf`/... in `alice-lol/clippy.toml`)
+shares the same lint name, so a `nonzero-const:`/`both-abs:`/`int-cast:` allow
+sitting on a statement that *also* happens to call one of those would
+silently let it through too. This script therefore also scans the statement
+each such allow actually covers (a cheap text scan: from the end of the
+attribute to the next top-level `;` or enclosing `}`, not a real parse) for
+any libm method/path name, and fails if one is found — that statement is not
+exempt from the libm ban, whatever the max/min reason says.
+`test-probe-alternative:` is the one prefix this does not apply to: a probe
+exists specifically to call the forbidden libm form as a comparison
+baseline, so finding one there is the point, not a leak.
+
+⚠️⚠️ An *inner* attribute (`#![allow(...)]`, no item/statement after it — the
+form clippy accepts at module or crate root) silences the lint for the
+*entire enclosing scope*, not just "the next statement": the same
+statement-boundary scan would stop at the first `;`/`}` it finds and miss a
+libm call several statements later that the same inner attribute still
+covers. For an inner attribute this script scans to the end of the file
+instead (the common case is a `mod`-level `#![allow(...)]` at the top of a
+small file dedicated to one routine; scanning past the file into a sibling
+module cannot happen, since each file is its own scan unit here).
+
+The libm pattern list matches three spellings of each name, not just the
+method-call form: `.sin(` (method call), `f32::sin`/`f32::sin(` (path,
+called or passed bare as a function reference, the `.fold(acc, f32::sin)`
+style — `max`/`min` are not in this libm list, they are the separate
+raw_minmax reasons above, this is only about the libm names), and
+`<f32>::sin(` (fully-qualified call syntax). Missing any of these would let
+a statement whose reason is correctly named for the max/min exemption
+separately pass a libm function by reference instead of calling it inline,
+unnoticed.
 
 No `svg-pipeline-exempt:`-style blanket "this output isn't covered by an
 oracle so the platform difference doesn't matter" prefix exists here on
@@ -72,16 +98,23 @@ DEFAULT_ROOT = os.path.dirname(HERE)
 
 PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:"]
 
+# the one file `raw-helper:` is accepted on; `test-probe-alternative:` is
+# additionally accepted inside a `#[cfg(test)] mod ... { }` block in any
+# scanned file, or in a file under a `tests/` path segment (not scanned by
+# this script today — only `src/` is — but checked the same way if that ever
+# changes, rather than silently accepting an unscoped claim)
+RAW_HELPER_FILE_REL = "alice-lol/src/raw_minmax.rs"
+
 MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
 MEMBER_NAME_RE = re.compile(r'"([^"]+)"')
 
 
 def workspace_members(root: str) -> list[str]:
     """Every `[workspace] members` entry in the root `Cargo.toml` (the gate
-    covers the whole workspace, not just alice-lol — see F1 in the LOL r2
-    review: other members had no clippy.toml at all, so this list is
-    discovered, not hand-maintained, so a new member is covered the moment
-    it joins the workspace)."""
+    covers the whole workspace, not just alice-lol: other members had no
+    clippy.toml at all until this was added, so this list is discovered, not
+    hand-maintained, so a new member is covered the moment it joins the
+    workspace)."""
     path = os.path.join(root, "Cargo.toml")
     try:
         with open(path, encoding="utf-8") as f:
@@ -93,22 +126,37 @@ def workspace_members(root: str) -> list[str]:
         return []
     return MEMBER_NAME_RE.findall(m.group("body"))
 
-# matches `#[allow(...)]` / `#![allow(...)]` spanning possibly several lines
-# (rustfmt wraps long attribute lists), capturing everything between the
-# outer parens so a reason inside is found regardless of argument order
-ALLOW_RE = re.compile(r"#\s*!?\s*\[\s*allow\s*\((?P<body>.*?)\)\s*\]", re.S)
+# matches `#[allow(...)]` (outer, group 1 empty) / `#![allow(...)]` (inner,
+# group 1 is `!`) spanning possibly several lines (rustfmt wraps long
+# attribute lists), capturing everything between the outer parens so a
+# reason inside is found regardless of argument order
+ALLOW_RE = re.compile(r"#\s*(?P<inner>!?)\s*\[\s*allow\s*\((?P<body>.*?)\)\s*\]", re.S)
 REASON_RE = re.compile(r'reason\s*=\s*"(?P<text>(?:[^"\\]|\\.)*)"')
 
-# the libm ban in alice-lol/clippy.toml, as method-call and path-call forms;
-# a cheap name list (not every entry there), matching 6e's "sin/cos/tan/atan/
-# exp/ln/log/powf" plus the few close relatives already in that file
+# `#[cfg(test)]` immediately followed by `mod <name> {` (whitespace/comments
+# between the two are not handled — rustfmt never inserts either there) —
+# used to scope `test-probe-alternative:` to an actually-gated location
+# instead of trusting the reason text alone
+CFG_TEST_MOD_RE = re.compile(r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+\w+\s*\{")
+
+# the libm ban in alice-lol/clippy.toml, as method-call, path-call, bare
+# path-reference (no call parens — `.fold(acc, f32::max)` passes the
+# function itself, not a call) and fully-qualified-call forms; a cheap name
+# list (not every entry there), matching the "sin/cos/tan/atan/exp/ln/log/
+# powf" family plus the few close relatives already in that file. `max`/
+# `min` are deliberately NOT in this list: those are the separate
+# raw_minmax reasons, checked by the PREFIXES above, not the libm ban this
+# scan is defending against leaking into the same statement.
 LIBM_NAMES = (
     "sin_cos", "sin", "cos", "tan", "atan2", "atan", "asin", "acos",
     "exp2", "exp_m1", "exp", "ln_1p", "ln", "log2", "log10", "log",
     "powf", "cbrt", "hypot", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
 )
+_LIBM_ALT = "|".join(LIBM_NAMES)
 LIBM_CALL_RE = re.compile(
-    r"\.(?:" + "|".join(LIBM_NAMES) + r")\(|\b(?:f32|f64)::(?:" + "|".join(LIBM_NAMES) + r")\("
+    r"\.(?:" + _LIBM_ALT + r")\("  # a.sin(...)
+    r"|\b(?:f32|f64)::(?:" + _LIBM_ALT + r")\b"  # f32::sin(...) or bare f32::sin
+    r"|<(?:f32|f64)>::(?:" + _LIBM_ALT + r")\("  # <f32>::sin(...)
 )
 
 MAX_STATEMENT_SCAN = 3000
@@ -116,9 +164,20 @@ MAX_STATEMENT_SCAN = 3000
 
 def statement_after(text: str, pos: int) -> str:
     """Cheap, non-parsing capture of the statement starting at `pos`: up to
-    the next top-level `;` (bracket/paren/brace-depth 0) or an enclosing `}`
-    reached at depth 0 (a semicolon-less tail expression), capped so a
-    malformed file cannot make this scan the rest of the file."""
+    the next top-level `;` (bracket/paren/brace-depth 0), or the matching
+    close of a `{` opened by this scan itself (the attribute sits directly
+    on an item like `fn f() { ... }`, not inside an already-open block), or
+    an enclosing `}` this scan never opened, reached back at depth 0 (the
+    attribute is inside an already-open block, on a semicolon-less tail
+    expression) — capped so a malformed file cannot make this scan the rest
+    of the file.
+
+    Depth goes negative exactly when a `}` closes a brace this scan did not
+    open itself (it belongs to an outer, already-open block): that is the
+    "enclosing `}`, no match of our own" case and excludes the brace.
+    Depth returning to exactly 0 from 1 means a `{` this scan DID open just
+    closed (the item's own body): that is "our own `{ }`" and includes the
+    brace, since the item's own braces are part of its statement."""
     depth = 0
     n = min(len(text), pos + MAX_STATEMENT_SCAN)
     i = pos
@@ -129,13 +188,40 @@ def statement_after(text: str, pos: int) -> str:
         elif c in ")]":
             depth -= 1
         elif c == "}":
-            if depth == 0:
-                return text[pos:i]
             depth -= 1
+            if depth == 0:
+                return text[pos : i + 1]
+            if depth < 0:
+                return text[pos:i]
         elif c == ";" and depth == 0:
             return text[pos : i + 1]
         i += 1
     return text[pos:n]
+
+
+def cfg_test_mod_spans(text: str) -> list[tuple[int, int]]:
+    """`(start, end)` of every `#[cfg(test)] mod ... { ... }` block's body in
+    `text` (brace-matched from the `{` the regex found to its closing `}`).
+    A malformed/unbalanced file yields no span for that match rather than
+    scanning past EOF."""
+    spans = []
+    for m in CFG_TEST_MOD_RE.finditer(text):
+        depth = 1
+        i = m.end()
+        n = len(text)
+        while i < n and depth > 0:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        if depth == 0:
+            spans.append((m.end(), i - 1))
+    return spans
+
+
+def is_within(pos: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
 
 
 def iter_rs_files(base: str):
@@ -165,6 +251,8 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
             with open(path, encoding="utf-8") as f:
                 text = f.read()
             files += 1
+            test_mod_spans = cfg_test_mod_spans(text)
+            file_under_tests_dir = "tests" in rel.split("/")
             for m in ALLOW_RE.finditer(text):
                 body = m.group("body")
                 if "disallowed_methods" not in body:
@@ -184,15 +272,34 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     )
                     continue
                 prefix = matched[0]
+
+                if prefix == "raw-helper:" and rel != RAW_HELPER_FILE_REL:
+                    errors.append(
+                        f"error: {rel}:{line}: raw-helper: は {RAW_HELPER_FILE_REL} 以外の file で"
+                        "名乗れない (caller 側が同じ prefix を自称しても検査は通さない)"
+                    )
+                    continue
+                if prefix == "test-probe-alternative:" and not (
+                    file_under_tests_dir or is_within(m.start(), test_mod_spans)
+                ):
+                    errors.append(
+                        f"error: {rel}:{line}: test-probe-alternative: は #[cfg(test)] mod {{ }} の中、"
+                        "または tests/ 配下の file でしか名乗れない (この箇所はどちらでもない — "
+                        "reason の自己申告だけでは production 混入を防げない)"
+                    )
+                    continue
+
                 counts[prefix] += 1
                 if prefix != "test-probe-alternative:":
-                    stmt = statement_after(text, m.end())
+                    inner = m.group("inner") == "!"
+                    stmt = text[m.end() :] if inner else statement_after(text, m.end())
                     lm = LIBM_CALL_RE.search(stmt)
                     if lm:
+                        scope = "enclosing file (inner #![allow])" if inner else "statement"
                         errors.append(
-                            f"error: {rel}:{line}: {prefix} の allow が隠す statement に libm 呼び出し "
-                            f"({lm.group(0)!r}) が含まれる — この statement は libm 禁止の対象外にならない、"
-                            "libm 呼び出しを allow の外 (別 statement) に出す"
+                            f"error: {rel}:{line}: {prefix} の allow が隠す {scope} に libm 呼び出し "
+                            f"({lm.group(0)!r}) が含まれる — この箇所は libm 禁止の対象外にならない、"
+                            "libm 呼び出しを allow の外に出す"
                         )
 
     scanned = ", ".join(os.path.relpath(d, root) for d in src_dirs)

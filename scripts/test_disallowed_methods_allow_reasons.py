@@ -40,10 +40,25 @@ class Check(unittest.TestCase):
             self.assertEqual(counts["nonzero-const:"], 1)
 
     def test_each_prefix_is_counted_separately(self):
+        # test-probe-alternative: and raw-helper: are scope-restricted (see
+        # the Scoping class below), so this writes each prefix to a location
+        # where it is actually valid, not all into one plain function
         with tempfile.TemporaryDirectory() as root:
+            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:")]
             write(root, SRC, "\n".join(
                 f'#[allow(clippy::disallowed_methods, reason = "{p} x")]\nfn f{i}() {{}}\n'
-                for i, p in enumerate(g.PREFIXES)
+                for i, p in enumerate(unscoped)
+            ))
+            write(root, "alice-lol/src/other.rs", (
+                "#[cfg(test)]\n"
+                "mod tests {\n"
+                '    #[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
+                "    fn probe() {}\n"
+                "}\n"
+            ))
+            write(root, g.RAW_HELPER_FILE_REL, (
+                '#[allow(clippy::disallowed_methods, reason = "raw-helper: x")]\n'
+                "fn raw() {}\n"
             ))
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
@@ -119,6 +134,57 @@ class Check(unittest.TestCase):
             self.assertEqual(counts["int-cast:"], 1)
 
 
+class Scoping(unittest.TestCase):
+    """`test-probe-alternative:` and `raw-helper:` are not accepted on the
+    reason text alone; the allow's own location must actually be the scope
+    each prefix claims."""
+
+    def test_test_probe_alternative_outside_cfg_test_and_outside_tests_dir_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
+                "fn f(a: f32) -> f32 { a.sin() }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("test-probe-alternative" in e and "名乗れない" in e for e in errors))
+
+    def test_test_probe_alternative_in_a_sibling_plain_mod_fails(self):
+        # a `mod` that is NOT itself `#[cfg(test)]`-gated does not count,
+        # even if a `#[cfg(test)] mod` exists elsewhere in the same file
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                "#[cfg(test)]\n"
+                "mod tests {\n"
+                "    fn unrelated() {}\n"
+                "}\n"
+                "mod production {\n"
+                '    #[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
+                "    fn f(a: f32) -> f32 { a.sin() }\n"
+                "}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("test-probe-alternative" in e and "名乗れない" in e for e in errors))
+
+    def test_raw_helper_outside_the_designated_file_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "raw-helper: x")]\n'
+                "fn raw(a: f32, b: f32) -> f32 { a.max(b) }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("raw-helper" in e and "名乗れない" in e for e in errors))
+
+    def test_raw_helper_on_the_designated_file_passes(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, g.RAW_HELPER_FILE_REL, (
+                '#[allow(clippy::disallowed_methods, reason = "raw-helper: x")]\n'
+                "fn raw(a: f32, b: f32) -> f32 { a.max(b) }\n"
+            ))
+            errors, counts = g.check(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(counts["raw-helper:"], 1)
+
+
 class LibmHiddenByAllow(unittest.TestCase):
     def test_a_libm_call_in_the_same_statement_fails(self):
         with tempfile.TemporaryDirectory() as root:
@@ -164,8 +230,62 @@ class LibmHiddenByAllow(unittest.TestCase):
     def test_test_probe_alternative_is_exempt_from_this_check(self):
         with tempfile.TemporaryDirectory() as root:
             write(root, SRC, (
-                '#[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
-                "fn f(a: f32) -> f32 { a.sin() }\n"
+                "#[cfg(test)]\n"
+                "mod tests {\n"
+                '    #[allow(clippy::disallowed_methods, reason = "test-probe-alternative: x")]\n'
+                "    fn f(a: f32) -> f32 { a.sin() }\n"
+                "}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertEqual(errors, [])
+
+    def test_a_bare_function_reference_libm_form_fails(self):
+        # `.fold(acc, f32::sin)` passes the function itself, never calling
+        # it with `(`, which a `(?:f32|f64)::name\(` pattern would miss
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "fn f(a: f32, v: &[f32]) -> f32 {\n"
+                "    a.max(1.0) + v.iter().copied().fold(0.0, f32::sin)\n"
+                "}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("libm 呼び出し" in e for e in errors))
+
+    def test_a_fully_qualified_libm_call_form_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "both-abs: x")]\n'
+                "fn f(a: f32, b: f32) -> f32 { a.max(<f32>::cos(b)) }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("libm 呼び出し" in e for e in errors))
+
+    def test_an_inner_allow_hiding_a_libm_call_later_in_the_file_fails(self):
+        # an inner `#![allow(...)]`'s scope is the whole enclosing module,
+        # not just "up to the next `;`/`}`" — a libm call several
+        # statements later, still in the same module, must still be caught
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#![allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "fn f(a: f32) -> f32 {\n"
+                "    a.max(1.0)\n"
+                "}\n"
+                "fn g(b: f32) -> f32 {\n"
+                "    b.sin()\n"
+                "}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("libm 呼び出し" in e and "enclosing file" in e for e in errors))
+
+    def test_an_outer_allow_does_not_see_past_its_own_statement_into_a_later_one(self):
+        # confirms the broadened scan did not accidentally turn the OUTER
+        # (per-statement) form into a whole-file scan too
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n'
+                "fn f(a: f32) -> f32 { a.max(1.0) }\n"
+                "fn g(b: f32) -> f32 { b.sin() }\n"
             ))
             errors, _ = g.check(root)
             self.assertEqual(errors, [])

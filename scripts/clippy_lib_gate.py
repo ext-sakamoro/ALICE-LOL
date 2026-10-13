@@ -6,9 +6,9 @@ for every workspace member (clippy resolves it by walking up from each
 crate's own manifest dir, so one file covers `alice-lol`,
 `alice-lol-datagen`, `alice-lol-ui`, `alice-world-auditor`, ... uniformly —
 a member with no clippy.toml of its own is NOT exempt, it was simply
-unchecked until this file existed at the root: see the LOL r2 review finding
-F1, 20 ungated max/min/powf sites across three members with no config of
-their own at all). The library code additionally may not call `f32::max` /
+unchecked until this file existed at the root — an earlier audit found 20
+ungated max/min/powf sites across three members with no config of their own
+at all). The library code additionally may not call `f32::max` /
 `f32::min` / `f64::max` / `f64::min`: those leave the sign of an equal pair
 of zeros unspecified and the targets differ (aarch64 returns +0 from max and
 -0 from min, x86_64 returns the argument), so a stored value could carry a
