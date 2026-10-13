@@ -345,6 +345,15 @@ every platform. Range, residual, provenance and policy types are those of
 `alice_zip::law`. Example: [`research_law_demo`](alice-lol/examples/research_law_demo.rs);
 oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_research_law.rs).
 
+## Talking about verification state
+
+This crate conjugates `lol` as a verb to name the stages a conformance claim
+about it goes through (not yet checked, being checked, checked with
+evidence) and who is doing the checking. See
+[`docs/LOL_CONJUGATION_GLOSSARY.md`](docs/LOL_CONJUGATION_GLOSSARY.md) for
+the full vocabulary and worked examples against this crate's own
+[`alice-law-conformance.toml`](alice-law-conformance.toml).
+
 ## Crates in this workspace
 
 | Crate | Role |

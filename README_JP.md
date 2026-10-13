@@ -312,6 +312,13 @@ Example: [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs)、oracle:
 example: [`research_law_demo`](alice-lol/examples/research_law_demo.rs)、
 oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_research_law.rs)
 
+## 検証状態の呼び方
+
+この crate は `lol` を動詞として活用し、適合に関する主張が辿る段階 (未検証・検証中・
+証跡付きで検証済み) と、誰が何を検証しているかを呼び分ける
+全体は [`docs/LOL_CONJUGATION_GLOSSARY.md`](docs/LOL_CONJUGATION_GLOSSARY.md) 参照
+(この crate 自身の [`alice-law-conformance.toml`](alice-law-conformance.toml) を使った実例付き、英語)
+
 ## この workspace の crate
 
 | Crate | 役割 |

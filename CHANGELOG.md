@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `docs/LOL_CONJUGATION_GLOSSARY.md`: `lol` を動詞として活用した時の各活用形が、この crate 自身の適合状態 (`alice-law-conformance.toml` の G1-G14) のどの段階を指すかの用語集 未然・連用・終止・連体・仮定・命令の 6 形 + 受身・可能、派生形 (サ変・使役・継続・完了強調) と英語側の活用 (lol/lols/lolled/lolling、lol'd は非正典) を含む README / README_JP には要約と本章への link のみを追加
+
 ### Fixed
 
 - `release.yml`: tag の `cargo publish --dry-run` が「failed to load manifest」で失敗していた (`alice-lol-macro-v0.3.0` の run) cargo は publish の前に workspace の全 member の manifest を読み、member は隣の repository に path で依存する (`../../ALICE-SDF` ほか) が、release.yml は隣を 1 つも checkout していなかった (「dry-run に隣は要らない」という comment は誤り) 隣はそれぞれ、その commit の `Cargo.lock` にある版の tag (`v<版>` か `<package>-v<版>`) を checkout する (`scripts/release_siblings.py`、隣の main ではない) 続けて `cargo metadata --locked` で lock と checkout した版が合うことを見る 隣が 0 件・lock に無い・tag が無い時は失敗する tag を決める script は checkout した tag でなく workflow 自身の commit から取る (script より前に作った tag にも効くように) `workflow_dispatch` に `ref` (tag がまだ無い commit で試す、SHA は 40 桁で渡す) と `release` (false なら GitHub Release を作らない、`ref` を渡した時と、tag が無いか checkout した commit と違う時も作らない) tag の input は shell に埋め込まず `env` で渡す を足した `release_siblings.py` の offline の検査と試験は CI (docs job) と `scripts/preflight.sh` でも走る
