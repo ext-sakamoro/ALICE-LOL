@@ -18,6 +18,10 @@
 # 例外は箇所ごとの `#[allow(clippy::disallowed_methods, reason = "<prefix>: ...")]` で明示する
 # (`scripts/disallowed_methods_allow_reasons.py` が prefix と、同じ statement に libm 呼び出しが
 # 紛れていないことを検査する)
+disallowed-macros = [
+    { path = "alice_lol::raw_minmax::raw_minmax_here", reason = "only a module with its own reasoned #![allow(clippy::disallowed_macros, ...)] may generate the raw f32/f64 max/min helpers — see alice-lol/src/raw_minmax.rs's module doc and scripts/raw_minmax_manifest.py" },
+]
+
 disallowed-methods = [
     { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::sin" },
     { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cos" },

@@ -10,6 +10,12 @@
 //! This is the evaluation of an SDF field (`eval`). A quantitative law (`research_law`) is
 //! stricter: a non-finite intermediate value is an error there (`conformance/TASK.md`). SDF
 //! evaluation has no reference evaluator of its own in `conformance/`, which covers law files.
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
+
+crate::raw_minmax::raw_minmax_here!(max_f32);
 
 /// `a` and `b` agree: the same bits, both NaN, or both finite and
 /// `|a - b| <= rel_tol * max(|a|, |b|, 1)` (symmetric: the order of `a` and `b` does not matter)
@@ -23,7 +29,7 @@ pub fn agrees(a: f32, b: f32, rel_tol: f32) -> bool {
         // the tolerance is only for two finite values: with an infinite `a` it is itself ∞,
         // and `inf` would agree with `-inf` and with every finite number
         || (a.is_finite() && b.is_finite() && (a - b).abs()
-            <= rel_tol * crate::raw_minmax::raw_max_f32(crate::raw_minmax::raw_max_f32(a.abs(), b.abs(), crate::raw_minmax::Reason::BothAbs), 1.0, crate::raw_minmax::Reason::NonzeroConst))
+            <= rel_tol * raw_max_f32(raw_max_f32(a.abs(), b.abs(), crate::raw_minmax::Reason::BothAbs), 1.0, crate::raw_minmax::Reason::NonzeroConst))
 }
 
 #[cfg(test)]

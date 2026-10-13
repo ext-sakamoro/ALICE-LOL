@@ -128,10 +128,10 @@ python3 scripts/test_clippy_lib_gate.py
 python3 scripts/clippy_lib_gate.py
 
 step "ci.yml / clippy-lib: alice-lol (lib のみ、examples/tests/benches は既存どおり std のまま許容)"
-CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods
+CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros
 
 step "ci.yml / clippy-lib: alice-lol 以外の workspace 全体 (lib+bins+examples、既存の除外実績が無いので production 相当を広く取る)"
-CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods
+CLIPPY_CONF_DIR=.github/clippy-lib cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros
 
 step "ci.yml / det-math-minmax-blob-sync: alice-lol の det_math max/min が alice-physics の実装と一致する"
 python3 scripts/test_det_math_minmax_blob_sync.py

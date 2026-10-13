@@ -2,6 +2,12 @@
 //!
 //! SDF距離場を使わず、2D幾何学パターンをSVGパスデータとして生成する。
 //! LOL DSL → `LaserPattern` → SVG のパイプライン。
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
+
+crate::raw_minmax::raw_minmax_here!(max_f64);
 
 use std::f64::consts::PI;
 use std::fmt::Write;
@@ -811,7 +817,11 @@ pub fn elements_to_svg(
 /// 符号を消すので歯に関わらない)
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn cell_count(extent: f64, cell: f64) -> usize {
-    crate::raw_minmax::raw_max_f64((extent / cell).ceil(), 0.0, crate::raw_minmax::Reason::IntCast) as usize
+    raw_max_f64(
+        (extent / cell).ceil(),
+        0.0,
+        crate::raw_minmax::Reason::IntCast,
+    ) as usize
 }
 
 /// cell index → cell 中心の座標 (`origin + (i + 0.5) * cell`)

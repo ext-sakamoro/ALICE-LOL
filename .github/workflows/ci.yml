@@ -638,11 +638,11 @@ jobs:
       - name: clippy-lib (alice-lol、lib のみ、examples/tests/benches は既存どおり std のまま許容)
         env:
           CLIPPY_CONF_DIR: .github/clippy-lib
-        run: cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods
+        run: cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros
       - name: clippy-lib (alice-lol 以外の workspace 全体、lib+bins+examples)
         env:
           CLIPPY_CONF_DIR: .github/clippy-lib
-        run: cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods
+        run: cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros
       - name: det-math-minmax-blob-sync oracle (検査器自身の試験)
         run: python scripts/test_det_math_minmax_blob_sync.py
       - name: det-math-minmax-blob-sync (alice-lol の det_math max/min が alice-physics の実装と一致する)

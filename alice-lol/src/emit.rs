@@ -31,6 +31,12 @@
 //!   quaternion の 4 成分は `fmt_f32` で faithful に書くため、emit/parse は
 //!   bit-exact round-trip する (旧 Euler 度への decompose は往復で 1 ulp 単位の
 //!   drift が生じたため廃止、詳細は [`crate::limits::checked_rotation_quat`])
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
+
+crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use std::fmt::Write as _;
 
@@ -218,7 +224,8 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
                 && point_b.x == 0.0
                 && point_b.z == 0.0
                 && (point_a.y + h).abs()
-                    <= f32::EPSILON * crate::raw_minmax::raw_max_f32(h.abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
+                    <= f32::EPSILON
+                        * raw_max_f32(h.abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
             if symmetric {
                 prim!("capsule", f(*radius), f(h))
             } else {

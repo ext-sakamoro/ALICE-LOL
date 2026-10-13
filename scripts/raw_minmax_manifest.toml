@@ -1,30 +1,32 @@
-# Every file that calls `crate::raw_minmax::raw_*` (alice-lol/src/raw_minmax.rs,
-# the one place the disallowed_methods lint allows f32/f64 max/min directly),
-# and how many times. See scripts/raw_minmax_manifest.py.
+# Every module authorized to invoke `crate::raw_minmax::raw_minmax_here!()`
+# (alice-lol/src/raw_minmax.rs, the one place the disallowed_methods lint allows
+# f32/f64 max/min directly), and which helpers it generates. See
+# scripts/raw_minmax_manifest.py.
 #
-# A count here is not a budget to spend: a new call site means either a new
-# provably-safe site (add it here, with the same nonzero-const:/both-abs:/
+# A listing here is not a budget to spend: a new invocation means either a new
+# provably-safe module (add it here, with the same nonzero-const:/both-abs:/
 # int-cast: reasoning as alice-lol/src/raw_minmax.rs's module doc requires of
-# every caller) or a site that should route through crate::det_math::max/min
-# instead (the Law form, not this file).
+# every caller, and its own #![allow(clippy::disallowed_macros, ...)]) or a site
+# that should route through crate::det_math::max/min instead (the Law form, not
+# this file).
 
 ["alice-lol/src/emit.rs"]
-count = 1
+generates = ["max_f32"]
 
 ["alice-lol/src/laser_pattern.rs"]
-count = 1
+generates = ["max_f64"]
 
 ["alice-lol/src/law.rs"]
-count = 8
+generates = ["max_f32", "min_f32"]
 
 ["alice-lol/src/parity.rs"]
-count = 2
+generates = ["max_f32"]
 
 ["alice-lol/src/research_law.rs"]
-count = 5
+generates = ["max_f64"]
 
 ["alice-lol/src/runtime_parser.rs"]
-count = 1
+generates = ["max_f32"]
 
 ["alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"]
-count = 1
+generates = ["max_f32"]

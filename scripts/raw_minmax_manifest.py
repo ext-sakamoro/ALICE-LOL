@@ -1,32 +1,30 @@
 #!/usr/bin/env python3
-"""Every caller of `alice-lol/src/raw_minmax.rs`'s `raw_max_f32`/`raw_min_f32`/
-`raw_max_f64`, named and counted.
+"""Every module authorized to generate `alice-lol/src/raw_minmax.rs`'s raw f32/f64 max/min, named.
 
-`raw_minmax.rs` is the one file allowed to call the platform `f32`/`f64`
-`max`/`min` directly (see its module doc and
-`scripts/disallowed_methods_allow_reasons.py`'s `raw-helper:` prefix). A
-caller of its helpers is a separate, provably-safe site of its own (a
-constant nonzero operand, both operands already `.abs()`-derived, or the
-result cast to an integer immediately after) — this script is the default-
-deny ratchet on *those* sites: `scripts/raw_minmax_manifest.toml` lists every
-file that may call them and how many times, and this script fails on:
+Which modules may call the platform `f32`/`f64` `max`/`min` directly is enforced by
+the compiler (`clippy::disallowed_macros` on `crate::raw_minmax::raw_minmax_here!()`'s
+own definition path; a module invoking it without a reasoned `#![allow(...)]` fails
+clippy directly, see `alice-lol/src/raw_minmax.rs`'s module doc) — this script is not
+that enforcement. Its job is review/drift tracking the OTHER direction, which the
+compiler cannot see on its own:
 
-  * a file not in the manifest calling a raw_* helper (a new, unreviewed site)
-  * a file's call count differing from the manifest (a site added or removed
-    without updating the manifest in the same commit)
-  * a manifest entry naming a file that no longer calls any raw_* helper (a
-    stale entry — the exemption it tracked is gone, remove the entry)
-  * an aliased import of a raw_* helper (`use ... raw_max_f32 as x;`) whose
-    calls under the alias are not folded into the same file's count (the
-    point of counting is defeated if a call can hide under a different name)
-  * `raw_minmax.rs` itself: its own `a.max(b)`/`a.min(b)` bodies are the
-    *definition*, not a caller, and must not be counted as one
-  * zero files scanned, or the manifest listing zero entries (compared
-    nothing)
+  * a module invoking the macro that is not yet in `raw_minmax_manifest.toml` (a new
+    site to review and add)
+  * a listed module whose generated set (`generates = [...]`) differs from what it
+    actually invokes (reviewed for fewer helpers than listed, or more than listed)
+  * a listed module that no longer invokes the macro at all (a stale entry — the
+    exemption it tracked is gone, remove the entry)
+  * a module invoking the macro with no `#![allow(clippy::disallowed_macros, ...)]`
+    of its own in the same file (clippy itself fails this build already; this script
+    catches it too, as a cheaper, non-cargo check, for a checkout mid-edit that has
+    not run clippy yet)
+  * `alice-lol/src/raw_minmax.rs` itself: its macro's internal `@one` recursive
+    self-invocation is the *definition*, not a caller, and must not be counted as one
+  * zero files scanned, or the manifest listing zero entries (compared nothing)
 
 Usage: `python3 scripts/raw_minmax_manifest.py`
 `--root DIR` to check a different tree (used by the test)
-`--write` to regenerate the manifest from the real counts (review the diff)
+`--write` to regenerate the manifest from the real modules (review the diff)
 """
 from __future__ import annotations
 
@@ -43,16 +41,19 @@ DEFINITION_REL = os.path.join("alice-lol", "src", "raw_minmax.rs")
 MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
 MEMBER_NAME_RE = re.compile(r'"([^"]+)"')
 
-RAW_FNS = ("raw_max_f32", "raw_min_f32", "raw_max_f64", "raw_min_f64")
-# a bare reference (e.g. `.fold(0.0, crate::raw_minmax::raw_max_f64)`, passing the
-# function itself rather than calling it inline) is still a real call site, so this
-# does not require a trailing `(`
-CALL_RE = re.compile(r"\b(?:" + "|".join(RAW_FNS) + r")\b")
-# `use ... raw_max_f32 as x;`-style aliasing: the alias name is then also a call target
-ALIAS_AS_RE = re.compile(r"\b(?:" + "|".join(RAW_FNS) + r")\s+as\s+([A-Za-z_][A-Za-z0-9_]*)")
+VALID_WHICH = ("max_f32", "min_f32", "max_f64")
+
+# `crate::raw_minmax::raw_minmax_here!(max_f32, min_f32);` (or `use`d and invoked
+# bare, or with trailing whitespace/newlines inside the parens) — captures the
+# argument list text
+INVOCATION_RE = re.compile(r"raw_minmax_here\s*!\s*\((?P<args>[^)]*)\)")
+DISALLOWED_MACROS_ALLOW_RE = re.compile(
+    r"#!\s*\[\s*allow\s*\(\s*clippy::disallowed_macros\b"
+)
 
 TOML_HEADER_RE = re.compile(r'^\["?(?P<file>[^"\]]+)"?\]\s*$')
-TOML_COUNT_RE = re.compile(r'^count\s*=\s*(?P<n>\d+)\s*$')
+TOML_GENERATES_RE = re.compile(r'^generates\s*=\s*\[(?P<body>[^\]]*)\]\s*$')
+TOML_STR_RE = re.compile(r'"([^"]+)"')
 
 
 def workspace_members(root: str) -> list[str]:
@@ -75,8 +76,8 @@ def iter_rs_files(base: str):
                 yield os.path.join(dirpath, name)
 
 
-def read_manifest(path: str) -> dict[str, int]:
-    manifest: dict[str, int] = {}
+def read_manifest(path: str) -> dict[str, list[str]]:
+    manifest: dict[str, list[str]] = {}
     current: str | None = None
     try:
         with open(path, encoding="utf-8") as f:
@@ -91,9 +92,9 @@ def read_manifest(path: str) -> dict[str, int]:
         if m:
             current = m.group("file")
             continue
-        m = TOML_COUNT_RE.match(stripped)
+        m = TOML_GENERATES_RE.match(stripped)
         if m and current is not None:
-            manifest[current] = int(m.group("n"))
+            manifest[current] = sorted(TOML_STR_RE.findall(m.group("body")))
             current = None
     return manifest
 
@@ -102,7 +103,9 @@ class RawMinmaxError(Exception):
     """a manifest or source tree this check cannot read"""
 
 
-def real_counts(root: str) -> dict[str, int]:
+def real_modules(root: str) -> tuple[dict[str, list[str]], list[str]]:
+    """(module -> sorted generated-which list, list of modules invoking the
+    macro without their own `disallowed_macros` allow in the same file)"""
     members = workspace_members(root)
     if not members:
         raise RawMinmaxError(f"{root}/Cargo.toml に [workspace] members が無い")
@@ -111,69 +114,82 @@ def real_counts(root: str) -> dict[str, int]:
     if missing:
         raise RawMinmaxError(f"member の src/ が無い: {', '.join(missing)}")
 
-    counts: dict[str, int] = {}
+    modules: dict[str, list[str]] = {}
+    missing_allow: list[str] = []
     definition_abs = os.path.join(root, DEFINITION_REL)
     for base in src_dirs:
         for path in iter_rs_files(base):
             if os.path.abspath(path) == os.path.abspath(definition_abs):
-                continue  # the definition's own a.max(b)/a.min(b) is not a caller
+                continue  # the macro's own `@one` recursive call is the definition, not a caller
             with open(path, encoding="utf-8") as f:
                 text = f.read()
-            n = len(CALL_RE.findall(text))
-            for alias_name in ALIAS_AS_RE.findall(text):
-                # an aliased import: calls under the alias name also count,
-                # folded into the same file (the point is one count per file,
-                # not one count per spelling)
-                n += len(re.findall(rf"\b{re.escape(alias_name)}\s*\(", text))
-            if n > 0:
-                rel = os.path.relpath(path, root).replace(os.sep, "/")
-                counts[rel] = n
-    return counts
+            invocations = INVOCATION_RE.findall(text)
+            if not invocations:
+                continue
+            which: set[str] = set()
+            for args in invocations:
+                for tok in args.split(","):
+                    tok = tok.strip()
+                    if tok and tok != "@one":
+                        which.add(tok)
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            modules[rel] = sorted(which)
+            if not DISALLOWED_MACROS_ALLOW_RE.search(text):
+                missing_allow.append(rel)
+    return modules, missing_allow
 
 
 def check(root: str) -> tuple[list[str], int]:
     manifest = read_manifest(os.path.join(root, MANIFEST_REL))
     if not manifest:
         raise RawMinmaxError("manifest が 0 件 (比較できない)")
-    counts = real_counts(root)
-    # a scanner that silently matches nothing would otherwise look identical to
-    # "every manifest entry's exemption was legitimately removed" (every entry
-    # reported as merely stale, not as a hard failure) -- that distinction
-    # matters only when the manifest is non-empty, which the check above
-    # already guarantees, so every manifest entry would show up as stale
-    # below regardless of which of the two this actually is: the stale-entry
-    # errors this function already returns are the signal, not a separate
-    # raise
+    modules, missing_allow = real_modules(root)
 
     errors: list[str] = []
-    for rel, n in sorted(counts.items()):
+    for rel, which in sorted(modules.items()):
+        unknown = [w for w in which if w not in VALID_WHICH]
+        if unknown:
+            errors.append(
+                f"{rel}: raw_minmax_here!() に未知の引数 {unknown} (有効: {list(VALID_WHICH)})"
+            )
         if rel not in manifest:
-            errors.append(f"{rel}: raw_minmax の呼び出し {n} 件、manifest に entry が無い (新規サイトを足す)")
-        elif manifest[rel] != n:
-            errors.append(f"{rel}: 呼び出し {n} 件、manifest は {manifest[rel]} 件 (drift)")
-    for rel in sorted(set(manifest) - set(counts)):
-        errors.append(f"{rel}: manifest に entry があるが呼び出しが 0 件 (使われなくなった entry、消す)")
-    return errors, sum(counts.values())
+            errors.append(
+                f"{rel}: raw_minmax_here!({', '.join(which)}) を呼んでいるが manifest に entry が無い (新規サイトを足す)"
+            )
+        elif manifest[rel] != which:
+            errors.append(
+                f"{rel}: 実際の generates = {which}、manifest は {manifest[rel]} (drift)"
+            )
+    for rel in sorted(set(manifest) - set(modules)):
+        errors.append(f"{rel}: manifest に entry があるが raw_minmax_here!() を呼んでいない (使われなくなった entry、消す)")
+    for rel in missing_allow:
+        errors.append(
+            f"{rel}: raw_minmax_here!() を呼んでいるが #![allow(clippy::disallowed_macros, ...)] が同じ file に無い (clippy も別途 fail する)"
+        )
+    return errors, sum(len(w) for w in modules.values())
 
 
 def write_manifest(root: str) -> None:
-    counts = real_counts(root)
+    modules, _missing_allow = real_modules(root)
     path = os.path.join(root, MANIFEST_REL)
     lines = [
-        "# Every file that calls `crate::raw_minmax::raw_*` (alice-lol/src/raw_minmax.rs,",
-        "# the one place the disallowed_methods lint allows f32/f64 max/min directly),",
-        "# and how many times. See scripts/raw_minmax_manifest.py.",
+        "# Every module authorized to invoke `crate::raw_minmax::raw_minmax_here!()`",
+        "# (alice-lol/src/raw_minmax.rs, the one place the disallowed_methods lint allows",
+        "# f32/f64 max/min directly), and which helpers it generates. See",
+        "# scripts/raw_minmax_manifest.py.",
         "#",
-        "# A count here is not a budget to spend: a new call site means either a new",
-        "# provably-safe site (add it here, with the same nonzero-const:/both-abs:/",
+        "# A listing here is not a budget to spend: a new invocation means either a new",
+        "# provably-safe module (add it here, with the same nonzero-const:/both-abs:/",
         "# int-cast: reasoning as alice-lol/src/raw_minmax.rs's module doc requires of",
-        "# every caller) or a site that should route through crate::det_math::max/min",
-        "# instead (the Law form, not this file).",
+        "# every caller, and its own #![allow(clippy::disallowed_macros, ...)]) or a site",
+        "# that should route through crate::det_math::max/min instead (the Law form, not",
+        "# this file).",
         "",
     ]
-    for rel in sorted(counts):
+    for rel in sorted(modules):
         lines.append(f'["{rel}"]')
-        lines.append(f"count = {counts[rel]}")
+        generates = ", ".join(f'"{w}"' for w in modules[rel])
+        lines.append(f"generates = [{generates}]")
         lines.append("")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -197,12 +213,13 @@ def main() -> int:
         print(f"error: {e}")
         return 2
 
+    modules, _ = real_modules(args.root)
     if errors:
         for e in errors:
             print(f"error: {e}")
-        print(f"compared: files {len(real_counts(args.root))}, calls {total}, mismatches {len(errors)}")
+        print(f"compared: modules {len(modules)}, generated helpers {total}, mismatches {len(errors)}")
         return 1
-    print(f"compared: files {len(real_counts(args.root))}, calls {total}, mismatches 0")
+    print(f"compared: modules {len(modules)}, generated helpers {total}, mismatches 0")
     print("raw-minmax-manifest: ok")
     return 0
 

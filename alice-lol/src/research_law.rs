@@ -106,6 +106,12 @@
 //! assert!(law.evaluate(&[("t", 11.0)]).is_err()); // outside the valid range
 //! # Ok::<(), alice_lol::research_law::ResearchLawError>(())
 //! ```
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
+
+crate::raw_minmax::raw_minmax_here!(max_f64);
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -1663,7 +1669,7 @@ impl ResearchLaw {
             let observed = finite(o.value)?;
             let d = observed - self.evaluate_with(&borrowed_conditions(&o.conditions), params)?;
             sum_sq += d * d;
-            max_abs = crate::raw_minmax::raw_max_f64(max_abs, d.abs(), crate::raw_minmax::Reason::BothAbs);
+            max_abs = raw_max_f64(max_abs, d.abs(), crate::raw_minmax::Reason::BothAbs);
         }
         Ok(ResidualStats {
             n: observations.len(),
@@ -1696,7 +1702,8 @@ impl ResearchLaw {
             r.push(o.value - self.evaluate_with(&cond, p).ok()?);
             let mut row = Vec::with_capacity(p.len());
             for j in 0..p.len() {
-                let h = GN_FD_STEP * crate::raw_minmax::raw_max_f64(p[j].abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
+                let h = GN_FD_STEP
+                    * raw_max_f64(p[j].abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
                 shifted[j] = p[j] + h;
                 let up = self.evaluate_with(&cond, &shifted).ok()?;
                 shifted[j] = p[j] - h;
@@ -1750,7 +1757,9 @@ impl ResearchLaw {
                 break;
             };
             let converged = cand.iter().zip(&p).all(|(new, old)| {
-                (new - old).abs() <= GN_TOLERANCE * crate::raw_minmax::raw_max_f64(old.abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst)
+                (new - old).abs()
+                    <= GN_TOLERANCE
+                        * raw_max_f64(old.abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst)
             });
             p = cand;
             ssr = c_ssr;
@@ -1898,7 +1907,7 @@ fn normal_matrix(jac: &[Vec<f64>], k: usize) -> Vec<Vec<f64>> {
 fn solve(mut m: Vec<Vec<f64>>, mut rhs: Vec<f64>) -> Option<Vec<f64>> {
     let k = rhs.len();
     let scale = (0..k).map(|i| m[i][i].abs()).fold(0.0_f64, |acc, x| {
-        crate::raw_minmax::raw_max_f64(acc, x, crate::raw_minmax::Reason::BothAbs)
+        raw_max_f64(acc, x, crate::raw_minmax::Reason::BothAbs)
     });
     if !scale.is_finite() || scale <= 0.0 {
         return None;
@@ -2056,7 +2065,11 @@ pub fn compare(
     let b_value = b.evaluate(&b_conditions)?;
     let b_value_in_a_unit = finite(b_value * b.output_unit.scale / a.output_unit.scale)?;
     let difference = finite(a_value - b_value_in_a_unit)?;
-    let denom = crate::raw_minmax::raw_max_f64(a_value.abs(), b_value_in_a_unit.abs(), crate::raw_minmax::Reason::BothAbs);
+    let denom = raw_max_f64(
+        a_value.abs(),
+        b_value_in_a_unit.abs(),
+        crate::raw_minmax::Reason::BothAbs,
+    );
     let relative = if denom == 0.0 {
         0.0
     } else {

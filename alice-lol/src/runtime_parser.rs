@@ -10,6 +10,12 @@
 //! let node = parse_lol("smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))").unwrap();
 //! let dist = alice_lol::eval(&node, glam::Vec3::ZERO);
 //! ```
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
+
+crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use crate::audit_law::{sorted_values, AuditLaw, Clause};
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
@@ -2990,7 +2996,7 @@ impl<'a> Parser<'a> {
                     height: h,
                     flange_thickness: 3.0,
                     flange_overhang: 4.0,
-                    inner_dia: crate::raw_minmax::raw_max_f32(od - 10.0, 4.0, crate::raw_minmax::Reason::NonzeroConst),
+                    inner_dia: raw_max_f32(od - 10.0, 4.0, crate::raw_minmax::Reason::NonzeroConst),
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::cable_grommet(
                     &spec,

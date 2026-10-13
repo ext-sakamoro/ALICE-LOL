@@ -22,10 +22,15 @@
 //!   / `DRAWER_ORGANIZER` / `SHELF_DIVIDER_560X250X120` の metadata と対を成す関数
 //! - **pipeline との互換**: pipeline Python `python generator` は本 module の対象外 (薄物専用)
 //!   本 module は **`SdfMarchingCubes` 経路のみ** (`SdfNode::sdf_to_mesh` 経由)
-
+#![allow(
+    clippy::disallowed_macros,
+    reason = "raw-helper: this module calls the platform f32/f64 max/min via crate::raw_minmax::raw_minmax_here!() at sites proven safe by nonzero-const:/both-abs:/int-cast: reasoning, see scripts/raw_minmax_manifest.toml"
+)]
 // 幾何寸法の慣習命名 (hx / hy / hz、dx / dy、cx / cy 等) が 240 箇所以上あり、
 // rename すると pipeline canonical generator との対応が追えなくなるため module 単位で許容
 #![allow(clippy::similar_names)]
+
+crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use crate::limits::{
     checked_positive_finite, checked_product, SpecError, MAX_NODE_EXPANSION, MIN_PITCH_MM,
@@ -3913,8 +3918,7 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let inner_x = (count_f - 1.0).mul_add(spec.wall_thickness, count_f * spec.cell_width);
     // Law form: negate both mul_add operands instead of the call result,
     // used below as `x_left`'s starting (negative-half) position.
-    let neg_inner_x =
-        (count_f - 1.0).mul_add(-spec.wall_thickness, -(count_f * spec.cell_width));
+    let neg_inner_x = (count_f - 1.0).mul_add(-spec.wall_thickness, -(count_f * spec.cell_width));
     let ext_x = 2.0f32.mul_add(spec.wall_thickness, inner_x);
     let ext_y = spec.height + spec.floor_thickness;
     let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.cell_depth);
@@ -6967,8 +6971,11 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     let plate = box3d(outer_hx, outer_hy, outer_hz);
 
     let screw_nominal = spec.screw_size.nominal_diameter();
-    let boss_body_height =
-        crate::raw_minmax::raw_max_f32(spec.boss_height - spec.base_thickness, 1.0, crate::raw_minmax::Reason::NonzeroConst);
+    let boss_body_height = raw_max_f32(
+        spec.boss_height - spec.base_thickness,
+        1.0,
+        crate::raw_minmax::Reason::NonzeroConst,
+    );
     let boss_template = boss(screw_nominal, boss_body_height);
     let boss_y = outer_hy + boss_body_height * 0.5;
 
