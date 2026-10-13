@@ -59,6 +59,14 @@ class Siblings(unittest.TestCase):
             self.assertEqual(rows, [("ALICE-Kinematics", "alice-kinematics", "0.2.0", "alice-kinematics-v0.2.0"),
                                     ("ALICE-SDF", "alice-sdf", "6.0.0", "v6.0.0")])
 
+    def test_workspace_dependencies_are_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = tree(Path(d), '[dependencies]\nalice-sdf = { workspace = true }\n')
+            (root / "Cargo.toml").write_text(
+                '[workspace]\nmembers = ["a", "b"]\n\n[workspace.dependencies]\n'
+                'alice-sdf = { path = "../ALICE-SDF", version = "6" }\n', encoding="utf-8")
+            self.assertEqual(rs.sibling_deps(root), {"ALICE-SDF": "alice-sdf"})
+
     def test_v_prefix_wins_over_package_prefix(self):
         self.assertEqual(rs.pick_tag("alice-sdf", "6.0.0", {"v6.0.0", "alice-sdf-v6.0.0"}), "v6.0.0")
 

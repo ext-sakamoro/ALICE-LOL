@@ -17,7 +17,7 @@ on:
         type: string
         default: ''
       release:
-        description: 'Create the GitHub Release (false = only the dry-run publish)'
+        description: 'Create the GitHub Release (false = only the dry-run publish); only when ref is empty and the tag exists'
         required: false
         type: boolean
         default: true
@@ -36,8 +36,9 @@ jobs:
     steps:
       - id: parse
         shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
           if [[ "$TAG" == alice-lol-macro-v* ]]; then
             echo "crate=alice-lol-macro" >> "$GITHUB_OUTPUT"
             echo "version=${TAG#alice-lol-macro-v}" >> "$GITHUB_OUTPUT"
@@ -110,13 +111,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [detect-crate, dry-run-publish]
-    if: github.event_name != 'workflow_dispatch' || inputs.release
+    # a release is made only for the commit the tag already names: a dispatch with `ref`
+    # tries a commit before its tag exists and must not make a tag or a release
+    if: github.event_name != 'workflow_dispatch' || (inputs.release && inputs.ref == '')
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref || inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-tags: true
+
+      - name: The tag exists and is the checked-out commit
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "refs/tags/$TAG:refs/tags/$TAG"
+          tagged=$(git rev-parse "refs/tags/$TAG^{commit}")
+          head=$(git rev-parse HEAD)
+          echo "tag $TAG -> $tagged, checked out $head"
+          if [ "$tagged" != "$head" ]; then
+            echo "error: the tag $TAG names $tagged, not the checked-out commit $head" >&2
+            exit 1
+          fi
 
       - name: Extract CHANGELOG excerpt
         id: changelog

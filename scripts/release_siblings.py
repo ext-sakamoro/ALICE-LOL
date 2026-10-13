@@ -47,12 +47,23 @@ def dep_tables(manifest: dict):
             yield target.get(name, {})
 
 
-def sibling_deps(root: Path) -> dict[str, str]:
-    """sibling directory name -> package name, over every member's path dependencies"""
-    found: dict[str, str] = {}
+def manifests(root: Path):
+    """(directory the paths are relative to, dependency tables) for the workspace
+    dependencies of the root manifest and for every member"""
+    ws = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8")).get("workspace", {})
+    yield root, [ws.get("dependencies", {})]
     for member in members(root):
         manifest = tomllib.loads((member / "Cargo.toml").read_text(encoding="utf-8"))
-        for table in dep_tables(manifest):
+        yield member, list(dep_tables(manifest))
+
+
+def sibling_deps(root: Path) -> dict[str, str]:
+    """sibling directory name -> package name, over every path dependency of the root's
+    `[workspace.dependencies]` and of every member (a sibling's own path dependencies are
+    not read: it is not checked out yet, and `cargo metadata --locked` fails loudly on one)"""
+    found: dict[str, str] = {}
+    for member, tables in manifests(root):
+        for table in tables:
             for key, spec in table.items():
                 if not isinstance(spec, dict) or "path" not in spec:
                     continue
@@ -61,7 +72,7 @@ def sibling_deps(root: Path) -> dict[str, str]:
                 if target == root or root in target.parents:
                     continue  # a member of this workspace
                 if target.parent != root.parent:
-                    raise SiblingError(f"{member.name}: path {spec['path']} is not a sibling of the repository")
+                    raise SiblingError(f"{member.name or 'workspace'}: path {spec['path']} is not a sibling of the repository")
                 package = spec.get("package", key)
                 if found.get(target.name, package) != package:
                     raise SiblingError(f"{target.name}: named as {found[target.name]} and {package}")
