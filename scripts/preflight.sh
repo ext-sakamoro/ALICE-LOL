@@ -141,9 +141,13 @@ step "ci.yml / disallowed-methods-allow-reasons: 個別 allow の reason が既�
 python3 scripts/test_disallowed_methods_allow_reasons.py
 python3 scripts/disallowed_methods_allow_reasons.py
 
-step "ci.yml / raw-minmax-manifest: raw_minmax の呼び出し元を file ごとに数える (G2、default-deny)"
+step "ci.yml / raw-minmax-manifest: raw_minmax_here!() を呼ぶ module を一覧する (G2、drift 検知)"
 python3 scripts/test_raw_minmax_manifest.py
 python3 scripts/raw_minmax_manifest.py
+
+step "ci.yml / libm-hidden-check: disallowed_methods の allow を全部外し、libm が src/ scope に漏れていないか clippy で検査"
+python3 scripts/test_libm_hidden_check.py
+python3 scripts/libm_hidden_check.py
 
 step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
 python3 scripts/test_readme_sync.py
