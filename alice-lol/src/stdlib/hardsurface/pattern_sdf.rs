@@ -504,6 +504,9 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     let tray_hy = spec.depth * 0.5;
     let tray_hz = spec.height * 0.5;
     let inner_width = 2.0f32.mul_add(-spec.wall_thickness, spec.width);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below as `x_cursor`'s starting (negative-half) position.
+    let neg_inner_width = 2.0f32.mul_add(spec.wall_thickness, -spec.width);
     let inner_hz = (spec.height - spec.floor_thickness) * 0.5;
     let outer = rounded_box(tray_hx, tray_hy, tray_hz, spec.fillet_radius);
 
@@ -525,7 +528,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
 
     // 全 cavity を Union で組立て、最後に outer から subtract
     let mut cavities: Option<SdfNode> = None;
-    let mut x_cursor = -inner_width * 0.5;
+    let mut x_cursor = neg_inner_width * 0.5;
     let cavity_z_offset = spec.floor_thickness * 0.5;
     for slot in &spec.slots {
         let sw = slot.width * scale;
@@ -2257,6 +2260,10 @@ pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
     // Standoff 位置: PCB corner から standoff_inset だけ内側
     let sx = spec.pcb_width.mul_add(0.5, -spec.standoff_inset);
     let sz = spec.pcb_depth.mul_add(0.5, -spec.standoff_inset);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below for the mirrored (negative-X / negative-Z) standoff corners.
+    let neg_sx = spec.pcb_width.mul_add(-0.5, spec.standoff_inset);
+    let neg_sz = spec.pcb_depth.mul_add(-0.5, spec.standoff_inset);
 
     let pilot_r = spec.standoff_pilot_diameter * 0.5;
     let pilot_hy = spec.standoff_height * 0.75;
@@ -2276,7 +2283,7 @@ pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
     let mut result = subtract(outer, cavity);
 
     // 4 corner standoffs
-    for (dx, dz) in [(-sx, -sz), (sx, -sz), (-sx, sz), (sx, sz)] {
+    for (dx, dz) in [(neg_sx, neg_sz), (sx, neg_sz), (neg_sx, sz), (sx, sz)] {
         let peg = translate(
             cylinder(standoff_r, standoff_hy),
             Vec3::new(dx, standoff_offset_y, dz),
@@ -3904,6 +3911,10 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
 
     // 内部合計幅 = count × cell_width + (count-1) × wall_thickness
     let inner_x = (count_f - 1.0).mul_add(spec.wall_thickness, count_f * spec.cell_width);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below as `x_left`'s starting (negative-half) position.
+    let neg_inner_x =
+        (count_f - 1.0).mul_add(-spec.wall_thickness, -(count_f * spec.cell_width));
     let ext_x = 2.0f32.mul_add(spec.wall_thickness, inner_x);
     let ext_y = spec.height + spec.floor_thickness;
     let ext_z = 2.0f32.mul_add(spec.wall_thickness, spec.cell_depth);
@@ -3930,7 +3941,7 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let wall_hy = spec.height * 0.5;
     let wall_hz = spec.cell_depth * 0.5;
     let wall_offset_y = spec.floor_thickness + wall_hy;
-    let x_left = -inner_x * 0.5;
+    let x_left = neg_inner_x * 0.5;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 1..count {
         let wall_center_x = spec.wall_thickness.mul_add(
@@ -5022,6 +5033,10 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
     let groove_hy = f32::midpoint(spec.gasket_depth, 10.0);
     let wall_mid_x = spec.wall_thickness.mul_add(0.5, cavity_hx);
     let wall_mid_z = spec.wall_thickness.mul_add(0.5, cavity_hz);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below for the mirrored (negative-X / negative-Z) groove slots.
+    let neg_wall_mid_x = spec.wall_thickness.mul_add(-0.5, -cavity_hx);
+    let neg_wall_mid_z = spec.wall_thickness.mul_add(-0.5, -cavity_hz);
 
     // X 方向長 slot (Z-facing wall 2 本)
     let slot_x_long = translate(
@@ -5030,7 +5045,7 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
     );
     let slot_x_long_n = translate(
         box3d(cavity_hx, groove_hy, spec.gasket_width * 0.5),
-        Vec3::new(0.0, groove_offset_y, -wall_mid_z),
+        Vec3::new(0.0, groove_offset_y, neg_wall_mid_z),
     );
     // Z 方向長 slot (X-facing wall 2 本)
     let slot_z_long = translate(
@@ -5039,7 +5054,7 @@ pub fn outdoor_enclosure(spec: &OutdoorEnclosureSpec) -> SdfNode {
     );
     let slot_z_long_n = translate(
         box3d(spec.gasket_width * 0.5, groove_hy, cavity_hz),
-        Vec3::new(-wall_mid_x, groove_offset_y, 0.0),
+        Vec3::new(neg_wall_mid_x, groove_offset_y, 0.0),
     );
 
     result = subtract(result, slot_x_long);
@@ -6283,11 +6298,15 @@ pub fn l_bracket(spec: &LBracketSpec) -> SdfNode {
     };
 
     // 穴配置: 各 arm の Z 軸方向に holes 個等間隔、両端は板厚分マージン
-    let z_margin = spec
+    // (Law form: usable_z needs -z_margin, computed via negated mul_add
+    // operands instead of negating a mul_add result — `-z_margin` would be
+    // the fneg(fma(...)) shape the no-outer-fneg-of-fma gate forbids, even
+    // as an argument to a different call — so only the negated form is kept)
+    let neg_z_margin = spec
         .hole_size
         .head_diameter_socket()
-        .mul_add(0.5, spec.plate_thickness);
-    let usable_z = crate::det_math::max(2.0f32.mul_add(-z_margin, spec.depth), 0.0);
+        .mul_add(-0.5, -spec.plate_thickness);
+    let usable_z = crate::det_math::max(2.0f32.mul_add(neg_z_margin, spec.depth), 0.0);
     let step_z = if holes > 1 {
         usable_z / n_f32(holes - 1)
     } else {
@@ -6505,11 +6524,15 @@ pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
         // Optional M4 VESA 4 隅穴 (cavity margin rule intrinsic in helper)
         let vesa_x = spec.plate_margin.mul_add(-0.5, plate_extent_x * 0.5);
         let vesa_z = spec.plate_margin.mul_add(-0.5, plate_extent_z * 0.5);
+        // Law form: negate both mul_add operands instead of the call result,
+        // used below for the mirrored (negative-X / negative-Z) VESA holes.
+        let neg_vesa_x = spec.plate_margin.mul_add(0.5, -(plate_extent_x * 0.5));
+        let neg_vesa_z = spec.plate_margin.mul_add(0.5, -(plate_extent_z * 0.5));
         for (x, z) in [
             (vesa_x, vesa_z),
-            (-vesa_x, vesa_z),
-            (vesa_x, -vesa_z),
-            (-vesa_x, -vesa_z),
+            (neg_vesa_x, vesa_z),
+            (vesa_x, neg_vesa_z),
+            (neg_vesa_x, neg_vesa_z),
         ] {
             result =
                 subtract_through_screw_hole(result, MetricSize::M4, spec.plate_thickness, x, z);
@@ -6945,7 +6968,7 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
 
     let screw_nominal = spec.screw_size.nominal_diameter();
     let boss_body_height =
-        crate::raw_minmax::raw_max_f32(spec.boss_height - spec.base_thickness, 1.0);
+        crate::raw_minmax::raw_max_f32(spec.boss_height - spec.base_thickness, 1.0, crate::raw_minmax::Reason::NonzeroConst);
     let boss_template = boss(screw_nominal, boss_body_height);
     let boss_y = outer_hy + boss_body_height * 0.5;
 
@@ -7503,13 +7526,17 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
     // M3 hole pattern: board 外形 -3mm inset の 4 隅 (cavity margin rule intrinsic in helper)
     let hole_x = bw.mul_add(0.5, -3.0);
     let hole_z = bh.mul_add(0.5, -3.0);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below for the mirrored (negative-X / negative-Z) M3 holes.
+    let neg_hole_x = bw.mul_add(-0.5, 3.0);
+    let neg_hole_z = bh.mul_add(-0.5, 3.0);
 
     let mut result = plate;
     for (x, z) in [
         (hole_x, hole_z),
-        (-hole_x, hole_z),
-        (hole_x, -hole_z),
-        (-hole_x, -hole_z),
+        (neg_hole_x, hole_z),
+        (hole_x, neg_hole_z),
+        (neg_hole_x, neg_hole_z),
     ] {
         result = subtract_through_screw_hole(result, MetricSize::M3, spec.plate_thickness, x, z);
     }
@@ -7518,11 +7545,15 @@ pub fn arduino_mount_plate(spec: &ArduinoMountPlateSpec) -> SdfNode {
     if spec.extra_m4_holes >= 4 {
         let vesa_x = spec.plate_margin.mul_add(-0.5, plate_extent_x * 0.5);
         let vesa_z = spec.plate_margin.mul_add(-0.5, plate_extent_z * 0.5);
+        // Law form: negate both mul_add operands instead of the call result,
+        // used below for the mirrored (negative-X / negative-Z) VESA holes.
+        let neg_vesa_x = spec.plate_margin.mul_add(0.5, -(plate_extent_x * 0.5));
+        let neg_vesa_z = spec.plate_margin.mul_add(0.5, -(plate_extent_z * 0.5));
         for (x, z) in [
             (vesa_x, vesa_z),
-            (-vesa_x, vesa_z),
-            (vesa_x, -vesa_z),
-            (-vesa_x, -vesa_z),
+            (neg_vesa_x, vesa_z),
+            (vesa_x, neg_vesa_z),
+            (neg_vesa_x, neg_vesa_z),
         ] {
             result =
                 subtract_through_screw_hole(result, MetricSize::M4, spec.plate_thickness, x, z);
@@ -7622,11 +7653,15 @@ pub fn pixhawk_mount(spec: &PixhawkMountSpec) -> SdfNode {
         let damper_depth = spec.plate_thickness * 0.5;
         let damper_x = spec.plate_margin.mul_add(-0.5, plate_extent * 0.5);
         let damper_z = spec.plate_margin.mul_add(-0.5, plate_extent * 0.5);
+        // Law form: negate both mul_add operands instead of the call result,
+        // used below for the mirrored (negative-X / negative-Z) dampers.
+        let neg_damper_x = spec.plate_margin.mul_add(0.5, -(plate_extent * 0.5));
+        let neg_damper_z = spec.plate_margin.mul_add(0.5, -(plate_extent * 0.5));
         for (x, z) in [
             (damper_x, damper_z),
-            (-damper_x, damper_z),
-            (damper_x, -damper_z),
-            (-damper_x, -damper_z),
+            (neg_damper_x, damper_z),
+            (damper_x, neg_damper_z),
+            (neg_damper_x, neg_damper_z),
         ] {
             result =
                 subtract_blind_pocket(result, damper_dia, spec.plate_thickness, damper_depth, x, z);

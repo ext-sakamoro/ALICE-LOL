@@ -1317,6 +1317,9 @@ fn dovetail_half_width_is_linear_in_height_with_the_documented_taper() {
         for ih in 0..3_u16 {
             let base = f32::from(ib).mul_add(4.0, 10.0);
             let height = f32::from(ih).mul_add(2.0, 4.0);
+            // Law form: negate both mul_add operands instead of negating
+            // `height` itself (buried inside `-height * 0.5` below).
+            let neg_height = f32::from(ih).mul_add(-2.0, -4.0);
             let node = dovetail(base, height, 20.0);
 
             let mut samples: Vec<(f32, f32)> = Vec::new();
@@ -1324,7 +1327,7 @@ fn dovetail_half_width_is_linear_in_height_with_the_documented_taper() {
             for i in 0..=n {
                 // 上下端を避けた内部の高さ
                 let frac = 0.1 + 0.8 * f32::from(i) / f32::from(n);
-                let y = height.mul_add(frac, -height * 0.5);
+                let y = height.mul_add(frac, neg_height * 0.5);
                 let w = boundary(&node, Vec3::new(0.0, y, 0.0), Vec3::X, 10.0 * base);
                 let expect = (y + height * 0.5).mul_add(-tan_t, base * 0.5);
                 assert!(

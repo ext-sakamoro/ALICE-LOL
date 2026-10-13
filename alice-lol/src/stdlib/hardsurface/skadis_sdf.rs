@@ -456,9 +456,15 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 範囲に入る添字だけを並べる (旧実装は両方とも ix ∈ [-3, 3] で、stagger の +140 が余白に
     // 入り、-140 は無い左右非対称だった)
     let usable_half = size.mul_add(0.5, -SKADIS_EDGE_MARGIN);
+    // Law form: negate both mul_add operands instead of negating
+    // `usable_half` itself (`-usable_half` is the fneg(fma(...)) shape the
+    // no-outer-fneg-of-fma gate forbids, even buried inside `-usable_half -
+    // offset`; `size.mul_add(-0.5, SKADIS_EDGE_MARGIN)` is the bit-exact
+    // equivalent).
+    let neg_usable_half = size.mul_add(-0.5, SKADIS_EDGE_MARGIN);
     #[allow(clippy::cast_possible_truncation)]
     let index_range = |offset: f32| {
-        let lo = ((-usable_half - offset) / SKADIS_GRID_PITCH).ceil() as i32;
+        let lo = ((neg_usable_half - offset) / SKADIS_GRID_PITCH).ceil() as i32;
         let hi = ((usable_half - offset) / SKADIS_GRID_PITCH).floor() as i32;
         lo..=hi
     };
@@ -627,6 +633,9 @@ pub const CONTAINER_BOTTOM_T: f32 = 1.6;
 pub fn skadis_container_sdf() -> SdfNode {
     let outer_w = 2.0f32.mul_add(CONTAINER_WALL_T, CONTAINER_W);
     let outer_d = 2.0f32.mul_add(CONTAINER_WALL_T, CONTAINER_D);
+    // Law form: negate both mul_add operands instead of the call result,
+    // used below for the mirrored (negative-Z) peg (see `peg_at`).
+    let neg_outer_d = 2.0f32.mul_add(-CONTAINER_WALL_T, -CONTAINER_D);
     let total_h = CONTAINER_H + CONTAINER_BOTTOM_T;
 
     // 外形 (X 幅 × Y 高 × Z 奥行)
@@ -657,7 +666,7 @@ pub fn skadis_container_sdf() -> SdfNode {
     // 2 個の間隔は SKADIS の格子 (GRID_PITCH = 40) = X = ±20
     let peg_at = |x: f32| SdfNode::Translate {
         child: Arc::new(peg_facing_back(PEG_BLADE_W)),
-        offset: Vec3::new(x, total_h * 0.35, -outer_d * 0.5),
+        offset: Vec3::new(x, total_h * 0.35, neg_outer_d * 0.5),
     };
     let pegs = SdfNode::Union {
         a: Arc::new(peg_at(-SKADIS_GRID_PITCH * 0.5)),

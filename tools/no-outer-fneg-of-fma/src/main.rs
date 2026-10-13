@@ -32,12 +32,20 @@
 //!   * `a.mul_add(b, c) * -1.0` (either operand order) — multiplying by the
 //!     literal `-1.0` is the same substitute, also bit-exact for all `x`
 //!   * `let t = a.mul_add(b, c); /* ... */ -t;` — binding the call to a
-//!     variable and negating the variable later in the *same block*, in any
-//!     of the four forms above; this one is a best-effort textual-scope
-//!     check, not full dataflow — it stops looking for a given binding as
-//!     soon as that identifier is shadowed by a new `let` of the same name
-//!     or reassigned, but does not otherwise prove the binding was never
-//!     mutated or aliased, so prefer writing the direct forms where possible
+//!     variable and negating the variable later, in any of the four forms
+//!     above and in **any syntactically-reachable position** within the
+//!     enclosing block — a `return` expression, a function-call argument, an
+//!     array/struct-literal field, an index-assignment right-hand side, an
+//!     `if`/`match`/loop branch, or buried inside a larger unrelated
+//!     expression (`(-t) * 0.5` still negates `t` as a subexpression, even
+//!     though the statement as a whole computes something else); this is a
+//!     best-effort textual-scope check, not full dataflow — it recurses into
+//!     every nested block reachable from the binding (so shadowing is
+//!     tracked independently per nested scope: a `let`/reassignment of the
+//!     same name inside an `if`-branch only shadows within that branch, not
+//!     in sibling branches or after the `if` ends) but does not otherwise
+//!     prove the binding was never mutated through a reference or alias, so
+//!     prefer writing the direct forms where possible
 //!
 //! ⚠️ the miscompile this gate exists for only reproduces on a target with a
 //! native FMA instruction (`mul_add` lowers to one `fma`/`fmadd` op the
@@ -83,8 +91,12 @@
 //! that deliberately keep the old form as a comparison reference.
 //!
 //! Usage: `cargo run --release -- [--root DIR] [--src DIR [DIR...]]`
-//! (default `--src`: `alice-lol/src alice-lol/tests alice-lol/examples`;
-//! another repo passes its own, e.g. `--src src tests examples`)
+//! (default `--src`: `alice-lol/src alice-lol/tests alice-lol/examples
+//! alice-lol-ui/src alice-lol-ui/examples` — this workspace has two
+//! publishable/template crates that both define `SdfNode`-building geometry
+//! using `mul_add`, so both need to be in scope by default, not just the one
+//! that happens to publish to crates.io; another repo passes its own, e.g.
+//! `--src src tests examples`)
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -99,7 +111,13 @@ use syn::{
 
 const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.txt";
 const ALLOWLIST_SCOPE_DIRS: [&str; 2] = ["tests", "examples"];
-const DEFAULT_SRC_DIRS: [&str; 3] = ["alice-lol/src", "alice-lol/tests", "alice-lol/examples"];
+const DEFAULT_SRC_DIRS: [&str; 5] = [
+    "alice-lol/src",
+    "alice-lol/tests",
+    "alice-lol/examples",
+    "alice-lol-ui/src",
+    "alice-lol-ui/examples",
+];
 
 enum FindingKind {
     /// `-x.mul_add(y, z)` (any receiver shape) found directly by the AST walk.
@@ -265,8 +283,11 @@ impl<'a> Visitor<'a> {
         }
     }
 
-    /// Form F: `let t = <mul_add>; ... -t;` in the same block — a best-effort
-    /// textual-scope check (see module doc), not full dataflow.
+    /// Form F: `let t = <mul_add>; ... -t;` — a recursive, shadow-aware
+    /// best-effort textual-scope check (see module doc), not full dataflow.
+    /// Finds a negation of `ident` anywhere reachable from the statements
+    /// following the binding, at any nesting depth, not just a statement
+    /// whose entire top-level expression IS the negation.
     fn record_let_then_negate(&mut self, block: &Block) {
         for (i, stmt) in block.stmts.iter().enumerate() {
             let Stmt::Local(local) = stmt else { continue };
@@ -276,60 +297,92 @@ impl<'a> Visitor<'a> {
             }
             let Pat::Ident(pi) = &local.pat else { continue };
             let ident = pi.ident.to_string();
-            for later in &block.stmts[i + 1..] {
-                if is_rebound_or_reassigned(later, &ident) {
-                    break;
-                }
-                if let Some(span) = find_negation_of_ident_in_stmt(later, &ident) {
-                    self.record_finding_at(span);
-                    break;
-                }
+            let mut finder = IdentNegationFinder {
+                ident: &ident,
+                findings: Vec::new(),
+            };
+            finder.scan_block_from(&block.stmts[i + 1..]);
+            for span in finder.findings {
+                self.record_finding_at(span);
             }
         }
     }
 }
 
-/// Does `stmt` shadow (`let ident = ...`) or reassign (`ident = ...`) the
-/// given identifier? Marks the end of the scope this checker tracks for it
-/// (conservative: stop looking rather than risk a false positive past a
-/// point where the binding's value may have changed).
-fn is_rebound_or_reassigned(stmt: &Stmt, ident: &str) -> bool {
-    match stmt {
-        Stmt::Local(l) => matches!(&l.pat, Pat::Ident(pi) if pi.ident == ident),
-        Stmt::Expr(Expr::Assign(a), _) => is_path_ident(&a.left, ident),
-        _ => false,
+/// Recursively scans a sequence of statements (and every nested block
+/// reachable from them — `if`/`match`/loop bodies, closures, any
+/// expression position) for a negation of `ident`, in any of the forms
+/// [`is_negation_of`] recognises, at any syntactic depth: a `return`
+/// expression, a function-call argument, an array/struct-literal field, the
+/// right-hand side of an index assignment, a branch of an `if`/`match`, or
+/// buried inside a larger unrelated expression. Shadow-aware: once a
+/// (sub)block rebinds (`let ident = ...`) or reassigns (`ident = ...`) the
+/// same name, tracking stops for the remainder of *that* block only — a
+/// sibling branch (e.g. the other arm of the `if` that caused the rebind)
+/// and anything after the enclosing block ends are unaffected, since each
+/// nested block gets its own, independent scan starting fresh from its own
+/// first statement.
+struct IdentNegationFinder<'a> {
+    ident: &'a str,
+    findings: Vec<proc_macro2::Span>,
+}
+
+impl<'a> IdentNegationFinder<'a> {
+    fn scan_block_from(&mut self, stmts: &[Stmt]) {
+        for stmt in stmts {
+            let shadowed = match stmt {
+                Stmt::Local(l) => {
+                    if let Some(init) = &l.init {
+                        self.visit_expr(&init.expr);
+                        if let Some((_, diverge_expr)) = &init.diverge {
+                            self.visit_expr(diverge_expr);
+                        }
+                    }
+                    matches!(&l.pat, Pat::Ident(pi) if pi.ident == self.ident)
+                }
+                Stmt::Expr(Expr::Assign(a), _) => {
+                    self.visit_expr(&a.right);
+                    let reassigns = is_path_ident(&a.left, self.ident);
+                    if !reassigns {
+                        self.visit_expr(&a.left);
+                    }
+                    reassigns
+                }
+                Stmt::Expr(e, _) => {
+                    self.visit_expr(e);
+                    false
+                }
+                _ => false,
+            };
+            if shadowed {
+                break;
+            }
+        }
     }
 }
 
-/// Does the statement's OWN top-level expression (not some buried
-/// sub-expression deep inside it) negate the bare identifier `ident`? This is
-/// deliberately not a recursive walk: a buried `-ident` inside a larger,
-/// unrelated expression (e.g. `(-ident) * 0.5` computing something new) is
-/// not "undoing the mul_add result" and must not be flagged. Only a
-/// statement whose entire expression (or Local's init expression) IS one of
-/// the negation forms counts.
-fn find_negation_of_ident_in_stmt(stmt: &Stmt, ident: &str) -> Option<proc_macro2::Span> {
-    let raw = match stmt {
-        Stmt::Expr(e, _) => e,
-        Stmt::Local(l) => {
-            let init = l.init.as_ref()?;
-            if init.diverge.is_some() {
-                return None;
-            }
-            &init.expr
+impl<'a, 'ast> Visit<'ast> for IdentNegationFinder<'a> {
+    fn visit_expr(&mut self, node: &'ast Expr) {
+        if is_negation_of_ident(node, self.ident) {
+            let span = match node {
+                Expr::Unary(u) => u.op.span(),
+                Expr::MethodCall(m) => m.method.span(),
+                Expr::Binary(b) => b.op.span(),
+                _ => node.span(),
+            };
+            self.findings.push(span);
+            return;
         }
-        _ => return None,
-    };
-    let e = peel(raw);
-    if !is_negation_of_ident(e, ident) {
-        return None;
+        visit::visit_expr(self, node);
     }
-    Some(match e {
-        Expr::Unary(u) => u.op.span(),
-        Expr::MethodCall(m) => m.method.span(),
-        Expr::Binary(b) => b.op.span(),
-        _ => e.span(),
-    })
+
+    /// Every nested block (`if`/`match`/loop bodies, a bare `{ }` expression)
+    /// gets its own independent scan via [`IdentNegationFinder::scan_block_from`]
+    /// instead of the default per-statement descent, so shadowing introduced
+    /// inside one branch cannot leak into a sibling branch or past the block.
+    fn visit_block(&mut self, node: &'ast Block) {
+        self.scan_block_from(&node.stmts);
+    }
 }
 
 impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
@@ -945,15 +998,70 @@ mod tests {
     }
 
     #[test]
-    fn let_binding_negated_as_a_buried_subexpression_is_not_flagged() {
-        // regression: `-t` appearing deep inside a larger, unrelated
-        // expression (here `(-t) * 0.5`, itself unrelated to undoing the
-        // mul_add) must not be flagged just because `t` was negated
-        // somewhere inside it; only a statement whose ENTIRE expression IS
-        // the negation counts
+    fn let_binding_negated_as_a_buried_subexpression_is_flagged() {
+        // `-t` appearing deep inside a larger, syntactically unrelated
+        // expression (here `(-t) * 0.5`) still constructs the same
+        // fneg(fma(...)) IR subexpression LLVM's nsz-gated canonicalisation
+        // matches, regardless of what the enclosing expression goes on to
+        // compute with the negated value — this must be flagged, not waved
+        // through because the statement as a whole "computes something new"
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    -t * 0.5\n}\n";
         let r = run(&[(SRC, src)], None);
-        assert_eq!(r.violations, 0);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_inside_a_return_expression_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    return -t;\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_as_a_function_call_argument_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let t = a.mul_add(b, c);\n    f32::max(-t, 0.0)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_in_an_array_literal_element_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> [f32; 2] {\n    let t = a.mul_add(b, c);\n    [t, -t]\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_in_a_struct_literal_field_is_caught() {
+        let src = "struct S { x: f32 }\nfn f(a: f32, b: f32, c: f32) -> S {\n    let t = a.mul_add(b, c);\n    S { x: -t }\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_in_an_index_assignment_rhs_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32, v: &mut [f32; 2]) {\n    let t = a.mul_add(b, c);\n    v[0] = -t;\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_negated_in_one_if_branch_is_caught() {
+        let src = "fn f(a: f32, b: f32, c: f32, cond: bool) -> f32 {\n    let t = a.mul_add(b, c);\n    if cond {\n        -t\n    } else {\n        t\n    }\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn let_binding_shadowed_in_one_if_branch_does_not_suppress_the_other_branch() {
+        // the `else` branch rebinds `t` to an unrelated value and negates
+        // THAT — must not be flagged — but the `if` branch still negates the
+        // original mul_add-bound `t` and must be. Each branch's shadow
+        // tracking must be independent: the rebind in one arm must not leak
+        // into, or be bled out of, the sibling arm.
+        let src = "fn f(a: f32, b: f32, c: f32, d: f32, cond: bool) -> f32 {\n    let t = a.mul_add(b, c);\n    if cond {\n        -t\n    } else {\n        let t = d;\n        -t\n    }\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
     }
 
     #[test]
@@ -1003,9 +1111,8 @@ mod tests {
         // the actual teeth are the two tests it names.
     }
 
-    /// Mutation teeth for the 5 additionally-caught shapes (2026-10-13,
-    /// review F2): verified by hand, each neutered independently then
-    /// reverted.
+    /// Mutation teeth for the 5 additionally-caught shapes (2026-10-13):
+    /// verified by hand, each neutered independently then reverted.
     /// - Neutering the `.neg()` check in `visit_expr_method_call` turns
     ///   `neg_method_call_is_caught` red while
     ///   `let_binding_then_neg_method_in_the_same_block_is_caught` stays
@@ -1018,18 +1125,38 @@ mod tests {
     ///   while their Form-F (`let`-then-negate) counterparts stay green for
     ///   the same reason.
     /// - Neutering `record_let_then_negate` entirely (Form F) turns all 4
-    ///   `let_binding_then_*_in_the_same_block_is_caught` tests red, while
-    ///   `let_binding_negated_as_a_buried_subexpression_is_not_flagged`
-    ///   stays green (disabling detection cannot manufacture a false
-    ///   positive — this fixture's teeth are instead the real-repo scan: it
-    ///   encodes the exact shape (`-ident` buried inside a larger, unrelated
-    ///   expression sharing the mul_add-bound variable's name) that the
-    ///   original recursive-`Visit`-based `find_negation_of_ident_in_stmt`
-    ///   falsely flagged 18 times across real LOL source before the fix
-    ///   that replaced it with a direct, non-recursive, statement-top-level
-    ///   check).
+    ///   `let_binding_then_*_in_the_same_block_is_caught` tests red, as well
+    ///   as every `let_binding_negated_*_is_caught` buried-position test
+    ///   below (return expression, call argument, array/struct literal
+    ///   field, index-assignment RHS, `if` branch, buried subexpression).
     #[test]
     fn mutation_teeth_marker_five_new_shapes_have_dedicated_tests() {
         // signpost only; see the doc comment above.
+    }
+
+    /// Correction (2026-10-13, independent review of this file's Form F
+    /// scan): the first landing of Form F detection used a recursive,
+    /// `syn::visit::Visit`-based scan (an early version of what is now
+    /// [`IdentNegationFinder`]) that flagged 18 real sites across LOL
+    /// source. Those 18 were misdiagnosed as false positives on the theory
+    /// that a negation buried inside a larger, syntactically unrelated
+    /// expression (`(-t) * 0.5`) "isn't really undoing the mul_add result" —
+    /// and the recursive scan was replaced with a narrower check that only
+    /// looked at a statement's own top-level expression, with
+    /// `let_binding_negated_as_a_buried_subexpression_is_not_flagged` landed
+    /// as a regression fixture codifying that (wrong) call.
+    ///
+    /// That theory does not hold: LLVM's `fneg(fma(x,y,z)) ->
+    /// fma(x,-y,-z)` canonicalisation (the module doc above) matches the
+    /// `fneg`-over-`fma` IR subexpression pattern wherever it occurs — it
+    /// has no notion of "the enclosing statement computes something else
+    /// afterward". All 18 original findings were genuine. This file now
+    /// restores the recursive scan ([`IdentNegationFinder`]) and the
+    /// fixture above has been corrected to assert `violations == 1`
+    /// (renamed `..._is_flagged`), alongside new tests for the other
+    /// syntactic positions a buried negation can occupy.
+    #[test]
+    fn mutation_teeth_marker_form_f_is_a_full_recursive_same_function_scan() {
+        // signpost only; see the doc comment above and `IdentNegationFinder`.
     }
 }

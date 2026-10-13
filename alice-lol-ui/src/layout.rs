@@ -144,7 +144,11 @@ pub fn grid(children: &[Sized], cols: usize, gap: f32) -> Result<SdfNode, UiErro
         #[allow(clippy::cast_precision_loss)]
         let row_f = row as f32;
         let center_x = col_f.mul_add(max_w + gap, max_w * 0.5);
-        let center_y = -row_f.mul_add(max_h + gap, max_h * 0.5);
+        // Law form: negate both mul_add operands instead of the call result
+        // (`-row_f.mul_add(s, k)` is the fneg(fma(...)) shape the
+        // no-outer-fneg-of-fma gate forbids; `row_f.mul_add(-s, -k)` is the
+        // bit-exact, LLVM-canonicalisation-safe equivalent).
+        let center_y = row_f.mul_add(-(max_h + gap), -(max_h * 0.5));
         nodes.push(SdfNode::Translate {
             child: Arc::new(node.clone()),
             offset: Vec3::new(center_x, center_y, 0.0),
