@@ -338,11 +338,18 @@ const STDLIB_TRANSCENDENTAL_PROBE_LOL: &[&str] = &[
 ];
 
 /// `stdlib` の超越関数の経路の pin: [`STDLIB_TRANSCENDENTAL_PROBE_LOL`] の各構成を
-/// `[-40, 40]^3` の 17^3 点の格子で評価した距離の bit を hash した digest
+/// `[-40, 40]^3` の 17^3 点の格子で `alice_sdf::eval` を呼んで評価した距離の bit を
+/// hash した digest
 ///
 /// 超越関数を platform libm に戻す・別の実装に替える等で形状の bit が変われば
 /// この digest が動く (`alice-det-math` の pin は算術そのものの世代を、こちらは
-/// 「stdlib がその算術を通っているか」を畳む)
+/// 「stdlib がその算術を通っているか」を畳む) ⚠️ 超越関数の経路以外にも、
+/// `alice_sdf::eval` 自体の評価アルゴリズムが変わる (距離計算の近似精度・
+/// primitive の合成方法等) 変更でもこの digest は動く — ここで挙がっている
+/// probe 5 件 (`skadis_hook_s`/`_j`、`countersink`、`dovetail`、`phone_dock`) は
+/// いずれも `alice_sdf::eval` を直接呼んで bit を取るため、alice-sdf 側の
+/// 挙動変化がこの digest の drift として現れることが前提の設計 (alice-sdf の
+/// 版を上げた直後にこの test が red になったら、まずそちら側の変更を疑う)
 ///
 /// # Panics
 ///
