@@ -218,7 +218,7 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
                 && point_b.x == 0.0
                 && point_b.z == 0.0
                 && (point_a.y + h).abs()
-                    <= f32::EPSILON * crate::raw_minmax::raw_max_f32(h.abs(), 1.0);
+                    <= f32::EPSILON * crate::raw_minmax::raw_max_f32(h.abs(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
             if symmetric {
                 prim!("capsule", f(*radius), f(h))
             } else {

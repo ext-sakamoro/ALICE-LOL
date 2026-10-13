@@ -1205,7 +1205,7 @@ fn probe_pair(
             continue;
         }
         if witness(fa, fb) {
-            let r = crate::raw_minmax::raw_min_f32(residual(fa, fb), -f32::EPSILON);
+            let r = crate::raw_minmax::raw_min_f32(residual(fa, fb), -f32::EPSILON, crate::raw_minmax::Reason::NonzeroConst);
             if worst.is_none_or(|(w, _)| r < w) {
                 worst = Some((r, c));
             }
@@ -1315,7 +1315,7 @@ fn check_non_overlap(
             field // どちらの表面も検査範囲内で見つからない時だけ場の値に戻す
         };
         (
-            crate::raw_minmax::raw_min_f32(residual, -f32::EPSILON),
+            crate::raw_minmax::raw_min_f32(residual, -f32::EPSILON, crate::raw_minmax::Reason::NonzeroConst),
             point,
             region,
         )
@@ -1370,7 +1370,7 @@ fn check_containment(
     let worst = worst.map(|(field, point, region)| {
         let residual = surface_distance(outer, point, cap).map_or(field, |d| -d);
         (
-            crate::raw_minmax::raw_min_f32(residual, -f32::EPSILON),
+            crate::raw_minmax::raw_min_f32(residual, -f32::EPSILON, crate::raw_minmax::Reason::NonzeroConst),
             point,
             region,
         )
@@ -1431,7 +1431,7 @@ fn check_stress(
         }
 
         for &(lp, force) in load_points {
-            let search_radius = crate::raw_minmax::raw_max_f32(force, 1.0);
+            let search_radius = crate::raw_minmax::raw_max_f32(force, 1.0, crate::raw_minmax::Reason::NonzeroConst);
             if center.distance(lp) > search_radius {
                 continue;
             }
@@ -2330,7 +2330,7 @@ fn check_thermal_field(
         return unusable("格子が各軸 3 セル未満 (transient_step_3d が解かない)");
     }
     // `transient_step_3d` は dx を 1 つしか取らない = 立方セルが前提
-    let aniso = crate::raw_minmax::raw_max_f32((step.x - step.y).abs(), (step.x - step.z).abs());
+    let aniso = crate::raw_minmax::raw_max_f32((step.x - step.y).abs(), (step.x - step.z).abs(), crate::raw_minmax::Reason::BothAbs);
     if aniso > step.x.abs() * 1.0e-4 {
         return unusable("セルが立方でない (検査 AABB を立方体にする)");
     }
@@ -2417,7 +2417,7 @@ fn check_thermal_field(
 /// (`n >= 1` 前提、`n` は `CheckConfig` の grid 解像度で小さい)
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn grid_index(coord: f32, n: usize) -> usize {
-    (crate::raw_minmax::raw_max_f32(coord, 0.0) as usize).min(n - 1)
+    (crate::raw_minmax::raw_max_f32(coord, 0.0, crate::raw_minmax::Reason::IntCast) as usize).min(n - 1)
 }
 
 /// `idx` から全セルを 6-connected で flood fill し、到達したセルの mask を返す
@@ -2734,7 +2734,7 @@ enum CellSign {
 /// slack が 0 の両側を未定にするため
 fn classify_cells(node: &SdfNode, config: &CheckConfig, step: Vec3) -> Vec<CellSign> {
     let n = config.resolution;
-    let slack = INTERVAL_SLACK * crate::raw_minmax::raw_max_f32(step.length(), 1.0);
+    let slack = INTERVAL_SLACK * crate::raw_minmax::raw_max_f32(step.length(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
     let mut out = vec![CellSign::Undecided; n * n * n];
     for (ix, iy, iz, idx) in grid_indices(n) {
         let iv = sdf_interval(node, cell_box(config, step, ix, iy, iz));
@@ -2782,7 +2782,7 @@ fn check_reachable(
     let step = extent / (n as f32);
 
     // 区間演算による 3 分類 (INTERVAL_SLACK の余裕つき、境界は未定に倒す)
-    let slack = INTERVAL_SLACK * crate::raw_minmax::raw_max_f32(step.length(), 1.0);
+    let slack = INTERVAL_SLACK * crate::raw_minmax::raw_max_f32(step.length(), 1.0, crate::raw_minmax::Reason::NonzeroConst);
     let mut proven_inside = vec![false; n * n * n];
     let mut proven_outside = vec![false; n * n * n];
     let mut undecided: usize = 0;

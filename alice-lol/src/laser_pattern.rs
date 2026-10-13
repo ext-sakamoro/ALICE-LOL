@@ -811,7 +811,7 @@ pub fn elements_to_svg(
 /// 符号を消すので歯に関わらない)
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn cell_count(extent: f64, cell: f64) -> usize {
-    crate::raw_minmax::raw_max_f64((extent / cell).ceil(), 0.0) as usize
+    crate::raw_minmax::raw_max_f64((extent / cell).ceil(), 0.0, crate::raw_minmax::Reason::IntCast) as usize
 }
 
 /// cell index → cell 中心の座標 (`origin + (i + 0.5) * cell`)

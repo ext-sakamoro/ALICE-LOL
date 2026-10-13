@@ -23,7 +23,7 @@ pub fn agrees(a: f32, b: f32, rel_tol: f32) -> bool {
         // the tolerance is only for two finite values: with an infinite `a` it is itself ∞,
         // and `inf` would agree with `-inf` and with every finite number
         || (a.is_finite() && b.is_finite() && (a - b).abs()
-            <= rel_tol * crate::raw_minmax::raw_max_f32(crate::raw_minmax::raw_max_f32(a.abs(), b.abs()), 1.0))
+            <= rel_tol * crate::raw_minmax::raw_max_f32(crate::raw_minmax::raw_max_f32(a.abs(), b.abs(), crate::raw_minmax::Reason::BothAbs), 1.0, crate::raw_minmax::Reason::NonzeroConst))
 }
 
 #[cfg(test)]

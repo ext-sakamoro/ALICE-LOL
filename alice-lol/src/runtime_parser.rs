@@ -2990,7 +2990,7 @@ impl<'a> Parser<'a> {
                     height: h,
                     flange_thickness: 3.0,
                     flange_overhang: 4.0,
-                    inner_dia: crate::raw_minmax::raw_max_f32(od - 10.0, 4.0),
+                    inner_dia: crate::raw_minmax::raw_max_f32(od - 10.0, 4.0, crate::raw_minmax::Reason::NonzeroConst),
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::cable_grommet(
                     &spec,
