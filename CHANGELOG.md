@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `release.yml`: tag の `cargo publish --dry-run` が「failed to load manifest」で失敗していた (`alice-lol-macro-v0.3.0` の run) cargo は publish の前に workspace の全 member の manifest を読み、member は隣の repository に path で依存する (`../../ALICE-SDF` ほか) が、release.yml は隣を 1 つも checkout していなかった (「dry-run に隣は要らない」という comment は誤り) 隣はそれぞれ、その commit の `Cargo.lock` にある版の tag (`v<版>` か `<package>-v<版>`) を checkout する (`scripts/release_siblings.py`、隣の main ではない) 続けて `cargo metadata --locked` で lock と checkout した版が合うことを見る 隣が 0 件・lock に無い・tag が無い時は失敗する `workflow_dispatch` に `ref` (tag がまだ無い commit で試す) と `release` (false なら GitHub Release を作らない) を足した `release_siblings.py` の offline の検査と試験は CI (docs job) と `scripts/preflight.sh` でも走る
+
 ## [0.4.0] - 2026-10-13
 
 `alice-lol-macro` 0.3.0 と同時に公開する (公開の順は macro 0.3.0 → `alice-lol` 0.4.0)

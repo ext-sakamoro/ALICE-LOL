@@ -667,6 +667,10 @@ jobs:
         run: python scripts/test_release_roster.py
       - name: release-roster (公開できる crate は alice-lol-macro と alice-lol だけ)
         run: python scripts/release_roster.py
+      - name: release-siblings oracle (検査器自身の試験)
+        run: python scripts/test_release_siblings.py
+      - name: release-siblings (隣の repo への path 依存がそれぞれ Cargo.lock に 1 版ある、release.yml はその版の tag を checkout する)
+        run: python scripts/release_siblings.py
       - name: license-check oracle (検査器自身の試験)
         run: python scripts/test_license_check.py
       - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
