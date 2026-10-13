@@ -34,8 +34,10 @@ def base_tree(root: Path) -> None:
         "    ($($which:ident),+) => {\n"
         "        $( $crate::raw_minmax::raw_minmax_here!(@one $which); )+\n"
         "    };\n"
-        "    (@one max_f32) => { const fn raw_max_f32(a: f32, b: f32) -> f32 { a.max(b) } };\n"
-        "}\n",
+        "    (@one max_f32) => { const fn raw_max_f32(a: f32, b: f32) -> f32 { $crate::raw_minmax::impl_max_f32(a, b) } };\n"
+        "}\n"
+        "pub(crate) const fn impl_max_f32(a: f32, b: f32) -> f32 { a.max(b) }\n"
+        "pub(crate) const fn impl_min_f32(a: f32, b: f32) -> f32 { a.min(b) }\n",
     )
 
 
@@ -177,6 +179,77 @@ class RealFiles(unittest.TestCase):
         errors, total = rmm.check(str(root))
         self.assertEqual(errors, [])
         self.assertGreater(total, 0)
+
+
+class ImplItemsStayInRawMinmax(unittest.TestCase):
+    """The pub(crate) impl_* items may be named in raw_minmax.rs only."""
+
+    def _tree(self, root: Path) -> None:
+        base_tree(root)
+        write(root, "alice-lol/src/a.rs", ALLOW + "crate::raw_minmax::raw_minmax_here!(max_f32);\n")
+        write_manifest(root, {"alice-lol/src/a.rs": ["max_f32"]})
+
+    def test_the_names_come_from_raw_minmax_rs(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            self.assertEqual(rmm.impl_names(str(root)), ["impl_max_f32", "impl_min_f32"])
+
+    def test_a_clean_tree_passes(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            self.assertEqual(rmm.check(str(root))[0], [])
+
+    def test_a_planted_direct_call_fails(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            write(root, "alice-lol/src/b.rs", "fn f(a: f32, b: f32) -> f32 { crate::raw_minmax::impl_max_f32(a, b) }\n")
+            errors = rmm.check(str(root))[0]
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn("alice-lol/src/b.rs:1: `impl_max_f32`", errors[0])
+
+    def test_an_alias_import_fails(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            write(root, "alice-lol/src/c.rs", "use crate::raw_minmax::impl_min_f32 as m;\nfn g(a: f32) -> f32 { m(a, 1.0) }\n")
+            errors = rmm.check(str(root))[0]
+            self.assertEqual(len(errors), 1, errors)
+            self.assertIn("alice-lol/src/c.rs:1: `impl_min_f32`", errors[0])
+
+    def test_a_function_pointer_in_a_test_file_fails(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            write(root, "alice-lol/tests/t.rs", "const F: fn(f32, f32) -> f32 = impl_max_f32;\n")
+            errors = rmm.check(str(root))[0]
+            self.assertEqual(len(errors), 1, errors)
+
+    def test_a_new_impl_item_is_covered_without_editing_the_script(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            d = root / rmm.DEFINITION_REL
+            d.write_text(d.read_text(encoding="utf-8") + "pub(crate) const fn impl_max_f64(a: f64, b: f64) -> f64 { a.max(b) }\n", encoding="utf-8")
+            write(root, "alice-lol/src/d.rs", "fn h() -> f64 { crate::raw_minmax::impl_max_f64(1.0, 2.0) }\n")
+            errors = rmm.check(str(root))[0]
+            self.assertEqual(len(errors), 1, errors)
+
+    def test_no_impl_items_to_check_raises(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t)
+            self._tree(root)
+            (root / rmm.DEFINITION_REL).write_text("// nothing here\n", encoding="utf-8")
+            with self.assertRaises(rmm.RawMinmaxError):
+                rmm.impl_reference_errors(str(root))
+
+    def test_the_real_repo_names_impl_items_only_in_raw_minmax_rs(self):
+        errors, files = rmm.impl_reference_errors(rmm.DEFAULT_ROOT)
+        self.assertEqual(errors, [])
+        self.assertGreater(files, 0)
+        self.assertGreaterEqual(len(rmm.impl_names(rmm.DEFAULT_ROOT)), 3)
 
 
 if __name__ == "__main__":

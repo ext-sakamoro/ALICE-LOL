@@ -139,6 +139,64 @@ def real_modules(root: str) -> tuple[dict[str, list[str]], list[str]]:
     return modules, missing_allow
 
 
+IMPL_DEF_RE = re.compile(r"pub\(crate\)\s+(?:const\s+)?fn\s+(impl_[A-Za-z0-9_]+)\s*\(")
+
+
+def impl_names(root: str) -> list[str]:
+    """The `pub(crate) fn impl_*` items raw_minmax.rs defines: the platform
+    max/min the generated helpers call through. Derived from the file itself,
+    so a newly added impl_* is covered without editing this script."""
+    path = os.path.join(root, DEFINITION_REL)
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        raise RawMinmaxError(f"{DEFINITION_REL} を読めない: {e}") from e
+    return sorted(set(IMPL_DEF_RE.findall(text)))
+
+
+def impl_reference_errors(root: str) -> tuple[list[str], int]:
+    """Every file other than raw_minmax.rs that names an impl_* item.
+
+    `pub(crate)` makes the impl_* functions callable from any module, which
+    would skip the macro gate, the Reason argument and this manifest in one
+    line. The names may therefore appear in raw_minmax.rs only; a call, an
+    alias import (`use ...::impl_max_f32 as m;`) or a function-pointer
+    reference all have to write the name once, so a text rule catches them.
+    Scans every `.rs` file of every workspace member (src, tests, examples,
+    benches). Returns (errors, files scanned)."""
+    names = impl_names(root)
+    if not names:
+        raise RawMinmaxError(f"{DEFINITION_REL} に pub(crate) fn impl_* が 1 つも無い (検査する名前が無い)")
+    name_re = re.compile(r"\b(?:" + "|".join(map(re.escape, names)) + r")\b")
+    definition_abs = os.path.abspath(os.path.join(root, DEFINITION_REL))
+    errors: list[str] = []
+    files = 0
+    for member in workspace_members(root):
+        base = os.path.join(root, member)
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d != "target"]
+            for name in sorted(filenames):
+                if not name.endswith(".rs"):
+                    continue
+                path = os.path.join(dirpath, name)
+                files += 1
+                if os.path.abspath(path) == definition_abs:
+                    continue
+                with open(path, encoding="utf-8") as f:
+                    for n, line in enumerate(f, 1):
+                        m = name_re.search(line)
+                        if m:
+                            rel = os.path.relpath(path, root).replace(os.sep, "/")
+                            errors.append(
+                                f"{rel}:{n}: `{m.group(0)}` は raw_minmax.rs の外で名前を書けない "
+                                "(macro と Reason 引数と manifest を迂回する、raw_minmax_here!() を使う)"
+                            )
+    if files == 0:
+        raise RawMinmaxError("workspace member の .rs file を 1 つも読めなかった (impl_* の検査が空振り)")
+    return errors, files
+
+
 def check(root: str) -> tuple[list[str], int]:
     manifest = read_manifest(os.path.join(root, MANIFEST_REL))
     if not manifest:
@@ -166,6 +224,8 @@ def check(root: str) -> tuple[list[str], int]:
         errors.append(
             f"{rel}: raw_minmax_here!() を呼んでいるが #![allow(clippy::disallowed_macros, ...)] が同じ file に無い (clippy も別途 fail する)"
         )
+    impl_errors, _files = impl_reference_errors(root)
+    errors.extend(impl_errors)
     return errors, sum(len(w) for w in modules.values())
 
 
