@@ -16,7 +16,9 @@ reference_repo = ""
 
 [G2]
 status = "missing"
-note = "f32/f64 max/min correctness is met today (crate-internal det_math.rs, lattice-tested, wired for all production call sites) but not through the canonical mechanism this gate specifies: still the interim per-call #[allow(clippy::disallowed_methods, reason = \"...\")] scheme (scripts/disallowed_methods_allow_reasons.py), not named raw_* helpers plus a default-deny manifest. Migrating to raw_max_f32/raw_min_f32 + manifest is a required precondition of this crate's alice-lol 0.4.0 publish (not a someday item), waiting on the reference implementation (ALICE-SDF) landing first."
+evidence = ["alice-lol/src/det_math.rs (Law max/min/max64/min64, unit-tested)", "alice-lol/src/raw_minmax.rs (raw_minmax_here!() macro, compiler-enforced via clippy::disallowed_macros on its own definition path)", "scripts/raw_minmax_manifest.toml + scripts/raw_minmax_manifest.py (default-deny manifest, wired in .github/workflows/ci.yml and scripts/preflight.sh)"]
+since = "df83855a8343038995ab213af511f39d89d523d8"
+note = "the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same form as ALICE-SDF's implementation); alice-lol computes max/min only in scalar f32/f64 itself, so the gate's per-width coverage clause has no additional width of its own to check against (the SIMD evaluation this crate re-exports, Vec3x8/eval_compiled_simd/eval_compiled_batch_simd* in lib.rs, is alice-sdf's code and falls under alice-sdf's own G2 entry, not this one) — but nothing in this repository asserts the scalar-only claim as a checked, ratcheted fact rather than a current coincidence, so status stays missing until that is an explicit test, not an omission."
 reference_repo = "ALICE-SDF"
 
 [G3]
