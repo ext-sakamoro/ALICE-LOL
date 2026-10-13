@@ -6,7 +6,7 @@ The changes of the whole repository, `alice-lol` included, are in the root `CHAN
 
 ## [Unreleased]
 
-## [0.3.0] - 未公開 (公開日を入れる)
+## [0.3.0] - 2026-10-13
 
 `alice-lol` 0.4.0 より前に公開する (公開の順は macro 0.3.0 → `alice-lol` 0.4.0) `alice-lol` 0.4.0 は macro 0.3 を要求する このバージョン自身は `alice-lol` を含むどの ALICE-* crate にも依存しない (`syn` / `quote` / `proc-macro2` のみ)
 
