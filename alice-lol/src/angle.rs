@@ -652,18 +652,175 @@ mod quat_from_euler_xyz_tests {
         }
     }
 
-    /// `build.rs` reads `Cargo.lock` and fails the build if it can't find
-    /// exactly one resolvable `alice-det-math` version for this crate; this
-    /// asserts that version is the one the oracle table was pinned for, so a
-    /// dependency bump that changes `alice-det-math`'s rounding fails this
-    /// test instead of silently invalidating stale literals
+    /// Reads `Cargo.lock` (and runs `rustc --version`) at **test run time**,
+    /// not from a `build.rs`: a `build.rs` runs for every downstream
+    /// consumer that merely depends on this crate as a library — including
+    /// one whose `Cargo.lock` is not reachable by any bounded ancestor walk
+    /// from wherever cargo happens to extract the published source (an
+    /// earlier `build.rs`-based version of this check assumed it always
+    /// was, which worked for the narrower `scripts/registry_consumer.sh`
+    /// harness layout but panicked for a real crates.io consumer's project
+    /// layout). This module's `#[cfg(test)]` code, by contrast, only ever
+    /// compiles and runs when a maintainer runs `cargo test` inside this
+    /// repo's own workspace checkout, so `CARGO_MANIFEST_DIR` is guaranteed
+    /// to be this checkout's own `alice-lol/` directory and the ancestor
+    /// walk to find its `Cargo.lock` is always safe here.
+    mod version_pin {
+        use std::path::PathBuf;
+
+        pub(super) struct Package {
+            pub name: String,
+            pub version: String,
+            pub dependencies: Vec<String>,
+        }
+
+        /// Walk up from this crate's own manifest directory looking for
+        /// `Cargo.lock` — safe here (see module doc) because this only ever
+        /// runs inside this workspace's own `cargo test`.
+        fn find_lock_path() -> PathBuf {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            for dir in manifest_dir.ancestors().skip(1) {
+                let candidate = dir.join("Cargo.lock");
+                if candidate.is_file() {
+                    return candidate;
+                }
+            }
+            panic!(
+                "Cargo.lock が見つからない ({} から上の祖先 directory を探索した) — \
+                 この test は workspace 内で `cargo test` された時だけ走る前提",
+                manifest_dir.display()
+            );
+        }
+
+        /// `Cargo.lock` の `[[package]]` block を最小限だけ読む
+        /// (TOML parser を dev-dependency に足さず、この file の形だけを前提にする)
+        fn parse_packages(text: &str) -> Vec<Package> {
+            let mut packages = Vec::new();
+            let mut lines = text.lines().peekable();
+            while let Some(line) = lines.next() {
+                if line.trim() != "[[package]]" {
+                    continue;
+                }
+                let mut name = String::new();
+                let mut version = String::new();
+                let mut dependencies = Vec::new();
+                while let Some(&next) = lines.peek() {
+                    let t = next.trim();
+                    if t == "[[package]]" || t.starts_with("[[") {
+                        break;
+                    }
+                    lines.next();
+                    if let Some(v) = t
+                        .strip_prefix("name = \"")
+                        .and_then(|s| s.strip_suffix('"'))
+                    {
+                        name = v.to_string();
+                    } else if let Some(v) = t
+                        .strip_prefix("version = \"")
+                        .and_then(|s| s.strip_suffix('"'))
+                    {
+                        version = v.to_string();
+                    } else if t == "dependencies = [" {
+                        for dep_line in lines.by_ref() {
+                            let dt = dep_line.trim().trim_end_matches(',');
+                            if dt == "]" {
+                                break;
+                            }
+                            if let Some(v) = dt.strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                            {
+                                dependencies.push(v.to_string());
+                            }
+                        }
+                    }
+                }
+                if !name.is_empty() {
+                    packages.push(Package {
+                        name,
+                        version,
+                        dependencies,
+                    });
+                }
+            }
+            assert!(
+                !packages.is_empty(),
+                "Cargo.lock から [[package]] を 1 件も読めなかった (形式が想定と違う)"
+            );
+            packages
+        }
+
+        // if/else-if chain with a panic branch reads top-to-bottom as the 3
+        // cases it is (disambiguated / unambiguous single version /
+        // ambiguous and unreadable); `map_or_else` would nest a panic inside
+        // a closure, which is harder to read here, not easier
+        #[allow(clippy::option_if_let_else)]
+        pub(super) fn resolved_det_math_version() -> String {
+            let lock_path = find_lock_path();
+            let text = std::fs::read_to_string(&lock_path)
+                .unwrap_or_else(|e| panic!("Cargo.lock を読めない ({}): {e}", lock_path.display()));
+            let blocks = parse_packages(&text);
+            let alice_lol = blocks
+                .iter()
+                .find(|b| b.name == "alice-lol")
+                .unwrap_or_else(|| panic!("Cargo.lock に [[package]] name = \"alice-lol\" が無い"));
+            // alice-lol 自身の dependencies 行は、同名 crate が複数 version linked されている
+            // 時だけ `"alice-det-math 0.5.0"` の形に disambiguate される (cargo の既定の表記)
+            let det_math_versions: Vec<&str> = blocks
+                .iter()
+                .filter(|b| b.name == "alice-det-math")
+                .map(|b| b.version.as_str())
+                .collect();
+            let Some(dep) = alice_lol
+                .dependencies
+                .iter()
+                .find(|d| d.starts_with("alice-det-math"))
+            else {
+                panic!("alice-lol の dependencies に alice-det-math が無い");
+            };
+            if let Some(v) = dep.strip_prefix("alice-det-math ") {
+                v.to_string()
+            } else if det_math_versions.len() == 1 {
+                det_math_versions[0].to_string()
+            } else {
+                panic!(
+                    "alice-lol の依存行が 'alice-det-math' だけ (version 無し) なのに \
+                     Cargo.lock に alice-det-math が {} 個 linked されている ({:?}) \
+                     — disambiguate されているはずなのに読めていない",
+                    det_math_versions.len(),
+                    det_math_versions
+                );
+            }
+        }
+
+        pub(super) fn resolved_rustc_version() -> String {
+            let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+            let output = std::process::Command::new(&rustc)
+                .arg("--version")
+                .output()
+                .unwrap_or_else(|e| panic!("`{rustc} --version` を実行できない: {e}"));
+            assert!(
+                output.status.success(),
+                "`{rustc} --version` が失敗 (status {:?}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let s = String::from_utf8(output.stdout)
+                .unwrap_or_else(|e| panic!("`{rustc} --version` の出力が UTF-8 でない: {e}"))
+                .trim()
+                .to_string();
+            assert!(!s.is_empty(), "`{rustc} --version` が空文字を返した");
+            s
+        }
+    }
+
+    /// Reads the resolved `alice-det-math` version from `Cargo.lock` at test
+    /// run time and fails if it can't find exactly one resolvable version
+    /// for this crate; this asserts that version is the one the oracle
+    /// table was pinned for, so a dependency bump that changes
+    /// `alice-det-math`'s rounding fails this test instead of silently
+    /// invalidating stale literals
     #[test]
     fn oracle_table_pinned_version_matches_resolved_det_math() {
-        let resolved = env!("ALICE_DET_MATH_LOCKED_VERSION");
-        assert!(
-            !resolved.is_empty(),
-            "build.rs emitted an empty version (should have panicked instead)"
-        );
+        let resolved = version_pin::resolved_det_math_version();
         assert_eq!(
             resolved, DET_MATH_PINNED_VERSION,
             "Cargo.lock resolves alice-det-math {resolved} but the oracle table below was pinned \
@@ -672,8 +829,8 @@ mod quat_from_euler_xyz_tests {
         );
     }
 
-    /// `build.rs` runs `rustc --version` and fails the build if it produces
-    /// an empty or unreadable result; this asserts that version is the one
+    /// Runs `rustc --version` at test run time and fails if it produces an
+    /// empty or unreadable result; this asserts that version is the one
     /// `quat_from_euler_xyz`'s `y`-component formula (and the oracle table)
     /// were last verified debug/release-identical under, so a rustc/LLVM
     /// upgrade that changes instruction selection for this expression shape
@@ -681,11 +838,7 @@ mod quat_from_euler_xyz_tests {
     /// of debug/release mismatch comes in again
     #[test]
     fn oracle_table_pinned_version_matches_resolved_rustc() {
-        let resolved = env!("RUSTC_LOCKED_VERSION");
-        assert!(
-            !resolved.is_empty(),
-            "build.rs emitted an empty version (should have panicked instead)"
-        );
+        let resolved = version_pin::resolved_rustc_version();
         assert_eq!(
             resolved, RUSTC_PINNED_VERSION,
             "building with {resolved} but the y-component formula's debug/release stability was \
@@ -769,9 +922,10 @@ mod quat_from_euler_xyz_tests {
     /// `alice-det-math` 0.5.0 produces; a dependency bump that changes its
     /// own rounding invalidates this table silently unless something checks
     /// the version. [`oracle_table_pinned_version_matches_resolved_det_math`]
-    /// is that check: it fails the build (via `build.rs`) if it can't read
-    /// `Cargo.lock`, and fails the test (not just a silent pass) if the
-    /// crate resolves a different `alice-det-math` than the one named here.
+    /// is that check: it fails the test (at test run time, not via a
+    /// `build.rs`) if it can't read `Cargo.lock`, and fails the test (not
+    /// just a silent pass) if the crate resolves a different
+    /// `alice-det-math` than the one named here.
     /// If `alice_det_math` ever changes its own rounding again, re-measure
     /// every row of this table (not just the one a CI failure happens to
     /// point at first), update [`DET_MATH_PINNED_VERSION`], and re-run both

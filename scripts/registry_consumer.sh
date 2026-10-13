@@ -14,6 +14,12 @@
 # version this workspace is about to publish; that the published macro is the same source
 # as the local one is `scripts/published_source_check.py`.
 #
+# It also rebuilds the same packaged crate from an isolated copy with no Cargo.lock
+# reachable by any ancestor walk from its own extracted directory: a real crates.io
+# consumer's project root and wherever cargo extracts the dependency are unrelated
+# subtrees, so anything alice-lol's own build does must not assume a nearby Cargo.lock
+# exists at all.
+#
 # usage: scripts/registry_consumer.sh
 set -euo pipefail
 
@@ -80,4 +86,47 @@ grep -q '^test every_keyword_of_the_macro_builds_a_node \.\.\. ok' "$LOG" || {
 EMPTY=$(mktemp)
 python3 scripts/lock_single_version.py --lock "$lock" --baseline "$EMPTY"
 rm -f "$EMPTY"
+
+# Regression: a real crates.io consumer's own Cargo.lock is not necessarily
+# reachable by walking up from wherever cargo extracts the dependency's
+# source — that extracted path and the consumer's project root can be
+# unrelated subtrees. `$OUT/pkg/alice-lol-$LOL` above is nested 2 levels
+# under `$OUT`'s own Cargo.lock, which does not catch that: a `build.rs`
+# that assumed an ancestor Cargo.lock always exists passed there but
+# panicked for a real consumer (see the removal of alice-lol/build.rs).
+# Rebuild the SAME packaged crate from an unpacked copy that has no
+# Cargo.lock anywhere above it, consumed by a throwaway workspace whose own
+# Cargo.lock lives in a wholly separate subtree, so an ancestor-walk from
+# the packaged crate's own directory cannot reach it either.
+ISOLATED=$(mktemp -d)
+mkdir -p "$ISOLATED/no-ancestor-lock/pkg"
+tar -xmzf "target/package/alice-lol-$LOL.crate" -C "$ISOLATED/no-ancestor-lock/pkg"
+tar -xmzf "target/package/alice-lol-macro-$MACRO.crate" -C "$ISOLATED/no-ancestor-lock/pkg"
+mkdir -p "$ISOLATED/consumer/src"
+cat > "$ISOLATED/consumer/Cargo.toml" <<EOF
+[package]
+name = "lol-no-ancestor-lock-consumer"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+alice-lol = { path = "$ISOLATED/no-ancestor-lock/pkg/alice-lol-$LOL" }
+
+[patch.crates-io]
+alice-lol-macro = { path = "$ISOLATED/no-ancestor-lock/pkg/alice-lol-macro-$MACRO" }
+
+[workspace]
+EOF
+echo "" > "$ISOLATED/consumer/src/lib.rs"
+ISO_LOG="$ISOLATED/build.log"
+if ! CARGO_TARGET_DIR="$ISOLATED/target" cargo build --manifest-path "$ISOLATED/consumer/Cargo.toml" > "$ISO_LOG" 2>&1; then
+  echo "error: alice-lol $LOL failed to build when its own Cargo.lock is not reachable by any ancestor walk (this must succeed for any real crates.io consumer):" >&2
+  cat "$ISO_LOG" >&2
+  rm -rf "$ISOLATED"
+  exit 1
+fi
+rm -rf "$ISOLATED"
+echo "registry consumer: alice-lol $LOL builds with no ancestor Cargo.lock reachable from its own extracted directory"
+
 echo "registry consumer: alice-lol $LOL + alice-lol-macro $MACRO built against crates.io ($(block alice-sdf | sed -n 's/^version = //p' | tr -d '"') alice-sdf)"
