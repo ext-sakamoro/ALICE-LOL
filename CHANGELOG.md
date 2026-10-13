@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `scripts/libm_hidden_check.py`: allow を外して clippy を回す処理を、checkout した file でなく build directory 内の作業 tree の複製で行う 途中で止まっても repository の file は変わらない
 - `alice-lol-humanoid`: `HumanoidTemplate::from_morphology` の左肘 x 座標を、fma の結果の符号反転でなく符号反転した項の fma で求めるようにした 和が 0 でない所は同じ bit、和がちょうど 0 になる所は符号反転した項の IEEE の和 (両方の項が +0 の時だけ -0) で、target と最適化 level によらず同じ値になる
 - `tools/no-outer-fneg-of-fma`: 走査対象を固定の dir 一覧から、root の `Cargo.toml` の workspace member すべての `src` / `tests` / `examples` / `benches` に広げた
 - `scripts/raw_minmax_manifest.py`: `raw_minmax.rs` が定義する `pub(crate) fn impl_*` の名前が他の file に現れたら失敗する (直接呼び出し・alias import・関数 pointer で macro と manifest を迂回できた)
