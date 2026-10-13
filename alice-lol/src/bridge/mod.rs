@@ -52,8 +52,9 @@
 //!   `temperature = 1.0` (no scaling) and `top_k = 1` (strict argmax)
 //!   because DSL generation wants determinism, not diversity. A
 //!   `_with_config` variant can be layered on later if needed.
-//! - Grammar authoring: the grammar file `lol.gbnf` lives at the ALICE-LOL
-//!   workspace root and is loaded via `include_str!` here.
+//! - Grammar authoring: the grammar file `lol.gbnf` lives at the
+//!   `alice-lol` crate root (next to its `Cargo.toml`) and is compiled in
+//!   by [`crate::LOL_GBNF`] (`include_str!` in `lib.rs`).
 
 use std::sync::OnceLock;
 
