@@ -88,6 +88,21 @@ def strip_comments_and_strings(text: str) -> str:
             i += 1
             while i < n and text[i] != '"':
                 if text[i] == "\\" and i + 1 < n:
+                    if text[i + 1] == "\n":
+                        # Rust string-literal line continuation (`\` at
+                        # end of line keeps the string going on the next
+                        # physical line, dropping the leading whitespace
+                        # there) -- the newline itself must be preserved
+                        # byte-for-byte here, or every line number this
+                        # scan reports from this point on in the file is
+                        # off by one (found via a real desync: a long
+                        # assert_eq! message string broken across two
+                        # lines this way shifted two later violations'
+                        # reported line numbers down by exactly 1 each)
+                        out.append(" ")
+                        out.append("\n")
+                        i += 2
+                        continue
                     out.append("  ")
                     i += 2
                     continue

@@ -1,0 +1,11 @@
+# tools/no-outer-fneg-of-fma's allowlist: `<file>:<line>` per entry, a `#`
+# comment on its own line for context. src/ has no escape hatch here (see
+# the tool's own module doc) -- every entry below is tests/, specifically
+# the one file that deliberately computes the OLD (forbidden) form as a
+# comparison baseline against the Law form it replaced, to pin the exact
+# zero-sign divergence between the two (see CHANGELOG.md's entry for the
+# 29-site Law-form rewrite this lattice test exists to verify).
+
+alice-lol/tests/raw_fma_negation_lattice.rs:66
+alice-lol/tests/raw_fma_negation_lattice.rs:90
+alice-lol/tests/raw_fma_negation_lattice.rs:111

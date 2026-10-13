@@ -127,6 +127,30 @@ class Teeth(unittest.TestCase):
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 0)
 
+    def test_a_string_literal_line_continuation_does_not_shift_later_line_numbers(self):
+        # a `\` at the very end of a line inside a string literal is Rust's
+        # line-continuation escape (the string keeps going on the next
+        # physical line, dropping that line's leading whitespace) -- found
+        # against a real file: the stripper's generic "\ + next char is a
+        # 2-char escape" rule swallowed the newline along with it, losing
+        # exactly one line from every line number reported for the rest of
+        # the file. Two violations after the continuation must still each
+        # report their own, distinct, correct line.
+        law = (
+            'fn f(a: f32, b: f32, c: f32) -> f32 {\n'
+            '    let _s = "line one \\\n'
+            '              line two";\n'
+            "    -(a.mul_add(b, c))\n"
+            "}\n"
+            "fn g(a: f32, b: f32, c: f32) -> f32 {\n"
+            "    -(a.mul_add(b, c))\n"
+            "}\n"
+        )
+        e, c = run({SRC: law})
+        self.assertEqual(c["violations"], 2)
+        self.assertTrue(any(f"{SRC}:4:" in err for err in e), e)
+        self.assertTrue(any(f"{SRC}:7:" in err for err in e), e)
+
     def test_extra_content_inside_the_outer_parens_is_not_flagged(self):
         # `-(a.mul_add(b, c) + d)` は mul_add の結果だけを negate していない
         law = "fn f(a: f32, b: f32, c: f32, d: f32) -> f32 {\n    -(a.mul_add(b, c) + d)\n}\n"
