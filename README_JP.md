@@ -420,6 +420,48 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 - [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): `music` intent の 8 byte の中身を定義する
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu レンダラ
 
+<!-- law-integration:begin law=5c6363312520f9991837e519bab14909ccf6f2b3 -->
+## ALICE-Law との統合
+
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5c6363312520` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+
+| | |
+|---|---|
+| release train | alice-lol 0.4.0 (published)、Law への依存: あり |
+| 算術 | train の alice-det-math 0.5.0、算術の識別子 `135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000` この crate の要求は `alice-det-math = "0.5"` |
+| end to end 検査 | 対象 (`alice-lol = "0.4"`)、digest `966a78784bb4e3341ac6627d519db896f398176b71c2402b188294db6c8e3728`、aarch64 と x86_64 で同じ |
+
+### 適合 (G1-G14)
+
+| gate | 状態 | 注記 |
+|---|---|---|
+| G1 no-libm-direct | 未確認 | type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a … |
+| G2 ieee-max-min | 未確認 | the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same … |
+| G3 no-outer-fneg-of-fma | 未確認 | syn-based checker catches all 5 outer-negation shapes (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one either … |
+| G4 debug-release-arch-goldens | 未確認 | the signed-zero/cancellation lattice this gate requires is exercised specifically for the quat_from_euler_xyz y-component (the case this crate's G3 residual … |
+| G5 release-profile-test-leg | 未確認 | matrix includes a release-profile macOS leg (macos-latest, aarch64 on GitHub-hosted runners); job has no continue-on-error and fail-fast: false, but this … |
+| G6 semantics-id | 未確認 | LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the … |
+| G7 handshake-carries-id | 未確認 | not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were … |
+| G8 persisted-semantics-id | 未確認 | geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's … |
+| G9 persisted-meaning-change-is-major | 未確認 | not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) … |
+| G10 no-run-varying-artifacts | 未確認 | a search of alice-lol/src for Uuid, SystemTime::now, Instant::now, and unseeded RNG constructors found none, but there is no durable CI check enforcing their … |
+| G11 gate-self-tests | 未確認 | canary and zero-scanned-fails patterns are present on the gates this crate implements (G1, G3); not audited for every gate uniformly |
+| G12 public-repo-text-rules | 未確認 | this crate's own docs_lint.py is the equivalent of ALICE-Law's public_text_check; not confirmed to share the same vocabulary list, only that an equivalent … |
+| G13 no-unspecified-order | 未確認 | print_export.rs's HashSet (euler_characteristic, local name edges) is only measured (.len()); its HashMap (weld_coincident_vertices, local name id) is only … |
+| G14 float-environment-invariants | 未確認 | no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the … |
+
+### feature と保証の範囲
+
+| feature | 保証 | 注記 |
+|---|---|---|
+| `glsl` | 未申告 |  |
+| `hlsl` | 未申告 |  |
+| `llm-bridge` | 未申告 |  |
+| `physics` | 未申告 |  |
+| `roblox` | 未申告 |  |
+| `wgsl` | 未申告 |  |
+<!-- law-integration:end -->
+
 ## ライセンス
 
 0.4.0 から Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)、[NOTICE](NOTICE)、[TRADEMARK_NOTICE](TRADEMARK_NOTICE))
