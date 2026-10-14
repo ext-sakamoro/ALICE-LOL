@@ -228,6 +228,10 @@ INACTIVE = {
     "|| true": WORKFLOW_TEXT.replace("--lint warn\n", "--lint warn || true\n"),
     "set +e": WORKFLOW_TEXT.replace("        run: |\n", "        run: |\n          set +e\n"),
     "another shell": WORKFLOW_TEXT.replace("        run: |\n", "        shell: sh {0}\n        run: |\n"),
+    "step continue-on-error expression": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        continue-on-error: ${{ matrix.flaky }}\n"),
+    "job continue-on-error expression": WORKFLOW_TEXT.replace("    runs-on: ubuntu-24.04\n", "    continue-on-error: ${{ matrix.experimental }}\n    runs-on: ubuntu-24.04\n"),
+    "in the background": WORKFLOW_TEXT.replace("--lint warn\n", "--lint warn &\n          wait\n"),
+    "workflow default shell": WORKFLOW_TEXT.replace("jobs:\n", "defaults:\n  run:\n    shell: bash {0}\njobs:\n"),
     "job default shell": WORKFLOW_TEXT.replace("    runs-on: ubuntu-24.04\n", "    defaults:\n      run:\n        shell: pwsh\n    runs-on: ubuntu-24.04\n"),
     # the command is not the check of this crate
     "echoed": WORKFLOW_TEXT.replace("          " + CMD, "          echo " + CMD),
@@ -249,6 +253,9 @@ GATING = {
     "block list": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches:\n      - main\n      - 'ci/**'\n"),
     "other branches ignored": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches-ignore: ['wip/**']\n"),
     "explicit bash": WORKFLOW_TEXT.replace("        run: |\n", "        shell: bash\n        run: |\n"),
+    "redirection": WORKFLOW_TEXT.replace("--lint warn\n", "--lint warn 2>&1 | tee out.txt\n"),
+    "and-list": WORKFLOW_TEXT.replace("--lint warn\n", "--lint warn && echo done\n"),
+    "workflow default bash": WORKFLOW_TEXT.replace("jobs:\n", "defaults:\n  run:\n    shell: bash\njobs:\n"),
     "continue-on-error false": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        continue-on-error: false\n"),
 }
 

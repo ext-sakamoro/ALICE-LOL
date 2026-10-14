@@ -146,8 +146,21 @@ def _false(cond) -> bool:
     return isinstance(cond, str) and re.fullmatch(r"\s*(?:'false'|false|\$\{\{\s*false\s*\}\})\s*", cond) is not None
 
 
-def _true(v) -> bool:
-    return isinstance(v, str) and re.fullmatch(r"\s*(?:true|\$\{\{\s*true\s*\}\})\s*", v) is not None
+def _may_continue(v) -> bool:
+    """`continue-on-error` that can be true: anything but absent or a literal false (an expression such
+    as `${{ matrix.flaky }}` can be true)"""
+    return v is not None and not (isinstance(v, str) and re.fullmatch(r"\s*(?:false|\$\{\{\s*false\s*\}\})\s*", v))
+
+
+def _shell(defaults) -> str | None:
+    """the `defaults.run.shell` of a workflow or a job (None = not set)"""
+    if not isinstance(defaults, dict) or not isinstance(defaults.get("run"), dict):
+        return None
+    return defaults["run"].get("shell")
+
+
+# a lone `&` (a command in the background), not `&&` or a redirection (`2>&1`, `&>`)
+BACKGROUND = re.compile(r"(?<![&<>])&(?![&>])")
 
 
 def _flow_list(v) -> list[str] | None:
@@ -217,8 +230,9 @@ def fires_on(on, branch: str) -> bool:
 def gating_lines(text: str, branch: str = "main") -> list[str]:
     """the command lines whose failure fails the workflow on every push / pull request to `branch`:
     from steps of a triggered workflow, in jobs and steps that are not `if: false` and not
-    `continue-on-error: true`, run by the default shell (bash -e -o pipefail) without `set +e`;
-    comment lines are dropped, continued lines joined, and a line with `||` is not returned
+    `continue-on-error` that can be true, run by the default shell (bash -e -o pipefail; workflow,
+    job and step level) without `set +e`; comment lines are dropped, continued lines joined, and a
+    line with `||` or a lone `&` (background) is not returned
     ([] when the file cannot be read as a workflow)"""
     try:
         doc = parse(text)
@@ -230,12 +244,13 @@ def gating_lines(text: str, branch: str = "main") -> list[str]:
     if not isinstance(jobs, dict):
         return []
     lines = []
+    wshell = _shell(doc.get("defaults"))
     for job in jobs.values():
-        if not isinstance(job, dict) or _false(job.get("if")) or _true(job.get("continue-on-error")):
+        if not isinstance(job, dict) or _false(job.get("if")) or _may_continue(job.get("continue-on-error")):
             continue
-        jshell = ((job.get("defaults") or {}).get("run") or {}).get("shell") if isinstance(job.get("defaults"), dict) else None
+        jshell = _shell(job.get("defaults")) or wshell
         for step in job.get("steps") or []:
-            if not isinstance(step, dict) or _false(step.get("if")) or _true(step.get("continue-on-error")) \
+            if not isinstance(step, dict) or _false(step.get("if")) or _may_continue(step.get("continue-on-error")) \
                     or not isinstance(step.get("run"), str):
                 continue
             if step.get("shell", jshell) not in (None, "bash"):
@@ -244,6 +259,6 @@ def gating_lines(text: str, branch: str = "main") -> list[str]:
             if re.search(r"(?m)^\s*set\s+(?:\+e\b|\+o\s+(?:errexit|pipefail)\b)", body):
                 continue
             for line in re.sub(r"\\\n\s*", " ", body).split("\n"):
-                if line.strip() and "||" not in line:
+                if line.strip() and "||" not in line and not BACKGROUND.search(line):
                     lines.append(line.strip())
     return lines
