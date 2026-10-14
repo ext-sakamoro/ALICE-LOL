@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 文法 `alice-lol/lol.gbnf` (と配布用の写し) を言語の定義から生成するようにした 定義は `alice-lol/language/constructs.toml` (construct 1 つにつき 1 行: 名前と、それを受け付ける文法の rule) と `alice-lol/language/lol.gbnf.in` (説明と固定の rule、名前の一覧の場所を `@names <rule>@` で示す)、生成は `python3 scripts/gen_gbnf.py` (書く先は正典と、追跡されている他の `lol.gbnf` すべて)、`--check` が生成結果と 2 つの file を比べる 行が 0 件・名前の重複・場所の無い rule・行の無い場所・template の `intent_*` rule が行と違う名前を綴る時は失敗する 検査器の試験 `scripts/test_gen_gbnf.py` CI (wiring-guard job) と preflight で走る 文法そのものは変わっていない (alice-llm の `parse_gbnf` で読んだ `Grammar` が変更前と等しい) 名前の一覧の配置は 1 行 1 名に揃えた
 - `alice-lol` の版を 0.4.2 にし、workspace の他の crate の要求も 0.4.2 にした (公開済みの 0.4.1 と src が違う、足したのは公開 API の追加だけ)
+- 依存の alice-det-math を 0.5.1 にした (`Cargo.lock` と `fuzz/Cargo.lock`、要求は `0.5` のまま) 識別子は版ごとの表の 0.5.1 の行 (`LOL_SEMANTICS_ID` = `d81c2cbb…`、`LOL_GEOMETRY_SEMANTICS_ID` = `d1cbba69…`) になる 角度の oracle の表 (`angle.rs`) が固定する alice-det-math の版を 0.5.1 に上げた 0.5.1 で測り直して全行が 0.5.0 と同じ (0.5.1 は関数の追加のみ)
 - CI: build した library と実行形式を tracked にしない検査 (`scripts/tracked_binaries.py`) を追加 例外は `.github/tracked-binaries.txt` に理由付きで書いた path だけ、読めない file と走査 0 件でも失敗する CI と preflight で走る
 
 ### Fixed

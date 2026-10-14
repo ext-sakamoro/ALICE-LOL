@@ -549,7 +549,7 @@ mod quat_from_euler_xyz_tests {
 
     /// The `alice-det-math` version the oracle table literals below were
     /// measured against (see the table's own doc comment)
-    const DET_MATH_PINNED_VERSION: &str = "0.5.0";
+    const DET_MATH_PINNED_VERSION: &str = "0.5.1";
 
     /// The `rustc --version` output the `y`-component formula's
     /// debug/release stability (and the oracle table literals) were last
@@ -916,10 +916,11 @@ mod quat_from_euler_xyz_tests {
     /// exists to prevent (unlike `glam::Quat::from_euler`, which dispatches
     /// to a different SIMD/libm backend per target).
     ///
-    /// # Pinned for `alice-det-math` 0.5.0
+    /// # Pinned for `alice-det-math` 0.5.1
     ///
     /// The literal bits below are only valid for the exact rounding
-    /// `alice-det-math` 0.5.0 produces; a dependency bump that changes its
+    /// `alice-det-math` 0.5.1 produces (re-measured on the move from 0.5.0: every row
+    /// unchanged, 0.5.1 only added functions); a dependency bump that changes its
     /// own rounding invalidates this table silently unless something checks
     /// the version. [`oracle_table_pinned_version_matches_resolved_det_math`]
     /// is that check: it fails the test (at test run time, not via a
