@@ -228,6 +228,9 @@ fn check_export(p: &Program) -> Result<(), String> {
     Ok(())
 }
 
+/// how many documents hold tagged programs, and how many programs of each kind they hold
+const EXPECTED_DOCUMENTS_PRINT_RENDER_FRAGMENT: (usize, usize, usize, usize) = (5, 33, 6, 10);
+
 /// every leg: the fences are found, tagged, comment-free and parse (cheap)
 #[test]
 fn every_program_in_the_documents_parses() {
@@ -249,6 +252,23 @@ fn every_program_in_the_documents_parses() {
     assert!(
         prints > 0 && run.len() > prints,
         "no `lol print` or no `lol render` fence was found: the test compared nothing"
+    );
+    // the exact numbers, so a document that leaves the scan (renamed, moved, a fence's info
+    // string broken) is a failure and not a smaller green run; a fence added, removed or
+    // retagged on purpose updates them
+    let documents: std::collections::BTreeSet<&str> = programs
+        .iter()
+        .map(|p| p.at.rsplit_once(':').unwrap().0)
+        .collect();
+    let counts = (
+        documents.len(),
+        prints,
+        run.len() - prints,
+        programs.len() - run.len(),
+    );
+    assert_eq!(
+        counts, EXPECTED_DOCUMENTS_PRINT_RENDER_FRAGMENT,
+        "(documents, print, render, fragment) changed; documents scanned: {documents:?}"
     );
     let failures: Vec<String> = run
         .iter()
