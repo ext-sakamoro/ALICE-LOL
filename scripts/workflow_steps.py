@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """The shell commands a GitHub Actions workflow actually runs (used by readme_sync.py and doc_numbers.py).
 
-`active_runs(text)` returns the `run:` strings of the steps that can run: the workflow has a trigger
-(`on:` is not empty), the job and the step have no `if:` that is literally false, and the command
-lines of the script are not shell comments. YAML comments are dropped by the parser.
+`gating_lines(text)` returns the command lines whose failure fails the workflow on every push / pull
+request to main (see its doc). YAML comments are dropped by the parser.
 
 The parser reads the subset of YAML that workflow files use (block mappings, block sequences,
 `|` / `>` block scalars, plain / quoted scalars, flow collections kept as text). Anything else
@@ -144,31 +143,107 @@ def parse(text: str):
 
 
 def _false(cond) -> bool:
-    return isinstance(cond, str) and re.fullmatch(r"\s*(?:false|\$\{\{\s*false\s*\}\})\s*", cond) is not None
+    return isinstance(cond, str) and re.fullmatch(r"\s*(?:'false'|false|\$\{\{\s*false\s*\}\})\s*", cond) is not None
 
 
-def active_runs(text: str) -> list[str]:
-    """the shell lines of the steps that can run (comment lines of the scripts removed); [] when the
-    file cannot be read as a workflow"""
+def _true(v) -> bool:
+    return isinstance(v, str) and re.fullmatch(r"\s*(?:true|\$\{\{\s*true\s*\}\})\s*", v) is not None
+
+
+def _flow_list(v) -> list[str] | None:
+    """a branch filter as a list of patterns (block sequence, flow `[a, 'b']` or one scalar)"""
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    if isinstance(v, str):
+        t = v.strip()
+        if t.startswith("[") and t.endswith("]"):
+            return [_scalar(x) for x in t[1:-1].split(",") if x.strip()]
+        return [_scalar(t)]
+    return None
+
+
+def _glob(pattern: str) -> re.Pattern:
+    out = ""
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif pattern[i] == "*":
+            out += "[^/]*"
+            i += 1
+        elif pattern[i] == "?":
+            out += "[^/]"
+            i += 1
+        else:
+            out += re.escape(pattern[i])
+            i += 1
+    return re.compile(out)
+
+
+def fires_on(on, branch: str) -> bool:
+    """the workflow runs on every push (or pull request) to `branch`: a push / pull_request trigger
+    with no path filter whose branch filter includes it; a filter this cannot decide (`!` patterns,
+    tags only) does not count"""
+    if isinstance(on, str):
+        events = {e: None for e in (_flow_list(on) or [])}
+    elif isinstance(on, list):
+        events = {str(e): None for e in on}
+    elif isinstance(on, dict):
+        events = on
+    else:
+        return False
+    for ev in ("push", "pull_request"):
+        if ev not in events:
+            continue
+        cfg = events[ev]
+        if cfg in (None, "", "{}"):
+            return True
+        if not isinstance(cfg, dict) or "paths" in cfg or "paths-ignore" in cfg:
+            continue
+        inc, exc = _flow_list(cfg.get("branches")), _flow_list(cfg.get("branches-ignore"))
+        if inc is None and exc is None and ("tags" in cfg or "tags-ignore" in cfg):
+            continue  # tags only
+        if any(p.startswith("!") for p in (inc or []) + (exc or [])):
+            continue
+        if inc is not None and not any(_glob(p).fullmatch(branch) for p in inc):
+            continue
+        if exc is not None and any(_glob(p).fullmatch(branch) for p in exc):
+            continue
+        return True
+    return False
+
+
+def gating_lines(text: str, branch: str = "main") -> list[str]:
+    """the command lines whose failure fails the workflow on every push / pull request to `branch`:
+    from steps of a triggered workflow, in jobs and steps that are not `if: false` and not
+    `continue-on-error: true`, run by the default shell (bash -e -o pipefail) without `set +e`;
+    comment lines are dropped, continued lines joined, and a line with `||` is not returned
+    ([] when the file cannot be read as a workflow)"""
     try:
         doc = parse(text)
     except Unsupported:
         return []
-    if not isinstance(doc, dict):
-        return []
-    on = doc.get("on", doc.get(True))
-    if on in (None, "", "{}", "[]") or on == {} or on == []:
+    if not isinstance(doc, dict) or not fires_on(doc.get("on", doc.get(True)), branch):
         return []
     jobs = doc.get("jobs")
     if not isinstance(jobs, dict):
         return []
-    runs = []
+    lines = []
     for job in jobs.values():
-        if not isinstance(job, dict) or _false(job.get("if")):
+        if not isinstance(job, dict) or _false(job.get("if")) or _true(job.get("continue-on-error")):
             continue
+        jshell = ((job.get("defaults") or {}).get("run") or {}).get("shell") if isinstance(job.get("defaults"), dict) else None
         for step in job.get("steps") or []:
-            if not isinstance(step, dict) or _false(step.get("if")) or not isinstance(step.get("run"), str):
+            if not isinstance(step, dict) or _false(step.get("if")) or _true(step.get("continue-on-error")) \
+                    or not isinstance(step.get("run"), str):
+                continue
+            if step.get("shell", jshell) not in (None, "bash"):
                 continue
             body = "\n".join(l for l in step["run"].split("\n") if not l.lstrip().startswith("#"))
-            runs.append(body.replace("\\\n", " "))
-    return runs
+            if re.search(r"(?m)^\s*set\s+(?:\+e\b|\+o\s+(?:errexit|pipefail)\b)", body):
+                continue
+            for line in re.sub(r"\\\n\s*", " ", body).split("\n"):
+                if line.strip() and "||" not in line:
+                    lines.append(line.strip())
+    return lines

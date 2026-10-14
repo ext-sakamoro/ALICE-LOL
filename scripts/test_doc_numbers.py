@@ -435,7 +435,7 @@ GEN_CONFIG = ('''
 [generated]
 begin = ''' + "'''<!-- gen:begin rev=[0-9a-f]{4} -->'''" + '''
 end = "<!-- gen:end -->"
-checked_by = { run = "gen\\\\.py check --crate x" }
+checked_by = { run = "python3 gen\\\\.py check --crate x$" }
 ''')
 GEN_BLOCK = "\n<!-- gen:begin rev=abcd -->\n- 7 shapes in the other gate's table\n<!-- gen:end -->\n"
 GEN_YML = "on:\n  push:\njobs:\n  gen:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: python3 gen.py check --crate x\n"
@@ -445,6 +445,10 @@ GEN_INACTIVE = {
     "job if: false": GEN_YML.replace("    runs-on:", "    if: false\n    runs-on:"),
     "step if: false": GEN_YML.replace("      - run: python3", "      - if: false\n        run: python3"),
     "no trigger": GEN_YML.replace("on:\n  push:\n", "on: {}\n"),
+    "dispatch only": GEN_YML.replace("on:\n  push:\n", "on:\n  workflow_dispatch:\n"),
+    "continue-on-error": GEN_YML.replace("      - run: python3", "      - continue-on-error: true\n        run: python3"),
+    "|| true": GEN_YML.replace("--crate x\n", "--crate x || true\n"),
+    "echoed": GEN_YML.replace("- run: python3", "- run: echo python3"),
 }
 
 

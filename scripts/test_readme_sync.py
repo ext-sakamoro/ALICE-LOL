@@ -222,6 +222,34 @@ INACTIVE = {
     "step if: false": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        if: ${{ false }}\n"),
     "no trigger": WORKFLOW_TEXT.replace("on:\n  push:\n    branches: [main]\n", "on: {}\n"),
     "unreadable YAML": WORKFLOW_TEXT.replace("jobs:\n", "jobs: &anchor\n"),
+    # the check runs, but its failure does not fail the workflow
+    "step continue-on-error": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        continue-on-error: true\n"),
+    "job continue-on-error": WORKFLOW_TEXT.replace("    runs-on: ubuntu-24.04\n", "    continue-on-error: true\n    runs-on: ubuntu-24.04\n"),
+    "|| true": WORKFLOW_TEXT.replace("--lint warn\n", "--lint warn || true\n"),
+    "set +e": WORKFLOW_TEXT.replace("        run: |\n", "        run: |\n          set +e\n"),
+    "another shell": WORKFLOW_TEXT.replace("        run: |\n", "        shell: sh {0}\n        run: |\n"),
+    "job default shell": WORKFLOW_TEXT.replace("    runs-on: ubuntu-24.04\n", "    defaults:\n      run:\n        shell: pwsh\n    runs-on: ubuntu-24.04\n"),
+    # the command is not the check of this crate
+    "echoed": WORKFLOW_TEXT.replace("          " + CMD, "          echo " + CMD),
+    "another crate": WORKFLOW_TEXT.replace("--crate alice-lol ", "--crate alice-lol-ui "),
+    # the workflow does not run on every push to main
+    "dispatch only": WORKFLOW_TEXT.replace("on:\n  push:\n    branches: [main]\n", "on:\n  workflow_dispatch:\n"),
+    "schedule only": WORKFLOW_TEXT.replace("on:\n  push:\n    branches: [main]\n", "on:\n  schedule:\n    - cron: '0 0 * * 1'\n"),
+    "every branch ignored": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches-ignore: ['**']\n"),
+    "another branch": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches: [no-such-branch]\n"),
+    "path filter": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches: [main]\n    paths: ['src/**']\n"),
+    "tags only": WORKFLOW_TEXT.replace("    branches: [main]\n", "    tags: ['v*']\n"),
+    "negated branch": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches: ['**', '!main']\n"),
+}
+# forms that still gate on every push to main
+GATING = {
+    "as written": WORKFLOW_TEXT,
+    "every branch": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches: ['**']\n"),
+    "no filter": WORKFLOW_TEXT.replace("on:\n  push:\n    branches: [main]\n", "on: [push, pull_request]\n"),
+    "block list": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches:\n      - main\n      - 'ci/**'\n"),
+    "other branches ignored": WORKFLOW_TEXT.replace("    branches: [main]\n", "    branches-ignore: ['wip/**']\n"),
+    "explicit bash": WORKFLOW_TEXT.replace("        run: |\n", "        shell: bash\n        run: |\n"),
+    "continue-on-error false": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        continue-on-error: false\n"),
 }
 
 
@@ -425,7 +453,9 @@ class WorkflowSteps(unittest.TestCase):
         self.assertGreater(len(names), 0)
         for n in names:
             with self.subTest(n=n), open(os.path.join(d, n), encoding="utf-8") as f:
-                self.assertGreater(len(ws.active_runs(f.read())), 0)
+                self.assertIn("jobs", ws.parse(f.read()))
+        with open(os.path.join(d, "law-readme-block.yml"), encoding="utf-8") as f:
+            self.assertTrue(any(rs.LAW_BLOCK_RUN.match(l) for l in ws.gating_lines(f.read())))
 
     def test_steps_keys_and_scalars(self):
         doc = ws.parse('name: x  # c\non:\n  push:\njobs:\n  a:\n    steps:\n      - run: echo "a # b"\n'
@@ -433,14 +463,19 @@ class WorkflowSteps(unittest.TestCase):
         self.assertEqual(doc["name"], "x")
         self.assertEqual(doc["jobs"]["a"]["steps"][0]["run"], 'echo "a # b"')
         self.assertEqual(doc["jobs"]["a"]["steps"][1]["name"], "q")
-        self.assertEqual(ws.active_runs("on: push\njobs:\n  a:\n    if: github.ref == 'refs/heads/main'\n"
-                                        '    steps:\n      - run: make\n'), ["make"])
+        self.assertEqual(ws.gating_lines("on: push\njobs:\n  a:\n    if: github.ref == 'refs/heads/main'\n"
+                                         "    steps:\n      - run: make\n"), ["make"])
 
-    def test_inactive_forms_run_nothing(self):
+    def test_forms_that_do_not_gate_have_no_check_line(self):
         for why, text in INACTIVE.items():
             with self.subTest(why=why):
-                self.assertFalse(any(rs.LAW_BLOCK_RUN.search(r) for r in ws.active_runs(text)))
-        self.assertTrue(any(rs.LAW_BLOCK_RUN.search(r) for r in ws.active_runs(WORKFLOW_TEXT)))
+                self.assertNotEqual(text, WORKFLOW_TEXT)
+                self.assertFalse(any(rs.LAW_BLOCK_RUN.match(l) for l in ws.gating_lines(text)))
+
+    def test_forms_that_gate_have_the_check_line(self):
+        for why, text in GATING.items():
+            with self.subTest(why=why):
+                self.assertTrue(any(rs.LAW_BLOCK_RUN.match(l) for l in ws.gating_lines(text)))
 
 
 class Examples(unittest.TestCase):

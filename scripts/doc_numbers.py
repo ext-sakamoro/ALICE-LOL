@@ -58,9 +58,9 @@ Sources (`[sources."KEY"]`, every source has `noun` (regex) and `kind`):
 two counts must be equal.
 
 `[generated]` (optional) names a block another gate writes and checks: `begin` and `end`
-(regexes, each matching a whole line) and `checked_by = { run = REGEX }` (an active step of a
-tracked workflow under .github/workflows runs a command matching REGEX; active = the workflow has
-a trigger, the job and the step are not `if: false`, the line is not a comment; see
+(regexes, each matching a whole line) and `checked_by = { run = REGEX }` (a command line of a
+tracked workflow under .github/workflows matches REGEX at its start, and that line gates: it runs
+on every push / pull request to main and its failure fails the workflow; see gating_lines in
 scripts/workflow_steps.py). The lines from the begin line to the end line are not read by this
 gate, but only when the file has exactly one begin line and one end line after it and
 `checked_by` holds; otherwise the markers are a finding and every line is
@@ -87,7 +87,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from workflow_steps import active_runs  # noqa: E402
+from workflow_steps import gating_lines  # noqa: E402
 
 try:
     import tomllib
@@ -146,8 +146,8 @@ def generated_rule(cfg: dict, root: str, files: list[str]) -> tuple[re.Pattern, 
         raise ConfigError("[generated] needs `begin`, `end` and `checked_by = { run = REGEX }`")
     run = re.compile(cb["run"])
     flows = [f for f in files if f.startswith(".github/workflows/") and f.endswith((".yml", ".yaml"))]
-    ok = any(run.search(r) for f in flows for r in active_runs(read(root, f)))
-    why = None if ok else f"no active step of a workflow runs `{cb['run']}`"
+    ok = any(run.match(l) for f in flows for l in gating_lines(read(root, f)))
+    why = None if ok else f"no gating command line of a workflow matches `{cb['run']}`"
     return re.compile(g["begin"]), re.compile(g["end"]), why
 
 
