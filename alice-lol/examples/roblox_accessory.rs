@@ -22,9 +22,18 @@ fn main() {
         )
     };
 
+    // output directory: the first argument, or a directory under the system temp dir
+    // (never the current directory, so a run from the repository root leaves no file there)
+    let out_dir = std::env::args_os().nth(1).map_or_else(
+        || std::env::temp_dir().join("alice_lol_roblox_accessory"),
+        std::path::PathBuf::from,
+    );
+    std::fs::create_dir_all(&out_dir).expect("failed to create the output directory");
+    println!("output dir: {}", out_dir.display());
+
     let config = RobloxConfig::accessory();
 
-    match node_to_obj_roblox(&crown, "crown.obj", &config) {
+    match node_to_obj_roblox(&crown, out_dir.join("crown.obj"), &config) {
         Ok(stats) => println!("Crown OBJ: {stats}"),
         Err(e) => eprintln!("Crown OBJ error: {e}"),
     }
@@ -37,7 +46,7 @@ fn main() {
         )
     ";
 
-    match alice_lol::roblox_export::lol_to_fbx_roblox(gem_lol, "gem.fbx", &config) {
+    match alice_lol::roblox_export::lol_to_fbx_roblox(gem_lol, out_dir.join("gem.fbx"), &config) {
         Ok(stats) => println!("Gem FBX:   {stats}"),
         Err(e) => eprintln!("Gem FBX error: {e}"),
     }
@@ -55,7 +64,7 @@ fn main() {
 
     let meshpart_config = RobloxConfig::meshpart();
 
-    match node_to_fbx_roblox(&shield, "shield.fbx", &meshpart_config) {
+    match node_to_fbx_roblox(&shield, out_dir.join("shield.fbx"), &meshpart_config) {
         Ok(stats) => println!("Shield FBX: {stats}"),
         Err(e) => eprintln!("Shield FBX error: {e}"),
     }

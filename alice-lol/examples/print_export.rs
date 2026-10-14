@@ -1,10 +1,10 @@
 //! LOL → STL/3MF エクスポートデモ
 //!
 //! 3Dプリントの3つの用途別モデルをSTL & 3MFファイルに出力する。
-//! 出力先: カレントディレクトリの `lol_print_output/`
+//! 出力先: 第 1 引数の directory、無ければ system の一時 directory の `alice_lol_print_export/` (カレントディレクトリには書かない)
 //!
 //! ```bash
-//! cargo run --example print_export
+//! cargo run --example print_export [-- <output dir>]
 //! ```
 
 // example: file size 表示 (u64 → f64)
@@ -15,8 +15,13 @@ use alice_lol::print_export::{lol_to_stl, node_to_3mf, node_to_stl, PrintConfig}
 use glam::Vec3;
 
 fn main() {
-    let out_dir = std::path::Path::new("lol_print_output");
-    std::fs::create_dir_all(out_dir).expect("failed to create output directory");
+    // output directory: the first argument, or a directory under the system temp dir
+    // (never the current directory, so a run from the repository root leaves no file there)
+    let out_dir = std::env::args_os().nth(1).map_or_else(
+        || std::env::temp_dir().join("alice_lol_print_export"),
+        std::path::PathBuf::from,
+    );
+    std::fs::create_dir_all(&out_dir).expect("failed to create output directory");
 
     println!("=== ALICE-LOL → 3D Print Export ===\n");
 
@@ -112,7 +117,7 @@ fn main() {
     // ファイルサイズ比較
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     println!("\n=== File Size Comparison ===");
-    for e in std::fs::read_dir(out_dir).expect("read dir").flatten() {
+    for e in std::fs::read_dir(&out_dir).expect("read dir").flatten() {
         let meta = e.metadata().expect("metadata");
         let size_kb = meta.len() as f64 / 1024.0;
         println!("  {:>8.1} KB  {}", size_kb, e.file_name().to_string_lossy());

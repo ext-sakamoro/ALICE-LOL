@@ -239,7 +239,7 @@ fn main() {
             flag,
         );
 
-        // Export STL to /tmp/verify_customizers/ so user can open in
+        // Export STL to <system temp dir>/verify_customizers/ so user can open in
         // Bambu Studio / MeshLab and confirm the true 3D shape
         // (bypasses the app's egui preview renderer entirely)
         if std::env::var("EXPORT_STL").is_ok() && !mesh.vertices.is_empty() {
@@ -248,8 +248,8 @@ fn main() {
                 .chars()
                 .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
                 .collect();
-            let dir = std::path::Path::new("/tmp/verify_customizers");
-            let _ = std::fs::create_dir_all(dir);
+            let dir = std::env::temp_dir().join("verify_customizers");
+            let _ = std::fs::create_dir_all(&dir);
             let path = dir.join(format!("{name}.stl"));
             let _ = write_stl_ascii(&mesh, &path);
         }

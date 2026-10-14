@@ -1,7 +1,11 @@
 /target
 .DS_Store
+# mesh exports (the examples write under the system temp dir or a given path, not here;
+# scripts/root_artifacts.py fails on any of these tracked at the repository root)
 *.obj
 *.fbx
+/*.stl
+/*.3mf
 lol_print_output/
 
 # cargo-mutants の成果物 (2 時間分、再生成可能)

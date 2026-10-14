@@ -11,8 +11,13 @@ use glam::Vec3;
 fn main() {
     println!("=== ALICE Coaster Generator ===\n");
 
-    let out_dir = std::path::Path::new("lol_print_output");
-    std::fs::create_dir_all(out_dir).unwrap();
+    // output directory: the first argument, or a directory under the system temp dir
+    // (never the current directory, so a run from the repository root leaves no file there)
+    let out_dir = std::env::args_os().nth(1).map_or_else(
+        || std::env::temp_dir().join("alice_lol_alice_coaster"),
+        std::path::PathBuf::from,
+    );
+    std::fs::create_dir_all(&out_dir).unwrap();
 
     // スケール: 1.0 LOL = 20mm
     // 10cm = 100mm → 半径 2.5 LOL
@@ -115,5 +120,8 @@ fn main() {
     }
 
     println!("\n=== Done — open in Bambu Studio: ===");
-    println!("open -a BambuStudio lol_print_output/ALICE_coaster.stl");
+    println!(
+        "open -a BambuStudio {}",
+        out_dir.join("ALICE_coaster.stl").display()
+    );
 }

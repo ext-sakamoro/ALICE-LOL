@@ -1,8 +1,18 @@
 //! 超ゴージャス王冠 — `UE5品質の装飾王冠をRoblox用OBJとして出力`
 //!
 //! ```bash
-//! cargo run --example royal_crown --features roblox --release
+//! cargo run --example royal_crown --features roblox --release [-- <output dir>]
 //! ```
+
+/// The output directory: the first argument, or a directory under the system temp dir
+/// (never the current directory, so a run from the repository root leaves no file there)
+#[cfg(feature = "roblox")]
+fn output_dir() -> std::path::PathBuf {
+    std::env::args_os().nth(1).map_or_else(
+        || std::env::temp_dir().join("alice_lol_royal_crown"),
+        std::path::PathBuf::from,
+    )
+}
 
 #[cfg(feature = "roblox")]
 fn main() {
@@ -104,10 +114,12 @@ fn main() {
         max_size_studs: glam::Vec3::new(10.0, 10.0, 10.0),
     };
 
-    let out_path = "royal_crown.obj";
-    match node_to_obj_roblox(&node, out_path, &config) {
+    let out_dir = output_dir();
+    std::fs::create_dir_all(&out_dir).expect("failed to create the output directory");
+    let out_path = out_dir.join("royal_crown.obj");
+    match node_to_obj_roblox(&node, &out_path, &config) {
         Ok(stats) => {
-            println!("=== Royal Crown ===");
+            println!("=== Royal Crown === ({})", out_path.display());
             println!("{stats}");
             if stats.validation.is_valid() {
                 println!("Roblox import ready!");
