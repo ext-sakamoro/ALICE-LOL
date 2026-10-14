@@ -161,13 +161,15 @@ step "ci.yml / libm-hidden-check: disallowed_methods の allow を全部外し�
 python3 scripts/test_libm_hidden_check.py
 python3 scripts/libm_hidden_check.py
 
-step "ci.yml / docs: readme_sync + doc_numbers + docs_lint (oracle + check)"
+step "ci.yml / docs: readme_sync + doc_numbers + docs_lint + tracked_binaries (oracle + check)"
 python3 scripts/test_readme_sync.py
 python3 scripts/readme_sync.py --check
 python3 scripts/test_doc_numbers.py
 python3 scripts/doc_numbers.py
 python3 scripts/test_docs_lint.py
 python3 scripts/docs_lint.py --check
+python3 scripts/test_tracked_binaries.py
+python3 scripts/tracked_binaries.py
 
 step "ci.yml / docs: law_corners (oracle + corner enumeration)"
 python3 scripts/test_law_corners.py
