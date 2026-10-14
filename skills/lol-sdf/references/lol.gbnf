@@ -1,5 +1,9 @@
 # ALICE-LOL DSL grammar for constrained decoding (Phase X.8 B-5).
 #
+# Generated: do not edit. The construct names come from `alice-lol/language/constructs.toml`
+# and the rest from `alice-lol/language/lol.gbnf.in`; `python3 scripts/gen_gbnf.py` writes this
+# file and its distribution copies, `--check` compares them.
+#
 # Covers every construct implemented in `alice_lol::runtime_parser::parse_lol`
 # (SDF primitives / CSG / modifiers / 3D-print product + mechanical archetype
 # shortcuts / fastener helpers), plus the Phase 3 `program(...)` Intent wrapper.

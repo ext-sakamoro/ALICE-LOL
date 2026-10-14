@@ -100,6 +100,10 @@ step "ci.yml / runtime-keywords: oracle + parser の keyword dispatch と syntax
 python3 scripts/test_runtime_keywords.py
 python3 scripts/runtime_keywords.py
 
+step "ci.yml / gen-gbnf: oracle + lol.gbnf と配布用の写しが language/constructs.toml から生成したものと一致"
+python3 scripts/test_gen_gbnf.py
+python3 scripts/gen_gbnf.py --check
+
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py

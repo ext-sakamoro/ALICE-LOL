@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 文法 `alice-lol/lol.gbnf` (と配布用の写し) を言語の定義から生成するようにした 定義は `alice-lol/language/constructs.toml` (construct 1 つにつき 1 行: 名前と、それを受け付ける文法の rule) と `alice-lol/language/lol.gbnf.in` (説明と固定の rule、名前の一覧の場所を `@names <rule>@` で示す)、生成は `python3 scripts/gen_gbnf.py` (書く先は正典と、追跡されている他の `lol.gbnf` すべて)、`--check` が生成結果と 2 つの file を比べる 行が 0 件・名前の重複・場所の無い rule・行の無い場所・template の `intent_*` rule が行と違う名前を綴る時は失敗する 検査器の試験 `scripts/test_gen_gbnf.py` CI (wiring-guard job) と preflight で走る 文法そのものは変わっていない (alice-llm の `parse_gbnf` で読んだ `Grammar` が変更前と等しい) 名前の一覧の配置は 1 行 1 名に揃えた
+
 ## [0.4.1] - 2026-10-14
 
 ### Added

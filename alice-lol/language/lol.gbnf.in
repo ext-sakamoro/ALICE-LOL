@@ -1,0 +1,267 @@
+# ALICE-LOL DSL grammar for constrained decoding (Phase X.8 B-5).
+#
+# Generated: do not edit. The construct names come from `alice-lol/language/constructs.toml`
+# and the rest from `alice-lol/language/lol.gbnf.in`; `python3 scripts/gen_gbnf.py` writes this
+# file and its distribution copies, `--check` compares them.
+#
+# Covers every construct implemented in `alice_lol::runtime_parser::parse_lol`
+# (SDF primitives / CSG / modifiers / 3D-print product + mechanical archetype
+# shortcuts / fastener helpers), plus the Phase 3 `program(...)` Intent wrapper.
+# `tests/lol_gbnf_test.rs` asserts parser names ⊆ grammar names so the two
+# cannot drift again (2026-09-14: 103 product / mechanical constructs had
+# been added to the parser and to a downstream copy of this file, but not
+# here). Grouped by *argument shape*
+# rather than one rule per construct: a `sphere(1.0)` and `heart(1.0)`
+# share the same body shape (`name "(" number ")"`), so they live in
+# the same `prim_1f` production and only differ in the enumerated name.
+#
+# What the grammar enforces
+# -------------------------
+# - Only construct names known to the runtime parser are accepted
+#   (unknown / typo'd names are rejected).
+# - The argument *shape* (number-count vs child-count, comma placement,
+#   balanced parens) matches one of the recognised categories.
+# - At most one whitespace char between tokens; `//` line comments are
+#   NOT accepted (deliberately stricter than the runtime lexer, which
+#   still accepts both in human-written files). A comment state accepts
+#   almost any char, so the token-trie mask degrades to a full-vocabulary
+#   walk (0.5-1 s/step measured on a 130k vocab), and unbounded
+#   whitespace / comments are channels models use to ramble instead of
+#   emitting the program (B-10, 2026-09-14).
+#
+# What the grammar does NOT enforce
+# ---------------------------------
+# - Exact per-construct arity (e.g. that `sphere` really takes exactly
+#   one number vs two). Constructs are bucketed by *category*, so
+#   swapping within a category still parses. The runtime parser catches
+#   arity mismatches at eval time.
+# - Numeric ranges / semantic validity (negative radii, etc.).
+# - Rust-side variable capture `{expr}` or bare identifiers — those are
+#   `proc_macro`-only syntax, absent from the runtime LLM path.
+
+# ─── Root ──────────────────────────────────────────────────────────────
+#
+# Either a bare SDF expression (Phase 2 Law, backward compatible) or a
+# full `program(...)` wrapping SDF + entity registry + Intent (Phase 3).
+
+root ::= ws (program | expr | law) ws
+
+# ─── 監査 Law (行ごとに 1 項、`runtime_parser::parse_law`) ──────────────
+#
+# 何が成立すべきかの主張で、測り方は書かない (測るのは host)
+# 項の keyword は test 専用の `syntax_table::LAW_SYNTAX` と一致する
+#
+# ⚠️ ここだけ **開いた識別子** (`ident`) を使う 上の構文は「parser が知る名前だけ
+# 受理する」ために名前を全部列挙しているが、Law の metric 名と成立範囲の key は
+# **host が何を測ったかで決まる**ので列挙できない 代わりに項の形を固定する
+law ::= "audit" sp ident nl lawline (nl lawline)* nl?
+lawline ::= lawevidence | lawexpect | lawrange
+lawevidence ::= "evidence" sp ident
+lawexpect ::= "expect" sp ident sp "==" sp number (sp "within" sp number)?
+lawrange ::= "range" sp ident (sp lawvalue)+
+ident ::= [a-zA-Z_] [a-zA-Z0-9_-]*
+lawvalue ::= [0-9a-zA-Z.+-]+
+sp ::= " "
+nl ::= "\n"
+
+# ─── Program (SDF + entities + Intent) ────────────────────────────────
+#
+#   program(<sdf>)
+#   program(<sdf>, entities(<sdf>, ...))
+#   program(<sdf>, entities(<sdf>, ...), <intent>)
+#
+# `entities(...)` is the NodeId registry: index = NodeId referenced by
+# the Intent verbs. Bound checking (id < len) is done by the runtime
+# parser, not the grammar.
+
+program ::= "program" ws "(" ws expr ws programtail? ")"
+programtail ::= "," ws entities ws intenttail?
+intenttail ::= "," ws intent ws
+entities ::= "entities" ws "(" ws (expr ws exprtail*)? ")"
+
+# ─── Intent (Phase 3, mirrors alice_lol::intent::IntentNode) ─────────
+#
+# Argument order follows the IntentNode field order. Object references
+# are unsigned integer NodeIds, hands are bare identifiers.
+
+intent ::= intent_grasp
+         | intent_id_only
+         | intent_vec3_1f
+         | intent_point
+         | intent_throw
+         | intent_id_vec3_1f
+         | intent_align
+         | intent_id_1f
+         | intent_rest
+         | intent_latent
+         | intent_compose
+         | intent_music
+
+intent_grasp ::= "grasp" ws "(" ws uint ws "," ws hand ws "," ws number ws ")"
+intent_id_only ::= name_intent_id_only ws "(" ws uint ws ")"
+intent_vec3_1f ::= name_intent_vec3_1f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_point ::= "point" ws "(" ws number ws "," ws number ws "," ws number ws "," ws hand ws ")"
+intent_throw ::= "throw" ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws hand ws ")"
+intent_id_vec3_1f ::= name_intent_id_vec3_1f ws "(" ws uint ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_align ::= "align" ws "(" ws uint ws "," ws number ws "," ws number ws "," ws number ws ")"
+intent_id_1f ::= name_intent_id_1f ws "(" ws uint ws "," ws number ws ")"
+intent_rest ::= "rest" ws "(" ws uint ws ")"
+intent_latent ::= "latent" ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws numbertail* ")"
+intent_compose ::= name_intent_compose ws "(" ws intent ws intenttail_inner* ")"
+intent_music ::= "music" ws "(" ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws "," ws uint ws ")"
+
+intenttail_inner ::= "," ws intent ws
+numbertail ::= "," ws number ws
+
+@names name_intent_id_only@
+@names name_intent_vec3_1f@
+@names name_intent_id_vec3_1f@
+@names name_intent_id_1f@
+@names name_intent_compose@
+
+@names hand@
+uint ::= [0-9]+
+
+# ─── Whitespace (subset of the runtime_parser lexer) ──────────────────
+#
+# At most ONE whitespace char between tokens, and no comments. The
+# runtime lexer accepts arbitrary whitespace runs and `//` comments in
+# human-written files; the LLM grammar is deliberately tighter because
+# an unbounded `ws` is a rambling channel — under constrained decoding a
+# model that wants to "think" picks the least committal token, and a
+# 41-tab run was observed on MiniCPM5-2B once comments were removed.
+
+ws ::= [ \t\r\n]?
+
+# ─── Numeric literal (matches runtime_parser::read_number) ────────────
+#
+#   [-]? ( digits ("." digits)? | "." digits ) ( [eE][+-]? digits )?
+
+number ::= sign? magnitude expon?
+sign ::= "-"
+magnitude ::= digits fract? | fract
+digits ::= [0-9]+
+fract ::= "." [0-9]+
+expon ::= expchar signchar? digits
+expchar ::= "e" | "E"
+signchar ::= "+" | "-"
+
+# ─── Expression dispatcher ────────────────────────────────────────────
+
+expr ::= prim_1f
+       | prim_0f
+       | prim_2f
+       | prim_3f
+       | prim_4f
+       | prim_5f
+       | prim_6f
+       | prim_7f
+       | prim_9f
+       | prim_10f
+       | op_variadic
+       | op_k_children
+       | op_2k_children
+       | op_ab
+       | op_1f_ab
+       | op_2f_ab
+       | mod_1f_child
+       | mod_2f_child
+       | mod_3f_child
+       | mod_4f_child
+       | mod_6f_child
+       | mod_child_only
+
+# ─── Primitives (fixed number of floats, no children) ─────────────────
+
+prim_0f ::= name_0f ws "(" ws ")"
+prim_1f ::= name_1f ws "(" ws number ws ")"
+prim_2f ::= name_2f ws "(" ws number ws "," ws number ws ")"
+prim_3f ::= name_3f ws "(" ws number ws "," ws number ws "," ws number ws ")"
+prim_4f ::= name_4f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_5f ::= name_5f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_6f ::= name_6f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_9f ::= name_9f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_7f ::= name_7f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+prim_10f ::= name_10f ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws ")"
+
+@names name_0f@
+
+@names name_1f@
+
+@names name_2f@
+
+@names name_3f@
+
+@names name_4f@
+
+@names name_5f@
+
+@names name_6f@
+
+@names name_7f@
+
+@names name_9f@
+
+@names name_10f@
+
+# ─── Operations (Boolean / combining constructs) ──────────────────────
+#
+# op_variadic:  name(expr, expr, ...) with 2+ children.
+# op_k_children: name(number, expr, expr, ...) — smoothing family.
+# op_2k_children: name(number, number, expr, expr, ...) — stairs/columns.
+# op_ab: name(expr, expr) — subtract / xor.
+# op_1f_ab: name(number, expr, expr) — smooth_subtract / morph etc.
+# op_2f_ab: name(number, number, expr, expr).
+
+op_variadic ::= name_variadic ws "(" ws expr ws exprtail exprtail* ")"
+op_k_children ::= name_k_children ws "(" ws number ws exprtail exprtail exprtail* ")"
+op_2k_children ::= name_2k_children ws "(" ws number ws "," ws number ws exprtail exprtail exprtail* ")"
+op_ab ::= name_ab ws "(" ws expr ws "," ws expr ws ")"
+op_1f_ab ::= name_1f_ab ws "(" ws number ws "," ws expr ws "," ws expr ws ")"
+op_2f_ab ::= name_2f_ab ws "(" ws number ws "," ws number ws "," ws expr ws "," ws expr ws ")"
+
+exprtail ::= "," ws expr ws
+
+@names name_variadic@
+
+@names name_k_children@
+
+@names name_2k_children@
+
+@names name_ab@
+
+@names name_1f_ab@
+
+@names name_2f_ab@
+
+# ─── Modifiers / transforms (floats + one child) ──────────────────────
+#
+# mod_1f_child:    name(number, expr)
+# mod_2f_child:    name(number, number, expr)  — animate only
+# mod_3f_child:    name(number, number, number, expr)
+# mod_4f_child:    name(number, number, number, number, expr)  — rotate_q only
+# mod_6f_child:    name(number, number, number, number, number, number, expr)
+# mod_child_only:  name(expr)
+
+mod_1f_child ::= name_1f_child ws "(" ws number ws "," ws expr ws ")"
+mod_2f_child ::= name_2f_child ws "(" ws number ws "," ws number ws "," ws expr ws ")"
+mod_3f_child ::= name_3f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
+mod_4f_child ::= name_4f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
+mod_6f_child ::= name_6f_child ws "(" ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws number ws "," ws expr ws ")"
+mod_child_only ::= name_child_only ws "(" ws expr ws ")"
+
+@names name_1f_child@
+
+@names name_2f_child@
+
+@names name_3f_child@
+
+# rotate_q's x/y/z/w must be unit length to within a tight tolerance (~8
+# significant digits per component needed); a model generating one should
+# copy an existing exact quaternion rather than invent decimal digits by
+# hand -- rotate(x, y, z) in degrees is the form for a hand-written rotation.
+@names name_4f_child@
+
+@names name_6f_child@
+
+@names name_child_only@
