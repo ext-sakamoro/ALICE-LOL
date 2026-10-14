@@ -60,7 +60,10 @@ lawevidence ::= "evidence" sp ident
 lawexpect ::= "expect" sp ident sp "==" sp number (sp "within" sp number)?
 lawrange ::= "range" sp ident (sp lawvalue)+
 ident ::= [a-zA-Z_] [a-zA-Z0-9_-]*
-lawvalue ::= [0-9a-zA-Z.+-]+
+# a value is any run of printable ASCII except `#` (where parse_law starts a comment) and the
+# double quote: method paths (`f32::sin`), underscores and versions read the same in the
+# grammar and the parser
+lawvalue ::= [!$-~]+
 sp ::= " "
 nl ::= "\n"
 

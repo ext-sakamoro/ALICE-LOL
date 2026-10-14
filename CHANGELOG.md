@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 文法の監査 Law の値 (`lawvalue`) が英数字と `.+-` しか受理せず、`parse_law` が読む `f32::sin` のような method の path や `_` を含む値を拒否していた (文法と parser の食い違い) `#` (parser が comment の始まりとして読む) と `"` を除く印字可能な ASCII を受理するようにした 文法と parser の両方が受理することを試験で確かめ (`alice-lol/tests/lol_gbnf_test.rs`)、旧い範囲に戻すと試験が失敗することを確かめた
 - 文書の LOL の program の誤り: `LLM_REFERENCE.md` の歯車は subtract の被演算子が逆で何も残らなかった (歯を円板の縁に足す形にした) / `LLM_PRINT_PROMPT.md` の drone motor mount と resin figurine は `subtract` に被演算子を 3 つ渡していた (`subtract` は 2 つ、入れ子にした) / 印刷の手引き (`print-guide.md`) の bracket は `lattice_infill` に引数を 2 つしか渡していなかった (4 つ) / figurine の殻 0.015 は export の格子で解けず mesh が数百の断片になっていた (0.03 にした) / 1 つの fence に 3 つ・2 つの program を置いていた箇所を分けた / 数の代わりに名前を使う雛形の fence を `lol fragment` にした
 - `LLM_PRINT_PROMPT.md` の Step 4 が program に `//` の comment header を付けるよう指示していたが、生成に使う文法は comment を受理しない 設計の判断は program の前に文章で書くようにし、例の comment を文章に移した
 - mesh の修復の説明が古かった (`MeshRepair::repair_all(epsilon=1e-3)` を毎回掛けると書いていた) 実際の修復 (同じ位置の頂点の統合、閉じた mesh には破壊的な修復を掛けない、掛けるのは開いた edge が増えず位相が変わらない時だけ) に合わせた

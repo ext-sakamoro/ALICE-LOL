@@ -401,3 +401,27 @@ fn accepts_product_and_mechanical_shortcuts() {
     ));
     assert!(accepts(g, "jst_ph_slot(4)"));
 }
+
+// ─── audit law values: every value `parse_law` reads as one token, in printable ASCII ──
+//
+// `parse_law` splits a clause on whitespace and reads `#` as the start of a comment, so a
+// value is any run without them; the grammar takes the printable ASCII part of that (it is
+// stricter on purpose: no comment, no non-ASCII), which includes method paths and versions
+
+#[test]
+fn accepts_law_values_with_paths_underscores_and_versions() {
+    let g = lol_grammar();
+    for law in [
+        "audit lint\nrange banned f32::sin f64::sin_cos\n",
+        "audit lint\nrange known case_17 a-b 0.4.0 +x ~y\n",
+    ] {
+        assert!(accepts(g, law), "{law:?}");
+        assert!(alice_lol::runtime_parser::parse_law(law).is_ok(), "{law:?}");
+    }
+}
+
+#[test]
+fn rejects_a_law_value_with_a_comment_character() {
+    let g = lol_grammar();
+    assert!(rejects(g, "audit lint\nrange known a#b\n"));
+}
