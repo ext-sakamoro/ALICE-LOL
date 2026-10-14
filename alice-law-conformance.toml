@@ -5,20 +5,22 @@
 #
 # Entries here are written from what this repository's own commits, CI
 # workflow and test suite actually show, checked directly rather than
-# assumed: a gate without concrete evidence is `missing`, not guessed `pass`.
+# assumed: a gate checked and unmet is `fail-known`, one not checked is
+# `unverified`, and a `pass` names its evidence and the mutant that was run.
 
 [G1]
 status = "pass"
-evidence = ["clippy.toml (repository root)", ".github/clippy-lib/clippy.toml", "scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py", ".github/workflows/ci.yml wiring-guard job"]
-since = "3d0b4be352f70f33e6a837f4434eebdd9af7fe0b"
-note = "type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a violation in a non-alice-lol workspace member"
+evidence = ["clippy.toml (repository root): every f32 and f64 method the G1 list in ALICE-Law's conformance/gates.toml marks banned (25 names x 2 types = 50 entries), including the 21 alice-det-math 0.5 has no equivalent for (sinh, cosh, asinh, acosh, atanh, exp2, exp_m1, log, ln_1p for both types; tanh, cbrt, hypot for f64)", ".github/clippy-lib/clippy.toml (generated from the root file by scripts/clippy_lib_gate.py, which fails when the two differ)", ".github/workflows/ci.yml clippy job (cargo clippy --workspace --all-targets --all-features, root configuration)", ".github/workflows/ci.yml wiring-guard job steps clippy-lib (alice-lol --lib --all-features; the rest of the workspace --lib --bins --examples --all-features)", "scripts/clippy-lib-canary + scripts/test_clippy_lib_gate.py (the canary's forbidden forms must all be flagged; 0 diagnostics fails)"]
+mutant = "added f32::sinh to alice-lol/src/lib.rs and f64::exp_m1 inside a #[cfg(feature = \"physics\")] item there: the clippy-lib pass for alice-lol --lib --all-features reported both as disallowed and exited 101 (measured, reverted)"
+since = ""
+note = "the feature set covered is --all-features (every feature of every workspace member on), which is the superset in which every feature-gated module is compiled; code gated on a feature being off (cfg(not(feature = ...))) exists only in 4 examples (the feature-off fallbacks in humanoid_bvh_animation, hardsurface_ribbed_bracket, roblox_accessory and royal_crown, each a message print), none of which calls a banned method (read by hand), and in no library source. Adding the 21 names found 3 call sites, all in tests: alice-lol/src/laser_pattern.rs (2, a density field in a unit test) and alice-lol/tests/laser_pattern_digest_golden.rs (1, the density field of the density_hatch golden case); all three now use mul_add and sqrt, and the golden digest did not move (it does cover that case: changing the field's constant fails it). mul_add and sqrt are allowed by G1. powi is pending in G1 and allowed here: 5 calls in library code (alice-lol/src/law.rs 1, alice-lol/src/stdlib/hardsurface/pattern_sdf.rs 1, alice-lol-ui/src/theme.rs 3; one more match there is a doc comment), 16 matches of .powi( in all tracked .rs files outside fuzz/ and tools/; allowed until the cross-target measurement G1 names decides it, and then banned or kept accordingly"
 reference_repo = ""
 
 [G2]
-status = "missing"
+status = "fail-known"
 evidence = ["alice-lol/src/det_math.rs (Law max/min/max64/min64, unit-tested)", "alice-lol/src/raw_minmax.rs (raw_minmax_here!() macro, compiler-enforced via clippy::disallowed_macros on its own definition path)", "scripts/raw_minmax_manifest.toml + scripts/raw_minmax_manifest.py (default-deny manifest, wired in .github/workflows/ci.yml and scripts/preflight.sh)"]
 since = "df83855a8343038995ab213af511f39d89d523d8"
-note = "the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same form as ALICE-SDF's implementation); alice-lol computes max/min only in scalar f32/f64 itself, so the gate's per-width coverage clause has no additional width of its own to check against (the SIMD evaluation this crate re-exports, Vec3x8/eval_compiled_simd/eval_compiled_batch_simd* in lib.rs, is alice-sdf's code and falls under alice-sdf's own G2 entry, not this one) — but nothing in this repository asserts the scalar-only claim as a checked, ratcheted fact rather than a current coincidence, so status stays missing until that is an explicit test, not an omission."
+note = "the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same form as ALICE-SDF's implementation); alice-lol computes max/min only in scalar f32/f64 itself, so the gate's per-width coverage clause has no additional width of its own to check against (the SIMD evaluation this crate re-exports, Vec3x8/eval_compiled_simd/eval_compiled_batch_simd* in lib.rs, is alice-sdf's code and falls under alice-sdf's own G2 entry, not this one) — but nothing in this repository asserts the scalar-only claim as a checked, ratcheted fact rather than a current coincidence, so status stays fail-known until that is an explicit test, not an omission."
 reference_repo = "ALICE-SDF"
 
 [G3]
@@ -43,28 +45,39 @@ note = "matrix includes a release-profile macOS leg (macos-latest, aarch64 on Gi
 reference_repo = ""
 
 [G6]
-status = "missing"
-note = "LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the toolchain-plus-version staleness guard this gate specifically requires was not individually confirmed"
+status = "fail-known"
+evidence = ["alice-lol/src/law_id.rs:108 LOL_SEMANTICS_ID (32 bytes, a hex literal) and :79 LOL_SEMANTICS_PINS (alice-det-math's SEMANTICS_ID plus 4 behaviour digests)", "alice-lol/src/geometry_id.rs:418 LOL_GEOMETRY_SEMANTICS_ID and :382 LOL_GEOMETRY_SEMANTICS_PINS (the SdfNode evaluation's identifier, folding alice-det-math's SEMANTICS_ID and digests that call alice_sdf::eval)", "alice-lol/tests/law_id_oracle.rs the_semantics_identifier_is_the_fold_of_its_pins, the_audit_order_pin_is_the_measured_behaviour, typing_the_inputs_moved_the_identifier", "alice-lol/tests/geometry_id_oracle.rs every_pin_matches_its_live_behaviour_digest, the_pins_fold_to_the_exported_identifier"]
+mutant = "changed one byte of the audit-order pin in LOL_SEMANTICS_PINS: 5 of 29 tests in law_id_oracle.rs failed, among them the fold test and the measured-behaviour test (measured, reverted)"
+since = ""
+note = "unmet: (1) with the physics feature on, constraint verdicts run alice_physics::transient_thermal (alice-lol/src/law.rs:2136), but neither identifier folds alice-physics' own PHYSICS_SEMANTICS_ID (ALICE-Physics src/semantics.rs:191), so a change in that arithmetic does not move LOL's identifier; alice-sdf and alice-zip only re-export alice-det-math's SEMANTICS_ID, which is folded. (2) the tie to version and toolchain is partial: alice-det-math's version and the rustc version are pinned by tests for the quat_from_euler_xyz oracle table only (alice-lol/src/angle.rs oracle_table_pinned_version_matches_resolved_det_math / _rustc), not for the identifiers themselves. The constant, its fold test and the pin-change test exist and the mutant above turns them red"
 reference_repo = ""
 
 [G7]
-status = "missing"
-note = "not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were not surveyed for this gate"
+status = "n/a"
+evidence = ["the boundary list is empty: git ls-files '*.rs' (outside fuzz/, tools/ and the clippy canary) grepped for extern \"C\", no_mangle, wasm_bindgen, #[pyfunction] / #[pymethods] / #[pyclass] and dyn Any finds nothing; no build.rs is tracked; the one proc-macro crate, alice-lol-macro, depends only on syn, quote and proc-macro2 and calls no Law function", "alice-lol's public readers (law_input.rs parse / read, research_law.rs parse) read LOL text and measurement JSON a caller supplies, not another Law-bearing crate's output; alice-lol takes alice-sdf, alice-zip and alice-physics values in memory as their concrete Rust types, which G7 exempts"]
+mutant = "adding a #[no_mangle] pub extern \"C\" fn to alice-lol/src/lib.rs makes the same grep list it"
+since = ""
+note = "the survey is a manual grep run for this entry, not a CI step; G7's completeness part is an audit. The durable LOL text the crate writes and reads back (emit::to_lol) is G8's question, not G7's"
 reference_repo = ""
 
 [G8]
-status = "missing"
-note = "geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's in-process one (rather than the same identifier serving both roles) was not confirmed"
+status = "fail-known"
+evidence = ["writers of durable forms: alice-lol/src/emit.rs:132 to_lol and :793 (the .lol text, read back by the parser); alice-lol/src/print_export.rs node_to_stl / node_to_3mf / lol_to_stl / lol_to_3mf and the dual-contouring variants (meshes for a printer, not read back by this crate)"]
+since = ""
+note = "unmet: the emitted .lol text carries no identifier of what its numbers mean (LOL_GEOMETRY_SEMANTICS_ID is not written, and the parser compares nothing), so a .lol file written before an evaluation change is read back under the new meaning without notice. The STL and 3MF exports are not read back by this crate; whether a mesh for printing counts as a durable Law-bearing form is not decided here"
 reference_repo = ""
 
 [G9]
-status = "missing"
-note = "not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) was not audited against this gate's definition"
+status = "fail-known"
+evidence = ["git log -S / -G over the identifier literals: LOL_SEMANTICS_ID first appears in 2251e84, and the hex literals of law_id.rs (its pins and the identifier) changed in 9 later commits up to 55bfd77; LOL_GEOMETRY_SEMANTICS_ID first appears in f143396 and moved in ae2b75c; every one of these commits lies between the tags alice-lol-v0.3.0 and alice-lol-v0.4.0, so both identifiers first shipped in 0.4.0 and neither has moved across a release"]
+since = ""
+note = "unmet because G8 is: there is no persisted identifier yet for this history audit to attest. The in-process identifiers have not moved across a release, so there is no past move to classify as a meaning change or a cross-architecture fix"
 reference_repo = ""
 
 [G10]
 status = "pass"
 evidence = [".github/clippy-lib/clippy.toml (generated by scripts/clippy_lib_gate.py): std::time::SystemTime::now / std::time::Instant::now are disallowed methods in the library pass of every workspace member (alice-lol --lib; the other members --lib --bins --examples), and rand::thread_rng / rand::rng / rand::random / getrandom::getrandom / getrandom::fill / uuid::Uuid::new_v4 / uuid::Uuid::now_v7 stand ready with allow-invalid (none of those crates is a dependency today)", "scripts/clippy-lib-canary (both wall-clock forms must be flagged; scripts/clippy_lib_gate.py fails on a missing diagnostic or on 0 diagnostics) + scripts/test_clippy_lib_gate.py", "scripts/disallowed_methods_allow_reasons.py: the one exemption prefix for a wall-clock read, timing-display:, is accepted only under src/bin/ (an elapsed time printed for the operator), never in library code"]
+mutant = "added std::time::SystemTime::now() to alice-lol/src/lib.rs: the clippy-lib pass for alice-lol --lib --all-features reported it as disallowed and exited 101 (measured, reverted)"
 since = ""
 note = "the one existing wall-clock read in scanned code is alice-lol-datagen's bin printing its elapsed time (timing-display:); removing that allow turns the library clippy pass red (measured). alice-lol's own examples, tests and benches keep the root configuration, as for the max/min ban"
 reference_repo = ""
@@ -93,6 +106,7 @@ reference_repo = ""
 [G14]
 status = "pass"
 evidence = ["scripts/float_build_flags.py + scripts/test_float_build_flags.py: every tracked file that can carry build flags (each Cargo.toml, .cargo/config, rust-toolchain, build.rs, .github/workflows/*, scripts/preflight.sh) is read, and target-cpu=native or a fast-math-style flag fails; 0 files read fails; run in CI (docs job) and preflight", "alice-lol/tests/float_environment.rs: round-to-nearest ties-to-even (f32 / f64 addition, a value just off the tie, f64 to f32 narrowing, a subnormal tie) and no flush-to-zero / denormals-are-zero (subnormal results, inputs and gradual underflow), each operand through black_box so the target's own unit computes it, with exact bit patterns as the oracle; the test suite runs it on every CI target, and it passes in release as well as debug"]
+mutant = "added RUSTFLAGS: -C target-cpu=native to the workflow env of .github/workflows/ci.yml: scripts/float_build_flags.py reported it and exited 1 (measured, reverted); rewriting tests/float_environment.rs's expectations to round-toward-zero or flush-to-zero turns that test red (measured)"
 since = ""
 note = "the doc comments of angle.rs and geometry_id.rs that assumed this environment are now backed by the test; rewriting the test's expectations to round-toward-zero or flush-to-zero turns it red (measured)"
 reference_repo = ""
