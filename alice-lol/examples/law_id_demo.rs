@@ -86,6 +86,9 @@ fn main() -> Result<(), ParseError> {
     println!("  この世代     {}", short(&law.law_id(&LOL_SEMANTICS_ID)));
     println!("  別の世代     {}", short(&law.law_id(&OTHER_SEMANTICS)));
 
+    println!("\n=== 研究 Law も主張で名前が決まる ===");
+    research_law_ids();
+
     println!("\n=== 下流が自分の種類の Law に名前を付ける時 ===");
     // 値ごとに型と長さを書くので、連結が曖昧にならない
     let built = LawIdHasher::new(AUDIT_LAW_KIND, &LOL_SEMANTICS_ID)
@@ -107,4 +110,49 @@ fn main() -> Result<(), ParseError> {
     println!("  ⚠️ 同じ 1 でも型が違えば別の名前になる (連結の曖昧さを塞いでいる)");
 
     Ok(())
+}
+
+/// 研究 Law の識別子: 式の書き方 (空白・括弧) では変わらず、値や単位の文字列で変わり、
+/// 主張を支えるだけのもの (parameter の不確かさ) では変わらない
+fn research_law_ids() {
+    use alice_lol::research_law::{Param, ResearchLaw, Var};
+    use alice_zip::law::{Provenance, ValidRange};
+    let gas = |expr: &str, r_unc: f64, v_unit: &str| {
+        ResearchLaw::new(
+            "ideal gas",
+            expr,
+            Var::new("P", "Pa"),
+            &[
+                Var::new("n", "mol"),
+                Var::new("T", "K"),
+                Var::new("V", v_unit),
+            ],
+            &[Param::new("R", 8.314_462_618, r_unc, "J/(mol*K)")],
+            &[(
+                "T",
+                ValidRange {
+                    lo: 1.0,
+                    hi: 2000.0,
+                },
+            )],
+            Provenance::new("closed form", "stated"),
+        )
+        .expect("a valid law")
+    };
+    let base = gas("n*R*T/V", 0.0, "m^3");
+    for (label, law) in [
+        ("そのもの", gas("n*R*T/V", 0.0, "m^3")),
+        ("空白と括弧", gas("((n*R)*T) / V", 0.0, "m^3")),
+        ("不確かさだけ", gas("n*R*T/V", 0.5, "m^3")),
+        ("単位の書き方", gas("n*R*T/V", 0.0, "m*m*m")),
+        ("掛ける順序", gas("R*n*T/V", 0.0, "m^3")),
+    ] {
+        let id = law.law_id(&LOL_SEMANTICS_ID);
+        let same = if id == base.law_id(&LOL_SEMANTICS_ID) {
+            "同じ"
+        } else {
+            "別"
+        };
+        println!("  {label:<10} {} ({same})", short(&id));
+    }
 }

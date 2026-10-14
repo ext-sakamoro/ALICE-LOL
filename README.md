@@ -240,8 +240,15 @@ computed from behaviour (`audit_verdict_order_fingerprint`,
 `law_input::derivation_fingerprint`) rather than written down, so changing
 the order in which verdicts are reached, or how a request's inputs are read,
 makes a pin disagree. An audit law's identifier also covers the type of each
-`x-input` line (`law_input::audit_law_from_file`). Research laws do not have
-an identifier yet; `SdfNode` evaluation has its own, separate one (below).
+`x-input` line (`law_input::audit_law_from_file`). `ResearchLaw::law_id` names a
+research law by its claim: the name, the expression's tree (spacing and redundant
+parentheses do not matter; operand order, grouping and literal bits do), the
+output and inputs with their unit texts, the parameter values and each input's
+valid range. Observations, the residual, provenance, oracle cases and a
+parameter's uncertainty only support the claim and are left out (evaluation
+does not read an uncertainty). Unit texts are compared as written, so `m^3` and
+`m*m*m` are different laws until unit parsing is pinned. `SdfNode` evaluation
+has its own, separate identifier (below).
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs); oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs).

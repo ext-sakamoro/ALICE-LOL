@@ -642,6 +642,33 @@ enum Node {
     Call(Func, Vec<Self>),
 }
 
+/// The expression tree in preorder for [`ResearchLaw::law_id`] (the tags are part of every
+/// research law's identifier: never renumber them)
+fn hash_node(h: crate::law_id::LawIdHasher, node: &Node) -> crate::law_id::LawIdHasher {
+    match node {
+        Node::Num(v) => h.u32(0).f64(*v),
+        Node::Ident(name) => h.u32(1).str(name),
+        Node::Neg(a) => hash_node(h.u32(2), a),
+        Node::Bin(op, a, b) => {
+            let code = match op {
+                BinOp::Add => 0,
+                BinOp::Sub => 1,
+                BinOp::Mul => 2,
+                BinOp::Div => 3,
+            };
+            hash_node(hash_node(h.u32(3).u32(code), a), b)
+        }
+        Node::Pow(a, p) => hash_node(h.u32(4), a).f64(*p),
+        Node::Call(f, args) => {
+            let mut h = h.u32(5).str(f.name()).u64(args.len() as u64);
+            for a in args {
+                h = hash_node(h, a);
+            }
+            h
+        }
+    }
+}
+
 /// Expression tree with identifiers resolved to input / parameter slots
 #[derive(Debug, Clone, PartialEq)]
 enum Code {
@@ -1571,6 +1598,49 @@ impl ResearchLaw {
     #[must_use]
     pub fn evidence(&self) -> &[Observation] {
         &self.evidence
+    }
+
+    /// The identifier of this law under the arithmetic generation `semantics_id`
+    ///
+    /// The identity is the claim: the name, the expression's tree (spacing and redundant
+    /// parentheses do not matter; operand order, grouping and literal bits do), the output
+    /// and inputs with their unit texts, the parameter values with their unit texts, and
+    /// each input's valid range. What only records support for the claim is left out: the
+    /// observations, the residual, the provenance, the oracle cases and the parameters'
+    /// uncertainties (evaluation does not read an uncertainty; if it ever does, the
+    /// uncertainty belongs in the identifier, and `tests/research_law_id_oracle.rs`
+    /// fails until it is moved in). Unit texts are compared as written: `m^3` and `m*m*m`
+    /// give different identifiers until unit parsing is pinned in
+    /// [`LOL_SEMANTICS_PINS`](crate::law_id::LOL_SEMANTICS_PINS).
+    ///
+    /// The layout (after [`RESEARCH_LAW_KIND`](crate::law_id::RESEARCH_LAW_KIND) and
+    /// `semantics_id`): name; the tree in preorder, each node a u32 tag (0 number + its
+    /// f64 bits, 1 identifier + name, 2 negation, 3 binary + u32 operator 0 add / 1 sub /
+    /// 2 mul / 3 div, 4 power + exponent bits after the base, 5 call + function name +
+    /// u64 argument count); output name and unit; u64 input count, each name and unit;
+    /// u64 parameter count, each name, value bits and unit; per input u32 0 (no range) or
+    /// u32 1 + the bounds' bits
+    #[must_use]
+    pub fn law_id(&self, semantics_id: &[u8; 32]) -> [u8; 32] {
+        use crate::law_id::{LawIdHasher, RESEARCH_LAW_KIND};
+        let mut h = LawIdHasher::new(RESEARCH_LAW_KIND, semantics_id).str(&self.name);
+        h = hash_node(h, &self.expr.root);
+        h = h.str(&self.output.name).str(&self.output.unit);
+        h = h.u64(self.inputs.len() as u64);
+        for v in &self.inputs {
+            h = h.str(&v.name).str(&v.unit);
+        }
+        h = h.u64(self.params.len() as u64);
+        for p in &self.params {
+            h = h.str(&p.name).f64(p.value).str(&p.unit);
+        }
+        for range in &self.validity {
+            h = match range {
+                None => h.u32(0),
+                Some(r) => h.u32(1).f64(r.lo).f64(r.hi),
+            };
+        }
+        h.finish()
     }
 
     /// Residual measured over [`Self::evidence`] (zero points when there is none)

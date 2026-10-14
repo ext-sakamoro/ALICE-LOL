@@ -60,6 +60,9 @@ pub use alice_zip::law::LAW_ID_DOMAIN;
 /// 監査の Law の種類 tag
 pub const AUDIT_LAW_KIND: &[u8] = b"lol.law.audit";
 
+/// 研究の Law の種類 tag ([`ResearchLaw::law_id`](crate::research_law::ResearchLaw::law_id))
+pub const RESEARCH_LAW_KIND: &[u8] = b"lol.law.research/v1";
+
 /// 値の型 tag `u32 5` と `u64 5` を分けるために、長さの前に 1 byte 書く
 mod tag {
     pub const BYTES: u8 = 1;

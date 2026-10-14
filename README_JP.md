@@ -224,8 +224,12 @@ NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol
 `research_law::expression_functions_fingerprint`、
 `law_input::derivation_fingerprint`) ので、判定の順序や request の入力の読み方を
 変えると pin が合わなくなる 監査の Law の識別子は `x-input` の行の型も含む
-(`law_input::audit_law_from_file`) 研究 Law の識別子はまだ無い `SdfNode` の評価には
-別の識別子がある (下記)
+(`law_input::audit_law_from_file`) `ResearchLaw::law_id` は研究 Law を主張で名付ける:
+名前、式の木 (空白と余分な括弧では変わらず、項の順序・括り方・数値の bit で変わる)、
+出力と入力とその単位の文字列、parameter の値、入力ごとの有効範囲 観測・残差・来歴・
+oracle の case・parameter の不確かさは主張を支えるだけなので含めない (評価は不確かさを
+読まない) 単位の文字列は書いた通りに比べるので、単位の読み方が pin されるまで `m^3` と
+`m*m*m` は別の Law になる `SdfNode` の評価には別の識別子がある (下記)
 
 Example: [`law_id_demo`](alice-lol/examples/law_id_demo.rs)、oracle:
 [`alice-lol/tests/law_id_oracle.rs`](alice-lol/tests/law_id_oracle.rs)
