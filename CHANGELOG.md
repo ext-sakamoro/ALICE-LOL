@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-14
+
 ### Added
 
 - `ResearchLaw::law_id(&semantics_id)` と `law_id::RESEARCH_LAW_KIND` (`lol.law.research/v1`): 研究 Law の識別子 これまで識別子を持つのは監査 Law だけだった 主張 (名前、式の木、出力と入力とその単位の文字列、parameter の値、入力ごとの有効範囲) と算術の世代から決まり、空白と余分な括弧では変わらず、項の順序・括り方・数値の bit で変わる 観測・残差・来歴・oracle の case・parameter の不確かさは含めない (評価が不確かさを読まないことを試験で固定し、読むようになれば試験が失敗する) 単位の文字列は書いた通りに比べる 既存の識別子 (`LOL_SEMANTICS_ID`、監査 Law の識別子) は変わらない 試験 `alice-lol/tests/research_law_id_oracle.rs` (仕様から組み立てた期待値と記録した値を、理想気体の Law とすべての node の種類を使う Law の 2 つで)、例 `law_id_demo`
@@ -1427,6 +1429,7 @@ Ships with:
   guilloche / turing etc.), `pruned_compile` (interval-based space
   culling), `roblox_export` (behind the `roblox` feature).
 
-[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.0...HEAD
+[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.1...HEAD
+[0.4.1]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.0...alice-lol-v0.4.1
 [0.4.0]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.3.0...alice-lol-v0.4.0
 [0.3.0]: https://github.com/ext-sakamoro/ALICE-LOL/releases/tag/alice-lol-v0.3.0
