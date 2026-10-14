@@ -679,6 +679,10 @@ jobs:
         run: |
           python scripts/test_root_artifacts.py
           python scripts/root_artifacts.py
+      - name: float-build-flags (検査器の試験 + 浮動小数点の意味を変える build flag が build 設定に無い、ALICE-Law G14)
+        run: |
+          python scripts/test_float_build_flags.py
+          python scripts/float_build_flags.py
       - name: license-check oracle (検査器自身の試験)
         run: python scripts/test_license_check.py
       - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `alice-lol/tests/float_environment.rs`: 実行時の浮動小数点の環境 (IEEE 754 の round-to-nearest ties-to-even と、subnormal を 0 に潰さない (FTZ / DAZ でない)) を試験で確かめる (ALICE-Law G14) f32 / f64 の加算の tie、tie の少し外、f64 から f32 への縮小、subnormal の tie、subnormal の結果・入力・gradual underflow を、各被演算子を `black_box` に通して target 自身の演算で計算し、正確な bit 列と比べる debug と release の両方で通り、期待値を切り捨てや FTZ の結果に書き換えると失敗する `scripts/float_build_flags.py` (試験 `scripts/test_float_build_flags.py`) が build の flag を載せうる追跡 file に `target-cpu=native` や fast-math 系の flag が無いことを検査し (読んだ file が 0 なら失敗)、CI (docs job) と preflight で走る `alice-law-conformance.toml` の `[G14]` を pass にした
+
 ### Changed
 
 - CI: library の clippy pass (`.github/clippy-lib/clippy.toml`、`scripts/clippy_lib_gate.py` が生成) で壁時計の読み取り (`std::time::SystemTime::now` / `std::time::Instant::now`) を禁じた (ALICE-Law G10: 出力が実行ごとに変わる材料を持ち込まない) 無種の乱数と新しい UUID (`rand::thread_rng` / `rand::rng` / `rand::random` / `getrandom::getrandom` / `getrandom::fill` / `uuid::Uuid::new_v4` / `uuid::Uuid::now_v7`) も、今は依存に無いので `allow-invalid` 付きで載せた canary に壁時計の 2 形を足し、両方の診断が無ければ失敗する 例外の prefix `timing-display:` (操作者に表示するだけの経過時間) は `src/bin/` の下でしか名乗れない (`scripts/disallowed_methods_allow_reasons.py`) `alice-lol-datagen` の bin の 1 箇所がこれに当たる `alice-law-conformance.toml` の `[G10]` を pass にした
