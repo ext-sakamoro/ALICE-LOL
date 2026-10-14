@@ -36,8 +36,8 @@ bad=0
 run() {
   local label=$1 expect=$2; shift 2
   local log="$tmp/$label.log" rc=0
-  env "$@" python3 "$here/run_conformance.py" --corpus "$tmp/corpus.json" --show 1 \
-    -- python3 "$here/ref_impl.py" > "$log" 2>&1 || rc=$?
+  env "$@" "$PYTHON" "$here/run_conformance.py" --corpus "$tmp/corpus.json" --show 1 \
+    -- "$PYTHON" "$here/ref_impl.py" > "$log" 2>&1 || rc=$?
   local passed failed kfail
   passed=$(awk '$1 == "TOTAL" {print $2}' "$log")
   failed=$(awk '$1 == "TOTAL" {print $3 + $4}' "$log")
