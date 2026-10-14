@@ -81,7 +81,7 @@ use crate::angle::{
     ROTATION_AXIS_PROBE_TABLE,
 };
 use crate::emit::{fmt_f32, FMT_F32_FIDELITY_PROBE_VALUES};
-use crate::law_id::hex32;
+use crate::law_id::{hex32, same32};
 use crate::limits::{
     checked_rotation_quat, checked_tpms_fields, ROTATION_QUAT_BOUNDARY_PROBE_INPUTS,
     TPMS_VALIDITY_PROBE_INPUTS,
@@ -413,10 +413,56 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
 ];
 
-/// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
+/// alice-det-math の世代ごとの [`LOL_GEOMETRY_SEMANTICS_ID`] `(alice-det-math の SEMANTICS_ID, その下での fold)`
+///
+/// [`crate::law_id::LOL_SEMANTICS_BY_DET_MATH`] と同じ理由・同じ形: 最初の pin が解決された
+/// alice-det-math の識別子なので、定数 1 つではどちらかの版で fold と一致しなくなる 各行が
+/// その識別子に差し替えた pin の fold であることは `tests/geometry_semantics_per_det_math.rs`
+/// が検査する
+pub const LOL_GEOMETRY_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
+    // alice-det-math 0.5.0
+    (
+        hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000"),
+        hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d"),
+    ),
+    // alice-det-math 0.5.1
+    (
+        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("d1cbba69a1b33ce7363ac178f16ad0cb062699ff8c9c76af7058c6d006bc8a24"),
+    ),
+];
+
+/// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold (build した alice-det-math の行)
 /// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d");
+    geometry_semantics_id_for(&alice_det_math::SEMANTICS_ID);
+
+/// alice-det-math の識別子に対応する [`LOL_GEOMETRY_SEMANTICS_ID`]
+///
+/// # Panics
+///
+/// [`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`] に行が無い時 (const 文脈では compile 時に止まる)
+#[must_use]
+pub const fn geometry_semantics_id_for(det_math: &[u8; 32]) -> [u8; 32] {
+    let mut i = 0;
+    while i < LOL_GEOMETRY_SEMANTICS_BY_DET_MATH.len() {
+        if same32(&LOL_GEOMETRY_SEMANTICS_BY_DET_MATH[i].0, det_math) {
+            return LOL_GEOMETRY_SEMANTICS_BY_DET_MATH[i].1;
+        }
+        i += 1;
+    }
+    panic!("alice-det-math SEMANTICS_ID has no row in LOL_GEOMETRY_SEMANTICS_BY_DET_MATH: add its fold");
+}
+
+/// `id` がこの crate の知っている alice-det-math の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] なら、
+/// その alice-det-math の識別子
+#[must_use]
+pub fn known_geometry_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
+    LOL_GEOMETRY_SEMANTICS_BY_DET_MATH
+        .iter()
+        .find(|(_, g)| g == id)
+        .map(|(det_math, _)| *det_math)
+}
 
 #[cfg(test)]
 mod tests {

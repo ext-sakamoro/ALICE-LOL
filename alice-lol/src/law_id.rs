@@ -104,9 +104,72 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
 ];
 
-/// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
-pub const LOL_SEMANTICS_ID: [u8; 32] =
-    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421");
+/// alice-det-math の世代ごとの [`LOL_SEMANTICS_ID`] `(alice-det-math の SEMANTICS_ID, その下での fold)`
+///
+/// ⚠️ [`LOL_SEMANTICS_PINS`] の最初の pin は解決された alice-det-math の識別子なので、
+/// alice-det-math の版が動くと fold も動く (0.5.0 → 0.5.1 で `max` / `min` が増え識別子が
+/// 変わった) 定数 1 つでは、どちらかの版で一致しなくなる ⇒ 世代ごとに記録し、build した
+/// alice-det-math の行を [`LOL_SEMANTICS_ID`] にする 前の世代の行は残す (その世代で作った
+/// 識別子を [`known_semantics_id`] で読めるように)
+///
+/// 各行が「その alice-det-math の識別子に差し替えた pin の fold」であることは oracle が
+/// 検査する (`tests/semantics_id_per_det_math.rs`) alice-det-math が新しい識別子になったら
+/// 行を足す (足さないと compile 時に止まる)
+pub const LOL_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
+    // alice-det-math 0.5.0
+    (
+        hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000"),
+        hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421"),
+    ),
+    // alice-det-math 0.5.1 (`max` / `min` / `max64` / `min64` を追加)
+    (
+        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
+        hex32("d81c2cbbf7f010b7b3368c461d0a4ba60345fae302e9991fbd992d35dc3a7002"),
+    ),
+];
+
+/// [`LOL_SEMANTICS_PINS`] の fold (build した alice-det-math の行) ⚠️ 定数と fold の一致は
+/// oracle が検査する
+pub const LOL_SEMANTICS_ID: [u8; 32] = semantics_id_for(&alice_det_math::SEMANTICS_ID);
+
+/// alice-det-math の識別子に対応する [`LOL_SEMANTICS_ID`]
+///
+/// # Panics
+///
+/// [`LOL_SEMANTICS_BY_DET_MATH`] に行が無い時 (const 文脈では compile 時に止まる) 新しい
+/// alice-det-math の識別子には、その fold を行として足す
+#[must_use]
+pub const fn semantics_id_for(det_math: &[u8; 32]) -> [u8; 32] {
+    let mut i = 0;
+    while i < LOL_SEMANTICS_BY_DET_MATH.len() {
+        if same32(&LOL_SEMANTICS_BY_DET_MATH[i].0, det_math) {
+            return LOL_SEMANTICS_BY_DET_MATH[i].1;
+        }
+        i += 1;
+    }
+    panic!("alice-det-math SEMANTICS_ID has no row in LOL_SEMANTICS_BY_DET_MATH: add its fold");
+}
+
+/// `id` がこの crate の知っている alice-det-math の世代の [`LOL_SEMANTICS_ID`] なら、その
+/// alice-det-math の識別子 (前の世代で作った識別子を見分けるため)
+#[must_use]
+pub fn known_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
+    LOL_SEMANTICS_BY_DET_MATH
+        .iter()
+        .find(|(_, lol)| lol == id)
+        .map(|(det_math, _)| *det_math)
+}
+
+pub(crate) const fn same32(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    let mut i = 0;
+    while i < 32 {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)
 ///

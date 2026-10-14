@@ -1,0 +1,95 @@
+//! `LOL_SEMANTICS_ID` follows the alice-det-math it is built with
+//!
+//! The first pin of `LOL_SEMANTICS_PINS` is `alice_det_math::SEMANTICS_ID`, so the fold of the
+//! pins moves when the resolved alice-det-math moves (0.5.0 → 0.5.1 added `max` / `min` and
+//! changed its identifier). A single recorded constant then fails against one of them. The
+//! identifier is therefore recorded once per alice-det-math generation, the constant is the
+//! row of the linked one, and an identifier of a known earlier generation stays recognised.
+//!
+//! oracle: each row is checked against the definition (the fold of the pins with the
+//! alice-det-math pin set to that row's identifier), which needs no second build; the 0.5.0
+//! row is also checked against the values recorded before this change (literal)
+
+use alice_lol::law_id::{
+    fold_semantics_pins, hex32, known_semantics_id, LOL_SEMANTICS_BY_DET_MATH, LOL_SEMANTICS_ID,
+    LOL_SEMANTICS_PINS,
+};
+
+/// the pins as they are under another alice-det-math identifier
+fn pins_under(det_math: [u8; 32]) -> Vec<(&'static str, [u8; 32])> {
+    let pins: Vec<_> = LOL_SEMANTICS_PINS
+        .iter()
+        .map(|&(name, id)| {
+            if name == "alice-det-math" {
+                (name, det_math)
+            } else {
+                (name, id)
+            }
+        })
+        .collect();
+    assert_eq!(
+        pins.iter().filter(|(n, _)| *n == "alice-det-math").count(),
+        1,
+        "the alice-det-math pin is there exactly once"
+    );
+    pins
+}
+
+#[test]
+fn every_row_is_the_fold_of_the_pins_under_its_det_math() {
+    assert!(
+        LOL_SEMANTICS_BY_DET_MATH.len() >= 2,
+        "the table compares nothing"
+    );
+    for (det_math, lol) in LOL_SEMANTICS_BY_DET_MATH {
+        assert_eq!(fold_semantics_pins(&pins_under(*det_math)), *lol);
+    }
+}
+
+#[test]
+fn the_constant_is_the_row_of_the_linked_det_math() {
+    let row = LOL_SEMANTICS_BY_DET_MATH
+        .iter()
+        .find(|(d, _)| *d == alice_det_math::SEMANTICS_ID)
+        .expect("the linked alice-det-math has a row");
+    assert_eq!(LOL_SEMANTICS_ID, row.1);
+    assert_eq!(LOL_SEMANTICS_ID, fold_semantics_pins(LOL_SEMANTICS_PINS));
+}
+
+#[test]
+fn the_rows_are_distinct() {
+    for (i, a) in LOL_SEMANTICS_BY_DET_MATH.iter().enumerate() {
+        for b in &LOL_SEMANTICS_BY_DET_MATH[i + 1..] {
+            assert_ne!(a.0, b.0, "an alice-det-math identifier has two rows");
+            assert_ne!(
+                a.1, b.1,
+                "two alice-det-math generations give the same LOL identifier"
+            );
+        }
+    }
+}
+
+// recorded before the table existed: alice-det-math 0.5.0 and the LOL constant under it
+const DET_MATH_0_5_0: [u8; 32] =
+    hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000");
+const LOL_UNDER_0_5_0: [u8; 32] =
+    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421");
+
+#[test]
+fn the_0_5_0_row_is_the_identifier_recorded_before() {
+    assert!(LOL_SEMANTICS_BY_DET_MATH.contains(&(DET_MATH_0_5_0, LOL_UNDER_0_5_0)));
+}
+
+#[test]
+fn an_identifier_of_a_known_generation_is_recognised() {
+    for (det_math, lol) in LOL_SEMANTICS_BY_DET_MATH {
+        assert_eq!(known_semantics_id(lol), Some(*det_math));
+    }
+    assert_eq!(known_semantics_id(&LOL_UNDER_0_5_0), Some(DET_MATH_0_5_0));
+    assert_eq!(known_semantics_id(&[0_u8; 32]), None);
+    assert_eq!(
+        known_semantics_id(&DET_MATH_0_5_0),
+        None,
+        "a det-math id is not a LOL id"
+    );
+}

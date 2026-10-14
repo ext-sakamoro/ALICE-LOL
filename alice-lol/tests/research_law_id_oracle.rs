@@ -67,6 +67,15 @@ fn id(l: &ResearchLaw) -> [u8; 32] {
     l.law_id(&LOL_SEMANTICS_ID)
 }
 
+/// the semantics identifier the recorded values below were computed under (LOL under
+/// alice-det-math 0.5.0): a recorded value pins the serialization, so it is compared under the
+/// generation it was recorded in, whatever alice-det-math this build links
+const fn recorded_semantics() -> [u8; 32] {
+    alice_lol::law_id::semantics_id_for(&alice_lol::law_id::hex32(
+        "135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000",
+    ))
+}
+
 /// `n*R*T/V` parses left-associatively: ((n * R) * T) / V
 fn expected_gas_id(semantics: &[u8; 32]) -> [u8; 32] {
     let ident = |h: LawIdHasher, s: &str| h.u32(1).str(s);
@@ -161,15 +170,14 @@ fn every_node_kind_is_the_specified_serialization() {
 
 #[test]
 fn the_recorded_value_for_the_all_nodes_law_does_not_drift() {
-    let hex =
-        all_nodes(ALL_NODES)
-            .law_id(&LOL_SEMANTICS_ID)
-            .iter()
-            .fold(String::new(), |mut s, b| {
-                use std::fmt::Write as _;
-                let _ = write!(s, "{b:02x}");
-                s
-            });
+    let hex = all_nodes(ALL_NODES)
+        .law_id(&recorded_semantics())
+        .iter()
+        .fold(String::new(), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
     assert_eq!(hex, RECORDED_ALL_NODES_ID);
 }
 
@@ -218,11 +226,14 @@ fn the_identifier_is_the_specified_serialization() {
 fn the_recorded_value_for_the_example_law_does_not_drift() {
     // recorded once from the specification above (expected_gas_id), never edited to make a
     // test pass: a change here is a change of every research law's identifier
-    let hex = id(&gas()).iter().fold(String::new(), |mut s, b| {
-        use std::fmt::Write as _;
-        let _ = write!(s, "{b:02x}");
-        s
-    });
+    let hex = gas()
+        .law_id(&recorded_semantics())
+        .iter()
+        .fold(String::new(), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
     assert_eq!(hex, RECORDED_GAS_ID);
 }
 

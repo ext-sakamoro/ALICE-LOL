@@ -9,8 +9,8 @@
 
 use alice_lol::audit_law::AuditLaw;
 use alice_lol::law_id::{
-    audit_verdict_order_fingerprint, fold_semantics_pins, LawIdHasher, AUDIT_LAW_KIND,
-    LOL_SEMANTICS_ID, LOL_SEMANTICS_PINS,
+    audit_verdict_order_fingerprint, fold_semantics_pins, known_semantics_id, LawIdHasher,
+    AUDIT_LAW_KIND, LOL_SEMANTICS_BY_DET_MATH, LOL_SEMANTICS_ID, LOL_SEMANTICS_PINS,
 };
 use alice_lol::runtime_parser::{parse_law, ParseError};
 
@@ -45,6 +45,19 @@ fn main() -> Result<(), ParseError> {
     }
     println!("  fold = {}", hex(&fold_semantics_pins(LOL_SEMANTICS_PINS)));
     println!("  宣言 = {}", hex(&LOL_SEMANTICS_ID));
+    // alice-det-math の世代ごとの識別子 (前の世代で作った識別子もどの世代のものか分かる)
+    for (det_math, lol) in LOL_SEMANTICS_BY_DET_MATH {
+        let linked = if *lol == LOL_SEMANTICS_ID {
+            " (build した alice-det-math)"
+        } else {
+            ""
+        };
+        println!("  alice-det-math {} -> {}{linked}", hex(det_math), hex(lol));
+    }
+    match known_semantics_id(&LOL_SEMANTICS_ID) {
+        Some(det_math) => println!("  宣言は alice-det-math {} の世代", hex(&det_math)),
+        None => println!("  宣言はどの世代の表にも無い"),
+    }
     println!(
         "  判定順序を今ここで測り直した指紋 = {}",
         hex(&audit_verdict_order_fingerprint())

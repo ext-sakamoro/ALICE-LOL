@@ -10,12 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - 印刷用の program が export の解像度で解けているかの検査 (`alice-lol/tests/doc_programs.rs`): export を既定の解像度 R と 1.5R で作り、Euler 標数と分かれた殻の数が同じなら解けているとする (格子より薄い壁や支柱は解像度で形が変わる) oracle: 球と箱は解ける / 既定の箱 ±2 (128 で cell 0.031) で厚さ 0.03 の殻 (`onion(0.015, sphere(1.0))`) は解けない (128 で Euler 標数 −2036・殻 21、192 で 4・2) / 厚さ 0.06 (`onion(0.03, …)`) は解ける 文書の印刷用の例 33 個のうち 10 個 (`onion` / `*_infill` の構造の例) は解けておらず、一覧に固定して警告として出す 一覧に無い例が解けなくなる・一覧の例が解けるようになる、のどちらでも失敗する (例は parameter か解像度の方針で直し、検査は弱めない) 2 回の export で release の実行時間は約 15 秒から約 210 秒になる
-
 - 文書に載っている LOL の program を取り出して走らせる試験 `alice-lol/tests/doc_programs.rs` 追跡されている `*.md` (CHANGELOG を除く) の fence のうち info string が `lol print` / `lol render` / `lol fragment` のものを読む `print` は parse でき、有界な立体 1 つで (内側の点があり、外側だけで囲める箱がある)、`print_export::node_to_mesh` が既定の解像度で閉じた mesh (境界 edge 0 / 非多様体 edge 0) を 100 万三角形以下で出す `render` は parse できる `print` / `render` は `//` の comment を持たない `llm-bridge` 付きでは文法 (`lol.gbnf`) が受理することも見る `fragment` (数の代わりに名前を使う雛形など) は走らせない 1 件も比べなければ失敗する export の検査は debug build では数分かかるので test matrix では ignore し、CI の `doc-programs` job (ubuntu、release、`scripts/cargo_test_nonzero.sh`) と `scripts/preflight.sh` で走らせる 取り出し・parse・文法の検査は全 OS の test で走る 印の無い fence で最初の呼び出しが construct の名前のものは警告 (次の変更で失敗にする) 単位と印刷可能性 (肉厚・大きさ・overhang) はまだ言語の定義に無いので見ない
 
 ### Changed
 
 - 文法 `alice-lol/lol.gbnf` (と配布用の写し) を言語の定義から生成するようにした 定義は `alice-lol/language/constructs.toml` (construct 1 つにつき 1 行: 名前と、それを受け付ける文法の rule) と `alice-lol/language/lol.gbnf.in` (説明と固定の rule、名前の一覧の場所を `@names <rule>@` で示す)、生成は `python3 scripts/gen_gbnf.py` (書く先は正典と、追跡されている他の `lol.gbnf` すべて)、`--check` が生成結果と 2 つの file を比べる 行が 0 件・名前の重複・場所の無い rule・行の無い場所・template の `intent_*` rule が行と違う名前を綴る時は失敗する 検査器の試験 `scripts/test_gen_gbnf.py` CI (wiring-guard job) と preflight で走る 文法そのものは変わっていない (alice-llm の `parse_gbnf` で読んだ `Grammar` が変更前と等しい) 名前の一覧の配置は 1 行 1 名に揃えた
+- `alice-lol` の版を 0.4.2 にし、workspace の他の crate の要求も 0.4.2 にした (公開済みの 0.4.1 と src が違う、足したのは公開 API の追加だけ)
 
 ### Fixed
 
@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mesh の修復の説明が古かった (`MeshRepair::repair_all(epsilon=1e-3)` を毎回掛けると書いていた) 実際の修復 (同じ位置の頂点の統合、閉じた mesh には破壊的な修復を掛けない、掛けるのは開いた edge が増えず位相が変わらない時だけ) に合わせた
 - 「解像度 192 以下なら 100 万三角形に収まる」を三角形の数の規則に改めた 文書の印刷用の例 33 個を測ると、既定の 128 では最大 0.72M だが 192 で 5 個、256 で 9 個が 100 万を超える (lattice / infill の部品)
 - `conformance/controls.sh` が参照実装を `$PYTHON` でなく `python3` で起動していた 先頭で mpmath の有無を確かめるのは `$PYTHON` なので、手元で `PYTHON` に仮想環境を渡し `python3` に mpmath が無いと、mpmath を使う Law で参照実装が import error で落ち、「全 vector が通るはず」の control 3 本 (`unchanged` / `ref_bug_6_pow_r3` / `ref_bug_8_sqrt_cubed`) が失敗していた (CI は `python3` が mpmath 入りなので通っていた) 「失敗するはず」の control も落ちた分が失敗に数えられており、歯があるかが見えていなかった 直した後は同じ環境で 17 本すべてが期待どおり (`ref_bug_1_drag_factor` の失敗は 80 件から 43 件になった)
+- `LOL_SEMANTICS_ID` が alice-det-math の版に追従していなかった `LOL_SEMANTICS_PINS` の最初の pin は解決された alice-det-math の `SEMANTICS_ID` なので、alice-det-math 0.5.1 (`max` / `min` を追加し識別子が `135c407d…` → `85e08846…`) を解決すると pin の fold は `d81c2cbb…` に動くのに、定数は `403359f6…` のままで、`fold_semantics_pins(LOL_SEMANTICS_PINS) == LOL_SEMANTICS_ID` の oracle が失敗していた alice-det-math の世代ごとの表 `LOL_SEMANTICS_BY_DET_MATH` (0.5.0 → `403359f6…`、0.5.1 → `d81c2cbb…`) を置き、`LOL_SEMANTICS_ID` は build した alice-det-math の行にした (表に行が無い alice-det-math では compile 時に止まる) 前の世代で作った識別子は `known_semantics_id` で見分けられる 試験 `alice-lol/tests/semantics_id_per_det_math.rs` (各行がその alice-det-math の下での pin の fold であることを、版を変えずに 1 回の build で確かめる) 旧世代の識別子と記録値を固定する試験は、記録した時の alice-det-math (0.5.0) の下で比べるようにした 幾何の識別子 `LOL_GEOMETRY_SEMANTICS_ID` も同じ理由で同じ形にした (`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`、0.5.0 → `251e73bf…`、0.5.1 → `d1cbba69…`、`known_geometry_semantics_id`、試験 `alice-lol/tests/geometry_semantics_per_det_math.rs`) alice-det-math 0.5.0 と 0.5.1 のどちらを解決しても識別子の試験が通る
 
 ## [0.4.1] - 2026-10-14
 

@@ -20,6 +20,28 @@ use alice_lol::runtime_parser::parse_law;
 /// 算術世代を 1 つ変えた架空の識別子 (値そのものに意味はない)
 const OTHER_SEMANTICS: [u8; 32] = [0x5a; 32];
 
+/// 下の旧世代の識別子を記録した時の alice-det-math の識別子 (0.5.0)
+const DET_MATH_WHEN_RECORDED: [u8; 32] =
+    alice_lol::law_id::hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000");
+
+/// 今の pin を、旧世代の識別子を記録した時の alice-det-math の識別子で読んだもの
+///
+/// ⚠️ pin の最初の 1 つは build した alice-det-math の識別子なので、そのまま使うと
+/// alice-det-math の版が動いた時に旧世代の fold が合わなくなる (0.5.1 で実測)
+/// 旧世代の識別子はどれも alice-det-math 0.5.0 の下で記録した
+fn pins_as_recorded() -> Vec<(&'static str, [u8; 32])> {
+    LOL_SEMANTICS_PINS
+        .iter()
+        .map(|&(name, id)| {
+            if name == "alice-det-math" {
+                (name, DET_MATH_WHEN_RECORDED)
+            } else {
+                (name, id)
+            }
+        })
+        .collect()
+}
+
 fn audit(text: &str) -> alice_lol::audit_law::AuditLaw {
     parse_law(text).expect("the law text parses")
 }
@@ -285,7 +307,7 @@ fn changing_how_evidence_and_ranges_are_read_moved_the_identifier() {
     );
     // 旧 ID は旧 pin の fold であること (定数の写し間違いで assert_ne が空振りしない歯)
     // 入力の読み方の pin はその世代には無かった
-    let previous_pins: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+    let previous_pins: Vec<(&str, [u8; 32])> = pins_as_recorded()
         .iter()
         .filter(|(name, _)| {
             !name.contains("input reading")
@@ -327,7 +349,7 @@ fn the_input_reading_pin_is_the_measured_behaviour() {
 fn typing_the_inputs_moved_the_identifier() {
     assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_INPUT_READING);
     // 旧 ID は入力の読み方の pin を除いた fold であること (写し間違いで空振りしない歯)
-    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+    let before: Vec<(&str, [u8; 32])> = pins_as_recorded()
         .iter()
         .filter(|(name, _)| {
             !name.contains("input reading")
@@ -391,7 +413,7 @@ fn the_expression_functions_pin_is_the_measured_behaviour() {
 #[test]
 fn adding_expression_functions_moved_the_identifier() {
     assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_EXPRESSION_FUNCTIONS);
-    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+    let before: Vec<(&str, [u8; 32])> = pins_as_recorded()
         .iter()
         .filter(|(name, _)| {
             !name.contains("research expressions") && !name.contains("audit derivations")
@@ -422,7 +444,7 @@ fn the_derivation_pin_is_the_measured_behaviour() {
 #[test]
 fn reading_the_derivations_moved_the_identifier() {
     assert_ne!(LOL_SEMANTICS_ID, SEMANTICS_ID_BEFORE_DERIVATIONS);
-    let before: Vec<(&str, [u8; 32])> = LOL_SEMANTICS_PINS
+    let before: Vec<(&str, [u8; 32])> = pins_as_recorded()
         .iter()
         .filter(|(name, _)| !name.contains("audit derivations"))
         .copied()

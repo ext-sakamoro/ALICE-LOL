@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "alice-lol"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "alice-det-math",
  "alice-llm",

@@ -7,9 +7,9 @@
 
 use alice_lol::geometry_id::{
     canon_angle_deg_probe_digest, euler_xyz_quat_probe_digest, fmt_f32_fidelity_probe_digest,
-    fold_geometry_pins, rotation_axis_quat_probe_digest, rotation_quat_boundary_probe_digest,
-    stdlib_transcendental_probe_digest, tpms_validity_probe_digest, LOL_GEOMETRY_SEMANTICS_ID,
-    LOL_GEOMETRY_SEMANTICS_PINS,
+    fold_geometry_pins, known_geometry_semantics_id, rotation_axis_quat_probe_digest,
+    rotation_quat_boundary_probe_digest, stdlib_transcendental_probe_digest,
+    tpms_validity_probe_digest, LOL_GEOMETRY_SEMANTICS_ID, LOL_GEOMETRY_SEMANTICS_PINS,
 };
 
 fn hex(id: &[u8; 32]) -> String {
@@ -32,6 +32,10 @@ fn main() {
         hex(&fold_geometry_pins(LOL_GEOMETRY_SEMANTICS_PINS))
     );
     println!("  宣言 = {}", hex(&LOL_GEOMETRY_SEMANTICS_ID));
+    match known_geometry_semantics_id(&LOL_GEOMETRY_SEMANTICS_ID) {
+        Some(det_math) => println!("  宣言は alice-det-math {} の世代", hex(&det_math)),
+        None => println!("  宣言はどの世代の表にも無い"),
+    }
 
     println!("\n=== 今ここで測り直した各 pin の digest ===");
     println!(
