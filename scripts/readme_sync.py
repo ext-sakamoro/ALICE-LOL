@@ -53,6 +53,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from workflow_steps import active_runs  # noqa: E402
+
 READMES = ("README.md", "README_JP.md")
 CRATE_TOML = "alice-lol/Cargo.toml"
 LIB_RS = "alice-lol/src/lib.rs"
@@ -89,16 +92,19 @@ def law_block(lines: list[str]) -> tuple[range | None, str | None]:
                   f"expected one begin line and one end line after it")
 
 
+LAW_BLOCK_RUN = re.compile(r"gen-law-readme-block\.py[\"']?\s+check\b.*--crate\s+alice-lol\b")
+
+
 def law_block_workflow(root: str) -> str | None:
-    """the workflow that regenerates the block and compares it, or None"""
+    """the workflow with an active step (scripts/workflow_steps.py: triggered, not `if: false`, not a
+    comment) that regenerates the block and compares it, or None"""
     d = os.path.join(root, WORKFLOWS)
     if not os.path.isdir(d):
         return None
     for name in sorted(os.listdir(d)):
         if not name.endswith((".yml", ".yaml")):
             continue
-        text = read(root, f"{WORKFLOWS}/{name}")
-        if re.search(r"gen-law-readme-block\.py[\"']?\s+check\b", text) and "--crate alice-lol" in text:
+        if any(LAW_BLOCK_RUN.search(r) for r in active_runs(read(root, f"{WORKFLOWS}/{name}"))):
             return f"{WORKFLOWS}/{name}"
     return None
 

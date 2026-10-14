@@ -435,10 +435,17 @@ GEN_CONFIG = ('''
 [generated]
 begin = ''' + "'''<!-- gen:begin rev=[0-9a-f]{4} -->'''" + '''
 end = "<!-- gen:end -->"
-checked_by = { file = ".github/workflows/gen.yml", pattern = "gen\\\\.py check --crate x" }
+checked_by = { run = "gen\\\\.py check --crate x" }
 ''')
 GEN_BLOCK = "\n<!-- gen:begin rev=abcd -->\n- 7 shapes in the other gate's table\n<!-- gen:end -->\n"
-GEN_FLOW = {".github/workflows/gen.yml": "run: python3 gen.py check --crate x\n"}
+GEN_YML = "on:\n  push:\njobs:\n  gen:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: python3 gen.py check --crate x\n"
+GEN_FLOW = {".github/workflows/gen.yml": GEN_YML}
+GEN_INACTIVE = {
+    "in a YAML comment": GEN_YML.replace("      - run: python3", "      - run: echo\n#     - run: python3"),
+    "job if: false": GEN_YML.replace("    runs-on:", "    if: false\n    runs-on:"),
+    "step if: false": GEN_YML.replace("      - run: python3", "      - if: false\n        run: python3"),
+    "no trigger": GEN_YML.replace("on:\n  push:\n", "on: {}\n"),
+}
 
 
 class Generated(unittest.TestCase):
@@ -471,7 +478,8 @@ class Generated(unittest.TestCase):
                 self.assertTrue(any("unmarked count `7 shapes" in x for x in e), e)
 
     def test_a_block_nothing_checks_is_read_in_full(self):
-        for flow in ({}, {".github/workflows/gen.yml": "run: python3 gen.py check --crate y\n"}):
+        for flow in ({}, {".github/workflows/gen.yml": GEN_YML.replace("--crate x", "--crate y")},
+                     *({".github/workflows/gen.yml": t} for t in GEN_INACTIVE.values())):
             with self.subTest(flow=flow):
                 e = self.gen(GEN_BLOCK, flow)
                 self.assertTrue(any("nothing checks it" in x for x in e), e)

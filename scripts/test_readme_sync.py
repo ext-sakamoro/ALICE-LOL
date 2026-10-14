@@ -16,6 +16,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import readme_sync as rs  # noqa: E402
+import workflow_steps as ws  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -208,9 +209,20 @@ BLOCK = ("<!-- law-integration:begin law=" + "5" * 40 + " -->\n## ALICE-Law inte
          "| Release train | alice-lol 0.4.0 (published) |\n| End to end check | covered (`alice-lol = \"0.4\"`) |\n"
          "<!-- law-integration:end -->\n")
 WORKFLOW = ".github/workflows/law-readme-block.yml"
-WORKFLOW_TEXT = ('jobs:\n  check:\n    steps:\n      - run: |\n'
+WORKFLOW_TEXT = ('on:\n  push:\n    branches: [main]\njobs:\n  check:\n    runs-on: ubuntu-24.04\n    steps:\n'
+                 '      - uses: actions/checkout@v5\n      - name: Check the block\n        run: |\n'
                  '          python3 "$RUNNER_TEMP/gen-law-readme-block.py" check --law "$RUNNER_TEMP/law" --crate alice-lol \\\n'
                  '            --crate-repo . --law-main origin/main --lint warn\n')
+CMD = 'python3 "$RUNNER_TEMP/gen-law-readme-block.py" check --law "$RUNNER_TEMP/law" --crate alice-lol \\'
+# the same command present in the file but not run: each must leave the block unchecked
+INACTIVE = {
+    "in a YAML comment": WORKFLOW_TEXT.replace("        run: |\n          " + CMD, "        run: |\n          echo\n#         " + CMD),
+    "in a shell comment": WORKFLOW_TEXT.replace("          " + CMD, "          # " + CMD),
+    "job if: false": WORKFLOW_TEXT.replace("    runs-on: ubuntu-24.04\n", "    if: false\n    runs-on: ubuntu-24.04\n"),
+    "step if: false": WORKFLOW_TEXT.replace("      - name: Check the block\n", "      - name: Check the block\n        if: ${{ false }}\n"),
+    "no trigger": WORKFLOW_TEXT.replace("on:\n  push:\n    branches: [main]\n", "on: {}\n"),
+    "unreadable YAML": WORKFLOW_TEXT.replace("jobs:\n", "jobs: &anchor\n"),
+}
 
 
 class RealRepo(unittest.TestCase):
@@ -370,6 +382,15 @@ class Checks(unittest.TestCase):
         other = WORKFLOW_TEXT.replace("--crate alice-lol", "--crate alice-sdf")
         self.assertTrue(any("block would go unchecked" in x for x in errors({**both(R + BLOCK), WORKFLOW: other})))
 
+    def test_a_command_that_does_not_run_leaves_the_block_unchecked(self):
+        for why, text in INACTIVE.items():
+            with self.subTest(why=why):
+                self.assertNotEqual(text, WORKFLOW_TEXT)
+                self.assertIn("gen-law-readme-block.py", text)
+                e = errors({**both(R + BLOCK), WORKFLOW: text})
+                self.assertTrue(any("block would go unchecked" in x for x in e), e)
+                self.assertTrue(any("states a version" in x for x in e), e)
+
     def test_the_law_block_lines_are_not_counted_as_compared(self):
         _, counts = rs.check(crate({**both(R + BLOCK), WORKFLOW: WORKFLOW_TEXT}))
         self.assertEqual(counts["version"], 2 * len(R.split("\n")))
@@ -393,6 +414,33 @@ class Checks(unittest.TestCase):
         e = errors(drop=("README_JP.md",))
         self.assertTrue(any("README_JP.md: missing" in x for x in e), e)
 
+
+
+class WorkflowSteps(unittest.TestCase):
+    """scripts/workflow_steps.py: the steps that can run, from the YAML structure"""
+
+    def test_every_workflow_of_this_repository_is_read(self):
+        d = os.path.join(ROOT, ".github", "workflows")
+        names = [n for n in sorted(os.listdir(d)) if n.endswith((".yml", ".yaml"))]
+        self.assertGreater(len(names), 0)
+        for n in names:
+            with self.subTest(n=n), open(os.path.join(d, n), encoding="utf-8") as f:
+                self.assertGreater(len(ws.active_runs(f.read())), 0)
+
+    def test_steps_keys_and_scalars(self):
+        doc = ws.parse('name: x  # c\non:\n  push:\njobs:\n  a:\n    steps:\n      - run: echo "a # b"\n'
+                       "      - name: 'q'\n        run: >-\n          one\n          two\n")
+        self.assertEqual(doc["name"], "x")
+        self.assertEqual(doc["jobs"]["a"]["steps"][0]["run"], 'echo "a # b"')
+        self.assertEqual(doc["jobs"]["a"]["steps"][1]["name"], "q")
+        self.assertEqual(ws.active_runs("on: push\njobs:\n  a:\n    if: github.ref == 'refs/heads/main'\n"
+                                        '    steps:\n      - run: make\n'), ["make"])
+
+    def test_inactive_forms_run_nothing(self):
+        for why, text in INACTIVE.items():
+            with self.subTest(why=why):
+                self.assertFalse(any(rs.LAW_BLOCK_RUN.search(r) for r in ws.active_runs(text)))
+        self.assertTrue(any(rs.LAW_BLOCK_RUN.search(r) for r in ws.active_runs(WORKFLOW_TEXT)))
 
 
 class Examples(unittest.TestCase):

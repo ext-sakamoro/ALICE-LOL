@@ -58,10 +58,12 @@ Sources (`[sources."KEY"]`, every source has `noun` (regex) and `kind`):
 two counts must be equal.
 
 `[generated]` (optional) names a block another gate writes and checks: `begin` and `end`
-(regexes, each matching a whole line) and `checked_by = { file, pattern }` (a tracked file,
-usually a workflow, whose text matches `pattern`). The lines from the begin line to the end
-line are not read by this gate, but only when the file has exactly one begin line and one end
-line after it and `checked_by` holds; otherwise the markers are a finding and every line is
+(regexes, each matching a whole line) and `checked_by = { run = REGEX }` (an active step of a
+tracked workflow under .github/workflows runs a command matching REGEX; active = the workflow has
+a trigger, the job and the step are not `if: false`, the line is not a comment; see
+scripts/workflow_steps.py). The lines from the begin line to the end line are not read by this
+gate, but only when the file has exactly one begin line and one end line after it and
+`checked_by` holds; otherwise the markers are a finding and every line is
 read, so a missing end marker cannot hide the rest of the file and a block nothing checks
 cannot hide its numbers.
 
@@ -83,6 +85,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from workflow_steps import active_runs  # noqa: E402
 
 try:
     import tomllib
@@ -137,13 +142,12 @@ def generated_rule(cfg: dict, root: str, files: list[str]) -> tuple[re.Pattern, 
     if g is None:
         return None
     cb = g.get("checked_by", {})
-    if not g.get("begin") or not g.get("end") or not cb.get("file") or not cb.get("pattern"):
-        raise ConfigError("[generated] needs `begin`, `end` and `checked_by = { file, pattern }`")
-    why = None
-    if cb["file"] not in files:
-        why = f"{cb['file']} is not tracked"
-    elif not re.search(cb["pattern"], read(root, cb["file"])):
-        why = f"{cb['file']} does not match `{cb['pattern']}`"
+    if not g.get("begin") or not g.get("end") or not cb.get("run"):
+        raise ConfigError("[generated] needs `begin`, `end` and `checked_by = { run = REGEX }`")
+    run = re.compile(cb["run"])
+    flows = [f for f in files if f.startswith(".github/workflows/") and f.endswith((".yml", ".yaml"))]
+    ok = any(run.search(r) for f in flows for r in active_runs(read(root, f)))
+    why = None if ok else f"no active step of a workflow runs `{cb['run']}`"
     return re.compile(g["begin"]), re.compile(g["end"]), why
 
 

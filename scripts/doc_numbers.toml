@@ -17,7 +17,7 @@ exclude = ["CHANGELOG.md", "*/CHANGELOG.md", "LICENSE*", "*/LICENSE*"]
 [generated]
 begin = '''<!-- law-integration:begin law=[0-9a-f]{40} -->'''
 end = '''<!-- law-integration:end -->'''
-checked_by = { file = ".github/workflows/law-readme-block.yml", pattern = '''gen-law-readme-block\.py"?\s+check\b[^\n]*--crate alice-lol''' }
+checked_by = { run = '''gen-law-readme-block\.py"?\s+check\b.*--crate\s+alice-lol\b''' }
 
 # ---------------------------------------------------------------- what counts as a count
 
