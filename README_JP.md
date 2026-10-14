@@ -435,20 +435,20 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5c6363312520` と
 
 | gate | 状態 | 注記 |
 |---|---|---|
-| G1 no-libm-direct | 未確認 | type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a … |
-| G2 ieee-max-min | 未確認 | the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same … |
+| G1 no-libm-direct | 適合 | the feature set covered is --all-features (every feature of every workspace member on), which is the superset in which every feature-gated module is compiled; … |
+| G2 ieee-max-min | 未達 | the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same … |
 | G3 no-outer-fneg-of-fma | 未確認 | syn-based checker catches all 5 outer-negation shapes (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one either … |
 | G4 debug-release-arch-goldens | 未確認 | the signed-zero/cancellation lattice this gate requires is exercised specifically for the quat_from_euler_xyz y-component (the case this crate's G3 residual … |
 | G5 release-profile-test-leg | 未確認 | matrix includes a release-profile macOS leg (macos-latest, aarch64 on GitHub-hosted runners); job has no continue-on-error and fail-fast: false, but this … |
-| G6 semantics-id | 未確認 | LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the … |
-| G7 handshake-carries-id | 未確認 | not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were … |
-| G8 persisted-semantics-id | 未確認 | geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's … |
-| G9 persisted-meaning-change-is-major | 未確認 | not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) … |
-| G10 no-run-varying-artifacts | 未確認 | a search of alice-lol/src for Uuid, SystemTime::now, Instant::now, and unseeded RNG constructors found none, but there is no durable CI check enforcing their … |
+| G6 semantics-id | 未達 | unmet: (1) with the physics feature on, constraint verdicts run alice_physics::transient_thermal (alice-lol/src/law.rs:2136), but neither identifier folds … |
+| G7 handshake-carries-id | 対象外 | the survey is a manual grep run for this entry, not a CI step; G7's completeness part is an audit. The durable LOL text the crate writes and reads back … |
+| G8 persisted-semantics-id | 未達 | unmet: the emitted .lol text carries no identifier of what its numbers mean (LOL_GEOMETRY_SEMANTICS_ID is not written, and the parser compares nothing), so a … |
+| G9 persisted-meaning-change-is-major | 未達 | unmet because G8 is: there is no persisted identifier yet for this history audit to attest. The in-process identifiers have not moved across a release, so … |
+| G10 no-run-varying-artifacts | 適合 | the one existing wall-clock read in scanned code is alice-lol-datagen's bin printing its elapsed time (timing-display:); removing that allow turns the library … |
 | G11 gate-self-tests | 未確認 | canary and zero-scanned-fails patterns are present on the gates this crate implements (G1, G3); not audited for every gate uniformly |
 | G12 public-repo-text-rules | 未確認 | this crate's own docs_lint.py is the equivalent of ALICE-Law's public_text_check; not confirmed to share the same vocabulary list, only that an equivalent … |
 | G13 no-unspecified-order | 未確認 | print_export.rs's HashSet (euler_characteristic, local name edges) is only measured (.len()); its HashMap (weld_coincident_vertices, local name id) is only … |
-| G14 float-environment-invariants | 未確認 | no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the … |
+| G14 float-environment-invariants | 適合 | the doc comments of angle.rs and geometry_id.rs that assumed this environment are now backed by the test; rewriting the test's expectations to … |
 
 ### feature と保証の範囲
 
