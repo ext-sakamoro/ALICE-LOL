@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `alice-lol` の版を 0.4.1 にし、workspace の他の crate (`alice-lol-humanoid` / `alice-lol-robot` / `alice-lol-ui` / `alice-lol-datagen`) の要求も 0.4.1 にした 公開済みの 0.4.0 と src が違う (`ResearchLaw::law_id` を足した) ので、要求 0.4 のままでは公開版の 0.4.0 に解決され、`scripts/published_source_check.py` が失敗する 足したのは公開 API の追加だけ
 - ルート直下に追跡されていた mesh の書き出し 4 file (`crown.obj` / `royal_crown.obj` / `gem.fbx` / `shield.fbx`、どこからも読まれていない) を削除した 書き出す example (`royal_crown` / `roblox_accessory` / `alice_coaster` / `print_export`) はカレントディレクトリに書いていたので、出力先を第 1 引数の directory、無ければ system の一時 directory の下 (`alice_lol_<example>`) にした `verify_customizers` の `/tmp` 決め打ちも system の一時 directory にした `scripts/root_artifacts.py` (試験 `scripts/test_root_artifacts.py`) がルート直下に追跡された `*.obj` / `*.fbx` / `*.stl` / `*.3mf` を失敗にし、追跡された file を 1 つも読めなければ失敗する CI (docs job) と preflight で走る
 
 ### Fixed
