@@ -432,6 +432,32 @@ fn a_wall_thinner_than_a_cell_is_not_resolved_and_one_of_two_cells_is() {
     );
 }
 
+// oracle: the number of shells is compared, not only χ — a torus whose hole (0.01 wide, its axis
+// between grid points) is closed at 128 and open at 192 (χ 2 → 0) beside a sphere of radius 0.006
+// that only 192 samples (+1 shell, χ +2) has χ 2 at both resolutions and 1 against 2 shells
+// (measured with the default box ±2; a χ-only comparison calls it resolved)
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "meshes at two resolutions: run in release (CI job doc-programs, preflight)"
+)]
+fn a_change_in_the_number_of_shells_alone_is_not_resolved() {
+    let (node, config) = default_box(
+        "union(translate(0.0155, -1.0, 0.0155, torus(0.31, 0.3)), translate(0.0, 0.0, 1.4, sphere(0.006)))",
+    );
+    let finer = PrintConfig {
+        resolution: config.resolution * 3 / 2,
+        ..config
+    };
+    let (coarse, fine) = (
+        topology(&node_to_mesh(&node, &config)),
+        topology(&node_to_mesh(&node, &finer)),
+    );
+    assert_eq!((coarse.0, fine.0), (2, 2), "the scene keeps χ equal");
+    assert_ne!(coarse.1, fine.1, "the scene changes the number of shells");
+    assert!(!resolved_at_export_resolution(&node, &config));
+}
+
 /// the `lol print` examples whose export is not resolved at the default resolution (A9), each as
 /// (document, n-th `lol print` fence of that document, from 1); a warning until they are fixed —
 /// the examples are fixed by their parameters or the resolution policy, never by weakening the
