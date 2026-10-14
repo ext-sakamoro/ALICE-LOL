@@ -75,7 +75,13 @@ const CASES: &[Case] = &[
     },
     Case {
         name: "density_hatch(0.5, 4.0, 15)",
-        elements: || density_hatch(0.5, 4.0, 15.0, &bounds(), &|x, y| 1.0 - x.hypot(y) / 70.0),
+        elements: || {
+            density_hatch(0.5, 4.0, 15.0, &bounds(), &|x, y| {
+                // f64::hypot は G1 の禁止 (platform libm、alice-det-math 0.5 に f64 版が無い) なので
+                // 正しく丸められる mul_add と sqrt で書く
+                1.0 - x.mul_add(x, y * y).sqrt() / 70.0
+            })
+        },
     },
     Case {
         name: "guilloche(31, 13, 2.0, steps=720)",

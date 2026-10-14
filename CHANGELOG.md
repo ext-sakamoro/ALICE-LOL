@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - CI: library の clippy pass (`.github/clippy-lib/clippy.toml`、`scripts/clippy_lib_gate.py` が生成) で壁時計の読み取り (`std::time::SystemTime::now` / `std::time::Instant::now`) を禁じた (ALICE-Law G10: 出力が実行ごとに変わる材料を持ち込まない) 無種の乱数と新しい UUID (`rand::thread_rng` / `rand::rng` / `rand::random` / `getrandom::getrandom` / `getrandom::fill` / `uuid::Uuid::new_v4` / `uuid::Uuid::now_v7`) も、今は依存に無いので `allow-invalid` 付きで載せた canary に壁時計の 2 形を足し、両方の診断が無ければ失敗する 例外の prefix `timing-display:` (操作者に表示するだけの経過時間) は `src/bin/` の下でしか名乗れない (`scripts/disallowed_methods_allow_reasons.py`) `alice-lol-datagen` の bin の 1 箇所がこれに当たる `alice-law-conformance.toml` の `[G10]` を pass にした
+- clippy の `disallowed-methods` (`clippy.toml`、生成物 `.github/clippy-lib/clippy.toml`) に、ALICE-Law の `conformance/gates.toml` が G1 で禁止する method のうち未掲載だった 21 個を足し、禁止の一覧を f32 と f64 の両方で G1 の一覧 (25 個) に揃えた 足したのは `alice-det-math` 0.5 に相当品が無いもの (`sinh` / `cosh` / `asinh` / `acosh` / `atanh` / `exp2` / `exp_m1` / `log` / `ln_1p` の f32 と f64、f64 の `tanh` / `cbrt` / `hypot`) で、呼べば clippy が失敗する 呼び出しは試験の 3 箇所 (`laser_pattern.rs` の単体試験 2、`tests/laser_pattern_digest_golden.rs` の密度場 1、いずれも `f64::hypot`) だけで、`mul_add` と `sqrt` に書き換えた golden の digest は変わっていない (その case を覆うことは、密度場の定数を変えると失敗することで確かめた) `powi` は G1 で判定待ちのため禁止せず、理由を `alice-law-conformance.toml` の `[G1]` に書いた
 
 ## [0.4.1] - 2026-10-14
 
