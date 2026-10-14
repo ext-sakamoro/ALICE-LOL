@@ -47,6 +47,12 @@ pub fn h(y: f32, x: f32) -> f32 {
 pub fn i(z: f32) -> f32 {
     z.tan()
 }
+pub fn j() -> std::time::Instant {
+    std::time::Instant::now()
+}
+pub fn k() -> std::time::SystemTime {
+    std::time::SystemTime::now()
+}
 """
 
 
@@ -60,13 +66,24 @@ class Render(unittest.TestCase):
         self.assertTrue(out.startswith(g.HEADER))
         body = out[len(g.HEADER) + 1:]
         self.assertEqual(body.replace("".join(
-            f'    {{ path = "{p}", reason = "{g.REASON}" }},\n' for p in g.EXTRA), ""), ROOT)
+            f'    {{ path = "{p}", reason = "{r}"' + (", allow-invalid = true" if inv else "") + " },\n"
+            for p, r, inv in g.EXTRA), ""), ROOT)
         i = body.index("disallowed-methods = [\n")
         self.assertIn('path = "f32::max"', body[i:body.index('path = "f32::sin"')])
         self.assertEqual(g.count_entries(out), 2 + len(g.EXTRA))
 
-    def test_the_four_extra_paths_are_exactly_f32_and_f64_max_and_min(self):
-        self.assertEqual(g.EXTRA, ["f32::max", "f32::min", "f64::max", "f64::min"])
+    def test_the_extra_paths_are_max_min_then_the_g10_time_and_randomness_sources(self):
+        self.assertEqual([p for p, _, _ in g.EXTRA[:4]], ["f32::max", "f32::min", "f64::max", "f64::min"])
+        paths = {p: inv for p, _, inv in g.EXTRA}
+        # std paths always resolve; crates that are not dependencies stand ready with allow-invalid
+        self.assertEqual(paths["std::time::Instant::now"], False)
+        self.assertEqual(paths["std::time::SystemTime::now"], False)
+        for p in ("rand::thread_rng", "rand::random", "getrandom::getrandom", "uuid::Uuid::new_v4"):
+            self.assertEqual(paths[p], True, p)
+
+    def test_the_canary_covers_the_wall_clock_forms(self):
+        self.assertIn("Instant::now()", g.CANARY_FORMS)
+        self.assertIn("SystemTime::now()", g.CANARY_FORMS)
 
     def test_a_root_list_that_already_forbids_max_is_refused(self):
         with self.assertRaises(ValueError):
@@ -103,13 +120,13 @@ class Canary(unittest.TestCase):
     def setUp(self):
         self.want = g.canary_lines(CANARY)
 
-    def test_the_seven_forms_are_found_on_their_lines(self):
-        self.assertEqual(sorted(self.want), [3, 6, 9, 12, 15, 18, 21])
+    def test_the_nine_forms_are_found_on_their_lines(self):
+        self.assertEqual(sorted(self.want), [3, 6, 9, 12, 15, 18, 21, 24, 27])
 
     def test_a_diagnostic_on_every_line_and_a_non_zero_exit_passes(self):
         out = "\n".join(diag(n, "x") for n in self.want)
         errors, n = g.judge_canary(101, out, self.want)
-        self.assertEqual((errors, n), ([], 7))
+        self.assertEqual((errors, n), ([], 9))
 
     def test_a_missing_line_fails(self):
         out = "\n".join(diag(n, "x") for n in self.want if n != 9)

@@ -2,7 +2,8 @@
 # do not edit (python3 scripts/clippy_lib_gate.py --write)
 #
 # The library code (`cargo clippy --lib`, CLIPPY_CONF_DIR=.github/clippy-lib)
-# also may not call f32 / f64 max and min; tests, examples and benches use the
+# also may not call f32 / f64 max and min, read the wall clock, or draw unseeded
+# randomness / fresh UUIDs (ALICE-Law G10); tests, examples and benches use the
 # repository-root clippy.toml configuration
 
 # repository root: clippy resolves this file for every workspace member
@@ -34,6 +35,15 @@ disallowed-methods = [
     { path = "f32::min", reason = "the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_math::max / min" },
     { path = "f64::max", reason = "the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_math::max / min" },
     { path = "f64::min", reason = "the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_math::max / min" },
+    { path = "std::time::SystemTime::now", reason = "a wall-clock read makes the output vary from run to run (ALICE-Law G10); pass the time in as an explicit input" },
+    { path = "std::time::Instant::now", reason = "a wall-clock read makes the output vary from run to run (ALICE-Law G10); pass the time in as an explicit input" },
+    { path = "rand::thread_rng", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "rand::rng", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "rand::random", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "getrandom::getrandom", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "getrandom::fill", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "uuid::Uuid::new_v4", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
+    { path = "uuid::Uuid::now_v7", reason = "an unseeded RNG or a fresh UUID makes the output vary from run to run (ALICE-Law G10); pass a seed or an identifier in as an explicit input", allow-invalid = true },
     { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::sin" },
     { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cos" },
     { path = "f32::sin_cos", reason = "two platform libm calls, not cross-platform bit-exact; use alice_det_math::sin_cos" },
