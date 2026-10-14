@@ -14,14 +14,14 @@ dependencies = [
 
 [[package]]
 name = "alice-kinematics"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "alice-lol",
 ]
 
 [[package]]
 name = "alice-llm"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "rayon",
  "wide",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "alice-physics"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "alice-det-math",
  "sha2",
