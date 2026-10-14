@@ -355,7 +355,7 @@ step "ci.yml / test: Test (roblox oracle, named)"
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
 
-step "ci.yml / doc-programs: Programs in the documents (parse, grammar, closed export under 1M triangles)"
+step "ci.yml / doc-programs: Programs in the documents (parse, grammar, closed export under 1M triangles, resolved at the export resolution)"
 ( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh --release -p alice-lol --features llm-bridge --test doc_programs -- --include-ignored )
 
 step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-same / pairwise, ~35,000 cases, ~90s)"

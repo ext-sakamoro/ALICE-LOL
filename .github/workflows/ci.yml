@@ -588,7 +588,7 @@ jobs:
 
       # 文書の lol print の program を既定の解像度で export する (debug では数分かかるので
       # test matrix では ignore し、ここで release で走らせる) 0 件の実行は失敗にする
-      - name: Programs in the documents (parse, grammar, closed export under 1M triangles)
+      - name: Programs in the documents (parse, grammar, closed export under 1M triangles, resolved at the export resolution)
         working-directory: ALICE-LOL
         run: scripts/cargo_test_nonzero.sh --release -p alice-lol --features llm-bridge --test doc_programs -- --include-ignored
 

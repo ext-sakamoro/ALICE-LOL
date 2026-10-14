@@ -337,3 +337,161 @@ fn every_program_in_the_documents_is_accepted_by_the_grammar() {
         rejected.join("\n")
     );
 }
+
+// ━━ resolved at the export resolution (A9) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// whether the export's topology does not depend on its grid: the Euler characteristic and the
+/// number of separate shells are the same at the configured resolution and at 1.5 times it
+fn resolved_at_export_resolution(node: &SdfNode, config: &PrintConfig) -> bool {
+    let finer = PrintConfig {
+        resolution: config.resolution * 3 / 2,
+        ..config.clone()
+    };
+    topology(&node_to_mesh(node, config)) == topology(&node_to_mesh(node, &finer))
+}
+
+/// the representative of `x`'s set in a union-find forest (halving the path on the way)
+const fn root(parent: &mut [usize], mut x: usize) -> usize {
+    while parent[x] != x {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    x
+}
+
+/// (Euler characteristic over the vertices a triangle uses, number of separate shells)
+///
+/// Written here rather than taken from `print_export`, so the test does not grade the export with
+/// its own measure; the export welds vertices at the same position, so two triangles of one surface
+/// share vertex indices
+fn topology(mesh: &alice_lol::print_export::Mesh) -> (i64, usize) {
+    use std::collections::BTreeSet;
+    let n = mesh.vertices.len();
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut used = vec![false; n];
+    let mut edges = BTreeSet::new();
+    for t in mesh.indices.chunks(3) {
+        let [a, b, c] = [t[0] as usize, t[1] as usize, t[2] as usize];
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            edges.insert((u.min(v), u.max(v)));
+            let (ru, rv) = (root(&mut parent, u), root(&mut parent, v));
+            parent[ru] = rv;
+        }
+        used[a] = true;
+        used[b] = true;
+        used[c] = true;
+    }
+    let vertices = used.iter().filter(|&&u| u).count();
+    let shells: BTreeSet<usize> = (0..n)
+        .filter(|&i| used[i])
+        .map(|i| root(&mut parent, i))
+        .collect();
+    let as_i64 = |x: usize| i64::try_from(x).unwrap();
+    (
+        as_i64(vertices) - as_i64(edges.len()) + as_i64(mesh.indices.len() / 3),
+        shells.len(),
+    )
+}
+
+fn default_box(node: &str) -> (SdfNode, PrintConfig) {
+    (parse_program(node).unwrap().sdf, PrintConfig::default())
+}
+
+// oracle: a solid sphere / box is resolved by any grid finer than its size (one shell, χ = 2)
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "meshes at two resolutions: run in release (CI job doc-programs, preflight)"
+)]
+fn a_solid_sphere_and_box_are_resolved() {
+    for src in ["sphere(1.0)", "box3d(1.0, 0.5, 0.25)"] {
+        let (node, config) = default_box(src);
+        assert!(resolved_at_export_resolution(&node, &config), "{src}");
+    }
+}
+
+// oracle: with the default box ±2 at resolution 128 a cell is 4/128 = 0.031; a hollow sphere whose
+// wall is 0.03 thick (onion 0.015) is thinner than a cell and comes out in pieces, one whose wall is
+// 0.06 thick (onion 0.03) is two cells and is resolved (measured: χ −2036 / 21 shells at 128 against
+// 4 / 2 at 192 for the first, 4 / 2 at both for the second)
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "meshes at two resolutions: run in release (CI job doc-programs, preflight)"
+)]
+fn a_wall_thinner_than_a_cell_is_not_resolved_and_one_of_two_cells_is() {
+    let (thin, config) = default_box("onion(0.015, sphere(1.0))");
+    assert!(
+        !resolved_at_export_resolution(&thin, &config),
+        "a 0.03 wall in a 0.031 cell"
+    );
+    let (two_cells, config) = default_box("onion(0.03, sphere(1.0))");
+    assert!(
+        resolved_at_export_resolution(&two_cells, &config),
+        "a 0.06 wall in a 0.031 cell"
+    );
+}
+
+/// the `lol print` examples whose export is not resolved at the default resolution (A9), each as
+/// (document, n-th `lol print` fence of that document, from 1); a warning until they are fixed —
+/// the examples are fixed by their parameters or the resolution policy, never by weakening the
+/// check — so the list only shrinks: a new entry or a stale one fails
+const KNOWN_UNRESOLVED: &[(&str, usize)] = &[
+    ("LLM_PRINT_PROMPT.md", 2),
+    ("LLM_PRINT_PROMPT.md", 3),
+    ("LLM_PRINT_PROMPT.md", 5),
+    ("LLM_PRINT_PROMPT.md", 6),
+    ("LLM_PRINT_PROMPT.md", 11),
+    ("LLM_REFERENCE.md", 2),
+    ("LLM_REFERENCE.md", 13),
+    ("LLM_REFERENCE.md", 14),
+    ("LLM_REFERENCE.md", 15),
+    ("LLM_REFERENCE.md", 16),
+];
+
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "meshes every print program at two resolutions: run in release (CI job doc-programs, preflight)"
+)]
+fn the_unresolved_print_programs_are_the_known_ones() {
+    let (programs, _) = fences();
+    let mut nth: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut unresolved: Vec<(String, usize, String)> = Vec::new();
+    let mut checked = 0;
+    for p in programs.iter().filter(|p| p.kind == Kind::Print) {
+        let doc = p.at.rsplit_once(':').unwrap().0.to_string();
+        let n = *nth.entry(doc.clone()).and_modify(|n| *n += 1).or_insert(1);
+        let program = check_text(p).unwrap();
+        let (lo, hi) = bounding_box(&program.sdf).unwrap();
+        let config = PrintConfig {
+            bounds_min: lo,
+            bounds_max: hi,
+            scale_mm: 1.0,
+            ..PrintConfig::default()
+        };
+        checked += 1;
+        if !resolved_at_export_resolution(&program.sdf, &config) {
+            unresolved.extend([(doc, n, p.at.clone())]);
+        }
+    }
+    assert!(
+        checked > 0,
+        "no `lol print` fence was found: nothing was compared"
+    );
+    for (_, _, at) in &unresolved {
+        eprintln!("warning: {at}: the export's topology changes between resolution 128 and 192 (a feature thinner than the grid)");
+    }
+    let found: Vec<(String, usize)> = unresolved.iter().map(|(d, n, _)| (d.clone(), *n)).collect();
+    let known: Vec<(String, usize)> = KNOWN_UNRESOLVED
+        .iter()
+        .map(|(d, n)| ((*d).to_string(), *n))
+        .collect();
+    let new: Vec<_> = found.iter().filter(|f| !known.contains(f)).collect();
+    let stale: Vec<_> = known.iter().filter(|k| !found.contains(k)).collect();
+    eprintln!("A9: {} of {checked} print programs unresolved", found.len());
+    assert!(
+        new.is_empty() && stale.is_empty(),
+        "newly unresolved: {new:?}\nlisted but now resolved (remove from KNOWN_UNRESOLVED): {stale:?}"
+    );
+}

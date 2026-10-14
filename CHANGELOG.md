@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 印刷用の program が export の解像度で解けているかの検査 (`alice-lol/tests/doc_programs.rs`): export を既定の解像度 R と 1.5R で作り、Euler 標数と分かれた殻の数が同じなら解けているとする (格子より薄い壁や支柱は解像度で形が変わる) oracle: 球と箱は解ける / 既定の箱 ±2 (128 で cell 0.031) で厚さ 0.03 の殻 (`onion(0.015, sphere(1.0))`) は解けない (128 で Euler 標数 −2036・殻 21、192 で 4・2) / 厚さ 0.06 (`onion(0.03, …)`) は解ける 文書の印刷用の例 33 個のうち 10 個 (`onion` / `*_infill` の構造の例) は解けておらず、一覧に固定して警告として出す 一覧に無い例が解けなくなる・一覧の例が解けるようになる、のどちらでも失敗する (例は parameter か解像度の方針で直し、検査は弱めない) 2 回の export で release の実行時間は約 15 秒から約 210 秒になる
+
 - 文書に載っている LOL の program を取り出して走らせる試験 `alice-lol/tests/doc_programs.rs` 追跡されている `*.md` (CHANGELOG を除く) の fence のうち info string が `lol print` / `lol render` / `lol fragment` のものを読む `print` は parse でき、有界な立体 1 つで (内側の点があり、外側だけで囲める箱がある)、`print_export::node_to_mesh` が既定の解像度で閉じた mesh (境界 edge 0 / 非多様体 edge 0) を 100 万三角形以下で出す `render` は parse できる `print` / `render` は `//` の comment を持たない `llm-bridge` 付きでは文法 (`lol.gbnf`) が受理することも見る `fragment` (数の代わりに名前を使う雛形など) は走らせない 1 件も比べなければ失敗する export の検査は debug build では数分かかるので test matrix では ignore し、CI の `doc-programs` job (ubuntu、release、`scripts/cargo_test_nonzero.sh`) と `scripts/preflight.sh` で走らせる 取り出し・parse・文法の検査は全 OS の test で走る 印の無い fence で最初の呼び出しが construct の名前のものは警告 (次の変更で失敗にする) 単位と印刷可能性 (肉厚・大きさ・overhang) はまだ言語の定義に無いので見ない
 
 ### Fixed
