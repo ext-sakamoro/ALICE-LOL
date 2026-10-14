@@ -10,6 +10,15 @@ include = ["**/*.md"]
 # LICENSE files are legal text
 exclude = ["CHANGELOG.md", "*/CHANGELOG.md", "LICENSE*", "*/LICENSE*"]
 
+# ---------------------------------------------------------------- a block another gate writes
+
+# the "ALICE-Law integration" block of the READMEs is generated from ALICE-Law at the revision it
+# names and compared by the workflow below; its numbers are that gate's, not this one's
+[generated]
+begin = '''<!-- law-integration:begin law=[0-9a-f]{40} -->'''
+end = '''<!-- law-integration:end -->'''
+checked_by = { file = ".github/workflows/law-readme-block.yml", pattern = '''gen-law-readme-block\.py"?\s+check\b[^\n]*--crate alice-lol''' }
+
 # ---------------------------------------------------------------- what counts as a count
 
 [countable]

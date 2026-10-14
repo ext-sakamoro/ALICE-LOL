@@ -431,6 +431,57 @@ class Empty(unittest.TestCase):
         self.assertTrue(any("class `marked` compared nothing" in x for x in e), e)
 
 
+GEN_CONFIG = ('''
+[generated]
+begin = ''' + "'''<!-- gen:begin rev=[0-9a-f]{4} -->'''" + '''
+end = "<!-- gen:end -->"
+checked_by = { file = ".github/workflows/gen.yml", pattern = "gen\\\\.py check --crate x" }
+''')
+GEN_BLOCK = "\n<!-- gen:begin rev=abcd -->\n- 7 shapes in the other gate's table\n<!-- gen:end -->\n"
+GEN_FLOW = {".github/workflows/gen.yml": "run: python3 gen.py check --crate x\n"}
+
+
+class Generated(unittest.TestCase):
+    """a block another gate writes and checks is skipped only as an exact, checked span"""
+
+    def gen(self, doc_extra: str, flow: dict[str, str] | None = None) -> list[str]:
+        return errors(doc=DOC + doc_extra, config=CONFIG + GEN_CONFIG, extra=GEN_FLOW if flow is None else flow)
+
+    def test_a_count_inside_the_checked_block_passes(self):
+        self.assertEqual(self.gen(GEN_BLOCK), [])
+
+    def test_the_same_count_without_the_rule_is_a_finding(self):
+        self.assertTrue(any("unmarked count" in x for x in errors(doc=DOC + GEN_BLOCK)))
+
+    def test_a_count_after_or_before_the_block_is_still_a_finding(self):
+        for doc_extra in (GEN_BLOCK + "- 9 shapes later\n", "\n- 9 shapes before\n" + GEN_BLOCK):
+            with self.subTest(doc_extra=doc_extra):
+                self.assertTrue(any("unmarked count `9 shapes" in x for x in self.gen(doc_extra)))
+
+    def test_a_block_without_its_end_marker_is_read_in_full(self):
+        e = self.gen(GEN_BLOCK.replace("<!-- gen:end -->\n", ""))
+        self.assertTrue(any("generated-block markers" in x for x in e), e)
+        self.assertTrue(any("unmarked count `7 shapes" in x for x in e), e)
+
+    def test_two_blocks_or_reversed_markers_are_read_in_full(self):
+        for doc_extra in (GEN_BLOCK + GEN_BLOCK, "\n<!-- gen:end -->\n- 7 shapes\n<!-- gen:begin rev=abcd -->\n"):
+            with self.subTest(doc_extra=doc_extra):
+                e = self.gen(doc_extra)
+                self.assertTrue(any("generated-block markers" in x for x in e), e)
+                self.assertTrue(any("unmarked count `7 shapes" in x for x in e), e)
+
+    def test_a_block_nothing_checks_is_read_in_full(self):
+        for flow in ({}, {".github/workflows/gen.yml": "run: python3 gen.py check --crate y\n"}):
+            with self.subTest(flow=flow):
+                e = self.gen(GEN_BLOCK, flow)
+                self.assertTrue(any("nothing checks it" in x for x in e), e)
+                self.assertTrue(any("unmarked count `7 shapes" in x for x in e), e)
+
+    def test_an_incomplete_rule_is_a_config_error(self):
+        with self.assertRaises(dn.ConfigError):
+            errors(config=CONFIG + "\n[generated]\nbegin = \"x\"\nend = \"y\"\n")
+
+
 class Cli(unittest.TestCase):
     def test_exit_codes(self):
         script = os.path.join(HERE, "doc_numbers.py")

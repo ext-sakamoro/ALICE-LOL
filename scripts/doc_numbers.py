@@ -57,6 +57,14 @@ Sources (`[sources."KEY"]`, every source has `noun` (regex) and `kind`):
 `[[complete]] rows = KEY, of = KEY` states that a table lists every item: the
 two counts must be equal.
 
+`[generated]` (optional) names a block another gate writes and checks: `begin` and `end`
+(regexes, each matching a whole line) and `checked_by = { file, pattern }` (a tracked file,
+usually a workflow, whose text matches `pattern`). The lines from the begin line to the end
+line are not read by this gate, but only when the file has exactly one begin line and one end
+line after it and `checked_by` holds; otherwise the markers are a finding and every line is
+read, so a missing end marker cannot hide the rest of the file and a block nothing checks
+cannot hide its numbers.
+
 Every class must compare at least one item unless `[not_applicable]` gives the
 class a reason, every source must be used by at least one marker, every allow
 entry must match, and a source that finds 0 items fails: a moved file, a
@@ -109,6 +117,34 @@ def tracked(root: str) -> list[str]:
     if p.returncode != 0:
         raise ConfigError(f"git ls-files failed in {root}: {p.stderr.decode(errors='replace').strip()}")
     return [f for f in p.stdout.decode("utf-8").split("\0") if f]
+
+
+def generated_span(lines: list[str], begin: re.Pattern, end: re.Pattern) -> tuple[range | None, str | None]:
+    """the 0-based lines of the one generated block (markers included), or a finding"""
+    b = [i for i, l in enumerate(lines) if begin.fullmatch(l.strip())]
+    e = [i for i, l in enumerate(lines) if end.fullmatch(l.strip())]
+    if not b and not e:
+        return None, None
+    if len(b) == 1 and len(e) == 1 and b[0] < e[0]:
+        return range(b[0], e[0] + 1), None
+    at = ", ".join(str(i + 1) for i in sorted(b + e))
+    return None, f"generated-block markers on lines {at}: expected one begin line and one end line after it"
+
+
+def generated_rule(cfg: dict, root: str, files: list[str]) -> tuple[re.Pattern, re.Pattern, str | None] | None:
+    """the begin and end patterns of [generated], and why the block is not checked (None = it is)"""
+    g = cfg.get("generated")
+    if g is None:
+        return None
+    cb = g.get("checked_by", {})
+    if not g.get("begin") or not g.get("end") or not cb.get("file") or not cb.get("pattern"):
+        raise ConfigError("[generated] needs `begin`, `end` and `checked_by = { file, pattern }`")
+    why = None
+    if cb["file"] not in files:
+        why = f"{cb['file']} is not tracked"
+    elif not re.search(cb["pattern"], read(root, cb["file"])):
+        why = f"{cb['file']} does not match `{cb['pattern']}`"
+    return re.compile(g["begin"]), re.compile(g["end"]), why
 
 
 # ---------------------------------------------------------------- sources
@@ -355,8 +391,18 @@ def check(cfg: dict, root: str) -> tuple[list[str], dict[str, int]]:
 
     docs = doc_files(cfg, files)
     counts["docs"] = len(docs)
+    rule = generated_rule(cfg, root, files)
     for rel in docs:
         lines = read(root, rel).split("\n")
+        skip: range = range(0)
+        if rule is not None:
+            span, err = generated_span(lines, rule[0], rule[1])
+            if err:
+                errors.append(f"{rel}: {err}")
+            elif span is not None and rule[2] is not None:
+                errors.append(f"{rel}: has a generated block, but nothing checks it ({rule[2]})")
+            elif span is not None:
+                skip = span
         measured_ok, history = set(), set()
         for a, b in blocks(lines):
             rows = {i for i in range(a, b + 1) if lines[i].lstrip().startswith("|")}
@@ -365,6 +411,8 @@ def check(cfg: dict, root: str) -> tuple[list[str], dict[str, int]]:
                     cover.update(range(a, b + 1))
                 cover.update(i for i in rows if any(m.group(1) == kind for m in NOTE.finditer(lines[i])))
         for i, line in enumerate(lines):
+            if i in skip:
+                continue  # written and checked by the gate [generated] names
             where = f"{rel}:{i + 1}"
             markers = list(MARKER.finditer(line))
             marked_at: set[int] = set()
