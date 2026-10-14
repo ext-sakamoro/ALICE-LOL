@@ -26,7 +26,13 @@ follow fails CI instead of drifting:
   * version   no line of either README states a version of an alice-lol
               crate (`alice-lol = "X"`, `alice-lol X.Y`): the READMEs carry none,
               so a release cannot leave a stale one behind (every line is
-              compared, so the check is never empty)
+              compared, so the check is never empty); the one exception is
+              the block between `<!-- law-integration:begin law=<sha> -->`
+              and `<!-- law-integration:end -->`, generated from ALICE-Law and
+              checked by the workflow that regenerates it: it is skipped only
+              when each marker appears once, as its own line, begin before end,
+              and that workflow is present (otherwise the markers are an error
+              and every line is checked)
   * example   the first ```rust block of each README is the ```rust block of
               the crate documentation in alice-lol/src/lib.rs (a doctest)
   * links     every relative link in both READMEs points at a file that exists
@@ -55,11 +61,46 @@ MACRO_RS = "alice-lol-macro/src/parser.rs"
 LAW_RS = "alice-lol/src/law.rs"
 RESEARCH_RS = "alice-lol/src/research_law.rs"
 EVIDENCE = ("Proved", "Witnessed", "Modelled")
+LAW_BEGIN = re.compile(r"<!-- law-integration:begin law=[0-9a-f]{40} -->")
+LAW_END = "<!-- law-integration:end -->"
+WORKFLOWS = ".github/workflows"
 
 
 def read(root: str, rel: str) -> str:
     with open(os.path.join(root, rel), encoding="utf-8") as f:
         return f.read()
+
+
+def law_block(lines: list[str]) -> tuple[range | None, str | None]:
+    """the 0-based line range of the generated ALICE-Law block (markers included), or an error
+
+    No marker at all is (None, None). The range is given only for exactly one begin line and one
+    end line, each the whole line, begin before end; anything else (a missing end marker, a second
+    block, a marker with other text on its line) is an error and no line is skipped.
+    """
+    marked = [i for i, l in enumerate(lines) if "law-integration:" in l]
+    if not marked:
+        return None, None
+    begins = [i for i in marked if LAW_BEGIN.fullmatch(lines[i].strip())]
+    ends = [i for i in marked if lines[i].strip() == LAW_END]
+    if len(begins) == 1 and len(ends) == 1 and len(marked) == 2 and begins[0] < ends[0]:
+        return range(begins[0], ends[0] + 1), None
+    return None, (f"law-integration markers on lines {', '.join(str(i + 1) for i in marked)}: "
+                  f"expected one begin line and one end line after it")
+
+
+def law_block_workflow(root: str) -> str | None:
+    """the workflow that regenerates the block and compares it, or None"""
+    d = os.path.join(root, WORKFLOWS)
+    if not os.path.isdir(d):
+        return None
+    for name in sorted(os.listdir(d)):
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        text = read(root, f"{WORKFLOWS}/{name}")
+        if re.search(r"gen-law-readme-block\.py[\"']?\s+check\b", text) and "--crate alice-lol" in text:
+            return f"{WORKFLOWS}/{name}"
+    return None
 
 
 def strings(text: str) -> list[str]:
@@ -352,8 +393,19 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
     n = 0
     pat = re.compile(r'\balice-lol(?:-[a-z]+)*\s*=\s*(?:"[^"]*\d|\{[^}\n]*?\bversion\s*=)'
                      r'|\balice-lol(?:-[a-z]+)*\s+v?\d+\.\d+')
+    workflow = law_block_workflow(root)
     for rel in READMES:
-        for i, line in enumerate(docs[rel].split("\n"), 1):
+        lines = docs[rel].split("\n")
+        skip, err = law_block(lines)
+        if err:
+            errors.append(f"{rel}: {err}")
+        if skip is not None and workflow is None:
+            errors.append(f"{rel}: has an ALICE-Law block, but no workflow under {WORKFLOWS} runs "
+                          f"`gen-law-readme-block.py check --crate alice-lol` (the block would go unchecked)")
+            skip = None
+        for i, line in enumerate(lines, 1):
+            if skip is not None and i - 1 in skip:
+                continue
             n += 1
             m = pat.search(line)
             if m:

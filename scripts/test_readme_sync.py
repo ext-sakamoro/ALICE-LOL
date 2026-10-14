@@ -204,6 +204,13 @@ def both(text: str) -> dict[str, str]:
 
 
 R = README.format(example=EXAMPLE)
+BLOCK = ("<!-- law-integration:begin law=" + "5" * 40 + " -->\n## ALICE-Law integration\n\n"
+         "| Release train | alice-lol 0.4.0 (published) |\n| End to end check | covered (`alice-lol = \"0.4\"`) |\n"
+         "<!-- law-integration:end -->\n")
+WORKFLOW = ".github/workflows/law-readme-block.yml"
+WORKFLOW_TEXT = ('jobs:\n  check:\n    steps:\n      - run: |\n'
+                 '          python3 "$RUNNER_TEMP/gen-law-readme-block.py" check --law "$RUNNER_TEMP/law" --crate alice-lol \\\n'
+                 '            --crate-repo . --law-main origin/main --lint warn\n')
 
 
 class RealRepo(unittest.TestCase):
@@ -326,6 +333,45 @@ class Checks(unittest.TestCase):
 
     def test_the_version_check_reads_every_readme_line(self):
         _, counts = rs.check(crate())
+        self.assertEqual(counts["version"], 2 * len(R.split("\n")))
+
+    # the generated ALICE-Law block: skipped by the version check only as an exact, checked span
+    def test_a_version_inside_the_law_block_passes_when_the_workflow_checks_it(self):
+        self.assertEqual(errors({**both(R + BLOCK), WORKFLOW: WORKFLOW_TEXT}), [])
+
+    def test_a_version_after_the_law_block_still_fails(self):
+        e = errors({**both(R + BLOCK + 'alice-lol = "0.4"\n'), WORKFLOW: WORKFLOW_TEXT})
+        self.assertTrue(any("states a version" in x for x in e), e)
+
+    def test_a_version_before_the_law_block_still_fails(self):
+        e = errors({**both(R + "Install alice-lol 0.4.0\n" + BLOCK), WORKFLOW: WORKFLOW_TEXT})
+        self.assertTrue(any("states a version" in x for x in e), e)
+
+    def test_a_law_block_without_its_end_marker_is_not_skipped(self):
+        e = errors({**both(R + BLOCK.replace(rs.LAW_END + "\n", "")), WORKFLOW: WORKFLOW_TEXT})
+        self.assertTrue(any("law-integration markers" in x for x in e), e)
+        self.assertTrue(any("states a version" in x for x in e), e)
+
+    def test_two_law_blocks_or_reversed_markers_are_not_skipped(self):
+        for text in (R + BLOCK + BLOCK, R + rs.LAW_END + "\n" + BLOCK.replace(rs.LAW_END + "\n", "")):
+            with self.subTest(text=text[-80:]):
+                e = errors({**both(text), WORKFLOW: WORKFLOW_TEXT})
+                self.assertTrue(any("law-integration markers" in x for x in e), e)
+                self.assertTrue(any("states a version" in x for x in e), e)
+
+    def test_a_marker_sharing_its_line_with_text_is_not_skipped(self):
+        e = errors({**both(R + BLOCK.replace(rs.LAW_END, rs.LAW_END + " alice-lol 0.4")), WORKFLOW: WORKFLOW_TEXT})
+        self.assertTrue(any("law-integration markers" in x for x in e), e)
+
+    def test_a_law_block_without_the_checking_workflow_is_not_skipped(self):
+        e = errors(both(R + BLOCK))
+        self.assertTrue(any("block would go unchecked" in x for x in e), e)
+        self.assertTrue(any("states a version" in x for x in e), e)
+        other = WORKFLOW_TEXT.replace("--crate alice-lol", "--crate alice-sdf")
+        self.assertTrue(any("block would go unchecked" in x for x in errors({**both(R + BLOCK), WORKFLOW: other})))
+
+    def test_the_law_block_lines_are_not_counted_as_compared(self):
+        _, counts = rs.check(crate({**both(R + BLOCK), WORKFLOW: WORKFLOW_TEXT}))
         self.assertEqual(counts["version"], 2 * len(R.split("\n")))
 
     def test_readme_example_diverges_from_doctest(self):
