@@ -110,6 +110,8 @@ python3 scripts/test_release_siblings.py
 python3 scripts/release_siblings.py
 python3 scripts/test_root_artifacts.py
 python3 scripts/root_artifacts.py
+python3 scripts/test_float_build_flags.py
+python3 scripts/float_build_flags.py
 python3 scripts/test_license_check.py
 python3 scripts/test_fuzz_runs.py
 python3 scripts/license_check.py

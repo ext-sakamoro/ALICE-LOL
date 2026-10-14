@@ -91,6 +91,8 @@ note = "print_export.rs's HashSet<(u32,u32)> (euler_characteristic, local name e
 reference_repo = ""
 
 [G14]
-status = "missing"
-note = "no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the round-to-nearest-even / no-flush-to-zero assumption to be asserted by a test, not merely relied upon implicitly in doc comments (which several modules do, e.g. angle.rs, geometry_id.rs) -- no such dedicated assertion test was found"
+status = "pass"
+evidence = ["scripts/float_build_flags.py + scripts/test_float_build_flags.py: every tracked file that can carry build flags (each Cargo.toml, .cargo/config, rust-toolchain, build.rs, .github/workflows/*, scripts/preflight.sh) is read, and target-cpu=native or a fast-math-style flag fails; 0 files read fails; run in CI (docs job) and preflight", "alice-lol/tests/float_environment.rs: round-to-nearest ties-to-even (f32 / f64 addition, a value just off the tie, f64 to f32 narrowing, a subnormal tie) and no flush-to-zero / denormals-are-zero (subnormal results, inputs and gradual underflow), each operand through black_box so the target's own unit computes it, with exact bit patterns as the oracle; the test suite runs it on every CI target, and it passes in release as well as debug"]
+since = ""
+note = "the doc comments of angle.rs and geometry_id.rs that assumed this environment are now backed by the test; rewriting the test's expectations to round-toward-zero or flush-to-zero turns it red (measured)"
 reference_repo = ""
