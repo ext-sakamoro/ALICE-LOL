@@ -96,7 +96,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "timing-display:"]
 
 # the one file `raw-helper:` is accepted on; `test-probe-alternative:` is
 # additionally accepted inside a `#[cfg(test)] mod ... { }` block in any
@@ -277,6 +277,12 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     errors.append(
                         f"error: {rel}:{line}: raw-helper: は {RAW_HELPER_FILE_REL} 以外の file で"
                         "名乗れない (caller 側が同じ prefix を自称しても検査は通さない)"
+                    )
+                    continue
+                if prefix == "timing-display:" and "/src/bin/" not in "/" + rel:
+                    errors.append(
+                        f"error: {rel}:{line}: timing-display: は src/bin/ の下 (と examples/) でしか名乗れない "
+                        "(library code の出力に壁時計を入れない、ALICE-Law G10)"
                     )
                     continue
                 if prefix == "test-probe-alternative:" and not (

@@ -44,7 +44,7 @@ class Check(unittest.TestCase):
         # the Scoping class below), so this writes each prefix to a location
         # where it is actually valid, not all into one plain function
         with tempfile.TemporaryDirectory() as root:
-            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:")]
+            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "timing-display:")]
             write(root, SRC, "\n".join(
                 f'#[allow(clippy::disallowed_methods, reason = "{p} x")]\nfn f{i}() {{}}\n'
                 for i, p in enumerate(unscoped)
@@ -59,6 +59,10 @@ class Check(unittest.TestCase):
             write(root, g.RAW_HELPER_FILE_REL, (
                 '#[allow(clippy::disallowed_methods, reason = "raw-helper: x")]\n'
                 "fn raw() {}\n"
+            ))
+            write(root, "alice-lol/src/bin/tool.rs", (
+                '#[allow(clippy::disallowed_methods, reason = "timing-display: x")]\n'
+                "fn timed() {}\n"
             ))
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
@@ -183,6 +187,31 @@ class Scoping(unittest.TestCase):
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
             self.assertEqual(counts["raw-helper:"], 1)
+
+
+class TimingDisplay(unittest.TestCase):
+    """`timing-display:` (a wall-clock read only printed for the operator) is
+    accepted under src/bin/ and refused in library code (ALICE-Law G10)."""
+
+    def test_in_a_bin_passes(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, "pub fn f() {}\n")
+            write(root, "alice-lol/src/bin/tool.rs", (
+                '#[allow(clippy::disallowed_methods, reason = "timing-display: x")]\n'
+                "fn main() { let _t = std::time::Instant::now(); }\n"
+            ))
+            errors, counts = g.check(root)
+            self.assertEqual(errors, [])
+            self.assertEqual(counts["timing-display:"], 1)
+
+    def test_in_library_code_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "timing-display: x")]\n'
+                "pub fn f() -> std::time::Instant { std::time::Instant::now() }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("timing-display" in e and "名乗れない" in e for e in errors))
 
 
 class LibmHiddenByAllow(unittest.TestCase):

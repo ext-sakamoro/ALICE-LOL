@@ -33,3 +33,14 @@ pub fn libm_atan2(y: f32, x: f32) -> f32 {
 pub fn libm_tan(z: f32) -> f32 {
     z.tan()
 }
+
+// G10: a wall-clock read in library code (the configuration also lists unseeded RNG and
+// fresh UUID constructors, which this canary cannot call without those crates)
+
+pub fn wall_clock_instant() -> std::time::Instant {
+    std::time::Instant::now()
+}
+
+pub fn wall_clock_system() -> std::time::SystemTime {
+    std::time::SystemTime::now()
+}

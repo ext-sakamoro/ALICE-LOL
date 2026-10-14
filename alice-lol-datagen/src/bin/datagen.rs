@@ -49,6 +49,10 @@ fn main() {
     };
     let out_path = arg_after(&args, "--out");
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "timing-display: elapsed time printed for the operator, never part of the generated output"
+    )]
     let t0 = Instant::now();
     let (samples, rejected) = generate(&families, n, seed);
     let elapsed = t0.elapsed();
