@@ -94,6 +94,121 @@ fn expected_gas_id(semantics: &[u8; 32]) -> [u8; 32] {
     h.finish()
 }
 
+/// A law whose tree uses every node kind: number, identifier, negation, the four binary
+/// operators, power, and calls with 1, 2 and 3 arguments (the parser: unary minus above
+/// power, `*` `/` above `+` `-`, all binary operators left-associative)
+const ALL_NODES: &str = "-a + b*k - max(a, b, c)/sqrt(c)^2 + atan2(b, a) + 0.5";
+
+fn all_nodes(expr: &str) -> ResearchLaw {
+    ResearchLaw::new(
+        "all nodes",
+        expr,
+        Var::new("y", "1"),
+        &[Var::new("a", "1"), Var::new("b", "1"), Var::new("c", "1")],
+        &[Param::new("k", 2.0, 0.0, "1")],
+        &[("c", ValidRange { lo: 0.0, hi: 10.0 })],
+        Provenance::new("closed form", "stated"),
+    )
+    .unwrap()
+}
+
+/// ((((-a + b*k) - max(a, b, c) / sqrt(c)^2) + atan2(b, a)) + 0.5)
+fn expected_all_nodes_id(semantics: &[u8; 32]) -> [u8; 32] {
+    let ident = |h: LawIdHasher, s: &str| h.u32(1).str(s);
+    let mut h = LawIdHasher::new(RESEARCH_LAW_KIND, semantics).str("all nodes");
+    h = h.u32(3).u32(0); // + 0.5
+    h = h.u32(3).u32(0); //   + atan2(b, a)
+    h = h.u32(3).u32(1); //     - (max / sqrt^2)
+    h = h.u32(3).u32(0); //       -a + b*k
+    h = ident(h.u32(2), "a"); //         -a
+    h = h.u32(3).u32(2); //         b * k
+    h = ident(h, "b");
+    h = ident(h, "k");
+    h = h.u32(3).u32(3); //       max(a, b, c) / sqrt(c)^2
+    h = h.u32(5).str("max").u64(3);
+    h = ident(h, "a");
+    h = ident(h, "b");
+    h = ident(h, "c");
+    h = h.u32(4); //         power: base, then exponent bits
+    h = h.u32(5).str("sqrt").u64(1);
+    h = ident(h, "c");
+    h = h.f64(2.0);
+    h = h.u32(5).str("atan2").u64(2); //     atan2(b, a)
+    h = ident(h, "b");
+    h = ident(h, "a");
+    h = h.u32(0).f64(0.5); //   0.5
+    h = h.str("y").str("1");
+    h = h
+        .u64(3)
+        .str("a")
+        .str("1")
+        .str("b")
+        .str("1")
+        .str("c")
+        .str("1");
+    h = h.u64(1).str("k").f64(2.0).str("1");
+    h = h.u32(0).u32(0).u32(1).f64(0.0).f64(10.0);
+    h.finish()
+}
+
+#[test]
+fn every_node_kind_is_the_specified_serialization() {
+    assert_eq!(
+        all_nodes(ALL_NODES).law_id(&LOL_SEMANTICS_ID),
+        expected_all_nodes_id(&LOL_SEMANTICS_ID)
+    );
+}
+
+#[test]
+fn the_recorded_value_for_the_all_nodes_law_does_not_drift() {
+    let hex =
+        all_nodes(ALL_NODES)
+            .law_id(&LOL_SEMANTICS_ID)
+            .iter()
+            .fold(String::new(), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            });
+    assert_eq!(hex, RECORDED_ALL_NODES_ID);
+}
+
+const RECORDED_ALL_NODES_ID: &str =
+    "14295d24370f2f135af1452a809def929f8577841cd90e316d05e6beaff7114c";
+
+#[test]
+fn a_call_is_named_by_its_function_its_arity_and_its_argument_order() {
+    let base = all_nodes(ALL_NODES).law_id(&LOL_SEMANTICS_ID);
+    for (what, expr) in [
+        (
+            "arity: max of 2 instead of 3",
+            "-a + b*k - max(a, b)/sqrt(c)^2 + atan2(b, a) + 0.5",
+        ),
+        (
+            "argument order",
+            "-a + b*k - max(a, b, c)/sqrt(c)^2 + atan2(a, b) + 0.5",
+        ),
+        (
+            "function name",
+            "-a + b*k - min(a, b, c)/sqrt(c)^2 + atan2(b, a) + 0.5",
+        ),
+        (
+            "negation dropped",
+            "a + b*k - max(a, b, c)/sqrt(c)^2 + atan2(b, a) + 0.5",
+        ),
+        (
+            "exponent",
+            "-a + b*k - max(a, b, c)/sqrt(c)^3 + atan2(b, a) + 0.5",
+        ),
+    ] {
+        assert_ne!(
+            all_nodes(expr).law_id(&LOL_SEMANTICS_ID),
+            base,
+            "{what} did not change the identifier"
+        );
+    }
+}
+
 #[test]
 fn the_identifier_is_the_specified_serialization() {
     assert_eq!(id(&gas()), expected_gas_id(&LOL_SEMANTICS_ID));
