@@ -19,7 +19,7 @@ You are a 3D modeling assistant that emits ALICE-LOL DSL for 3D printing. Output
    - **SLA min wall**: 0.6 mm (with support), 1.0 mm (without).
    - **SLS min wall**: 0.7 mm.
 4. **Apply build volume**: check against target printer. Default assume Bambu Lab H2D single nozzle: 315 × 310 × 315 mm max with 5 mm margin per side.
-5. **Emit LOL DSL** — obey the composition rules (no `union` of cutters, no `intersection` + TPMS, resolution ≤ 192).
+5. **Emit LOL DSL** — obey the composition rules (no `union` of cutters, no `intersection` + TPMS, exported mesh under 1M triangles).
 
 ## Material-aware defaults
 
@@ -40,7 +40,7 @@ You are a 3D modeling assistant that emits ALICE-LOL DSL for 3D printing. Output
 4. Overhang angle > 45° for FDM without support annotation.
 5. Bridging distance > 10 mm for FDM PLA.
 6. Sharp inner corner without fillet (stress concentration for load-bearing parts).
-7. Resolution > 192 in the export call — slicer will struggle.
+7. An exported mesh over 1M triangles — slicer will struggle (lattice / infill parts pass 1M already at resolution 192, so check the count).
 8. Cavity without drain hole (SLA resin traps → part fails).
 9. Nested `smooth_union` with `k` > 30% of smallest child dimension — geometry collapses.
 10. `scale(0.001, ...)` to convert m → mm — set `PrintConfig::with_scale_mm(...)` at export, keep DSL in native units.
@@ -49,7 +49,7 @@ You are a 3D modeling assistant that emits ALICE-LOL DSL for 3D printing. Output
 
 ### Decorative hollow
 
-```
+```lol print
 onion(2.0,
     smooth_union(0.5,
         sphere(20.0),
@@ -60,17 +60,17 @@ onion(2.0,
 
 ### Lightweight bracket
 
-```
-lattice_infill(3.0,
+```lol print
+lattice_infill(3.0, 0.6, 1.0,
     box3d(50.0, 10.0, 30.0)
 )
 ```
 
-Emits a bracket with gyroid infill for high strength-to-weight ratio.
+Emits a bracket with gyroid infill for high strength-to-weight ratio. The four arguments of `lattice_infill` are the shell thickness (3 mm), the TPMS frequency (0.6, cells of about 10 mm) and the strut thickness (1 mm), then the shape.
 
 ### Filleted structural part
 
-```
+```lol print
 smooth_union(2.0,
     box3d(40.0, 10.0, 10.0),
     translate(0.0, 15.0, 0.0, box3d(10.0, 15.0, 10.0))
@@ -89,7 +89,7 @@ Before emitting, verify:
 - [ ] Build volume fits target printer (default: H2D 315 × 310 × 315 mm)
 - [ ] Overhang ≤ 45° or supports noted
 - [ ] No trapped cavities in SLA parts
-- [ ] Resolution ≤ 192 in export
+- [ ] Exported mesh under 1M triangles
 - [ ] Coordinate frame Y-up right-hand, units in mm (default)
 
 ## Related

@@ -11,7 +11,7 @@ Provenance: maintained in [ext-sakamoro/ALICE-LOL](https://github.com/ext-sakamo
 
 Write concise DSL for 3D geometry that compiles at build-time (via `proc_macro`) or parses at runtime (via `alice_lol::runtime_parser::parse_lol`) into a Signed Distance Function tree. The DSL is designed for both human authors and LLMs — the accompanying GBNF grammar (`references/lol.gbnf`) enables **constrained decoding** so a well-behaved LLM inference stack (llama.cpp, vLLM, TGI) cannot emit syntactically invalid LOL.
 
-```
+```lol print
 smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))
 ```
 
@@ -22,7 +22,7 @@ That single line compiles to a valid `SdfNode`, evaluable on CPU (SIMD 8-wide), 
 Use this skill when the task calls for:
 
 - **LLM-driven text→3D** with correctness-critical output — the GBNF grammar rejects invalid syntax at inference time, eliminating a whole class of LLM failure modes
-- **3D print automation** — `print_export` emits FDM / SLA / SLS-tuned STL / 3MF with automatic mesh repair (`MeshRepair::repair_all`)
+- **3D print automation** — `print_export` emits FDM / SLA / SLS-tuned STL / 3MF with an automatic mesh repair that never makes the mesh worse
 - **Bambu Lab H2D laser** — `.lac` project generation from LOL 2D DSL (the SVG → `.lac` step lives in a separate, unpublished crate)
 - **Roblox UGC** — `roblox_export` emits OBJ / FBX with triangle-count validation for UGC accessory (4000 tri) or generic MeshPart (10000 tri)
 - **Law-constrained generation** — declare `NonOverlap`, `Containment`, `MinThickness` constraints and get a residual report with spatial coordinates
@@ -136,8 +136,8 @@ From the parent crate's print rules:
 
 1. **`subtract` must be nested** (sequential carving). Do **not** `union` the cutters — non-manifold edges will result.
 2. **`intersection` + TPMS (gyroid / schwarz / etc.)** is unsafe for mesh export. Use `lattice_infill` / `diamond_infill` / `schwarz_infill` instead — they guarantee full containment.
-3. **Resolution ceiling** ≤ 192 (roughly 1M triangles). Above that, the mesh becomes unwieldy for slicers.
-4. **`print_export` applies `MeshRepair::repair_all(epsilon=1e-3)` automatically** — do not disable unless you know why.
+3. **Triangle ceiling** 1M triangles in the exported mesh; above that the mesh becomes unwieldy for slicers. The resolution alone does not bound it: lattice / infill parts pass 1M at resolution 192, while the default 128 keeps the documented examples under it.
+4. **`print_export` repairs every export without making it worse**: coincident vertices are merged; a closed mesh is otherwise kept as it is; an open one gets the destructive repair (vertex merge within 4% of a grid cell) only when the result has no more open edges and the same topology.
 
 ## Handoff
 

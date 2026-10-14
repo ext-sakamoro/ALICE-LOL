@@ -124,8 +124,9 @@ node_to_3mf(&bracket, "bracket.3mf", &PrintConfig::default())?;
 
 **SLA key rule:** If using `onion()` for hollow prints, add drain holes (subtract small cylinders at the bottom).
 
-```
-// SLA hollow print with drain holes
+SLA hollow print with drain holes
+
+```lol print
 subtract(
     onion(0.015, sphere(1.0)),
     translate(0.0, -0.9, 0.0, cylinder(0.05, 0.2))
@@ -198,12 +199,13 @@ Typical ranges (LOL units):
 
 ## Step 4: Output Format
 
-Always output valid LOL code. Include a comment header explaining your design decisions:
+Always output valid LOL code. State the design decisions in prose before the program, as below; the program itself has no comments: the grammar used for generation does not accept `//` (an open comment is where a model rambles instead of emitting the program), so a program with a comment header is rejected:
 
-```
-// Intent: Structural bracket for FDM (PLA)
-// Strategy: Gyroid infill for weight savings with adequate strength
-// Shell: 0.04 (0.8mm wall), Scale: 6.0, Lattice: 0.02
+- Intent: Structural bracket for FDM (PLA)
+- Strategy: Gyroid infill for weight savings with adequate strength
+- Shell: 0.04 (0.8mm wall), Scale: 6.0, Lattice: 0.02
+
+```lol print
 lattice_infill(0.04, 6.0, 0.02,
     subtract(
         rounded_box(2.0, 1.0, 0.5, 0.1),
@@ -216,9 +218,10 @@ lattice_infill(0.04, 6.0, 0.02,
 
 ### Phone Stand (FDM, PLA, structural)
 
-```
-// Intent: Phone stand — needs to hold weight, but should be lightweight
-// Strategy: Gyroid infill, medium density
+- Intent: Phone stand — needs to hold weight, but should be lightweight
+- Strategy: Gyroid infill, medium density
+
+```lol print
 lattice_infill(0.05, 5.0, 0.02,
     subtract(
         smooth_union(0.1,
@@ -236,9 +239,10 @@ lattice_infill(0.05, 5.0, 0.02,
 
 ### Desk Lamp Shade (FDM, PLA, decorative)
 
-```
-// Intent: Lamp shade — decorative, thin shell, light transmission
-// Strategy: Hollow shell only, no infill needed
+- Intent: Lamp shade — decorative, thin shell, light transmission
+- Strategy: Hollow shell only, no infill needed
+
+```lol print
 onion(0.02,
     subtract(
         scale_non_uniform(1.0, 1.5, 1.0, sphere(1.2)),
@@ -249,13 +253,16 @@ onion(0.02,
 
 ### Drone Motor Mount (FDM, Nylon, high stress)
 
-```
-// Intent: Motor mount — high vibration, needs maximum stiffness
-// Strategy: Diamond infill for directional stiffness along thrust axis
+- Intent: Motor mount — high vibration, needs maximum stiffness
+- Strategy: Diamond infill for directional stiffness along thrust axis
+
+```lol print
 diamond_infill(0.05, 7.0, 0.03,
     subtract(
-        cylinder(1.0, 0.4),
-        cylinder(0.3, 0.5),
+        subtract(
+            cylinder(1.0, 0.4),
+            cylinder(0.3, 0.5)
+        ),
         polar_repeat(4,
             translate(0.7, 0.0, 0.0, cylinder(0.1, 0.5))
         )
@@ -265,9 +272,10 @@ diamond_infill(0.05, 7.0, 0.03,
 
 ### Medical Scaffold (SLS, Nylon, isotropic)
 
-```
-// Intent: Bone scaffold — needs isotropic porosity for cell growth
-// Strategy: Schwarz-P for uniform pore distribution
+- Intent: Bone scaffold — needs isotropic porosity for cell growth
+- Strategy: Schwarz-P for uniform pore distribution
+
+```lol print
 schwarz_infill(0.03, 6.0, 0.015,
     smooth_intersection(0.05,
         cylinder(0.8, 1.5),
@@ -278,21 +286,26 @@ schwarz_infill(0.03, 6.0, 0.015,
 
 ### Resin Figurine (SLA, decorative)
 
-```
-// Intent: Display figurine — thin shell to save resin, with drain holes
-// Strategy: Hollow with drain holes at base
+- Intent: Display figurine — thin shell to save resin, with drain holes
+- Strategy: Hollow with drain holes at base
+
+```lol print
 subtract(
-    onion(0.015,
-        smooth_union(0.15,
-            sphere(0.8),
-            translate(0.0, 1.0, 0.0, sphere(0.5)),
-            translate(0.0, 1.7, 0.0, sphere(0.35))
-        )
+    subtract(
+        onion(0.03,
+            smooth_union(0.15,
+                sphere(0.8),
+                translate(0.0, 1.0, 0.0, sphere(0.5)),
+                translate(0.0, 1.7, 0.0, sphere(0.35))
+            )
+        ),
+        translate(0.0, -0.7, 0.0, cylinder(0.05, 0.2))
     ),
-    translate(0.0, -0.7, 0.0, cylinder(0.04, 0.2)),
-    translate(0.2, -0.7, 0.2, cylinder(0.04, 0.2))
+    translate(0.2, -0.7, 0.2, cylinder(0.05, 0.2))
 )
 ```
+
+The shell is 0.03 rather than the resin minimum 0.015: a figure this size is meshed at a grid cell of about 0.023, and a wall of 0.015 (0.03 thick) is too thin for that grid to resolve, so the mesh comes out in pieces (measured: hundreds of separate shells at resolution 128)
 
 ## Anti-Patterns (Do NOT generate)
 
@@ -306,7 +319,7 @@ subtract(
 | `schwarz_infill` with `scale > 10` | Lattice struts too thin to print | Keep `scale ≤ 8.0` for FDM |
 | Sharp internal corners for CNC | Tool can't reach | Use `round(r, ...)` on internal edges |
 | Solid sphere > 50mm diameter (FDM) | Wastes filament, long print time | Use `onion` or `lattice_infill` |
-| Mesh > 1M triangles | Slicer software slows down or rejects | Use resolution ≤ 192 in `PrintConfig` |
+| Mesh > 1M triangles | Slicer software slows down or rejects | Check the triangle count of the export (`ExportStats::triangle_count`), not only the resolution: lattice / infill parts pass 1M at resolution 192 |
 | Load-bearing hole < 3mm from edge | Tear-out failure under load (plastic rips between hole and edge) | Maintain ≥ 5mm solid plastic between load-bearing holes and outer boundary |
 | Mount hole at `frame_width / 2` (center of frame) | Leaves only 1-2mm meat to edge — cracks under wall-mount load | Place mount holes at `frame_width + hole_radius` from edge (≥7mm meat) |
 | Non-circular slot without clearance | FDM shrinks all openings — rectangular slots (e.g. SKADIS pegs) also narrow | Apply `+0.2mm to +0.4mm` clearance to BOTH width AND height of all slots, not just circular holes |
@@ -385,7 +398,7 @@ When generating organizer/storage items, use these standard dimensions.
 
 **MANDATORY**: Use `repeat_finite` for any repeating pattern. Never duplicate nodes manually.
 
-```
+```lol fragment
 // Grid of holes: translate to grid origin, repeat_finite for pattern
 subtract(
   rounded_box(base_hx, base_hy, base_hz, fillet),
@@ -396,15 +409,19 @@ subtract(
 
 ### Gridfinity Bins
 
-```
-// 2x3 bin, 4U height
-// External: 84 x 126mm, Height: 32mm
-rounded_box(42, 63, 16, 4.0)
+- 2x3 bin, 4U height
+- External: 84 x 126mm, Height: 32mm
 
-// With compartments: subtract dividers
+```lol print
+rounded_box(42, 63, 16, 4.0)
+```
+
+With compartments: subtract dividers
+
+```lol print
 subtract(
   rounded_box(42, 63, 16, 4.0),
-  translate(0, 0, 2, rounded_box(39, 60, 14, 1.0))  // hollow interior
+  translate(0, 0, 2, rounded_box(39, 60, 14, 1.0))
 )
 ```
 
@@ -414,9 +431,10 @@ subtract(
 NOT LOL/SDF. SDF marching cubes produces non-manifold edges on this geometry class.
 LOL/SDF is suitable for SKADIS **accessories** (hooks, containers — solid 3D shapes).
 
-```
-// SKADIS hook (LOL suitable — solid 3D shape)
-// T-shaped peg: blade 4.5×5mm, shoulder locks behind board
+- SKADIS hook (LOL suitable — solid 3D shape)
+- T-shaped peg: blade 4.5×5mm, shoulder locks behind board
+
+```lol print
 subtract(
   smooth_union(0.5,
     box3d(2.5, 15, 2.5),
@@ -435,7 +453,7 @@ peg_blade = 4.5 × 5.0mm (FDM), mechanism = T-insert + gravity drop
 
 ### Cable Clip (parametric)
 
-```
+```lol fragment
 // clip_inner = cable_dia / 2 + clearance
 // clip_outer = clip_inner + wall
 // opening = cable_dia × 0.35 (snap retention)
@@ -448,7 +466,7 @@ subtract(
 
 ### Drawer Divider
 
-```
+```lol fragment
 // Cross-slot interlocking divider
 // slot_width = material_thickness + 0.2mm
 // slot_depth = 50% of divider height
@@ -541,8 +559,9 @@ Plates larger than ~200×200mm warp and detach from the bed during cooling.
 - **Ground level**: Y = 0 (adjust `translate` to place object on build plate)
 - **Build plate contact**: Ensure flat bottom surface (use `intersection` with `plane` if needed)
 
-```
-// Place object on build plate (bottom at Y=0)
+Place object on build plate (bottom at Y=0)
+
+```lol print
 translate(0.0, 1.0, 0.0,
     lattice_infill(0.04, 5.0, 0.02, sphere(1.0))
 )

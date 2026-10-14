@@ -317,6 +317,7 @@ if [[ $quick -eq 1 ]]; then
   echo "  - cargo test (default + llm-bridge/glsl,wgsl,hlsl/physics/roblox features)"
   echo "  - law oracles (default + physics)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
+  echo "  - doc-programs (export of every lol print program in the documents, release)"
   echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
   echo "    a count/assertion here that is wrong locally still shows green)"
   echo "A push that changes the grammar (SDF_SYNTAX / the macro parser / the gbnf)"
@@ -353,6 +354,9 @@ step "ci.yml / test: Test (roblox oracle, named)"
 
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
+
+step "ci.yml / doc-programs: Programs in the documents (parse, grammar, closed export under 1M triangles)"
+( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh --release -p alice-lol --features llm-bridge --test doc_programs -- --include-ignored )
 
 step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-same / pairwise, ~35,000 cases, ~90s)"
 ( export CARGO_TERM_COLOR="always"; cargo test -p alice-lol --test degenerate_grid -- --ignored --nocapture )

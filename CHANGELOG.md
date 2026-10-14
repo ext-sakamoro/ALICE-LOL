@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 文書に載っている LOL の program を取り出して走らせる試験 `alice-lol/tests/doc_programs.rs` 追跡されている `*.md` (CHANGELOG を除く) の fence のうち info string が `lol print` / `lol render` / `lol fragment` のものを読む `print` は parse でき、有界な立体 1 つで (内側の点があり、外側だけで囲める箱がある)、`print_export::node_to_mesh` が既定の解像度で閉じた mesh (境界 edge 0 / 非多様体 edge 0) を 100 万三角形以下で出す `render` は parse できる `print` / `render` は `//` の comment を持たない `llm-bridge` 付きでは文法 (`lol.gbnf`) が受理することも見る `fragment` (数の代わりに名前を使う雛形など) は走らせない 1 件も比べなければ失敗する export の検査は debug build では数分かかるので test matrix では ignore し、CI の `doc-programs` job (ubuntu、release、`scripts/cargo_test_nonzero.sh`) と `scripts/preflight.sh` で走らせる 取り出し・parse・文法の検査は全 OS の test で走る 印の無い fence で最初の呼び出しが construct の名前のものは警告 (次の変更で失敗にする) 単位と印刷可能性 (肉厚・大きさ・overhang) はまだ言語の定義に無いので見ない
+
+### Fixed
+
+- 文書の LOL の program の誤り: `LLM_REFERENCE.md` の歯車は subtract の被演算子が逆で何も残らなかった (歯を円板の縁に足す形にした) / `LLM_PRINT_PROMPT.md` の drone motor mount と resin figurine は `subtract` に被演算子を 3 つ渡していた (`subtract` は 2 つ、入れ子にした) / 印刷の手引き (`print-guide.md`) の bracket は `lattice_infill` に引数を 2 つしか渡していなかった (4 つ) / figurine の殻 0.015 は export の格子で解けず mesh が数百の断片になっていた (0.03 にした) / 1 つの fence に 3 つ・2 つの program を置いていた箇所を分けた / 数の代わりに名前を使う雛形の fence を `lol fragment` にした
+- `LLM_PRINT_PROMPT.md` の Step 4 が program に `//` の comment header を付けるよう指示していたが、生成に使う文法は comment を受理しない 設計の判断は program の前に文章で書くようにし、例の comment を文章に移した
+- mesh の修復の説明が古かった (`MeshRepair::repair_all(epsilon=1e-3)` を毎回掛けると書いていた) 実際の修復 (同じ位置の頂点の統合、閉じた mesh には破壊的な修復を掛けない、掛けるのは開いた edge が増えず位相が変わらない時だけ) に合わせた
+- 「解像度 192 以下なら 100 万三角形に収まる」を三角形の数の規則に改めた 文書の印刷用の例 33 個を測ると、既定の 128 では最大 0.72M だが 192 で 5 個、256 で 9 個が 100 万を超える (lattice / infill の部品)
+
 ### Changed
 
 - 文法 `alice-lol/lol.gbnf` (と配布用の写し) を言語の定義から生成するようにした 定義は `alice-lol/language/constructs.toml` (construct 1 つにつき 1 行: 名前と、それを受け付ける文法の rule) と `alice-lol/language/lol.gbnf.in` (説明と固定の rule、名前の一覧の場所を `@names <rule>@` で示す)、生成は `python3 scripts/gen_gbnf.py` (書く先は正典と、追跡されている他の `lol.gbnf` すべて)、`--check` が生成結果と 2 つの file を比べる 行が 0 件・名前の重複・場所の無い rule・行の無い場所・template の `intent_*` rule が行と違う名前を綴る時は失敗する 検査器の試験 `scripts/test_gen_gbnf.py` CI (wiring-guard job) と preflight で走る 文法そのものは変わっていない (alice-llm の `parse_gbnf` で読んだ `Grammar` が変更前と等しい) 名前の一覧の配置は 1 行 1 名に揃えた

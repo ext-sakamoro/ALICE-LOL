@@ -12,8 +12,8 @@
 # Default scale: 1 unit = 1 mm
 #
 # Under the hood: runs `cargo run --example print_export` (parent crate),
-# which uses `alice_lol::print_export::{lol_to_stl, node_to_3mf}` with
-# automatic `MeshRepair::repair_all(epsilon=1e-3)`.
+# which uses `alice_lol::print_export::{lol_to_stl, node_to_3mf}`; every export
+# goes through a mesh repair that never makes the mesh worse.
 #
 # Requires:
 #   - Rust toolchain

@@ -136,12 +136,12 @@ The runtime parser does **not** accept Law declarations. Apply laws in Rust. `la
    - ❌ `subtract(base, union(hole1, hole2, hole3))` — non-manifold risk
    - ✅ `subtract(subtract(subtract(base, hole1), hole2), hole3)`
 2. **TPMS infill**: use the `*_infill` modifier, not raw `intersection(shell, gyroid)`.
-3. **Resolution**: mesh generation ≤ 192 to stay under 1M triangles.
+3. **Triangles**: keep the exported mesh under 1M triangles; check the count, the resolution alone does not bound it (lattice / infill parts pass 1M at resolution 192).
 4. **Coordinate frame**: Y-up, right-hand.
 
 ## Example
 
-```
+```lol print
 smooth_union(0.2,
     sphere(1.0),
     translate(2.0, 0.0, 0.0, box3d(0.5, 0.5, 0.5))

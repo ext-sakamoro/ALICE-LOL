@@ -9,7 +9,7 @@
 ALICE-LOL (Law-Oriented Language) is a DSL for describing 3D scenes using Signed Distance Functions (SDF).
 Instead of writing verbose JSON trees, you write concise function-call syntax:
 
-```
+```lol print
 smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))
 ```
 
@@ -147,9 +147,15 @@ ALICE 三相原理 Phase 2 Law 経路 (SDF+Dual Contouring)、mesh 化は
 | `skadis_hook_s()` | (0 args) | 1-peg S 字汎用フック (1kgf、reach 22 + drop 45mm) | `python generator` |
 
 **Usage 例**:
-```
+```lol print
 skadis_panel(300, 5, 5)
+```
+
+```lol print
 shopping_cart_coin(22.8, 1.7)
+```
+
+```lol print
 skadis_hook_l()
 ```
 
@@ -178,7 +184,7 @@ These are sugar syntax that expand to `Union(Onion(shell), Intersection(child, T
 
 A bare SDF expression describes geometry (Phase 2 Law). To also express **what an agent should do** in that scene (Phase 3 Intent), wrap it in `program(...)`:
 
-```
+```lol fragment
 program(<sdf>)
 program(<sdf>, entities(<sdf>, <sdf>, ...))
 program(<sdf>, entities(<sdf>, ...), <intent>)
@@ -214,7 +220,7 @@ Form 1 is geometry only (same as a bare `<sdf>`), form 2 adds the entity registr
 
 Example — pick up the small box on a table and put it down:
 
-```
+```lol render
 program(
 box3d(1.0, 0.05, 0.6),
 entities(box3d(0.05, 0.05, 0.05)),
@@ -231,7 +237,7 @@ release(0)
 
 ### Simple: Snowman
 
-```
+```lol print
 union(
 sphere(1.0),
 translate(0.0, 1.3, 0.0, sphere(0.7)),
@@ -241,7 +247,7 @@ translate(0.0, 2.2, 0.0, sphere(0.5))
 
 ### Organic: Mushroom
 
-```
+```lol print
 smooth_union(0.2,
 translate(0.0, 1.0, 0.0,
 scale_non_uniform(1.5, 0.4, 1.5, sphere(1.0))
@@ -252,21 +258,21 @@ cylinder(0.3, 0.8)
 
 ### Mechanical: Gear
 
-```
+```lol print
+union(
 subtract(
-polar_repeat(12,
-translate(1.5, 0.0, 0.0, cylinder(0.15, 0.2))
-),
-subtract(
-cylinder(1.8, 0.2),
+cylinder(1.5, 0.2),
 cylinder(0.5, 0.3)
+),
+polar_repeat(12,
+translate(1.55, 0.0, 0.0, cylinder(0.15, 0.2))
 )
 )
 ```
 
 ### Architecture: Arch
 
-```
+```lol print
 subtract(
 box3d(2.0, 2.0, 0.5),
 translate(0.0, 0.5, 0.0,
@@ -277,7 +283,7 @@ cylinder(1.2, 0.6)
 
 ### Organic: Twisted Vase
 
-```
+```lol print
 onion(0.05,
 twist(0.5,
 taper(0.3,
@@ -289,7 +295,7 @@ cylinder(1.0, 2.0)
 
 ### Crystal Cluster
 
-```
+```lol print
 smooth_union(0.1,
 diamond(0.5, 1.5),
 translate(0.8, -0.5, 0.3,
@@ -303,7 +309,7 @@ rotate(10.0, 0.0, -10.0, diamond(0.4, 1.2))
 
 ### Fractal-like: Symmetric Object
 
-```
+```lol print
 icosahedral_symmetry(
 translate(1.0, 0.0, 0.0, sphere(0.3))
 )
@@ -311,7 +317,7 @@ translate(1.0, 0.0, 0.0, sphere(0.3))
 
 ### Scene with Ground
 
-```
+```lol render
 union(
 noise(0.1, 2.0, 42,
 plane(0.0, 1.0, 0.0, 0.0)
@@ -329,7 +335,7 @@ translate(0.0, 1.0, 0.0, sphere(0.5))
 
 SDF geometric coaster, 10cm round and 5mm thick. Subtracts are nested sequentially (never union the cutters together): outer ring of 12 round holes, middle ring of 12 smaller holes rotated 15°, inner ring of 6 hexagonal holes, then a hexagonal recess (not through) in the center.
 
-```
+```lol print
 subtract(
 subtract(
 subtract(
@@ -391,7 +397,7 @@ pipeline 側の `scripts/` にH2D用テンプレートを格納済み。`export_
 ### Examples for 3D Printing
 
 **Decorative vase** (hollow, minimal material):
-```
+```lol print
 onion(0.02,
 twist(0.5,
 taper(0.3, cylinder(1.0, 2.0))
@@ -400,7 +406,7 @@ taper(0.3, cylinder(1.0, 2.0))
 ```
 
 **Structural bracket** (gyroid infill for strength + weight savings):
-```
+```lol print
 lattice_infill(0.05, 5.0, 0.02,
 subtract(
 box3d(2.0, 1.0, 0.5),
@@ -410,7 +416,7 @@ translate(1.0, 0.0, 0.0, cylinder(0.3, 0.6))
 ```
 
 **Drone arm** (diamond infill for maximum stiffness):
-```
+```lol print
 diamond_infill(0.04, 6.0, 0.03,
 smooth_union(0.1,
 capsule(0.3, 2.0),
@@ -420,7 +426,7 @@ translate(0.0, 2.0, 0.0, sphere(0.5))
 ```
 
 **Isotropic test specimen** (Schwarz-P for equal strength in all axes):
-```
+```lol print
 schwarz_infill(0.05, 4.0, 0.02, box3d(1.0, 1.0, 1.0))
 ```
 
@@ -792,7 +798,7 @@ Alternative: laser command → G-code directly (rasterize → scanlines → G-co
 ```
 
 ### LOL (concise):
-```
+```lol print
 union(
 sphere(1.0),
 translate(0.0, 1.3, 0.0, sphere(0.7)),
@@ -817,8 +823,8 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 - **Nest `subtract` sequentially** when cutting multiple patterns. Do NOT `union` cutters together — it creates non-manifold edges. Instead of `subtract(base, union(cutter_a, cutter_b))`, write `subtract(subtract(base, cutter_a), cutter_b)`.
 - **Avoid `intersection` with TPMS** (gyroid, schwarz_p, diamond_surface) for STL output — marching cubes produces non-manifold edges at TPMS surface boundaries. Use `subtract` with simple geometric patterns instead.
 - **`lattice_infill` / `diamond_infill` / `schwarz_infill` are safe** — they expand to internal Union+Onion+Intersection, which meshes cleanly because the TPMS is fully enclosed.
-- The `print_export` module automatically runs `MeshRepair::repair_all()` (degenerate triangle removal + vertex merge + normal fix) on every export.
-- Keep mesh resolution ≤ 192 to stay under 1M triangles for slicer compatibility.
+- Every `print_export` export goes through a repair that never makes the mesh worse: vertices at bit-identical positions are merged and the zero-area triangles this leaves are dropped; a mesh that is then closed is otherwise left as it is (only its winding is made outward); an open mesh gets the destructive repair (degenerate and duplicate triangle removal, vertex merge within 4% of a grid cell) only when the result has no more open or non-manifold edges, the same Euler characteristic and no more unused vertices.
+- Keep the exported mesh under 1M triangles for slicer compatibility; the limit is the triangle count (`ExportStats::triangle_count`), which the resolution alone does not bound (measured on the printable examples of these documents: at the default resolution 128 all stay under 1M (largest 0.72M), at 192 five of 33 exceed it and at 256 nine, all of them lattice / infill parts).
 - Set slicer infill to **0%** when using `lattice_infill` / `diamond_infill` / `schwarz_infill` — the LOL code already defines internal structure.
 - **Thin geometry (≤ 5mm thickness) must NOT use SDF+marching cubes** — voxel grid cannot resolve thin flat shapes, producing thousands of non-manifold edges and incorrect dimensions (e.g. 1.7mm coin inflated to 5mm). Use **2D polygon (Shapely) + extrude (trimesh) → 3MF** instead. This applies to: coins, cards, badges, tags, thin plates, washers, shims. The `round()` modifier worsens the problem on thin geometry.
   - Confirmed failure: Shopping Cart Coin (Ø22.8mm × 1.7mm) — SDF at resolution 256 produced 6177 non-manifold edges and Y=5.1mm instead of 1.7mm
@@ -848,13 +854,13 @@ Repeating patterns (holes, slots, cutouts) MUST use `repeat_finite`. Never gener
 
 NG — 200 nodes, O(n) eval per point:
 
-```
+```lol fragment
 union(translate(a, hole), translate(b, hole), ...)
 ```
 
 OK — 1 node, O(1) eval per point:
 
-```
+```lol fragment
 translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole))
 ```
 
@@ -863,7 +869,7 @@ translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hol
 ### Staggered Grid (e.g. SKADIS)
 
 Two `repeat_finite` with `translate` offset:
-```
+```lol fragment
 union(
 translate(g1_cx, g1_cy, 0, repeat_finite(n, n, 0, pitch, pitch, 0, shape)),
 translate(g2_cx, g2_cy, 0, repeat_finite(m, m, 0, pitch, pitch, 0, shape))
@@ -943,7 +949,7 @@ Use a **lap joint** at the split seam for mechanical alignment + adhesive bondin
 
 LEFT half — upper lap tab on the +X joining edge. Inside: the top plate with its lower half removed at the edge, the side plate, and the upper lap tab.
 
-```
+```lol fragment
 union(
 smooth_union(K,
 subtract(
@@ -999,7 +1005,7 @@ Popular cabinet shelf organizers use **arch cutouts** instead of full thin walls
 
 Side panel with arch cutout (stable printing, material efficient): the full side panel minus a rounded-box arch cut.
 
-```
+```lol fragment
 subtract(
 translate(SIDE_X, 0, PANEL_CZ, box3d(T, HY, PANEL_HZ)),
 translate(SIDE_X, 0, ARCH_CZ, rounded_box(T+1, ARCH_HY, ARCH_HZ, R))
@@ -1026,7 +1032,7 @@ Large flat plates (e.g. 280×250mm) warp and detach from the bed during cooling.
 
 Hex grid cutouts on the top plate — staggered (千鳥) pattern via two `repeat_finite` grids offset by half a pitch:
 
-```
+```lol fragment
 subtract(
 PLATE,
 union(
@@ -1336,13 +1342,13 @@ let glsl = to_glsl_full(&scene, &config);
 
 The simplest ground is a Y=0 plane:
 
-```
+```lol render
 plane(0.0, 1.0, 0.0, 0.0)
 ```
 
 Add surface detail with `noise` or `displacement`:
 
-```
+```lol render
 noise(0.1, 2.0, 42, plane(0.0, 1.0, 0.0, 0.0))
 ```
 
@@ -1401,7 +1407,7 @@ let config = RenderConfig {
 
 For scenes with different materials per object, set `material_slots > 1`. Your LOL scene must use `with_material(id, ...)`:
 
-```
+```lol render
 union(
 with_material(0, plane(0.0, 1.0, 0.0, 0.0)),
 with_material(1, translate(0.0, 2.0, 0.0, sphere(1.0))),
@@ -1465,7 +1471,7 @@ The application layer samples physics fields each frame and uploads to shader un
 
 ### Example: Complete Outdoor Scene
 
-```
+```lol render
 union(
 noise(0.08, 1.5, 42, plane(0.0, 1.0, 0.0, 0.0)),
 translate(0.0, 3.0, 0.0,
