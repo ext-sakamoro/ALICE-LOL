@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-15
+
 ### Added
 
 - CI: 公開する text の検査 (`.github/workflows/public-text.yml`、`scripts/public_text.sh`) ALICE-Law の検査器 `scripts/public_text_check.py` を `.github/public-text-pin` の revision で取得し、SHA-256 が一致しなければ止まる 全 tracked file の path と本文を読み、続けて送られた commit の message・追加行・追加 path を読む 比べる対象が無い・pin の形が違う・base が commit でない時は exit 2 で失敗する 試験 `scripts/test_public_text.py` (network を使わない部分)、preflight でも走る
@@ -1454,7 +1456,8 @@ Ships with:
   guilloche / turing etc.), `pruned_compile` (interval-based space
   culling), `roblox_export` (behind the `roblox` feature).
 
-[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.1...HEAD
+[Unreleased]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.2...HEAD
+[0.4.2]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.1...alice-lol-v0.4.2
 [0.4.1]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.4.0...alice-lol-v0.4.1
 [0.4.0]: https://github.com/ext-sakamoro/ALICE-LOL/compare/alice-lol-v0.3.0...alice-lol-v0.4.0
 [0.3.0]: https://github.com/ext-sakamoro/ALICE-LOL/releases/tag/alice-lol-v0.3.0
