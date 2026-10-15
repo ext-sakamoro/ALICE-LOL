@@ -171,6 +171,10 @@ python3 scripts/docs_lint.py --check
 python3 scripts/test_tracked_binaries.py
 python3 scripts/tracked_binaries.py
 
+step "ci.yml / docs: libm_dependency_guard (oracle + check)"
+python3 scripts/test_libm_dependency_guard.py
+python3 scripts/libm_dependency_guard.py
+
 step "ci.yml / docs: law_corners (oracle + corner enumeration)"
 python3 scripts/test_law_corners.py
 python3 scripts/law_corners.py laws/spike

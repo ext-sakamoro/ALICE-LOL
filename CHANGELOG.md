@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI: libm を直接依存に足した時に G1 の禁止 (clippy.toml の `libm::` path と `scripts/libm_ban_check.py`) が無ければ失敗する検査 `scripts/libm_dependency_guard.py` (試験 `scripts/test_libm_dependency_guard.py`) を docs job (3 OS) と preflight に追加 (ALICE-DetMath と byte 一致)
+
 ### Changed
 
 - `alice-law-conformance.toml` の適合状況を現行の語彙 (pass / fail-known / unverified / n/a) に書き直した 14 gate すべてを測り直し、pass は証跡の file と、red になることを示した変異 (適用して red、戻して green) を持つものだけにした 結果は pass 4 (G3 G4 G6 G12) / fail-known 6 (G1 G2 G8 G9 G10 G14、場所つき) / unverified 4 (G5 G7 G11 G13、足りないものを note に) / n/a 0 旧い記述の pass 7 (G1 G3 G4 G5 G11 G12 G13) のうち G1 は禁止が既定の powi を使う箇所 (pattern_sdf.rs:5143) があるため fail-known に、G5 G11 G13 は変異で red にできない matrix (G5)・自己試験の未整理 (G11)・1 file に限った検査 (G13) が見つかったため unverified にした 旧い missing 7 (G2 G6 G7 G8 G9 G10 G14) は G6 が pass、G2 G8 G9 G10 G14 が fail-known、G7 が unverified になった (G2 は glam の min/max を使う箇所が 3 つある) feature `physics` は保証の外と宣言した README と README_JP の適合状況の block は ALICE-Law 5de698e で再生成した
