@@ -1,6 +1,6 @@
 [package]
 name = "alice-lol"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.90"
 description = "ALICE-LOL: Law-Oriented Language — proc_macro + runtime DSL compiling to SdfNode (GLSL/WGSL/HLSL transpile), print export (STL/3MF/OBJ/FBX), law checker, laser pattern generator, and optional LLM Guided Generation bridge."
