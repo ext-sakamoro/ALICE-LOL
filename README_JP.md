@@ -199,7 +199,7 @@ rest latent seq par music
 
 <!-- readme-sync: syntax-law -->
 ```text
-audit evidence expect range
+audit evidence expect range includes
 ```
 
 `evidence <metric>` はその量が測られたこと自体を要求する — 1 件も比べていない検査は
@@ -208,6 +208,9 @@ NaN・無限大は証拠にならない `expect <metric> == <value> [within <tol
 `range <key> <value>...` は既知の違反を記録し、実測と一致する間は許容され、行が
 当てはまらなくなれば `OutOfRange`、値の組が動けば `ParameterUpdate` になる
 値の組は集合として比べる (順序と重複は判定に影響しない)
+`includes <key> <value>...` は `expect` と同じ主張の項で、実測の組が列挙した値をすべて含む
+こと (それ以外の値があってもよい、例: 少なくともこれらの method を禁じる lint 設定) を
+求め、1 つでも欠ければ `Breaks`、key が測られていなければ `Undecided` になる
 証拠は期待値より先に判定するので、空の実測で `0 == 0` が偶然通ることはない
 
 ## Law の識別子 (`law_id`)

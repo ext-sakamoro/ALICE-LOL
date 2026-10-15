@@ -203,7 +203,7 @@ python3 conformance/test_check_probes.py
 python3 conformance/test_run_conformance.py
 "$conf_py" conformance/check_probes.py --kind reader -- "$conf_py" conformance/ref_impl.py
 cargo build -q -p alice-lol --example audit_conformance
-python3 conformance/check_probes.py --kind reader --laws gate_compares_nonzero,identifier_feature_independent,no_such_law,decl_probe,floor_probe -- target/debug/examples/audit_conformance
+python3 conformance/check_probes.py --kind reader --laws gate_compares_nonzero,identifier_feature_independent,lint_bans_include,no_such_law,decl_probe,floor_probe -- target/debug/examples/audit_conformance
 python3 conformance/law_line_fuzz.py --pairs 150 -- python3 conformance/ref_impl.py -- target/debug/examples/audit_conformance
 
 step "ci.yml / msrv: Check (workspace, all features)"
