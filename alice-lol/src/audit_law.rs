@@ -156,6 +156,14 @@ pub enum Clause {
         /// 許容する値の組 (集合として正規化される: 昇順、重複なし)
         values: Vec<String>,
     },
+    /// 実測の集合がこの値をすべて含むこと (他の値があってもよい) 主張なので `Expect` と
+    /// 同じ段で、file の順に見る
+    Includes {
+        /// 行の key
+        key: String,
+        /// 含むべき値の組 (集合として正規化される: 昇順、重複なし)
+        values: Vec<String>,
+    },
 }
 
 /// text で書かれた監査の Law
@@ -249,7 +257,7 @@ impl AuditLaw {
     pub fn evaluate(&self, measured: &Measurements) -> Verdict {
         self.check_evidence(measured)
             .or_else(|| self.check_ranges(measured))
-            .or_else(|| self.check_expectations(measured))
+            .or_else(|| self.check_claims(measured))
             .unwrap_or(Verdict::Supports)
     }
 
@@ -281,8 +289,38 @@ impl AuditLaw {
         })
     }
 
-    fn check_expectations(&self, m: &Measurements) -> Option<Verdict> {
-        self.clauses.iter().find_map(|c| {
+    /// 主張の項 (`Expect` と `Includes`) を file の順に見る
+    fn check_claims(&self, m: &Measurements) -> Option<Verdict> {
+        self.clauses.iter().find_map(|c| match c {
+            Clause::Includes { key, values } => Self::check_includes(m, key, values),
+            Clause::Expect { .. } => Self::check_expectation(m, c),
+            Clause::Evidence { .. } | Clause::Range { .. } => None,
+        })
+    }
+
+    fn check_includes(m: &Measurements, key: &str, values: &[String]) -> Option<Verdict> {
+        let Some(now) = m.range(key) else {
+            return Some(Verdict::Undecided {
+                reason: format!("`{key}` is not in the measurement"),
+            });
+        };
+        let missing: Vec<&str> = values
+            .iter()
+            .filter(|v| now.binary_search(v).is_err())
+            .map(String::as_str)
+            .collect();
+        if missing.is_empty() {
+            return None;
+        }
+        Some(Verdict::Breaks {
+            metric: key.to_owned(),
+            expected: format!("includes {}", values.join(" ")),
+            measured: format!("missing {}", missing.join(" ")),
+        })
+    }
+
+    fn check_expectation(m: &Measurements, c: &Clause) -> Option<Verdict> {
+        {
             let Clause::Expect {
                 metric,
                 value,
@@ -315,7 +353,7 @@ impl AuditLaw {
                 });
             }
             None
-        })
+        }
     }
 }
 
