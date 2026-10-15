@@ -730,7 +730,7 @@ jobs:
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py)、全文書の件数と計測値 (scripts/doc_numbers.py)、
-  # 公開文書と全 tracked file の語彙 (scripts/docs_lint.py)
+  # CHANGELOG の構造と README の例 (scripts/docs_lint.py、公開してはいけない語は public-text.yml)
   # 検査器自身が OS 依存で空振り / 異常終了しないよう 3 OS で動かす (比較 0 件は fail)
   docs:
     name: Docs gates (${{ matrix.os }})
@@ -758,7 +758,7 @@ jobs:
         run: python scripts/doc_numbers.py
       - name: docs_lint oracle (検査器自身の試験)
         run: python scripts/test_docs_lint.py
-      - name: docs_lint (公開文書と tracked file の語彙、CHANGELOG の構造)
+      - name: docs_lint (CHANGELOG の構造、README の例)
         run: python scripts/docs_lint.py --check
       - name: tracked_binaries oracle (検査器自身の試験)
         run: python scripts/test_tracked_binaries.py

@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI: 公開する text の検査 (`.github/workflows/public-text.yml`、`scripts/public_text.sh`) ALICE-Law の検査器 `scripts/public_text_check.py` を `.github/public-text-pin` の revision で取得し、SHA-256 が一致しなければ止まる 全 tracked file の path と本文を読み、続けて送られた commit の message・追加行・追加 path を読む 比べる対象が無い・pin の形が違う・base が commit でない時は exit 2 で失敗する 試験 `scripts/test_public_text.py` (network を使わない部分)、preflight でも走る
 - 印刷用の program が export の解像度で解けているかの検査 (`alice-lol/tests/doc_programs.rs`): export を既定の解像度 R と 1.5R で作り、Euler 標数と分かれた殻の数が同じなら解けているとする (格子より薄い壁や支柱は解像度で形が変わる) oracle: 球と箱は解ける / 既定の箱 ±2 (128 で cell 0.031) で厚さ 0.03 の殻 (`onion(0.015, sphere(1.0))`) は解けない (128 で Euler 標数 −2036・殻 21、192 で 4・2) / 厚さ 0.06 (`onion(0.03, …)`) は解ける 文書の印刷用の例 33 個のうち 10 個 (`onion` / `*_infill` の構造の例) は解けておらず、一覧に固定して警告として出す 一覧に無い例が解けなくなる・一覧の例が解けるようになる、のどちらでも失敗する (例は parameter か解像度の方針で直し、検査は弱めない) 2 回の export で release の実行時間は約 15 秒から約 210 秒になる
 - 文書に載っている LOL の program を取り出して走らせる試験 `alice-lol/tests/doc_programs.rs` 追跡されている `*.md` (CHANGELOG を除く) の fence のうち info string が `lol print` / `lol render` / `lol fragment` のものを読む `print` は parse でき、有界な立体 1 つで (内側の点があり、外側だけで囲める箱がある)、`print_export::node_to_mesh` が既定の解像度で閉じた mesh (境界 edge 0 / 非多様体 edge 0) を 100 万三角形以下で出す `render` は parse できる `print` / `render` は `//` の comment を持たない `llm-bridge` 付きでは文法 (`lol.gbnf`) が受理することも見る `fragment` (数の代わりに名前を使う雛形など) は走らせない 1 件も比べなければ失敗する export の検査は debug build では数分かかるので test matrix では ignore し、CI の `doc-programs` job (ubuntu、release、`scripts/cargo_test_nonzero.sh`) と `scripts/preflight.sh` で走らせる 取り出し・parse・文法の検査は全 OS の test で走る 印の無い fence で最初の呼び出しが construct の名前のものは警告 (次の変更で失敗にする) 単位と印刷可能性 (肉厚・大きさ・overhang) はまだ言語の定義に無いので見ない
 
 ### Changed
 
+- `scripts/docs_lint.py` は語の一覧 (作業の進め方の語の正規表現と、SHA-256 で持つ非公開の名前) を持たなくなった どちらも公開 text の検査 (ALICE-Law の検査器) が検出する (docs_lint の試験が検出を求めていた語の入力 32 件をすべて検出し、非公開の名前の hash はすべて検査器も持ち、句・日本語の助詞に続く名前・file path・hyphen を含む名前の照合が同じになることを確かめた) ので、一覧を 2 箇所に置かない docs_lint に残るのは CHANGELOG の構造と README の例と doctest の一致
 - 文法 `alice-lol/lol.gbnf` (と配布用の写し) を言語の定義から生成するようにした 定義は `alice-lol/language/constructs.toml` (construct 1 つにつき 1 行: 名前と、それを受け付ける文法の rule) と `alice-lol/language/lol.gbnf.in` (説明と固定の rule、名前の一覧の場所を `@names <rule>@` で示す)、生成は `python3 scripts/gen_gbnf.py` (書く先は正典と、追跡されている他の `lol.gbnf` すべて)、`--check` が生成結果と 2 つの file を比べる 行が 0 件・名前の重複・場所の無い rule・行の無い場所・template の `intent_*` rule が行と違う名前を綴る時は失敗する 検査器の試験 `scripts/test_gen_gbnf.py` CI (wiring-guard job) と preflight で走る 文法そのものは変わっていない (alice-llm の `parse_gbnf` で読んだ `Grammar` が変更前と等しい) 名前の一覧の配置は 1 行 1 名に揃えた
 - `alice-lol` の版を 0.4.2 にし、workspace の他の crate の要求も 0.4.2 にした (公開済みの 0.4.1 と src が違う、足したのは公開 API の追加だけ)
 - 依存の alice-det-math を 0.5.1 にした (`Cargo.lock` と `fuzz/Cargo.lock`、要求は `0.5` のまま) 識別子は版ごとの表の 0.5.1 の行 (`LOL_SEMANTICS_ID` = `d81c2cbb…`、`LOL_GEOMETRY_SEMANTICS_ID` = `d1cbba69…`) になる 角度の oracle の表 (`angle.rs`) が固定する alice-det-math の版を 0.5.1 に上げた 0.5.1 で測り直して全行が 0.5.0 と同じ (0.5.1 は関数の追加のみ)
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `SPEC.md` の roadmap の 1 行が公開しない名前を含んでいたので一般的な書き方にした
 - 文法の監査 Law の値 (`lawvalue`) が英数字と `.+-` しか受理せず、`parse_law` が読む `f32::sin` のような method の path や `_` を含む値を拒否していた (文法と parser の食い違い) `#` (parser が comment の始まりとして読む) と `"` を除く印字可能な ASCII を受理するようにした 文法と parser の両方が受理することを試験で確かめ (`alice-lol/tests/lol_gbnf_test.rs`)、旧い範囲に戻すと試験が失敗することを確かめた
 - 文書の LOL の program の誤り: `LLM_REFERENCE.md` の歯車は subtract の被演算子が逆で何も残らなかった (歯を円板の縁に足す形にした) / `LLM_PRINT_PROMPT.md` の drone motor mount と resin figurine は `subtract` に被演算子を 3 つ渡していた (`subtract` は 2 つ、入れ子にした) / 印刷の手引き (`print-guide.md`) の bracket は `lattice_infill` に引数を 2 つしか渡していなかった (4 つ) / figurine の殻 0.015 は export の格子で解けず mesh が数百の断片になっていた (0.03 にした) / 1 つの fence に 3 つ・2 つの program を置いていた箇所を分けた / 数の代わりに名前を使う雛形の fence を `lol fragment` にした
 - `LLM_PRINT_PROMPT.md` の Step 4 が program に `//` の comment header を付けるよう指示していたが、生成に使う文法は comment を受理しない 設計の判断は program の前に文章で書くようにし、例の comment を文章に移した
@@ -76,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Constraint` に variant `GradientBound` / `Reachable` (`Continuity` の後) と `ThermalField` (末尾) を追加 `VolumeConservation` の discriminant は 7 → 9 になる (variant の並び順や番号に依る扱いは対応しなくなる `Constraint` は `Serialize` を持たないので直列化の互換には関わらない)
 - `LawReport` に field `unresolved` を追加し、`all_passed()` は「違反なし かつ 判定不能なし」 判定不能を合格として返さない
 - 法則検証器は場の値を距離として使わない (`MinThickness` / `Stress` / `NonOverlap` / `Containment` / `Contact` は三値判定、Lipschitz の包囲で証明する)
-- pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`LolPattern.bamboo_canonical` → `canonical_kind` (値の意味も変わる)
+- pattern registry の改名: `CertificationSource::BambooSimulation` → `SimulationOnly`、`LolPattern` の印刷系の正典の種類を表す field (旧名は別 crate の名前を前に付けていた) → `canonical_kind` (値の意味も変わる)
 - `EmitError` に `NonFinite` を追加し、`EmitError` / `ExportError` / `LawFileError` / `BridgeError` を `#[non_exhaustive]` にした (外の crate の `match` は `_` の腕が要る 次に variant を足す時は破壊的変更にならない)
 - `limits` module を追加: `MAX_STDLIB_COUNT` / `MAX_SKADIS_PANEL_MM` (`runtime_parser` から re-export、既存の import path は変わらない) に加え、`MAX_NODE_EXPANSION` (eager に `SdfNode` を複製して確保する箇所の総数上限) と `MIN_PITCH_MM` (pitch/spacing 引数の下限、度数でなく幾何的な根拠: 市販 FDM の解像度より十分小さい) / 整数個数の検査 helper `checked_product` と `ResourceLimitError { kind, limit, requested }` / float 値の検査 helper `checked_positive_finite` / `checked_bounded` と `FloatLimitError { kind, limit, value, unit }` (`value` は検査した `f32` をそのまま持つ、整数単位へ変換すると `NaN` と負値が同じ `requested=0` になり区別できなかったため)
 - `GridfinitySpec::validate()` と `try_gridfinity_bin` を追加 (untrusted な値を確保の前に検査し、決してパニックしない fallible な入口) / `SpecError` (`#[non_exhaustive]`、`ResourceLimit(ResourceLimitError)` / `FloatLimit(FloatLimitError)` を包む)
@@ -320,8 +323,8 @@ preflight では target ごとに実行する CI では同じ target を走ら�
 
 README.md / README_JP.md / CHANGELOG.md と全 tracked file について、開発の進め方を表す語・内部の記録名・機器名・
 private address を検査し、CHANGELOG の版見出しの順序と `[Unreleased]` の分類 (各 1 回、絵文字なし) を検査する
-固有名は SHA-256 で照合し、検査器に平文で持たない `skills/` 以下は言語モデル向けツールの package 形式なので、
-その形式名の語はその中でだけ許す (path の `skills/` はどこでも語として数えない) ci.yml の `docs` job (3 OS) と preflight で実行
+固有名は SHA-256 で照合し、検査器に平文で持たない 言語モデル向けツールの package を置く directory では、
+その package 形式の名前をその中でだけ許す (その directory への path は語として数えない) ci.yml の `docs` job (3 OS) と preflight で実行
 
 #### `alice-lol`: `research_law` (単位付きの多変数の研究 Law)
 
@@ -831,7 +834,7 @@ gate は書いた直後に壊して red を実測済: `Law::hard` の gate を�
 公開していない姉妹 crate の名前を含んでいた 2 項目を、何を表すかで名付け直した
 
 - `CertificationSource::BambooSimulation` → `CertificationSource::SimulationOnly`
-- `LolPattern.bamboo_canonical` → `LolPattern.canonical_kind`
+- `LolPattern` の正典の種類を表す field を `LolPattern.canonical_kind` に改名 (旧名は別 crate の名前を前に付けていた)
 
 `canonical_kind` は値の意味も変わっている: 以前は非公開 crate 内の file path を持っていたが、
 canonical 実装の種別 (`"python generator"` / `"rust generator"`) を持つ

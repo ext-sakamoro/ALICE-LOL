@@ -537,7 +537,7 @@ CI matrix (2026-08-06 時点): macOS default / Ubuntu llm-bridge / Ubuntu glsl+w
 - ⏸ **B.3** ALICE-Kinematics 統合 (LOL `IntentNode` → Kinematics `Intent` 8-byte packet 翻訳器)
 - ⏸ **B.4** LOL DSL に `intent! { }` block 構文
 - ⏸ **B.5** Backend 展開 (Intent は Rust runtime / wasm backend が第一級 target、GPU は Phase 2 まで)
-- ⏸ **C.1-C.4** 8-byte packet 実運用 (Metaverse transport / Foundry-Anima-Manga 統合 / Physics+Kinematics+IK 受信側解釈)
+- ⏸ **C.1-C.4** 8-byte packet 実運用 (Metaverse transport / 制作系 crate との統合 / Physics+Kinematics+IK 受信側解釈)
 
 ### 9.8 関連 commit (ALICE-LOL、2026-08-06 sprint)
 

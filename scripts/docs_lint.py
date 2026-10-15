@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
-"""Lint the public documents for vocabulary and CHANGELOG structure.
+"""Lint the public documents for CHANGELOG structure and the README example.
 
 The repository is public; its documents are read by people and by language
 models judging whether the project is real. Two classes of problem are
 checked mechanically:
 
-  * vocabulary  development-process words that do not belong in a public
-                document (agent / process names, internal tracker names,
-                device names, private network addresses, unrelated private
-                projects) in README.md, README_JP.md and CHANGELOG.md
   * changelog   version headings: no duplicates, `[Unreleased]` first,
                 released versions in descending semver order, the Cargo.toml
                 version either released or covered by `[Unreleased]`; inside
                 `[Unreleased]` (or, when it is empty just after a version is
                 cut, the newest section), each Keep a Changelog category at
                 most once and no emoji status markers
-
-The development-process, tracker, instruction-source and device vocabulary is
-also checked in the text of every other tracked file (comments, workflows,
-scripts, bindings); private names are checked in every file path and
-text.
-
   * example     the first ```rust block of README.md is identical to the
                 ```rust block in the crate documentation of alice-lol/src/lib.rs (which
                 rustdoc compiles and runs), so the README example compiles
+
+The words a public text must not carry (how the work was done, record names,
+device names, private addresses, private names held as SHA-256) are checked by
+the ALICE-Law public text checker (scripts/public_text.sh, at the revision
+.github/public-text-pin names), not here, so there is one list and it cannot
+drift apart from a copy.
 
 Released sections are history and are not rewritten, so the per-category and
 emoji checks apply to `[Unreleased]` only.
@@ -37,7 +33,6 @@ Usage: `python3 scripts/docs_lint.py --check` (exit 1 on any finding).
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import sys
@@ -49,134 +44,6 @@ DOCS = ("README.md", "README_JP.md", "CHANGELOG.md")
 CRATE_TOML = "alice-lol/Cargo.toml"
 LIB_RS = "alice-lol/src/lib.rs"
 
-# (label, pattern). Common English words such as "memory" and "session" are
-# matched only in their internal-process phrasings, so "memory footprint" or a
-# netcode "session" are not flagged.
-# English words written next to Japanese text: `\b` sees no boundary between
-# "worker" and "が" (both are word characters), so ASCII-letter boundaries are used
-A = r"(?<![A-Za-z])"
-Z = r"(?![A-Za-z])"
-
-
-def words(*alts: str) -> str:
-    return A + "(?:" + "|".join(alts) + ")" + Z
-
-
-FORBIDDEN = [
-    ("agent process", re.compile(words(r"workers?", r"subagents?", r"multi[- ]?agents?",
-                                       # `skills/` as a path segment names the directory, not a process
-                                       r"skills?(?!/)")
-                                 # `git worktree add` is a command, not a description of how the work was done
-                                 + r"|(?<!git )" + words(r"worktrees?")
-                                 + r"|ワーカー|マルチエージェント|エージェント|調停役|並走\s*session|他\s*session|session\s*名")),
-    ("session name", re.compile(r"(?<![A-Za-z0-9])(?:ys|sakamoro)-[0-9a-f]{2}(?![A-Za-z0-9])")),
-    ("internal tracker", re.compile(words(r"Backlog") + r"|memory\s*(?:側|化|に|へ|file)|(?<![A-Za-z0-9_])memory/")),
-    # names of private notes: `[[snake_case]]` links and the note-file prefixes
-    ("internal note", re.compile(r"\[\[[a-z0-9]+_[a-z0-9_]+\]\]"
-                                 r"|(?<![A-Za-z0-9_])(?:feedback|discipline|success|handoff)_[a-z0-9_]{4,}"
-                                 r"|(?<![A-Za-z0-9_])(?:project|reference)_alice_[a-z0-9_]+"
-                                 # numbered entries of an internal pitfall catalogue / CI template
-                                 r"|罠\s*#\s*\d+|canonical\s+(?:CI\s+)?template")),
-    ("instruction source", re.compile(r"user\s*(?:指示|裁定|指摘|判断)")),
-    ("device", re.compile(words(r"Jetson", r"Mac\s?mini", r"MacBook", r"Apple\s*Silicon") + r"|Raspberry\s*Pi")),
-    ("private address", re.compile(r"\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b|\b192\.168\.\d{1,3}\.\d{1,3}\b|\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")),
-]
-
-# Labels checked in the text of every tracked file, not only the public documents:
-# how the work was organised does not belong in comments, ledgers or the roadmap
-# either. Addresses stay document-only (dotted numbers occur in data files).
-TREE_LABELS = ("agent process", "session name", "internal tracker", "internal note", "instruction source", "device")
-# These files define and test the vocabulary, so they spell it out
-TREE_VOCAB_EXEMPT = {"scripts/docs_lint.py", "scripts/test_docs_lint.py"}
-# `skills/` is an installable package in the "skill" format of language-model
-# tools; its own files name that format, so the word itself is allowed there
-# (every other vocabulary class is still checked in those files)
-SKILL_PACKAGE_DIR = "skills/"
-SKILL_WORD = re.compile(r"skills?", re.I)
-
-# Names of unrelated private projects and of internal infrastructure are not written
-# here in plain text: this file
-# is public, and a list of names would itself disclose them. Each entry is the
-# SHA-256 of a lower-case word, or of a two- or three-word phrase joined by one
-# space; documents are tokenised and every 1-, 2- and 3-gram is hashed and looked up.
-PRIVATE_NAME_HASHES = {
-    # owned equipment and private network names (not generic products)
-    "1034f65141df5f4ca8ef4b136e1a4d67f70ef8f7bfd16f91f6d94d980c8061c3",
-    "af1c54d629fb3db8ecaa658f846b5b3f8ef314e6b01d1494bafac6af8a9183f1",
-    "699074f67aea6aa9733bfbf42ff376f92b7762049c5ef5136256908c298b7514",
-    "795b104abe3e4134960ca245ded0e617f162c751209347b7f003bc35e062f43e",
-    "791dc82c39c048682e2c8bcc953dba44838997987e5678c161f257d6fc27bf4a",
-    "76ed632eacc9561fddba93918e12fa408df40a2f9e8e038c7803346d9e2b9ab3",
-    "8c2dda2f006c7c4f0e8875c47387901590ff92de46261dbf15c325dc5b3ff8aa",
-    "2ef7d5809068e897d756dd958a81b31e3811673a716eb80b96680436550e096b",
-    "db526bfe062629b1fd8b8bf3cd70bd6cdbd37e1dd1e81d080fdd29de2a6873cd",
-    "80d387ccb3289295ecace879442a42cc8cdc1ff10a0047b9b2b9b11f569142c1",
-    "d79d1f8b76c9a4f5546474bf8cfea05cf1a9d3ef73698de05d5b6ae502861708",
-    "4a3eb33262fe03814a0fdc3ca9bb5ed5cdff99d8e28fc5788ebe767c0b2158fa",
-    "c7b00200a27d82bed0ee6fcaa71a29c535f41e839248aee0e3526c81396fd64d",
-    "e1eeef0077e8f80d6f71c92be9758592699ed9171c22e9be78978616ea8e5686",
-    "a3c1038a8770ed804b6544ad1a0100415f7ef7ae012f89253d0cd09675c59107",
-    "3925ad1a1f1767a30bfb7b606c8bd43bed9123e245bc46fd11950ffb7f0a9745",
-    "1de7dcbdf455feccbb694bf1fba9a65830d84ab96b16603624ea33f8cb417802",
-    "28bb90e451eea46b2ef4000ce1872e29f7e5a8aecbf94aaf184f5536ebcdb7b5",
-    "b4a959fb606739afc8c9f69bc1a3fca53807bdefd44ea46e352c6c84b45c05e0",
-    "e78a14d392a171bb45a5bcb8d6d4e3a685893ea6e1a04b811066c34873e0c311",
-    "33bdb6df44ce6cd93063bc0ca38b52808f72825c837bac136a3b45720022ef56",
-    "9c118c2d1b0d10df8c67942b4cb330fbcaeee47dabb27d9729a706825036ab74",
-    # assistant / tooling names: no form of them belongs anywhere in the tree
-    "c857d09db23e6822e3600bc06ad8d58f92ed62bc8efd81c753f77048662cb97d",
-    "b5cf43ae07a7364e0c0ca9e838f01f278fc6a71c207a6f8c3de8d908608b2db1",
-    "28e174396028f226b3bead259d19749205378d9204ce12fd9b1918ab6032a15d",
-    # titles and settings of a work that are not to appear in public text
-    "19f798ce9f70706dd4334369cbf056e51922830d480360b8ace258e818ba7dd4",
-    "f20f5b0dfb30b315a2adacb9fd240ce53301a01a4cbc4c16b26c1c64c815eaa8",
-    "e3638dd52d300c1393f35ef855ed00ae35e66b48acc8a8fbfc6b5dfba335593b",
-    "1f770aff55b29cfc7d0e86b0d15f0ca06b523420221794dbb9a4f028a698203a",
-    "cb49d686203bf58098b7db4cc309f826ee749366c217d7f108cad562507feccd",
-    "f59367a3ffb393334570507ae7d5d0f7b1b92b0b7dd8a9a229c0d3f1df416388",
-    "96ac2ef53544a3e2fbe76274f9124be1e78c878f03bdf2ae6ed9aa7864dddecd",
-    "8653d44dc6fd3b625cba9865fc10f6b8d2d9d871d5da9e3624bc6d87179ed8f1",
-    # sibling repositories and crates that are not published: naming them here
-    # would disclose an inventory that is deliberately not public (both the
-    # hyphen and the underscore spelling, since Rust paths use the latter)
-    "378f5e12256d4d847ec2e5a750b2e5118b4749cd75352d1ab26cfd3fca936f06",
-    "47d8bd8487117f1f9f05fd56fd011946858084a01cbaefd5deed52e9a05eeb2b",
-    "8e2774e9aafc847145a806227a80c6a51d91abade45a6220e0519c39f3f567bd",
-    "de735c5c8d8ee5f8ba0468a624fd847d37591b8f112579e7fc5216760088221c",
-    "7564f199eba942a04c0cb9e4c2b89ce7a3c1ad43899e715f96218ed83eae5c75",
-    "48d644e12fa5826c48ff2a8cef316a8b3a52dbc4d418d77f0698eb84abdda0da",
-    "c96267f290f76ac40a777ee9d90bc6d2198bb4a1632a987d8411f112d5e42286",
-    "f082e4292686ac18af2580b58bc82a7e858174c173316f540158216ed1c445cb",
-    "18eaed5cd72e74361e9c620a5b1df3f93cc34007f9c288abf27802d52d101506",
-    "c379346cda6119421f42651914a8871e340094d8f5b7980335354e8b70028c28",
-    "dca96b6d3e181f2c0ab4b1c3ba764e847a49ec988aada9d18a11160d68ed549c",
-    "0fde6f882c8c655fc05d2d7beedc92995c9338a5c85e616234161783f7138b4e",
-    "0357cdb2e625fd39d77f689fb7f66857751043f1989408b4f7ee4782269f45e8",
-    "c750b7d2a5ab98430cc013a51fa56a60cbe6640840fadc1bd764575cf216618d",
-    # internal review / rule names
-    "d44eb131a9fc729aae3aed377733d242c0796290775259142e0bd8d26e1e3132",
-    "9330fafbe2c0a50b50ab63cbc545e79f87b76394b7efa9b6f1dc90f4ce76bfb1",
-    "3834bde4d50c16031f0b0c9ff9371cd8aaa10155dbbf964f199a5b965e369925",
-}
-TOKEN_RE = re.compile(r"[A-Za-z0-9_\-\u3040-\u30ff\u4e00-\u9fff]+")
-# Japanese is written without spaces, so a name is usually glued to a particle or
-# another word ("<name>の", "<name>編"); the second tokenisation splits at every
-# change of script (Latin / katakana / hiragana / kanji) so such a name is still a token
-SCRIPT_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-]+|[\u30a0-\u30ff]+|[\u3040-\u309f]+|[\u4e00-\u9fff]+")
-
-
-def private_names(line: str) -> list[str]:
-    """Tokens / phrases of the line whose hash is a private-project name."""
-    found: list[str] = []
-    for toks in (TOKEN_RE.findall(line), SCRIPT_TOKEN_RE.findall(line)):
-        for n in (1, 2, 3):
-            for i in range(len(toks) - n + 1):
-                phrase = " ".join(toks[i:i + n])
-                if phrase not in found and \
-                        hashlib.sha256(phrase.lower().encode("utf-8")).hexdigest() in PRIVATE_NAME_HASHES:
-                    found.append(phrase)
-    return found
-
 CATEGORIES = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
 EMOJI_RE = re.compile("[⚠✅❌⭐\U0001f300-\U0001faff]")
 VERSION_RE = re.compile(r"^## \[([^\]]+)\]", re.M)
@@ -185,11 +52,6 @@ VERSION_RE = re.compile(r"^## \[([^\]]+)\]", re.M)
 def read(root: str, rel: str) -> str:
     with open(os.path.join(root, rel), encoding="utf-8") as f:
         return f.read()
-
-
-def strip_code(text: str) -> str:
-    """Blank fenced code blocks (identifiers in code are not prose), keeping line numbers."""
-    return re.sub(r"^```.*?^```", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.M | re.S)
 
 
 def semver_key(v: str) -> tuple:
@@ -254,21 +116,14 @@ def check_example(root: str, errors: list[str]) -> int:
 
 def check(root: str) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
-    counts = {"vocabulary": 0, "versions": 0, "categories": 0}
+    counts = {"documents": 0, "versions": 0, "categories": 0}
     counts["example lines"] = check_example(root, errors)
 
     for rel in DOCS:
         if not os.path.exists(os.path.join(root, rel)):
             errors.append(f"{rel}: missing")
             continue
-        text = strip_code(read(root, rel))
-        for i, line in enumerate(text.splitlines(), 1):
-            counts["vocabulary"] += 1
-            for label, pat in FORBIDDEN:
-                for m in pat.finditer(line):  # every hit: one name must not hide another on the same line
-                    errors.append(f"{rel}:{i}: {label} `{m.group(0)}` in a public document")
-            for name in private_names(line):
-                errors.append(f"{rel}:{i}: private or internal name in a public document (`{name}`)")
+        counts["documents"] += 1
 
     if os.path.exists(os.path.join(root, "CHANGELOG.md")):
         cl = read(root, "CHANGELOG.md")
@@ -307,71 +162,10 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
         else:
             counts["categories"] = 1  # no unreleased work: nothing to compare, not an error
 
-    # private / internal names (hashed above) anywhere in the tree: file paths and
-    # the text of every tracked file, not only the four documents. Generated
-    # ledgers, comments, workflows and scripts are published too.
-    counts["tree files"] = 0
-    counts["tree vocabulary"] = 0
-    for rel in tree_files(root):
-        counts["tree files"] += 1
-        for name in private_names(" ".join(re.split(r"[/_.\-]+", rel))):
-            errors.append(f"{rel}: private or internal name in a file path (`{name}`)")
-        if rel in DOCS:
-            continue  # their text is checked above (with code blocks set aside)
-        text = read_text_file(os.path.join(root, rel))
-        if text is None:
-            continue
-        for i, line in enumerate(text.splitlines(), 1):
-            for name in private_names(line):
-                errors.append(f"{rel}:{i}: private or internal name (`{name}`)")
-            if rel in TREE_VOCAB_EXEMPT:
-                continue
-            counts["tree vocabulary"] += 1
-            for label, pat in FORBIDDEN:
-                if label in TREE_LABELS:
-                    for m in pat.finditer(line):
-                        if rel.startswith(SKILL_PACKAGE_DIR) and SKILL_WORD.fullmatch(m.group(0)):
-                            continue
-                        errors.append(f"{rel}:{i}: {label} `{m.group(0)}`")
-
     for name, c in counts.items():
         if c == 0:
             errors.append(f"check `{name}` compared nothing")
     return errors, counts
-
-
-SKIP_TREE = {".git", "target", "node_modules"}
-
-
-def tree_files(root: str) -> list[str]:
-    """Tracked files when `root` is a git work tree, otherwise every file under it
-    (the tests run on plain directories)."""
-    import subprocess
-    r = subprocess.run(["git", "-C", root, "ls-files", "-z"], capture_output=True)
-    if r.returncode == 0 and r.stdout:
-        return sorted(p for p in r.stdout.decode("utf-8", "replace").split("\0") if p)
-    out = []
-    for d, dirs, files in os.walk(root):
-        dirs[:] = [x for x in dirs if x not in SKIP_TREE]
-        out += [os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/") for f in files]
-    return sorted(out)
-
-
-def read_text_file(path: str) -> str | None:
-    """The file as UTF-8 text, or None for a binary / large / missing file."""
-    try:
-        if os.path.getsize(path) > 4 * 1024 * 1024:
-            return None
-        with open(path, "rb") as f:
-            data = f.read()
-    except OSError:
-        return None
-    if b"\0" in data:
-        return None
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
 
 
 def main() -> int:

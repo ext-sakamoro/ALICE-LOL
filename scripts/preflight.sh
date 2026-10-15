@@ -312,6 +312,10 @@ fi
 step "ci.yml / test: law test files are listed"
 scripts/law_tests.sh list
 
+step "public-text.yml / public-text: Public text (ALICE-Law checker at the pin; tree, then the commits)"
+python3 scripts/test_public_text.py
+scripts/public_text.sh
+
 if [[ $quick -eq 1 ]]; then
   echo
   echo "preflight --quick OK -- the following CI steps were NOT run (full preflight,"
