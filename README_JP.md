@@ -435,8 +435,8 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 
 | gate | 状態 | 注記 |
 |---|---|---|
-| G1 no-libm-direct | 未確認 | the type-resolved clippy::disallowed_methods ban (clippy.toml:25, 29 f32/f64 methods, workspace-wide; .github/clippy-lib/clippy.toml adds max/min) is wired … |
-| G2 ieee-max-min | 未確認 | the scalar mechanism is in place and each part was turned red: the Law helpers det_math::max/min/max64/min64 (alice-lol/src/det_math.rs:28/43/57/71) with tests … |
+| G1 no-libm-direct | 未達 | the type-resolved clippy::disallowed_methods ban (clippy.toml:25, 29 f32/f64 methods, workspace-wide; .github/clippy-lib/clippy.toml adds max/min) is wired … |
+| G2 ieee-max-min | 未達 | the scalar mechanism is in place and each part was turned red: the Law helpers det_math::max/min/max64/min64 (alice-lol/src/det_math.rs:28/43/57/71) with tests … |
 | G3 no-outer-fneg-of-fma | 適合 | the syn-based checker covers every outer-negation form of the gate (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by … |
 | G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
 | G5 release-profile-test-leg | 未確認 | the geometry-digest job (ci.yml:175) has an aarch64 release leg (macos-latest, --release) but nothing turns red when it is removed: with macos-latest taken out … |
@@ -457,7 +457,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | `glsl` | 未申告 |  |
 | `hlsl` | 未申告 |  |
 | `llm-bridge` | 未申告 |  |
-| `physics` | 範囲外 | adds the ThermalField constraint (alice-lol/src/law.rs:320) computed by alice-physics, whose own arithmetic identifier is not folded into LOL_SEMANTICS_ID … |
+| `physics` | 範囲外 | adds the ThermalField constraint (alice-lol/src/law.rs:321) computed by alice-physics, whose own arithmetic identifier is not folded into LOL_SEMANTICS_ID … |
 | `roblox` | 未申告 |  |
 | `wgsl` | 未申告 |  |
 <!-- law-integration:end -->
