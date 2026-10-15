@@ -420,35 +420,35 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 - [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): `music` intent の 8 byte の中身を定義する
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu レンダラ
 
-<!-- law-integration:begin law=5c6363312520f9991837e519bab14909ccf6f2b3 -->
+<!-- law-integration:begin law=5de698ece34ab77c9c2ea78ae59dd58ed2da5f1c -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5c6363312520` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
-| release train | alice-lol 0.4.0 (published)、Law への依存: あり |
-| 算術 | train の alice-det-math 0.5.0、算術の識別子 `135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000` この crate の要求は `alice-det-math = "0.5"` |
-| end to end 検査 | 対象 (`alice-lol = "0.4"`)、digest `966a78784bb4e3341ac6627d519db896f398176b71c2402b188294db6c8e3728`、aarch64 と x86_64 で同じ |
+| release train | alice-lol 0.4.2 (prepared)、Law への依存: あり |
+| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.5"` |
+| end to end 検査 | 対象 (`alice-lol = "0.4"`)、digest `9f7cf676708a272e3817ebbf0727c610f391e1547747af4307ee44d5523267c2`、aarch64 と x86_64 で同じ |
 
 ### 適合 (G1-G14)
 
 | gate | 状態 | 注記 |
 |---|---|---|
-| G1 no-libm-direct | 未確認 | type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a … |
-| G2 ieee-max-min | 未確認 | the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same … |
-| G3 no-outer-fneg-of-fma | 未確認 | syn-based checker catches all 5 outer-negation shapes (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one either … |
-| G4 debug-release-arch-goldens | 未確認 | the signed-zero/cancellation lattice this gate requires is exercised specifically for the quat_from_euler_xyz y-component (the case this crate's G3 residual … |
-| G5 release-profile-test-leg | 未確認 | matrix includes a release-profile macOS leg (macos-latest, aarch64 on GitHub-hosted runners); job has no continue-on-error and fail-fast: false, but this … |
-| G6 semantics-id | 未確認 | LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the … |
-| G7 handshake-carries-id | 未確認 | not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were … |
-| G8 persisted-semantics-id | 未確認 | geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's … |
-| G9 persisted-meaning-change-is-major | 未確認 | not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) … |
-| G10 no-run-varying-artifacts | 未確認 | a search of alice-lol/src for Uuid, SystemTime::now, Instant::now, and unseeded RNG constructors found none, but there is no durable CI check enforcing their … |
-| G11 gate-self-tests | 未確認 | canary and zero-scanned-fails patterns are present on the gates this crate implements (G1, G3); not audited for every gate uniformly |
-| G12 public-repo-text-rules | 未確認 | this crate's own docs_lint.py is the equivalent of ALICE-Law's public_text_check; not confirmed to share the same vocabulary list, only that an equivalent … |
-| G13 no-unspecified-order | 未確認 | print_export.rs's HashSet (euler_characteristic, local name edges) is only measured (.len()); its HashMap (weld_coincident_vertices, local name id) is only … |
-| G14 float-environment-invariants | 未確認 | no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the … |
+| G1 no-libm-direct | 未確認 | the type-resolved clippy::disallowed_methods ban (clippy.toml:25, 29 f32/f64 methods, workspace-wide; .github/clippy-lib/clippy.toml adds max/min) is wired … |
+| G2 ieee-max-min | 未確認 | the scalar mechanism is in place and each part was turned red: the Law helpers det_math::max/min/max64/min64 (alice-lol/src/det_math.rs:28/43/57/71) with tests … |
+| G3 no-outer-fneg-of-fma | 適合 | the syn-based checker covers every outer-negation form of the gate (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by … |
+| G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
+| G5 release-profile-test-leg | 未確認 | the geometry-digest job (ci.yml:175) has an aarch64 release leg (macos-latest, --release) but nothing turns red when it is removed: with macos-latest taken out … |
+| G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
+| G7 handshake-carries-id | 未確認 | no scan or test lists the crate's type-erasing boundaries or feeds a mismatched identifier, so the list below is a manual survey and not a checked fact: … |
+| G8 persisted-semantics-id | 未達 | under the premise shared with G6 and G7 (this crate's outputs are Law-bearing unless its owner rules otherwise) the durable forms the crate writes carry no … |
+| G9 persisted-meaning-change-is-major | 未達 | history audit of the identifier definitions (git log -S over LOL_SEMANTICS_BY_DET_MATH and the pin tables): the identifiers were introduced before alice-lol … |
+| G10 no-run-varying-artifacts | 未達 | the gate's lint or CI scan with a canary is absent: clippy.toml:25 (disallowed-methods) holds no SystemTime::now, Instant::now, Uuid::new_v4, thread_rng, … |
+| G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
+| G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |
+| G13 no-unspecified-order | 未確認 | library source of alice-lol and alice-lol-macro names HashMap / HashSet only in alice-lol/src/print_export.rs (two locals, id and edges, only looked up or … |
+| G14 float-environment-invariants | 未達 | the scan step over build configuration is absent: .github/workflows/ci.yml has no step that checks .cargo/config*, workflow env, build.rs or Cargo.toml … |
 
 ### feature と保証の範囲
 
@@ -457,7 +457,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5c6363312520` と
 | `glsl` | 未申告 |  |
 | `hlsl` | 未申告 |  |
 | `llm-bridge` | 未申告 |  |
-| `physics` | 未申告 |  |
+| `physics` | 範囲外 | adds the ThermalField constraint (alice-lol/src/law.rs:320) computed by alice-physics, whose own arithmetic identifier is not folded into LOL_SEMANTICS_ID … |
 | `roblox` | 未申告 |  |
 | `wgsl` | 未申告 |  |
 <!-- law-integration:end -->

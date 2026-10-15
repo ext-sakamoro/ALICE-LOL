@@ -1,94 +1,118 @@
 # ALICE-Law conformance manifest for this crate (alice-lol). One entry per
 # gate defined in ALICE-Law's conformance/gates.toml. Schema (status /
-# evidence / since / note / reference_repo) is docs/CONFORMANCE.md's
-# "Manifest" section in that repository.
+# evidence / mutant / since / note / reference_repo) is docs/CONFORMANCE.md's
+# "Manifest" section in that repository; a `pass` entry also names the red
+# mutant that turns the evidence red, as carried out in this crate.
 #
 # Entries here are written from what this repository's own commits, CI
-# workflow and test suite actually show, checked directly rather than
-# assumed: a gate without concrete evidence is `missing`, not guessed `pass`.
+# workflow and test suite show at origin/main, re-measured directly rather
+# than assumed: a gate whose evidence or mutant is not shown is `unverified`
+# (with what is missing), a gate checked and unmet is `fail-known` (with the
+# site), and nothing is guessed `pass`. Library code means the workspace
+# members' src/ (alice-lol and alice-lol-macro are the published crates).
 
 [G1]
-status = "pass"
-evidence = ["clippy.toml (repository root)", ".github/clippy-lib/clippy.toml", "scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py", ".github/workflows/ci.yml wiring-guard job"]
-since = "3d0b4be352f70f33e6a837f4434eebdd9af7fe0b"
-note = "type-resolved clippy::disallowed_methods ban on platform transcendentals, applied workspace-wide (not just this crate's own src/); canary confirmed catching a violation in a non-alice-lol workspace member"
+status = "unverified"
+evidence = ["clippy.toml", ".github/clippy-lib/clippy.toml", "scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py", ".github/workflows/ci.yml wiring-guard job"]
+since = ""
+note = "the type-resolved clippy::disallowed_methods ban (clippy.toml:25, 29 f32/f64 methods, workspace-wide; .github/clippy-lib/clippy.toml adds max/min) is wired into CI (clippy job with --all-features, wiring-guard clippy-lib steps) and scripts/clippy_lib_gate.py has a canary (7 of 7 forbidden forms flagged), but the list lacks banned entries of ALICE-Law's G1 list: f32: sinh cosh asinh acosh atanh exp2 exp_m1 log ln_1p; f64: those plus tanh cbrt hypot (21 of 50 name x width pairs; the comment in clippy.toml says alice-det-math 0.5 has no cbrt64/hypot64/tanh64). Measured: appending f32::cosh and f32::powi to a library file passes both clippy configurations (exit 0), so the lint does not read those forms. A scan of library source finds no call of any of the missing banned names (method-call and path forms). powi (pending, banned by default) is not banned and is called in library code at alice-lol/src/stdlib/hardsurface/pattern_sdf.rs:5143 (f32 tier_ratio.powi(i32)); no reason for allowing it is stated here (the comment in clippy.toml calls it portable by repeated squaring, which is not the cross-target measurement the gate asks about). Becomes pass when both clippy configurations hold every banned entry for both widths (or a reason per entry) and powi is banned or justified, with a mutant per width"
 reference_repo = ""
 
 [G2]
-status = "missing"
-evidence = ["alice-lol/src/det_math.rs (Law max/min/max64/min64, unit-tested)", "alice-lol/src/raw_minmax.rs (raw_minmax_here!() macro, compiler-enforced via clippy::disallowed_macros on its own definition path)", "scripts/raw_minmax_manifest.toml + scripts/raw_minmax_manifest.py (default-deny manifest, wired in .github/workflows/ci.yml and scripts/preflight.sh)"]
-since = "df83855a8343038995ab213af511f39d89d523d8"
-note = "the Law helper (det_math.rs) and the named raw_* helper plus default-deny manifest this gate specifies now exist and are wired into CI (migrated to the same form as ALICE-SDF's implementation); alice-lol computes max/min only in scalar f32/f64 itself, so the gate's per-width coverage clause has no additional width of its own to check against (the SIMD evaluation this crate re-exports, Vec3x8/eval_compiled_simd/eval_compiled_batch_simd* in lib.rs, is alice-sdf's code and falls under alice-sdf's own G2 entry, not this one) — but nothing in this repository asserts the scalar-only claim as a checked, ratcheted fact rather than a current coincidence, so status stays missing until that is an explicit test, not an omission."
+status = "unverified"
+evidence = ["alice-lol/src/det_math.rs", "alice-lol/src/raw_minmax.rs", "scripts/raw_minmax_manifest.toml", "scripts/raw_minmax_manifest.py", "scripts/det_math_minmax_blob_sync.py", ".github/clippy-lib/clippy.toml", ".github/workflows/ci.yml wiring-guard job"]
+since = ""
+note = "the scalar mechanism is in place and each part was turned red: the Law helpers det_math::max/min/max64/min64 (alice-lol/src/det_math.rs:28/43/57/71) with tests over the signed-zero lattice (flipping the zero-sign rule of max fails max_and_min_follow_the_rule_on_the_signed_zero_lattice and the_zero_pair_has_the_documented_sign_in_both_orders), the clippy-lib ban on f32/f64 max/min in library code (an f32::max in limits.rs fails clippy with disallowed_methods), the default-deny raw_minmax_here! manifest (7 modules; an unlisted invocation fails scripts/raw_minmax_manifest.py), and the cross-copy check of the det_math bodies. What those checks do not read: glam vector min/max (Vec3::min/max and min_element/max_element call the platform f32::min/max inside glam, no f32 or f64 method appears in this crate's source, so the type-resolved lint does not see them), with sites in library code at alice-lol/src/roblox_export.rs:241-242 (min.min(v.position), max.max(v.position)), alice-lol/src/print_export.rs:413 (max_element) and alice-lol/src/stdlib/hardsurface/mount.rs:301 (min_element). SIMD widths: the crate builds none of its own (no f32xN, wide, core::arch or target_feature in library source; Vec3x8 and eval_compiled_*simd* in lib.rs:217-220 are alice-sdf re-exports, covered by that crate's own G2), a snapshot that no test or lint ratchets. Becomes pass when the glam forms go through a Law helper or a lint reads them, with a mutant for that form"
 reference_repo = "ALICE-SDF"
 
 [G3]
 status = "pass"
-evidence = ["tools/no-outer-fneg-of-fma/", "scripts/no_outer_fneg_of_fma.py", ".github/workflows/ci.yml wiring-guard job fma-guard steps"]
+evidence = ["tools/no-outer-fneg-of-fma/src/main.rs", "scripts/no_outer_fneg_of_fma.py", "scripts/test_no_outer_fneg_of_fma.py", ".github/workflows/ci.yml wiring-guard job fma-guard steps"]
+mutant = "insert -(a.mul_add(b, c)), a.mul_add(b, c).neg(), -0.0 - a.mul_add(b, c) or -1.0 * a.mul_add(b, c) in a library source file (limits.rs) -> the syntax-tree checker tools/no-outer-fneg-of-fma exits 1 on each (the regex checker scripts/no_outer_fneg_of_fma.py exits 1 on the bare form only); a macro_rules! whose body mentions mul_add -> the checker exits 1 (macro mul_add mentions 1); reverted -> ok"
 since = "0349ebb"
-note = "syn-based checker catches all 5 outer-negation shapes (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one either side) plus the same-block let-then-negate form; a universal fma-result-normalising wrapper was measured as an alternative and rejected (it regresses a deliberate sign-carrying cancellation form in angle.rs's quat_from_euler_xyz, see docs/CONFORMANCE.md's G3 residual)"
+note = "the syn-based checker covers every outer-negation form of the gate (bare unary, .neg(), block-wrapped, subtraction from negative zero, multiplication by negative one on either side, the same-block let-then-negate form) and fails on a macro that mentions a fma call; measured on the clean tree: files 175, mul_add calls 411, outer-fneg sites 3 (all allowed in tests/ and examples/, none in src/). A universal fma-result-normalising wrapper was measured and rejected (it regresses the deliberate sign-carrying cancellation in angle.rs's quat_from_euler_xyz, see docs/CONFORMANCE.md's G3 residual). The residual the gate itself names (a fma result negated after data flow the checker does not trace) is backed by G4"
 reference_repo = ""
 
 [G4]
 status = "pass"
-evidence = [".github/workflows/ci.yml geometry-digest job (3 OS x 2 profiles)", "alice-lol/src/angle.rs quat_from_euler_xyz_tests", "alice-lol/tests/geometry_id_oracle.rs", "alice-lol/tests/stdlib_profile_determinism_oracle.rs", "alice-lol/tests/laser_pattern_digest_golden.rs"]
-since = ""
-note = "the signed-zero/cancellation lattice this gate requires is exercised specifically for the quat_from_euler_xyz y-component (the case this crate's G3 residual concerns); coverage for other arithmetic paths in this crate is not separately confirmed"
+evidence = [".github/workflows/ci.yml geometry-digest job (ubuntu-latest x86_64, windows-latest x86_64, macos-latest aarch64, each debug and --release, fail-fast false, no continue-on-error)", "alice-lol/src/angle.rs quat_from_euler_xyz_is_bit_identical_across_architectures", "alice-lol/src/angle.rs y_component_cancellation_preserves_a_negative_zero_input", "alice-lol/tests/geometry_id_oracle.rs", "alice-lol/tests/stdlib_profile_determinism_oracle.rs", "alice-lol/tests/laser_pattern_digest_golden.rs"]
+mutant = "flip the expected sign bit in y_component_cancellation_preserves_a_negative_zero_input ((-0.0f32).to_bits() -> 0.0f32.to_bits()) -> the test fails in debug and in --release; replace the y component's (-cj).mul_add(ss, -(sj * cc)) in quat_from_euler_xyz by the outer-negated -(cj.mul_add(ss, sj * cc)) -> in debug quat_from_euler_xyz_is_bit_identical_across_architectures, y_component_cancellation_lattice_is_debug_release_identical_and_canonical and geometry_id_oracle every_pin_matches_its_live_behaviour_digest fail, in --release on aarch64 they stay green (the optimiser rewrites the outer negation to the operand form), which is the debug/release split the matrix exists to expose; reverted -> green"
+since = "ae2b75c"
+note = "the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the geometry-digest job runs the named selections on all four {debug, release} x {x86_64, aarch64} legs. The mutants were run locally in debug and release on an aarch64 host; the x86_64 legs were not run locally. The job is not a server-side required status check (branch protection and rulesets are absent) and scripts/preflight.sh does not run these selections, so requiredness rests on the job having no continue-on-error"
 reference_repo = ""
 
 [G5]
-status = "pass"
+status = "unverified"
 evidence = [".github/workflows/ci.yml geometry-digest job"]
 since = ""
-note = "matrix includes a release-profile macOS leg (macos-latest, aarch64 on GitHub-hosted runners); job has no continue-on-error and fail-fast: false, but this repository has no branch-protection rule making it a required status check (confirmed via the GitHub API returning 404 for branch protection) -- requiredness here is enforced by local preflight.sh plus the hook that blocks a push on a failing preflight, not by a server-side required check"
+note = "the geometry-digest job (ci.yml:175) has an aarch64 release leg (macos-latest, --release) but nothing turns red when it is removed: with macos-latest taken out of that job's matrix, ALICE-Law's measure_conformance.py still reports 'release test found, aarch64 runner macos-latest' (other jobs name the runner), and no script in this repository reads the matrix. The release leg also runs six named selections (geometry_id lib tests, two angle lib tests, geometry_id_oracle, stdlib_profile_determinism_oracle, laser_pattern_digest_golden), not the full Law-bearing suite, which the test job runs in debug only. Becomes pass when a check fails on the removal of that leg and the release selection is shown to be the Law-bearing set"
 reference_repo = ""
 
 [G6]
-status = "missing"
-note = "LOL_SEMANTICS_ID and related infrastructure exist (alice-lol/src/geometry_id.rs, law_id.rs; tests/law_id_oracle.rs, tests/audit_law_semantics.rs) but the toolchain-plus-version staleness guard this gate specifically requires was not individually confirmed"
+status = "pass"
+evidence = ["alice-lol/src/law_id.rs:133", "alice-lol/src/geometry_id.rs:437", "alice-lol/tests/semantics_id_per_det_math.rs", "alice-lol/tests/law_id_oracle.rs", "alice-lol/tests/geometry_semantics_per_det_math.rs", "alice-lol/tests/geometry_id_oracle.rs"]
+mutant = "change one pin constant (the research-expressions pin in LOL_SEMANTICS_PINS, law_id.rs) -> the_constant_is_the_row_of_the_linked_det_math, every_row_is_the_fold_of_the_pins_under_its_det_math, the_semantics_identifier_is_the_fold_of_its_pins and two further oracle tests fail; change one pin of LOL_GEOMETRY_SEMANTICS_PINS (the fmt_f32 pin, geometry_id.rs) -> every_row_is_the_fold_of_the_pins_under_its_det_math, the_pins_fold_to_the_exported_identifier and every_pin_matches_its_live_behaviour_digest fail; reverted -> green"
+since = "f08757c"
+note = "LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own behaviour pins and alice-det-math's SEMANTICS_ID, one row per alice-det-math generation (0.5.0 and 0.5.1), a compile-time panic when the linked generation has no row, and previous generations stay recognisable through known_semantics_id / known_geometry_semantics_id. The tie to the toolchain is not part of the fold (the fold moves with the arithmetic generation, pinned by the oracles), and the tie to this crate's version is by the rows and the oracles, both for audit. alice-det-math is the only upstream pin: with the physics feature the crate also depends on alice-physics (law.rs:320, ThermalField), whose own identifier is not folded, which is why that feature is declared outside the guarantee below"
 reference_repo = ""
 
 [G7]
-status = "missing"
-note = "not confirmed one way or the other: no grep hit for a SemanticsMismatch-shaped error type in this crate's src/; this crate's consumer-facing boundaries were not surveyed for this gate"
+status = "unverified"
+evidence = ["alice-lol/src/law_id.rs", "alice-lol-macro/src/parser.rs"]
+since = ""
+note = "no scan or test lists the crate's type-erasing boundaries or feeds a mismatched identifier, so the list below is a manual survey and not a checked fact: library source of alice-lol and alice-lol-macro holds no extern \"C\", no_mangle, wasm_bindgen, pyo3 or dyn Any, no build.rs exists, the macro parses decimal literals to f32 at expansion (alice-lol-macro/src/parser.rs:51-58) and calls no Law function, and values from alice-sdf, alice-zip and alice-det-math are exchanged in memory as typed Rust values (no per-value identifier needed). Law identifiers (law_id.rs) are computed from a law's text and the semantics identifier passed in (LawIdHasher::new). The completeness audit of public decode / read / open entry points and the mismatch error with both identifiers are not done. Becomes n/a with a scanner that finds zero such boundaries (and a mutant adding one), or pass with the list and a mismatch test per boundary"
 reference_repo = ""
 
 [G8]
-status = "missing"
-note = "geometry_id.rs computes an identifier for persisted geometry output, but whether it is specifically scoped as a persisted-bytes identifier distinct from G6's in-process one (rather than the same identifier serving both roles) was not confirmed"
+status = "fail-known"
+evidence = ["alice-lol/src/print_export.rs:432", "alice-lol/src/print_export.rs:451"]
+since = ""
+note = "under the premise shared with G6 and G7 (this crate's outputs are Law-bearing unless its owner rules otherwise) the durable forms the crate writes carry no identifier of the meaning of the stored bytes: node_to_stl (print_export.rs:432) and node_to_3mf (print_export.rs:451), with lol_to_stl / lol_to_3mf (470, 484) and the dual-contouring variants (559, 586), write mesh bytes (STL, 3MF) whose content is pinned by the geometry digests, but LOL_GEOMETRY_SEMANTICS_ID is referenced nowhere outside geometry_id.rs and no reader compares a stored identifier (the crate has no reader). If its owner rules these external mesh formats out of G8's scope the cell becomes n/a with a scanner and a mutant"
 reference_repo = ""
 
 [G9]
-status = "missing"
-note = "not confirmed: whether a past identifier move in this crate's history was reserved for an actual meaning change (versus a cross-architecture bit-matching fix) was not audited against this gate's definition"
+status = "fail-known"
+evidence = ["CHANGELOG.md:35", "alice-lol/src/law_id.rs:118", "alice-lol/src/geometry_id.rs:422"]
+since = ""
+note = "history audit of the identifier definitions (git log -S over LOL_SEMANTICS_BY_DET_MATH and the pin tables): the identifiers were introduced before alice-lol 0.4.0 (first release carrying them, 0.3.0 -> 0.4.0), the only later move is in 0.4.2 (patch of 0.4.1, 2026-10-15): resolving alice-det-math 0.5.1 moved LOL_SEMANTICS_ID from 403359f6 to d81c2cbb and LOL_GEOMETRY_SEMANTICS_ID from 251e73bf to d1cbba69 (CHANGELOG.md:35 names both sides and records that the 0.5.1 re-measurement gave the same bits as 0.5.0). The upstream identifier changed, so by the gate's definition it is a meaning change to be released as semver-major (a minor in 0.x), and it shipped in a patch release; no cross-architecture fix moved an identifier. Becomes pass at the next audit in which every move is a major release naming both sides"
 reference_repo = ""
 
 [G10]
-status = "missing"
-note = "a search of alice-lol/src for Uuid, SystemTime::now, Instant::now, and unseeded RNG constructors found none, but there is no durable CI check enforcing their absence going forward -- the absence is a manual snapshot, not a gate"
+status = "fail-known"
+evidence = ["clippy.toml:25", ".github/workflows/ci.yml"]
+since = ""
+note = "the gate's lint or CI scan with a canary is absent: clippy.toml:25 (disallowed-methods) holds no SystemTime::now, Instant::now, Uuid::new_v4, thread_rng, rand::random or from_entropy entry, and no step in .github/workflows/ci.yml scans for them. Library source holds none of the 15 forms ALICE-Law's measure_conformance.py scans (SystemTime::now, Instant::now, Utc::now, Local::now, Uuid::new_v4, Uuid::now_v7, thread_rng, rand::rng(), rand::random, from_entropy, from_os_rng, OsRng, getrandom, fastrand::, RandomState), a snapshot with no enforcement: appending a SystemTime::now call to a library file leaves clippy-lib, det_math_guard.py and libm_hidden_check.py green. Becomes pass when a lint or scan step with a canary lands and a SystemTime::now added to a library file turns it red"
 reference_repo = ""
 
 [G11]
-status = "pass"
-evidence = ["tools/no-outer-fneg-of-fma/src/main.rs #[cfg(test)] mod tests (canary + zero-scanned-fails pattern)", "scripts/clippy_lib_gate.py + scripts/test_clippy_lib_gate.py (canary)", "scripts/det_math_minmax_blob_sync.py (cross-repo byte-identity of the det_math.rs copies in alice-lol, alice-lol-ui, alice-lol-datagen, alice-world-auditor)"]
+status = "unverified"
+evidence = ["scripts/test_clippy_lib_gate.py", "scripts/test_no_outer_fneg_of_fma.py", "scripts/test_raw_minmax_manifest.py", "scripts/det_math_minmax_blob_sync.py", "scripts/test_det_math_minmax_blob_sync.py", "scripts/test_print_export_no_hashmap_iteration.py", "tools/no-outer-fneg-of-fma/src/main.rs"]
 since = ""
-note = "canary and zero-scanned-fails patterns are present on the gates this crate implements (G1, G3); not audited for every gate uniformly"
+note = "the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags 7 of 7 forbidden forms), the fma checker (tool and regex tests over every negation form), the raw max/min manifest and the HashMap check; zero-compared failures measured with an empty root: no_outer_fneg_of_fma.py exits 2, raw_minmax_manifest.py exits 2, det_math_minmax_blob_sync.py exits 1; the copy check for the det_math bodies across four members (scripts/det_math_minmax_blob_sync.py, 4 targets, 9 functions) and the generated clippy-lib config against the root clippy.toml (clippy_lib_gate.py). Not established: a zero-compared failure for the clippy runs themselves and for the print_export check, and canaries for G4 / G5 / G6 evidence (the digests are goldens, the matrix has no checker). Becomes pass when the table is complete for every gate marked pass here"
 reference_repo = ""
 
 [G12]
 status = "pass"
-evidence = ["scripts/docs_lint.py", "scripts/test_docs_lint.py"]
-since = ""
-note = "this crate's own docs_lint.py is the equivalent of ALICE-Law's public_text_check; not confirmed to share the same vocabulary list, only that an equivalent check exists and runs"
+evidence = [".github/workflows/public-text.yml", "scripts/public_text.sh", ".github/public-text-pin", "scripts/test_public_text.py"]
+mutant = "append an internal-process word to a tracked document (docs/LOL_CONJUGATION_GLOSSARY.md) in a commit -> scripts/public_text.sh exits 1 with 'found: docs/LOL_CONJUGATION_GLOSSARY.md:140: agent process' (1 finding); the clean tree reports 0 findings in 412 files at HEAD; reverted -> green"
+since = "9a9a51c"
+note = "the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the one written there, on every tracked file at HEAD and on the commits pushed; it exits 2 when it compared nothing or the pin or base is malformed (scripts/test_public_text.py covers the part that needs no network). scripts/docs_lint.py no longer carries a word list of its own"
 reference_repo = "ALICE-Law"
 
 [G13]
-status = "pass"
-evidence = ["scripts/print_export_no_hashmap_iteration.py + scripts/test_print_export_no_hashmap_iteration.py (closed static check: the HashMap/HashSet type is named nowhere in print_export.rs outside its two pinned locals' own declarations, and those two locals are never referenced except through a short whitelist of lookup methods)", "alice-lol/examples/print_export_probe.rs + alice-lol/tests/print_export_determinism.rs (the same scene exported by two separate processes under RAYON_NUM_THREADS=1 and =3, byte-identical STL+3MF)"]
+status = "unverified"
+evidence = ["scripts/print_export_no_hashmap_iteration.py", "scripts/test_print_export_no_hashmap_iteration.py", "alice-lol/examples/print_export_probe.rs", "alice-lol/tests/print_export_determinism.rs"]
 since = ""
-note = "print_export.rs's HashSet<(u32,u32)> (euler_characteristic, local name edges) is only measured (.len()); its HashMap<[u32; 3], usize> (weld_coincident_vertices, local name id) is only looked up (.entry()), with output vertices pushed in raw.vertices's own order, not the map's. The static check is closed on both the type (HashMap/HashSet is named nowhere else in the file, not via an untyped declaration, a full path, a type alias, a struct field, or a function parameter) and the two pinned names (every other appearance of id/edges must be an immediate whitelisted call, so a reference, an argument, an alias, or a trait-method-call-by-path all fail); renaming either local is itself a violation, by design. The runtime evidence specifically needs the 3MF output, not STL: STL writes each triangle's three vertices in full with no shared vertex list, so a HashMap-bucket-order-driven renumbering of vertices does not reach STL bytes at all, only 3MF's shared, indexed one -- verified by hand (a mutant deciding output order from the map's own iteration failed both checks, STL stayed identical across runs and only 3MF differed; reverted, not committed)"
+note = "library source of alice-lol and alice-lol-macro names HashMap / HashSet only in alice-lol/src/print_export.rs (two locals, id and edges, only looked up or measured; output vertices are pushed in the mesh's own order), and the 3MF bytes are identical across two processes under RAYON_NUM_THREADS=1 and 3 (print_export_determinism.rs). The static check is closed on that one file, though: appending a HashMap value iteration and a SystemTime::now call to another library file leaves print_export_no_hashmap_iteration.py green (exit 0), so a new use elsewhere is not read, and no lint bans HashMap / HashSet iteration in library code; the unpublished alice-lol-humanoid member holds HashMap uses that are out of the published crates. Parallel reductions of floats: none in alice-lol's own source (no rayon or thread use), those inside alice-sdf are its own G13. Becomes pass when a lint or scan reads all library files for HashMap / HashSet iteration (or a reasoned allowlist) with a canary, and the ordered-reduction test is shown to fail on an unordered reduction"
 reference_repo = ""
 
 [G14]
-status = "missing"
-note = "no fast-math-style flag or target-cpu=native found in this crate's or the workspace's Cargo.toml or CI configuration, but this gate also requires the round-to-nearest-even / no-flush-to-zero assumption to be asserted by a test, not merely relied upon implicitly in doc comments (which several modules do, e.g. angle.rs, geometry_id.rs) -- no such dedicated assertion test was found"
+status = "fail-known"
+evidence = [".github/workflows/ci.yml", "alice-lol/src/angle.rs"]
+since = ""
+note = "the scan step over build configuration is absent: .github/workflows/ci.yml has no step that checks .cargo/config*, workflow env, build.rs or Cargo.toml profiles for a fast-math-style flag or target-cpu=native, and no test asserts round-to-nearest-even or that subnormals are not flushed to zero (the subnormal tests in alice-lol/src/angle.rs:401 and :408 check angle canonicalisation, not the floating-point environment). Measured: no RUSTFLAGS, target-cpu or fast-math setting exists in any workflow, Cargo.toml or script of this repository, only an unenforced snapshot. Becomes pass when the scan step and the two environment tests land, a target-cpu=native in the CI environment turns the scan red and a subnormal input fails the flush test under a flush-to-zero mode"
 reference_repo = ""
+
+[features.physics]
+guarantee = "outside"
+note = "adds the ThermalField constraint (alice-lol/src/law.rs:320) computed by alice-physics, whose own arithmetic identifier is not folded into LOL_SEMANTICS_ID (alice-lol/src/law_id.rs:79 pins alice-det-math only), so condition 1 (the same arithmetic generation, nothing added the gates do not cover) is not shown"
