@@ -104,6 +104,10 @@ step "ci.yml / gen-gbnf: oracle + lol.gbnf と配布用の写しが language/con
 python3 scripts/test_gen_gbnf.py
 python3 scripts/gen_gbnf.py --check
 
+step "ci.yml / gen-units-doc: oracle + 文書の単位の段落が language/constructs.toml の unit 表から生成したものと一致"
+python3 scripts/test_gen_units_doc.py
+python3 scripts/gen_units_doc.py --check
+
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py

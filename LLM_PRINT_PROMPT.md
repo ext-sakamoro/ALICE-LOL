@@ -98,27 +98,27 @@ node_to_3mf(&bracket, "bracket.3mf", &PrintConfig::default())?;
 | Parameter | Constraint | Reason |
 |-----------|-----------|--------|
 | Min wall thickness | 0.8mm (2 nozzle widths @ 0.4mm) | Below this, walls won't adhere |
-| Min shell_t | 0.04 (LOL units, assuming scale_mm=20) | = 0.8mm physical |
+| Min shell_t | 0.8 (in `units(mm, ...)`) | = 0.8mm physical |
 | Overhang angle | < 45° without supports | FDM can't print in mid-air |
 | Min lattice strut | 0.8mm | Struts thinner than nozzle width fail |
 | Bridge distance | < 10mm unsupported | Sagging beyond this length |
 
 **FDM Material Presets:**
 
-| Material | shell_t (LOL) | lattice_t (LOL) | scale | Notes |
-|----------|---------------|-----------------|-------|-------|
-| PLA | 0.04 | 0.02 | 5.0-8.0 | Rigid, easy to print |
-| PETG | 0.05 | 0.025 | 4.0-6.0 | Slightly flexible, layer adhesion stronger |
-| ABS/ASA | 0.05 | 0.025 | 4.0-6.0 | Heat resistant, warps easily |
-| TPU | 0.06 | 0.03 | 3.0-5.0 | Flexible, needs thicker walls |
-| Nylon | 0.04 | 0.02 | 5.0-8.0 | Strong but hygroscopic |
+| Material | shell_t (mm) | lattice_t (mm) | scale (per mm) | Notes |
+|----------|--------------|----------------|----------------|-------|
+| PLA | 0.8 | 0.4 | 0.25-0.4 | Rigid, easy to print |
+| PETG | 1.0 | 0.5 | 0.2-0.3 | Slightly flexible, layer adhesion stronger |
+| ABS/ASA | 1.0 | 0.5 | 0.2-0.3 | Heat resistant, warps easily |
+| TPU | 1.2 | 0.6 | 0.15-0.25 | Flexible, needs thicker walls |
+| Nylon | 0.8 | 0.4 | 0.25-0.4 | Strong but hygroscopic |
 
 ### SLA/DLP (Stereolithography) — Elegoo, Anycubic, Formlabs
 
 | Parameter | Constraint | Reason |
 |-----------|-----------|--------|
 | Min wall thickness | 0.3mm | Resin can resolve finer features |
-| Min shell_t | 0.015 | = 0.3mm @ scale_mm=20 |
+| Min shell_t | 0.3 (mm) | = 0.3mm physical |
 | Drain holes required | Yes, for hollow prints | Uncured resin trapped inside |
 | Min lattice strut | 0.3mm | Resin resolves thin struts well |
 
@@ -127,9 +127,11 @@ node_to_3mf(&bracket, "bracket.3mf", &PrintConfig::default())?;
 SLA hollow print with drain holes
 
 ```lol print
+units(mm, print,
 subtract(
-    onion(0.015, sphere(1.0)),
-    translate(0.0, -0.9, 0.0, cylinder(0.05, 0.2))
+    onion(0.3, sphere(20)),
+    translate(0.0, -18, 0.0, cylinder(1, 4))
+)
 )
 ```
 
@@ -138,7 +140,7 @@ subtract(
 | Parameter | Constraint | Reason |
 |-----------|-----------|--------|
 | Min wall thickness | 0.7mm (nylon) | Powder sintering resolution |
-| Min shell_t | 0.035 | = 0.7mm @ scale_mm=20 |
+| Min shell_t | 0.7 (mm) | = 0.7mm physical |
 | No overhang limit | ∞ | Powder supports itself |
 | Min lattice strut | 0.5mm | Powder grain limits resolution |
 
@@ -176,13 +178,13 @@ subtract(
 
 ## Step 3: Parameter Auto-Tuning
 
-### Quick Reference (FDM PLA, scale_mm = 20.0)
+### Quick Reference (FDM PLA, `units(mm, print, ...)`)
 
-| Object Size | shell_t | scale | lattice_t | Total mass reduction |
-|------------|---------|-------|-----------|---------------------|
-| Small (< 30mm) | 0.05 | 8.0 | 0.02 | ~60% |
-| Medium (30-80mm) | 0.04 | 5.0 | 0.02 | ~70% |
-| Large (80mm+) | 0.04 | 4.0 | 0.015 | ~75% |
+| Object Size | shell_t (mm) | scale (per mm) | lattice_t (mm) | Total mass reduction |
+|------------|--------------|----------------|----------------|---------------------|
+| Small (< 30mm) | 1.0 | 0.4 | 0.4 | ~60% |
+| Medium (30-80mm) | 0.8 | 0.25 | 0.4 | ~70% |
+| Large (80mm+) | 0.8 | 0.2 | 0.3 | ~75% |
 
 ### Parameter Relationships
 
@@ -191,10 +193,10 @@ shell_t ↑  → stronger walls, heavier, more material
 scale   ↑  → denser lattice, stronger infill, heavier
 lattice_t ↑ → thicker struts, stronger lattice, heavier
 
-Typical ranges (LOL units):
-  shell_t:   0.015 – 0.10
-  scale:     3.0 – 10.0
-  lattice_t: 0.01 – 0.05
+Typical ranges (in units(mm, ...); scale is a frequency, cells of about 2π / scale mm):
+  shell_t:   0.3 – 2.0
+  scale:     0.15 – 0.5
+  lattice_t: 0.2 – 1.0
 ```
 
 ## Step 4: Output Format
@@ -203,14 +205,16 @@ Always output valid LOL code. State the design decisions in prose before the pro
 
 - Intent: Structural bracket for FDM (PLA)
 - Strategy: Gyroid infill for weight savings with adequate strength
-- Shell: 0.04 (0.8mm wall), Scale: 6.0, Lattice: 0.02
+- Shell: 0.8 mm wall, Scale: 0.3 per mm (cells of about 21 mm), Lattice: 0.4 mm
 
 ```lol print
-lattice_infill(0.04, 6.0, 0.02,
+units(mm, print,
+lattice_infill(0.8, 0.3, 0.4,
     subtract(
-        rounded_box(2.0, 1.0, 0.5, 0.1),
-        translate(1.0, 0.0, 0.0, cylinder(0.3, 0.6))
+        rounded_box(40, 20, 10, 2),
+        translate(20, 0.0, 0.0, cylinder(6, 12))
     )
+)
 )
 ```
 
@@ -222,18 +226,20 @@ lattice_infill(0.04, 6.0, 0.02,
 - Strategy: Gyroid infill, medium density
 
 ```lol print
-lattice_infill(0.05, 5.0, 0.02,
+units(mm, print,
+lattice_infill(1, 0.25, 0.4,
     subtract(
-        smooth_union(0.1,
-            box3d(1.5, 2.0, 0.3),
-            translate(0.0, -1.5, 0.5,
-                rotate(20.0, 0.0, 0.0, box3d(1.5, 0.15, 0.6))
+        smooth_union(2,
+            box3d(30, 40, 6),
+            translate(0.0, -30, 10,
+                rotate(20.0, 0.0, 0.0, box3d(30, 3, 12))
             )
         ),
-        translate(0.0, 0.5, 0.0,
-            rotate(10.0, 0.0, 0.0, box3d(1.3, 0.8, 0.5))
+        translate(0.0, 10, 0.0,
+            rotate(10.0, 0.0, 0.0, box3d(26, 16, 10))
         )
     )
+)
 )
 ```
 
@@ -243,11 +249,13 @@ lattice_infill(0.05, 5.0, 0.02,
 - Strategy: Hollow shell only, no infill needed
 
 ```lol print
-onion(0.02,
+units(mm, print,
+onion(0.4,
     subtract(
-        scale_non_uniform(1.0, 1.5, 1.0, sphere(1.2)),
-        translate(0.0, -1.0, 0.0, box3d(2.0, 0.5, 2.0))
+        scale_non_uniform(1.0, 1.5, 1.0, sphere(24)),
+        translate(0.0, -20, 0.0, box3d(40, 10, 40))
     )
+)
 )
 ```
 
@@ -257,16 +265,18 @@ onion(0.02,
 - Strategy: Diamond infill for directional stiffness along thrust axis
 
 ```lol print
-diamond_infill(0.05, 7.0, 0.03,
+units(mm, print,
+diamond_infill(1, 0.35, 0.6,
     subtract(
         subtract(
-            cylinder(1.0, 0.4),
-            cylinder(0.3, 0.5)
+            cylinder(20, 8),
+            cylinder(6, 10)
         ),
         polar_repeat(4,
-            translate(0.7, 0.0, 0.0, cylinder(0.1, 0.5))
+            translate(14, 0.0, 0.0, cylinder(2, 10))
         )
     )
+)
 )
 ```
 
@@ -276,11 +286,13 @@ diamond_infill(0.05, 7.0, 0.03,
 - Strategy: Schwarz-P for uniform pore distribution
 
 ```lol print
-schwarz_infill(0.03, 6.0, 0.015,
-    smooth_intersection(0.05,
-        cylinder(0.8, 1.5),
-        ellipsoid(0.9, 1.6, 0.9)
+units(mm, print,
+schwarz_infill(0.6, 0.3, 0.3,
+    smooth_intersection(1,
+        cylinder(16, 30),
+        ellipsoid(18, 32, 18)
     )
+)
 )
 ```
 
@@ -290,18 +302,20 @@ schwarz_infill(0.03, 6.0, 0.015,
 - Strategy: Hollow with drain holes at base
 
 ```lol print
+units(mm, print,
 subtract(
     subtract(
-        onion(0.03,
-            smooth_union(0.15,
-                sphere(0.8),
-                translate(0.0, 1.0, 0.0, sphere(0.5)),
-                translate(0.0, 1.7, 0.0, sphere(0.35))
+        onion(0.6,
+            smooth_union(3,
+                sphere(16),
+                translate(0.0, 20, 0.0, sphere(10)),
+                translate(0.0, 34, 0.0, sphere(7))
             )
         ),
-        translate(0.0, -0.7, 0.0, cylinder(0.05, 0.2))
+        translate(0.0, -14, 0.0, cylinder(1, 4))
     ),
-    translate(0.2, -0.7, 0.2, cylinder(0.05, 0.2))
+    translate(4, -14, 4, cylinder(1, 4))
+)
 )
 ```
 
@@ -413,15 +427,19 @@ subtract(
 - External: 84 x 126mm, Height: 32mm
 
 ```lol print
+units(mm, print,
 rounded_box(42, 63, 16, 4.0)
+)
 ```
 
 With compartments: subtract dividers
 
 ```lol print
+units(mm, print,
 subtract(
   rounded_box(42, 63, 16, 4.0),
   translate(0, 0, 2, rounded_box(39, 60, 14, 1.0))
+)
 )
 ```
 
@@ -435,12 +453,14 @@ LOL/SDF is suitable for SKADIS **accessories** (hooks, containers — solid 3D s
 - T-shaped peg: blade 4.5×5mm, shoulder locks behind board
 
 ```lol print
+units(mm, print,
 subtract(
   smooth_union(0.5,
     box3d(2.5, 15, 2.5),
     translate(0, -20, 0, rounded_box(15, 2.5, 2.5, 1.0))
   ),
   translate(0, 15, 0, box3d(3, 5, 3))
+)
 )
 ```
 
@@ -553,16 +573,36 @@ Plates larger than ~200×200mm warp and detach from the bed during cooling.
 
 ## Coordinate System & Scale
 
-- **LOL coordinates**: Y-up, origin at center, unitless
-- **Default scale**: `scale_mm = 20.0` → 1.0 LOL unit = 20mm
-- **Scene bounds**: [-5, 5] on all axes → max physical size 200mm per axis
+<!-- units:begin -->
+<!-- generated by scripts/gen_units_doc.py from alice-lol/language/constructs.toml; do not edit -->
+**Units.** A program says what its numbers are with one declaration at the root (never nested):
+`units(<unit>, <purpose>, <program>)`, for example `units(mm, print, cylinder(50, 5))`; a scene with no physical size is `units(world, render, <program>)`.
+Every length argument is in the declared unit; angles stay in degrees.
+
+| unit | one program unit | purposes |
+|------|------------------|----------|
+| `mm` | 1 mm | `print`, `render` |
+| `cm` | 10 mm | `print`, `render` |
+| `m` | 1000 mm | `print`, `render` |
+| `in` | 25.4 mm | `print`, `render` |
+| `world` | no physical size | `render` only |
+
+Exported with a declaration, the scale is the unit and the bounds are the shape's own tight box
+(no fixed scene box, nothing is cut off). A program without a declaration is exported with the
+`PrintConfig` scale and bounds of the caller and gets the warning `LOL-U001`.
+<!-- units:end -->
+
+- **LOL coordinates**: Y-up, origin at center
+- **Units**: every print program is `units(mm, print, <program>)`, all lengths in millimetres (below)
 - **Ground level**: Y = 0 (adjust `translate` to place object on build plate)
 - **Build plate contact**: Ensure flat bottom surface (use `intersection` with `plane` if needed)
 
 Place object on build plate (bottom at Y=0)
 
 ```lol print
-translate(0.0, 1.0, 0.0,
-    lattice_infill(0.04, 5.0, 0.02, sphere(1.0))
+units(mm, print,
+translate(0.0, 20, 0.0,
+    lattice_infill(0.8, 0.25, 0.4, sphere(20))
+)
 )
 ```

@@ -273,6 +273,11 @@ fn repair_preserving_watertightness(raw: &Mesh, eps: f32) -> Mesh {
 }
 
 /// 3Dプリント用エクスポート設定
+///
+/// LOL テキストからの書き出し (`lol_to_stl` / `lol_to_3mf` / `lol_to_fbx`) では、単位の宣言
+/// (`units(<unit>, <purpose>, ...)`) がある program の倍率と範囲は宣言から決まり
+/// ([`declared_config`])、ここの `scale_mm` と範囲は宣言の無い program にだけ使う (`resolution`
+/// はどちらにも使う)
 #[derive(Debug, Clone)]
 pub struct PrintConfig {
     /// メッシュ解像度（各軸のグリッド数）。高いほど精密だがファイルサイズ増大。
@@ -365,6 +370,9 @@ pub enum ExportError {
     Io(std::io::Error),
     /// メッシュが空（ジオメトリなし）
     EmptyMesh,
+    /// 単位の宣言と書き出しが合わない (長さを持たない単位の場面を書き出す、
+    /// 形が探索範囲の端に届く)
+    Units(String),
 }
 
 impl std::fmt::Display for ExportError {
@@ -373,6 +381,7 @@ impl std::fmt::Display for ExportError {
             Self::Parse(e) => write!(f, "LOL parse error: {e}"),
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::EmptyMesh => write!(f, "generated mesh has no triangles"),
+            Self::Units(m) => write!(f, "units: {m}"),
         }
     }
 }
@@ -472,8 +481,10 @@ pub fn lol_to_stl(
     path: impl AsRef<Path>,
     config: &PrintConfig,
 ) -> Result<ExportStats, ExportError> {
-    let node = crate::runtime_parser::parse_lol(lol_text)?;
-    node_to_stl(&node, path, config)
+    let declared = crate::runtime_parser::parse_declared(lol_text)?;
+    let (config, warnings) = declared_config(&declared, config)?;
+    let stats = node_to_stl(&declared.program.sdf, path, &config)?;
+    Ok(stats.with_warnings(warnings))
 }
 
 /// LOL テキスト → 3MF ファイル出力
@@ -486,8 +497,10 @@ pub fn lol_to_3mf(
     path: impl AsRef<Path>,
     config: &PrintConfig,
 ) -> Result<ExportStats, ExportError> {
-    let node = crate::runtime_parser::parse_lol(lol_text)?;
-    node_to_3mf(&node, path, config)
+    let declared = crate::runtime_parser::parse_declared(lol_text)?;
+    let (config, warnings) = declared_config(&declared, config)?;
+    let stats = node_to_3mf(&declared.program.sdf, path, &config)?;
+    Ok(stats.with_warnings(warnings))
 }
 
 /// `SdfNode` → FBX ファイル出力
@@ -519,8 +532,76 @@ pub fn lol_to_fbx(
     path: impl AsRef<Path>,
     config: &PrintConfig,
 ) -> Result<ExportStats, ExportError> {
-    let node = crate::runtime_parser::parse_lol(lol_text)?;
-    node_to_fbx(&node, path, config)
+    let declared = crate::runtime_parser::parse_declared(lol_text)?;
+    let (config, warnings) = declared_config(&declared, config)?;
+    let stats = node_to_fbx(&declared.program.sdf, path, &config)?;
+    Ok(stats.with_warnings(warnings))
+}
+
+/// 片側の探索範囲 (mm): 宣言した単位の program では形をこの範囲で探し、端に届けば書き出さない
+pub const DECLARED_SEARCH_HALF_MM: f32 = 1000.0;
+
+/// 範囲の余白 (格子の cell 幅の倍数): 面が範囲の境界に乗って欠けないように取る
+const DECLARED_MARGIN_CELLS: f32 = 2.0;
+
+/// 宣言に従って書き出しの設定を決める
+///
+/// - 宣言が無い: `base` のまま (今までどおり) と、警告 `LOL-U001` ([`crate::units::no_units_warning`])
+/// - 長さの単位の宣言: 倍率は 1 単位の mm、範囲は形の外接箱に格子 2 cell 分の余白
+///   (`base` の解像度は保つ) 外接箱は alice-sdf の解析的な外接箱 (`analytic_aabb`) を先に使い、
+///   それが扱えない node を含む時は区間演算の探索 (±[`DECLARED_SEARCH_HALF_MM`] mm) を使う
+///
+/// # Errors
+///
+/// 長さを持たない単位 (`world`) の場面 / 外接箱が ±[`DECLARED_SEARCH_HALF_MM`] mm の端に届く
+/// (どちらの方法でも外接箱が決まらない形を含む、切り取らずに止める) / 形が見つからない (`EmptyMesh`)
+pub fn declared_config(
+    declared: &crate::units::Declared,
+    base: &PrintConfig,
+) -> Result<(PrintConfig, Vec<crate::units::Diagnostic>), ExportError> {
+    let Some(decl) = declared.units else {
+        return Ok((base.clone(), vec![crate::units::no_units_warning(base)]));
+    };
+    let Some(mm) = decl.unit.mm_per_unit() else {
+        return Err(ExportError::Units(format!(
+            "unit '{}' has no physical size: a {} scene is not exported as a solid",
+            decl.unit.name(),
+            decl.purpose.name()
+        )));
+    };
+    let half = DECLARED_SEARCH_HALF_MM / mm;
+    // the analytic bound first (exact for the nodes it knows, no inflation under rotation), then
+    // the interval search, which bounds more nodes but loosely; neither cuts the shape
+    let aabb = match alice_sdf::tight_aabb::analytic_aabb(&declared.program.sdf) {
+        alice_sdf::tight_aabb::AnalyticAabb::Bounded(b) => b,
+        alice_sdf::tight_aabb::AnalyticAabb::Empty => return Err(ExportError::EmptyMesh),
+        alice_sdf::tight_aabb::AnalyticAabb::Unsupported => {
+            let search = alice_sdf::tight_aabb::TightAabbConfig::try_new(half, 24, 16)
+                .map_err(|e| ExportError::Units(e.to_string()))?;
+            alice_sdf::tight_aabb::compute_tight_aabb_with_config(&declared.program.sdf, &search)
+        }
+    };
+    let extent = aabb.max - aabb.min;
+    let widest = extent.max_element();
+    if widest.is_nan() || widest <= 0.0 || !aabb.min.is_finite() || !aabb.max.is_finite() {
+        return Err(ExportError::EmptyMesh);
+    }
+    let edge = half * (1.0 - 1e-3);
+    if aabb.min.min_element() <= -edge || aabb.max.max_element() >= edge {
+        return Err(ExportError::Units(format!(
+            "the shape reaches the ±{DECLARED_SEARCH_HALF_MM} mm search box (declared unit '{}')",
+            decl.unit.name()
+        )));
+    }
+    let cell = extent.max_element() / resolution_as_f32(base.resolution.max(1));
+    let pad = Vec3::splat(DECLARED_MARGIN_CELLS * cell);
+    let config = PrintConfig {
+        resolution: base.resolution,
+        bounds_min: aabb.min - pad,
+        bounds_max: aabb.max + pad,
+        scale_mm: mm,
+    };
+    Ok((config, Vec::new()))
 }
 
 // ────────────────────────────────────────────────────────
@@ -599,6 +680,7 @@ pub fn node_to_3mf_dual_contouring(
 
 /// エクスポート統計
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ExportStats {
     /// 頂点数
     pub vertex_count: usize,
@@ -606,6 +688,8 @@ pub struct ExportStats {
     pub triangle_count: usize,
     /// 出力ファイルパス
     pub path: String,
+    /// 書き出しの警告 (単位の宣言が無い `LOL-U001` など、LOL テキストからの書き出しだけが出す)
+    pub warnings: Vec<crate::units::Diagnostic>,
 }
 
 impl ExportStats {
@@ -614,7 +698,13 @@ impl ExportStats {
             vertex_count: mesh.vertices.len(),
             triangle_count: mesh.indices.len() / 3,
             path: path.as_ref().display().to_string(),
+            warnings: Vec::new(),
         }
+    }
+
+    fn with_warnings(mut self, warnings: Vec<crate::units::Diagnostic>) -> Self {
+        self.warnings = warnings;
+        self
     }
 }
 

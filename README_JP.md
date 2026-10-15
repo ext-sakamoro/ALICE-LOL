@@ -189,6 +189,17 @@ grasp release catch walk gaze point throw push pull turn align follow avoid
 rest latent seq par music
 ```
 
+### 単位
+
+program は root に 1 つの宣言で数値が何かを言う: `units(<unit>, <purpose>, <program>)`
+(例 `units(mm, print, cylinder(50, 5))`) 単位は `mm` / `cm` / `m` / `in` / `world` (物理的な大きさを
+持たない、`render` 専用)、用途は `print` / `render` 一覧は `alice-lol/language/constructs.toml` で、
+文法と文書の単位の段落はそこから生成する 宣言は `runtime_parser::parse_declared` が読む
+(`parse_lol` / `parse_program` は宣言を捨てずに error を返す) 宣言した program の書き出し
+(`print_export::lol_to_stl` / `lol_to_3mf` / `lol_to_fbx`、または `declared_config`) は倍率を単位から、
+範囲を形の外接箱から決める 宣言の無い program は今までどおり呼ぶ側の `PrintConfig` で書き出し、
+警告 `LOL-U001` を出す (`ExportStats::warnings`)
+
 ## 監査法則 (`audit_law`)
 
 監査法則は検査が何を見つけるべきかを述べ、どう測るかは書かない 1 行 1 項で、
