@@ -25,3 +25,13 @@ path = "alice-lol/tests/raw_fma_negation_lattice.rs"
 line = "let old_form = -(0.0f32.mul_add(0.0, 0.0));"
 count = 1
 reason = "the all-zero-operand case of the same baseline: both forms agree there, which the test pins"
+
+[[ir]]
+target = "x86_64-unknown-linux-gnu"
+package = "alice-lol"
+min-fma-calls = 371
+
+[[ir]]
+target = "aarch64-unknown-linux-gnu"
+package = "alice-lol"
+min-fma-calls = 356
