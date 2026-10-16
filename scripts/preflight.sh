@@ -312,6 +312,21 @@ else
 fi
 
 # every law test file is listed in scripts/law_tests.sh (cheap: no test runs)
+step "ci.yml / wiring-guard: Build configuration guard (G14, tests and check)"
+python3 scripts/test_build_config_guard.py
+python3 scripts/build_config_guard.py
+python3 scripts/test_build_flags_check.py
+python3 scripts/test_run_tests.py
+
+step "ci.yml / wiring-guard: Effective rustc flags (G14)"
+python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol
+python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol --all-features
+python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol --no-default-features
+
+step "ci.yml / geometry-digest: Float environment (G14, debug and release)"
+scripts/run_tests.sh float_environment=2 -- cargo test -p alice-lol --test float_environment
+scripts/run_tests.sh float_environment=2 -- cargo test -p alice-lol --release --test float_environment
+
 step "ci.yml / test: law test files are listed"
 scripts/law_tests.sh list
 

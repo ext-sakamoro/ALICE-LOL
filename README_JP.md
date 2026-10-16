@@ -448,7 +448,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
 | G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |
 | G13 no-unspecified-order | 未確認 | library source of alice-lol and alice-lol-macro names HashMap / HashSet only in alice-lol/src/print_export.rs (two locals, id and edges, only looked up or … |
-| G14 float-environment-invariants | 未達 | the scan step over build configuration is absent: .github/workflows/ci.yml has no step that checks .cargo/config*, workflow env, build.rs or Cargo.toml … |
+| G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers alice-lol's builds on ubuntu and macOS; the other workspace members' builds … |
 
 ### feature と保証の範囲
 

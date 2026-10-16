@@ -107,11 +107,20 @@ note = "library source of alice-lol and alice-lol-macro names HashMap / HashSet 
 reference_repo = ""
 
 [G14]
-status = "fail-known"
-evidence = [".github/workflows/ci.yml", "alice-lol/src/angle.rs"]
+status = "pass"
+evidence = [
+    "scripts/build_config_guard.py, static half (byte-identical to ALICE-DB's: every .cargo/config*, *.toml, build.rs, *.rs, *.yml / *.yaml, *.json and script kind outside target/, plus any rustc wrapper named in them, comments and YAML name values blanked, TOML / JSON decoded values too: target-cpu=native, a target-cpu / target-feature / llvm-args value that is not a plain literal, a RUSTFLAGS value from a command or a file, LLVM and C fast-math-style flags, a target-feature list disabling sse / sse2, and in src/ the fast and algebraic float intrinsics; an exclude of a file a build reads is refused; nothing read or no root Cargo.toml is exit 2), over the whole workspace (every member crate, fuzz/ and tools/)",
+    "scripts/build_flags_check.py, dynamic half (byte-identical to ALICE-DB's: runs cargo check -v in a fresh target directory and reads every rustc command line; run with --crate alice_lol and -p alice-lol, it fails when no command line, or none for alice_lol, was seen)",
+    "scripts/build_config_allowlist.toml (five excludes with reasons: the two G14 scripts, their tests, this manifest; no allow entry)",
+    "scripts/test_build_config_guard.py and scripts/test_build_flags_check.py",
+    ".github/workflows/ci.yml wiring-guard job (ubuntu, macOS, Windows): the static guard and both test files; on ubuntu and macOS, the dynamic check for alice-lol's default, all-features and no-default feature sets in the release profile",
+    ".github/workflows/ci.yml geometry-digest job (ubuntu, macOS, Windows, each in the debug and the release profile): alice-lol/tests/float_environment.rs through scripts/run_tests.sh as `float_environment=2`, so the step fails unless both tests pass: an #[ignore], a #[cfg] that drops one, or a rename is red",
+    "alice-lol/tests/float_environment.rs round_to_nearest_even and subnormals_are_not_flushed (byte-identical to ALICE-DB's tests/float_environment.rs)",
+]
+mutant = "measured 2026-10-16, each reverted: `RUSTFLAGS: \"-C target-cpu=native\"` added to ci.yml's env makes scripts/build_config_guard.py exit 1 with `.github/workflows/ci.yml:22: target-cpu-native: target-cpu=native`; RUSTFLAGS=$'-C target-cpu=nat\\x69ve' makes scripts/build_flags_check.py --crate alice_lol exit 1 with `alice_lol: target-cpu-native: target-cpu=native` (78 of 97 rustc command lines); an #[ignore] on subnormals_are_not_flushed makes `scripts/run_tests.sh float_environment=2 -- cargo test -p alice-lol --test float_environment` exit 1 with `float_environment passed 1 test(s), needs at least 2`; setting FPCR.RMode to round-toward-plus-infinity fails round_to_nearest_even and setting FPCR.FZ (flush-to-zero) fails subnormals_are_not_flushed (aarch64, macOS)"
 since = ""
-note = "the scan step over build configuration is absent: .github/workflows/ci.yml has no step that checks .cargo/config*, workflow env, build.rs or Cargo.toml profiles for a fast-math-style flag or target-cpu=native, and no test asserts round-to-nearest-even or that subnormals are not flushed to zero (the subnormal tests in alice-lol/src/angle.rs:401 and :408 check angle canonicalisation, not the floating-point environment). Measured: no RUSTFLAGS, target-cpu or fast-math setting exists in any workflow, Cargo.toml or script of this repository, only an unenforced snapshot. Becomes pass when the scan step and the two environment tests land, a target-cpu=native in the CI environment turns the scan red and a subnormal input fails the flush test under a flush-to-zero mode"
-reference_repo = ""
+note = "the static scan covers the files of this repository and the dynamic check covers alice-lol's builds on ubuntu and macOS; the other workspace members' builds are in the static scan only, and a flag passed by a build outside this repository (a consumer's own RUSTFLAGS) is outside both. YAML is not parsed by the static guard (the actionlint job parses the workflows). A Rust target-feature that only adds or removes instructions other than sse / sse2 is allowed: Rust does not contract a * b + c into an fma, and mul_add is correctly rounded either way. The subnormal tests in alice-lol/src/angle.rs check angle canonicalisation, not the floating-point environment"
+reference_repo = "ALICE-DB"
 
 [features.physics]
 guarantee = "outside"

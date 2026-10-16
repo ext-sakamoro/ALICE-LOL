@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI (ALICE-Law G14): 浮動小数点の結果を変える build の flag を静的と動的の 2 段で検査し、round-to-nearest-even と subnormal が flush されないことを実行時に確かめる (ALICE-DB と同一の `scripts/build_config_guard.py` / `scripts/build_flags_check.py` / `scripts/run_tests.sh` と試験、`alice-lol/tests/float_environment.rs`) 静的は workspace 全体の設定・script・Rust を comment を除いて読み、`target-cpu=native`、素の literal でない target-cpu / target-feature / llvm-args の値、command や file から取った RUSTFLAGS、fast-math 系の flag、sse / sse2 を外す target-feature を検出する 動的は新しい target dir で `cargo check -v -p alice-lol` を走らせ、cargo が rustc に実際に渡した flag を読む 静的は wiring-guard job (3 OS)、動的は同 job の ubuntu / macOS (default / all-features / no-default)、実行時の試験は geometry-digest job (3 OS × debug / release) で `float_environment=2` として実行し (片方を `#[ignore]` にする・cfg で外す・名前を変えると step が失敗する)、preflight にも同じ step を足した `alice-law-conformance.toml` の G14 を fail-known から pass にした
 - CI: libm を直接依存に足した時に G1 の禁止 (clippy.toml の `libm::` path と `scripts/libm_ban_check.py`) が無ければ失敗する検査 `scripts/libm_dependency_guard.py` (試験 `scripts/test_libm_dependency_guard.py`) を docs job (3 OS) と preflight に追加 (ALICE-DetMath と byte 一致)
 
 ### Changed

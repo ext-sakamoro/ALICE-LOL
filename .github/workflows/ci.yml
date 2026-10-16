@@ -229,6 +229,13 @@ jobs:
           run --test geometry_id_oracle
           run --test stdlib_profile_determinism_oracle
           run --test laser_pattern_digest_golden
+      # ALICE-Law G14: round-to-nearest-even and no flush-to-zero, asserted at run
+      # time in this leg's profile; scripts/run_tests.sh float_environment=2 fails
+      # unless both tests passed (an ignored or cfg'd-out test is red, not an empty green run)
+      - name: Float environment (G14)
+        working-directory: ALICE-LOL
+        shell: bash
+        run: scripts/run_tests.sh float_environment=2 -- cargo test -p alice-lol${{ matrix.profile }} --test float_environment
 
   clippy:
     name: Clippy
@@ -727,6 +734,26 @@ jobs:
         run: python scripts/test_license_check.py
       - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
         run: python scripts/license_check.py
+      # ALICE-Law G14, static half: no fast-math-style flag, target-cpu=native or flag
+      # value the guard cannot resolve in any file a flag can come from; nothing read
+      # fails. The dynamic half's parser and the per-binary minimum of
+      # scripts/run_tests.sh are tested here too
+      - name: Build configuration guard (G14, tests and check)
+        run: |
+          python scripts/test_build_config_guard.py
+          python scripts/build_config_guard.py
+          python scripts/test_build_flags_check.py
+          python scripts/test_run_tests.py
+      # ALICE-Law G14, dynamic half: the flags cargo really passes to rustc for
+      # alice-lol, read from `-v` in a fresh target directory, in the release profile,
+      # for the default, all-features and no-default feature sets
+      - name: Effective rustc flags (G14)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol
+          python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol --all-features
+          python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol --no-default-features
 
   # README / README_JP の構文表・法則表・feature 表・MSRV・使用例・リンクがコードと一致すること
   # (scripts/readme_sync.py)、全文書の件数と計測値 (scripts/doc_numbers.py)、
