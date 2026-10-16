@@ -400,6 +400,13 @@ impl AuditLaw {
                     }
                     e
                 }
+                Clause::Includes { key, values } => {
+                    let mut e = e.u32(3).str(key).u64(values.len() as u64);
+                    for v in values {
+                        e = e.str(v);
+                    }
+                    e
+                }
             };
         }
         // x-input / x-metric / x-at-least are declarations, not a sequence: their order in the

@@ -731,7 +731,7 @@ pub fn measurements(
         }
     }
     for c in law.clauses() {
-        if let Clause::Range { key, .. } = c {
+        if let Clause::Range { key, .. } | Clause::Includes { key, .. } = c {
             if let Some(Json::Array(xs)) = read_typed(key) {
                 let texts: Vec<&str> = xs
                     .iter()
@@ -840,7 +840,7 @@ pub fn derivation_fingerprint() -> [u8; 32] {
         for c in law.clauses() {
             match c {
                 Clause::Evidence { metric } | Clause::Expect { metric, .. } => names.push(metric),
-                Clause::Range { key, .. } => names.push(key),
+                Clause::Range { key, .. } | Clause::Includes { key, .. } => names.push(key),
             }
         }
         // the measured values, by name (the order of the declarations is not a semantics)

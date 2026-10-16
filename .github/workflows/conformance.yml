@@ -70,8 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # 392 vectors on 2026-10-11; raise it when laws or cases are added
-      MIN_VECTORS: 392
+      # 411 vectors on 2026-10-15 (392 + the lint_bans_include law); raise it when laws or
+      # cases are added
+      MIN_VECTORS: 411
       JOBS: 4
     steps:
       - uses: actions/checkout@v5
