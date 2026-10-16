@@ -16,7 +16,7 @@ keywords = ["dsl", "sdf", "humanoid", "vrm", "character"]
 categories = ["graphics", "game-development"]
 
 [dependencies]
-alice-lol = { path = "../alice-lol", version = "0.4.2", default-features = false }
+alice-lol = { path = "../alice-lol", version = "0.5.0", default-features = false }
 glam = "0.29"
 
 # Optional (feature vrm)
