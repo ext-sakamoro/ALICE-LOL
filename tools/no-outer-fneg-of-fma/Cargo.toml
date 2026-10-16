@@ -21,6 +21,8 @@ syn = { version = "2", features = ["full", "visit", "extra-traits"] }
 # line numbers instead of call_site() — cargo-machete cannot see that, hence
 # the ignore entry below.
 proc-macro2 = { version = "1", features = ["span-locations"] }
+# the allowlist (scripts/no-outer-fneg-of-fma-allowlist.toml) and the root manifest
+toml = "1"
 
 [dev-dependencies]
 tempfile = "3"

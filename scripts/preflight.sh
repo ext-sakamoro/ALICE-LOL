@@ -405,4 +405,8 @@ step "semver-checks.yml / semver-checks: semver gate (alice-lol, latest crates.i
 need cargo-semver-checks "cargo install cargo-semver-checks --version 0.50.0 --locked"
 python3 scripts/semver_gate.py --manifest alice-lol/Cargo.toml --config .github/semver-gate.toml --target-dir "${CARGO_TARGET_DIR:-target}/semver"
 
+step "g3-ir.yml / ir: probe tests + no negated fma result in alice-lol's release IR (host build; the per-target floors are checked in CI)"
+python3 scripts/test_fneg_fma_ir_check.py
+python3 scripts/fneg_fma_ir_check.py --package alice-lol --all-features --findings-only
+
 echo; echo "preflight OK"

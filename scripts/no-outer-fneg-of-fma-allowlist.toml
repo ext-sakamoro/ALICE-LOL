@@ -1,0 +1,27 @@
+# tools/no-outer-fneg-of-fma (syntax-tree pre-check) and scripts/fneg_fma_ir_check.py
+# (optimised-IR gate), ALICE-Law G3. Both read this file.
+#
+# expected-fma-calls / expected-src-fma-calls: the fma-family calls the syntax-tree
+# check finds in every scanned file / in src/. Both must equal what it finds: update
+# them in the commit that adds or removes a call (a repository without any declares 0).
+expected-fma-calls = 411
+expected-src-fma-calls = 344
+
+# [[ir]]: per target and package, the floor of fma-family calls in the optimised IR
+# (scripts/fneg_fma_ir_check.py --write-floor, run on the CI host class). Fewer fails,
+# and so does 0 while expected-src-fma-calls is not 0.
+
+# [[allow]]: a finding by path, exact trimmed line text and count, with a reason.
+# Only tests/ and examples/ can carry one; src/ has no exception.
+
+[[allow]]
+path = "alice-lol/tests/raw_fma_negation_lattice.rs"
+line = "let old_form = -(a.mul_add(s, k));"
+count = 2
+reason = "the lattice test computes the old (forbidden) form on purpose, as the comparison baseline that pins the zero-sign divergence the Law-form rewrite removed"
+
+[[allow]]
+path = "alice-lol/tests/raw_fma_negation_lattice.rs"
+line = "let old_form = -(0.0f32.mul_add(0.0, 0.0));"
+count = 1
+reason = "the all-zero-operand case of the same baseline: both forms agree there, which the test pins"

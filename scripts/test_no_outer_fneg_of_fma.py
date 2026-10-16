@@ -34,6 +34,10 @@ fn f(a: f32, b: f32, c: f32) -> f32 {
 """
 
 
+def allow_toml(path: str, line: str = "-(a.mul_add(b, c))", count: int = 1) -> str:
+    return f'[[allow]]\npath = "{path}"\nline = "{line}"\ncount = {count}\nreason = "test"\n'
+
+
 def run(files: dict[str, str], allowlist: str | None = None) -> tuple[list[str], dict[str, int]]:
     with tempfile.TemporaryDirectory() as root:
         for rel, text in files.items():
@@ -82,27 +86,27 @@ class Teeth(unittest.TestCase):
 
     def test_a_src_site_fails_even_when_the_allowlist_carries_it(self):
         # lib src/ には allowance が無い: Law form への書き換えのみが正解
-        e, c = run({SRC: OUTER_NEG}, allowlist=f"# 理由を書く場所\n{SRC}:2\n")
+        e, c = run({SRC: OUTER_NEG}, allowlist=allow_toml(SRC))
         self.assertEqual(c["violations"], 1)
         self.assertEqual(c["allowed"], 0)
         self.assertTrue(any("allowlist 不可" in x for x in e), e)
 
     def test_a_tests_dir_site_passes_when_the_allowlist_carries_it(self):
         oracle = "alice-lol/tests/oracle.rs"
-        e, c = run({oracle: OUTER_NEG}, allowlist=f"# 比較用の旧形を意図的に使う\n{oracle}:2\n")
+        e, c = run({oracle: OUTER_NEG}, allowlist=allow_toml(oracle))
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 1)
         self.assertEqual(c["allowed"], 1)
 
     def test_an_examples_dir_site_passes_when_the_allowlist_carries_it(self):
         oracle = "alice-lol/examples/compare_forms.rs"
-        e, c = run({oracle: OUTER_NEG}, allowlist=f"# 比較用の旧形を意図的に使う\n{oracle}:2\n")
+        e, c = run({oracle: OUTER_NEG}, allowlist=allow_toml(oracle))
         self.assertEqual(e, [])
         self.assertEqual(c["violations"], 1)
         self.assertEqual(c["allowed"], 1)
 
     def test_an_allowlist_entry_without_the_site_fails(self):
-        e, _ = run({SRC: CLEAN}, allowlist=f"{SRC}:2\n")
+        e, _ = run({SRC: CLEAN}, allowlist=allow_toml(SRC))
         self.assertTrue(any("allowlist にあるが実物が無い" in x for x in e), e)
 
     def test_no_readable_src_file_fails(self):

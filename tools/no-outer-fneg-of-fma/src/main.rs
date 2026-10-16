@@ -90,26 +90,67 @@
 //! there. The allowlist exists only for `tests/` / `examples/` oracle files
 //! that deliberately keep the old form as a comparison reference.
 //!
+//! ## The fma family and the other spellings of a negation (ALICE-Law G3)
+//!
+//! The same check covers every fused multiply-add the crates call, not only
+//! `mul_add`: a call (method or path, however imported) whose name is
+//! `mul_add`, `fma`, `fmaf`, `fmaf32` or `fmaf64` (`libm`, `core::intrinsics`),
+//! an aarch64 `vfma*` / `vfms*` intrinsic, or an x86 `_mm*_fmadd_*` /
+//! `_fmsub_*` / `_fnmadd_*` / `_fnmsub_*` / `_fmaddsub_*` / `_fmsubadd_*`
+//! intrinsic. `vfms*` and `_fnmadd_*` negate inside the single rounding (the
+//! safe operand form) and are not findings themselves; negating their result is.
+//! Besides the forms above, a negation is also `Neg::neg(x)` (any path ending in
+//! `neg` with one argument), `x / -1.0`, `x *= -1.0` / `x /= -1.0` on a tracked
+//! binding, the sign-bit flip `f32::from_bits(x.to_bits() ^ SIGN)` (or
+//! `f64::...`, with `0x8000_0000`, `1 << 31`, `0x8000_0000_0000_0000` or
+//! `1 << 63`), and the SIMD spellings `vneg*(x)`, `vsub*(vdup*_n_*(-0.0), x)`,
+//! `vmul*_n_*(x, -1.0)`, `_mm*_xor_p[sd](x, _mm*_set1_p[sd](-0.0))`,
+//! `_mm*_sub_p[sd](_mm*_set1_p[sd](-0.0), x)` and
+//! `_mm*_mul_p[sd](x, _mm*_set1_p[sd](-1.0))` (either operand order where the
+//! operation commutes). A fma result is also seen through `as` casts,
+//! `T::from(x)` / `x.into()`, `*&x`, a block's tail expression, and any arm of
+//! an `if` / `match`. A binding is tracked through `let u = t;` aliases and a
+//! deferred `let t; t = <fma>;`.
+//!
+//! Renaming a fma-family item on import (`use libm::fma as fused;`) is a hard
+//! failure anywhere: the check reads names, so a renamed fma would be invisible
+//! to it. Import it under its own name.
+//!
+//! What stays out of reach of a syntax tree (a fma returned from a helper
+//! function or a closure and negated by the caller, a fma stored in a tuple or
+//! struct field and read back, generic code instantiated in another crate) is
+//! what the IR half of the gate, `scripts/fneg_fma_ir_check.py`, reads in the
+//! optimised LLVM IR. This tool is the fast pre-check that reports source lines.
+//!
+//! ## Counts and the allowlist
+//!
+//! `scripts/no-outer-fneg-of-fma-allowlist.toml` holds `expected-fma-calls`
+//! (every fma-family call in the scanned files) and `expected-src-fma-calls`
+//! (those in a `src/` directory). Both must equal what the tool finds; a missing
+//! header fails, and a repository without any fma call declares 0. Reading no
+//! file fails whatever the header says. `[[allow]]` entries name a finding by
+//! `path`, the exact trimmed `line` text and the `count` of findings with that
+//! text, with a `reason`; only `tests/` and `examples/` files can carry one, and
+//! an entry that matches nothing or a different count fails. `[[ir]]` entries are
+//! read by the IR check only.
+//!
 //! Usage: `cargo run --release -- [--root DIR] [--src DIR [DIR...]]`
-//! (default `--src`: `alice-lol/src alice-lol/tests alice-lol/examples
-//! alice-lol-ui/src alice-lol-ui/examples` — this workspace has two
-//! publishable/template crates that both define `SdfNode`-building geometry
-//! using `mul_add`, so both need to be in scope by default, not just the one
-//! that happens to publish to crates.io; another repo passes its own, e.g.
-//! `--src src tests examples`)
+//! (default `--src`: the `src` / `tests` / `examples` / `benches` of every member
+//! of the root `Cargo.toml`'s `[workspace]`, or of the root package when there is
+//! no workspace)
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    BinOp, Block, Expr, ExprBinary, ExprCall, ExprMethodCall, ExprUnary, Lit, Macro, Pat, Stmt,
-    UnOp,
+    BinOp, Block, Expr, ExprBinary, ExprCall, ExprMethodCall, ExprUnary, ItemUse, Lit, Macro, Pat,
+    Stmt, UnOp, UseTree,
 };
 
-const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.txt";
+const ALLOWLIST_REL: &str = "scripts/no-outer-fneg-of-fma-allowlist.toml";
 const ALLOWLIST_SCOPE_DIRS: [&str; 2] = ["tests", "examples"];
 /// Directories scanned inside each workspace member.
 const MEMBER_SUBDIRS: [&str; 4] = ["src", "tests", "examples", "benches"];
@@ -128,41 +169,50 @@ const DEFAULT_SRC_DIRS: [&str; 5] = [
 
 /// `src` / `tests` / `examples` / `benches` of every member listed in the
 /// root `Cargo.toml`'s `[workspace] members` (read from the file, not
-/// hand-maintained, so a new member is scanned the moment it joins). An
-/// empty result means the members could not be read; the caller fails on it.
+/// hand-maintained, so a new member is scanned the moment it joins), or of the
+/// root package itself when the manifest has `[package]` and no workspace. An
+/// empty result means the manifest could not be read, has neither, or names a
+/// member by a glob (not expanded); the caller fails on it.
 fn workspace_src_dirs(root: &Path) -> Vec<String> {
     let Ok(text) = fs::read_to_string(root.join("Cargo.toml")) else {
         return Vec::new();
     };
-    let Some(start) = text.find("members") else {
+    let Ok(manifest) = text.parse::<toml::Table>() else {
         return Vec::new();
     };
-    let rest = &text[start..];
-    let (Some(open), Some(close)) = (rest.find('['), rest.find(']')) else {
-        return Vec::new();
+    let members: Vec<String> = match manifest.get("workspace").and_then(|w| w.get("members")) {
+        Some(toml::Value::Array(list)) => list
+            .iter()
+            .filter_map(|m| m.as_str().map(str::to_string))
+            .collect(),
+        _ if manifest.contains_key("package") => vec![String::new()],
+        _ => return Vec::new(),
     };
-    if close < open {
+    if members.iter().any(|m| m.contains('*')) {
         return Vec::new();
     }
     let mut dirs = Vec::new();
-    for member in rest[open + 1..close]
-        .split(',')
-        .map(|m| m.trim().trim_matches('"'))
-        .filter(|m| !m.is_empty())
-    {
+    for member in members {
         for sub in MEMBER_SUBDIRS {
-            dirs.push(format!("{member}/{sub}"));
+            dirs.push(if member.is_empty() {
+                sub.to_string()
+            } else {
+                format!("{member}/{sub}")
+            });
         }
     }
     dirs
 }
 
 enum FindingKind {
-    /// `-x.mul_add(y, z)` (any receiver shape) found directly by the AST walk.
+    /// `-x.mul_add(y, z)` (any receiver shape, any fma-family callee, any
+    /// negation spelling) found directly by the AST walk.
     NegatedMulAdd,
-    /// a macro invocation's token stream mentions `mul_add` — AST-unverified,
-    /// hard fail unless allowlisted (never allowlistable in `src/`).
+    /// a macro invocation's token stream mentions a fma-family name —
+    /// AST-unverified, hard fail unless allowlisted (never allowlistable in `src/`).
     MacroMulAdd,
+    /// `use <fma-family path> as <other name>`: never allowlistable.
+    AliasedFma,
 }
 
 struct Finding {
@@ -172,9 +222,18 @@ struct Finding {
     kind: FindingKind,
 }
 
+#[derive(Default)]
 struct FileCounts {
     unary_neg_exprs: usize,
     mul_add_calls: usize,
+    scalar_fma_calls: usize,
+    simd_fma_calls: usize,
+}
+
+impl FileCounts {
+    fn fma_calls(&self) -> usize {
+        self.mul_add_calls + self.scalar_fma_calls + self.simd_fma_calls
+    }
 }
 
 struct Visitor<'a> {
@@ -192,17 +251,49 @@ fn excerpt_at(src: &str, line: usize) -> String {
         .to_string()
 }
 
-fn is_mul_add_method(call: &ExprMethodCall) -> bool {
-    call.method == "mul_add"
+/// The kind of fma-family callee a name denotes, if any.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum FmaKind {
+    MulAdd,
+    Scalar,
+    Simd,
 }
 
-fn is_mul_add_path_call(call: &ExprCall) -> bool {
-    if let Expr::Path(p) = &*call.func {
-        if let Some(last) = p.path.segments.last() {
-            return last.ident == "mul_add";
-        }
+fn fma_kind(name: &str) -> Option<FmaKind> {
+    const X86: [&str; 6] = [
+        "_fmadd_",
+        "_fmsub_",
+        "_fnmadd_",
+        "_fnmsub_",
+        "_fmaddsub_",
+        "_fmsubadd_",
+    ];
+    match name {
+        "mul_add" => Some(FmaKind::MulAdd),
+        "fma" | "fmaf" | "fmaf32" | "fmaf64" => Some(FmaKind::Scalar),
+        _ if name.starts_with("vfma") || name.starts_with("vfms") => Some(FmaKind::Simd),
+        _ if name.starts_with("_mm") && X86.iter().any(|k| name.contains(k)) => Some(FmaKind::Simd),
+        _ => None,
     }
-    false
+}
+
+fn path_last(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Path(p) => p.path.segments.last().map(|s| s.ident.to_string()),
+        _ => None,
+    }
+}
+
+fn call_name(call: &ExprCall) -> Option<String> {
+    path_last(&call.func)
+}
+
+fn method_fma_kind(call: &ExprMethodCall) -> Option<FmaKind> {
+    fma_kind(&call.method.to_string())
+}
+
+fn path_call_fma_kind(call: &ExprCall) -> Option<FmaKind> {
+    call_name(call).and_then(|n| fma_kind(&n))
 }
 
 /// Peel `(expr)`, `{ expr }`-less groups (syn's `Expr::Group`, inserted by
@@ -210,7 +301,7 @@ fn is_mul_add_path_call(call: &ExprCall) -> bool {
 /// semicolon-less tail expression, down to the real inner expression, so
 /// `-(a.mul_add(b, c))`, `-((a.mul_add(b, c)))` and `-{ a.mul_add(b, c) }`
 /// are all treated identically to `-a.mul_add(b, c)`.
-fn peel<'e>(mut e: &'e Expr) -> &'e Expr {
+fn peel(mut e: &Expr) -> &Expr {
     loop {
         match e {
             Expr::Paren(p) => e = &p.expr,
@@ -226,10 +317,41 @@ fn peel<'e>(mut e: &'e Expr) -> &'e Expr {
     }
 }
 
-fn is_mul_add_result(e: &Expr) -> bool {
+/// The tail expression of a block (its last statement, without a semicolon).
+fn block_tail(b: &Block) -> Option<&Expr> {
+    match b.stmts.last() {
+        Some(Stmt::Expr(e, None)) => Some(e),
+        _ => None,
+    }
+}
+
+/// `e` is the value of a fma-family call: directly, or through an `as` cast,
+/// `T::from(x)` / `From::from(x)` / `x.into()`, `*&x`, a block's tail, or any
+/// arm of an `if` / `match` (any arm: the negation then negates a fma result on
+/// that path).
+fn is_fma_result(e: &Expr) -> bool {
     match peel(e) {
-        Expr::MethodCall(m) => is_mul_add_method(m),
-        Expr::Call(c) => is_mul_add_path_call(c),
+        Expr::MethodCall(m) => {
+            method_fma_kind(m).is_some()
+                || (m.method == "into" && m.args.is_empty() && is_fma_result(&m.receiver))
+        }
+        Expr::Call(c) => {
+            path_call_fma_kind(c).is_some()
+                || (call_name(c).as_deref() == Some("from")
+                    && c.args.len() == 1
+                    && is_fma_result(&c.args[0]))
+        }
+        Expr::Cast(c) => is_fma_result(&c.expr),
+        Expr::Reference(r) => is_fma_result(&r.expr),
+        Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) => is_fma_result(&u.expr),
+        Expr::Block(b) => block_tail(&b.block).is_some_and(is_fma_result),
+        Expr::If(i) => {
+            block_tail(&i.then_branch).is_some_and(is_fma_result)
+                || i.else_branch
+                    .as_ref()
+                    .is_some_and(|(_, e)| is_fma_result(e))
+        }
+        Expr::Match(m) => m.arms.iter().any(|a| is_fma_result(&a.body)),
         _ => false,
     }
 }
@@ -261,13 +383,92 @@ fn is_negative_one_literal(e: &Expr) -> bool {
     matches!(peel(e), Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_one_literal(&u.expr))
 }
 
+/// A SIMD splat of a literal: `vdup*_n_*(lit)` / `vmov*_n_*(lit)` /
+/// `_mm*_set1_p[sd](lit)`, true when `lit` satisfies `pred`.
+fn is_simd_splat_of(e: &Expr, pred: &dyn Fn(&Expr) -> bool) -> bool {
+    let Expr::Call(c) = peel(e) else { return false };
+    let Some(name) = call_name(c) else {
+        return false;
+    };
+    let splat = (name.starts_with("vdup") || name.starts_with("vmov")) && name.contains("_n_")
+        || (name.starts_with("_mm") && (name.ends_with("_set1_ps") || name.ends_with("_set1_pd")));
+    splat && c.args.len() == 1 && pred(&c.args[0])
+}
+
+/// The sign bit of an f32 or f64 as an integer literal or shift:
+/// `0x8000_0000`, `1 << 31`, `0x8000_0000_0000_0000`, `1 << 63`.
+fn is_sign_mask(e: &Expr) -> bool {
+    match peel(e) {
+        Expr::Lit(l) => matches!(&l.lit, Lit::Int(i)
+            if matches!(i.base10_parse::<u64>(), Ok(0x8000_0000) | Ok(0x8000_0000_0000_0000))),
+        Expr::Binary(b) if matches!(b.op, BinOp::Shl(_)) => {
+            matches!(peel(&b.left), Expr::Lit(l) if matches!(&l.lit, Lit::Int(i) if matches!(i.base10_parse::<u64>(), Ok(1))))
+                && matches!(peel(&b.right), Expr::Lit(l) if matches!(&l.lit, Lit::Int(i) if matches!(i.base10_parse::<u64>(), Ok(31) | Ok(63))))
+        }
+        _ => false,
+    }
+}
+
+/// The call spellings of a negation: `Neg::neg(x)` (any path ending in `neg`
+/// with one argument), the sign-bit flip `f32::from_bits(x.to_bits() ^ SIGN)`,
+/// and the SIMD forms listed in the module doc.
+fn is_negation_call_of(c: &ExprCall, target: &dyn Fn(&Expr) -> bool) -> bool {
+    let Some(name) = call_name(c) else {
+        return false;
+    };
+    let args: Vec<&Expr> = c.args.iter().collect();
+    let neg_zero = |e: &Expr| is_negative_zero_literal(e);
+    let neg_one = |e: &Expr| is_negative_one_literal(e);
+    match (name.as_str(), args.as_slice()) {
+        ("neg", [x]) => target(x),
+        ("from_bits", [x]) => match peel(x) {
+            Expr::Binary(b) if matches!(b.op, BinOp::BitXor(_)) => {
+                let bits_of = |e: &Expr| {
+                    matches!(peel(e), Expr::MethodCall(m)
+                    if m.method == "to_bits" && m.args.is_empty() && target(&m.receiver))
+                };
+                (bits_of(&b.left) && is_sign_mask(&b.right))
+                    || (bits_of(&b.right) && is_sign_mask(&b.left))
+            }
+            _ => false,
+        },
+        (n, [x]) if n.starts_with("vneg") => target(x),
+        (n, [z, x]) if n.starts_with("vsub") => is_simd_splat_of(z, &neg_zero) && target(x),
+        (n, [x, k]) if n.starts_with("vmul") && n.contains("_n_") => neg_one(k) && target(x),
+        (n, [x, y]) if n.starts_with("vmul") => {
+            (is_simd_splat_of(y, &neg_one) && target(x))
+                || (is_simd_splat_of(x, &neg_one) && target(y))
+        }
+        (n, [x, y])
+            if n.starts_with("_mm") && (n.ends_with("_xor_ps") || n.ends_with("_xor_pd")) =>
+        {
+            (is_simd_splat_of(y, &neg_zero) && target(x))
+                || (is_simd_splat_of(x, &neg_zero) && target(y))
+        }
+        (n, [z, x])
+            if n.starts_with("_mm") && (n.ends_with("_sub_ps") || n.ends_with("_sub_pd")) =>
+        {
+            is_simd_splat_of(z, &neg_zero) && target(x)
+        }
+        (n, [x, y])
+            if n.starts_with("_mm") && (n.ends_with("_mul_ps") || n.ends_with("_mul_pd")) =>
+        {
+            (is_simd_splat_of(y, &neg_one) && target(x))
+                || (is_simd_splat_of(x, &neg_one) && target(y))
+        }
+        _ => false,
+    }
+}
+
 /// Every non-let-binding spelling of "negate the whole value of `target`":
-/// `-target`, `target.neg()`, `-0.0 - target`, `target * -1.0` / `-1.0 * target`.
+/// `-target`, `target.neg()`, `-0.0 - target`, `target * -1.0` / `-1.0 * target`,
+/// `target / -1.0`, and the call spellings of [`is_negation_call_of`].
 fn is_negation_of(e: &Expr, target: &dyn Fn(&Expr) -> bool) -> bool {
     match e {
         Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) => target(&u.expr),
         Expr::MethodCall(m) if is_neg_method_call(m) => target(&m.receiver),
         Expr::Binary(b) => is_negation_of_binary(b, target),
+        Expr::Call(c) => is_negation_call_of(c, target),
         _ => false,
     }
 }
@@ -283,11 +484,25 @@ fn is_negation_of_binary(b: &ExprBinary, target: &dyn Fn(&Expr) -> bool) -> bool
         return (is_negative_one_literal(&b.left) && target(&b.right))
             || (is_negative_one_literal(&b.right) && target(&b.left));
     }
+    // `x / -1.0`, and on a binding `x *= -1.0` / `x /= -1.0`
+    if matches!(
+        b.op,
+        BinOp::Div(_) | BinOp::MulAssign(_) | BinOp::DivAssign(_)
+    ) {
+        return is_negative_one_literal(&b.right) && target(&b.left);
+    }
     false
 }
 
 fn is_path_ident(e: &Expr, ident: &str) -> bool {
     matches!(peel(e), Expr::Path(p) if p.path.get_ident().is_some_and(|i| i == ident))
+}
+
+fn ident_name(e: &Expr) -> Option<String> {
+    match peel(e) {
+        Expr::Path(p) => p.path.get_ident().map(|i| i.to_string()),
+        _ => None,
+    }
 }
 
 fn is_negation_of_ident(e: &Expr, ident: &str) -> bool {
@@ -296,13 +511,26 @@ fn is_negation_of_ident(e: &Expr, ident: &str) -> bool {
 
 impl<'a> Visitor<'a> {
     fn record_finding_at(&mut self, span: proc_macro2::Span) {
+        self.record_kind_at(span, FindingKind::NegatedMulAdd);
+    }
+
+    fn record_kind_at(&mut self, span: proc_macro2::Span, kind: FindingKind) {
         let line = span.start().line;
         self.findings.push(Finding {
             rel: self.rel.to_string(),
             line,
             excerpt: excerpt_at(self.src, line),
-            kind: FindingKind::NegatedMulAdd,
+            kind,
         });
+    }
+
+    fn count(&mut self, kind: Option<FmaKind>) {
+        match kind {
+            Some(FmaKind::MulAdd) => self.counts.mul_add_calls += 1,
+            Some(FmaKind::Scalar) => self.counts.scalar_fma_calls += 1,
+            Some(FmaKind::Simd) => self.counts.simd_fma_calls += 1,
+            None => {}
+        }
     }
 
     fn record_unary(&mut self, u: &ExprUnary) {
@@ -310,13 +538,13 @@ impl<'a> Visitor<'a> {
             return;
         }
         self.counts.unary_neg_exprs += 1;
-        if is_mul_add_result(&u.expr) {
+        if is_fma_result(&u.expr) {
             self.record_finding_at(u.op.span());
         }
     }
 
     fn record_binary(&mut self, b: &ExprBinary) {
-        if is_negation_of_binary(b, &is_mul_add_result) {
+        if is_negation_of_binary(b, &is_fma_result) {
             self.record_finding_at(b.op.span());
         }
     }
@@ -327,16 +555,49 @@ impl<'a> Visitor<'a> {
     /// following the binding, at any nesting depth, not just a statement
     /// whose entire top-level expression IS the negation.
     fn record_let_then_negate(&mut self, block: &Block) {
+        // names bound to a fma value so far in this block: `let t = <fma>`,
+        // an alias `let u = t` of one, or a deferred `let t; ... t = <fma>`
+        let mut fma_names: BTreeSet<String> = BTreeSet::new();
+        let mut uninit: BTreeSet<String> = BTreeSet::new();
         for (i, stmt) in block.stmts.iter().enumerate() {
-            let Stmt::Local(local) = stmt else { continue };
-            let Some(init) = &local.init else { continue };
-            if init.diverge.is_some() || !is_mul_add_result(&init.expr) {
-                continue;
-            }
-            let Pat::Ident(pi) = &local.pat else { continue };
-            let ident = pi.ident.to_string();
+            let bound = match stmt {
+                Stmt::Local(local) => {
+                    let Pat::Ident(pi) = &local.pat else { continue };
+                    let ident = pi.ident.to_string();
+                    match &local.init {
+                        None => {
+                            uninit.insert(ident);
+                            continue;
+                        }
+                        Some(init) if init.diverge.is_none() => {
+                            let alias = matches!(peel(&init.expr), Expr::Path(p)
+                                if p.path.get_ident().is_some_and(|n| fma_names.contains(&n.to_string())));
+                            if is_fma_result(&init.expr) || alias {
+                                ident
+                            } else {
+                                fma_names.remove(&ident);
+                                continue;
+                            }
+                        }
+                        Some(_) => continue,
+                    }
+                }
+                Stmt::Expr(Expr::Assign(a), _) => {
+                    let Some(ident) = ident_name(&a.left) else {
+                        continue;
+                    };
+                    if uninit.contains(&ident) && is_fma_result(&a.right) {
+                        uninit.remove(&ident);
+                        ident
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+            fma_names.insert(bound.clone());
             let mut finder = IdentNegationFinder {
-                ident: &ident,
+                ident: &bound,
                 findings: Vec::new(),
             };
             finder.scan_block_from(&block.stmts[i + 1..]);
@@ -425,20 +686,40 @@ impl<'a, 'ast> Visit<'ast> for IdentNegationFinder<'a> {
 
 impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
-        if is_mul_add_method(node) {
-            self.counts.mul_add_calls += 1;
-        }
-        if is_neg_method_call(node) && is_mul_add_result(&node.receiver) {
+        self.count(method_fma_kind(node));
+        if is_neg_method_call(node) && is_fma_result(&node.receiver) {
             self.record_finding_at(node.method.span());
         }
         visit::visit_expr_method_call(self, node);
     }
 
     fn visit_expr_call(&mut self, node: &'ast ExprCall) {
-        if is_mul_add_path_call(node) {
-            self.counts.mul_add_calls += 1;
+        self.count(path_call_fma_kind(node));
+        if is_negation_call_of(node, &is_fma_result) {
+            self.record_finding_at(node.func.span());
         }
         visit::visit_expr_call(self, node);
+    }
+
+    fn visit_item_use(&mut self, node: &'ast ItemUse) {
+        fn renames(tree: &UseTree, out: &mut Vec<proc_macro2::Span>) {
+            match tree {
+                UseTree::Path(p) => renames(&p.tree, out),
+                UseTree::Rename(r)
+                    if fma_kind(&r.ident.to_string()).is_some() && r.ident != r.rename =>
+                {
+                    out.push(r.rename.span());
+                }
+                UseTree::Group(g) => g.items.iter().for_each(|t| renames(t, out)),
+                _ => {}
+            }
+        }
+        let mut spans = Vec::new();
+        renames(&node.tree, &mut spans);
+        for span in spans {
+            self.record_kind_at(span, FindingKind::AliasedFma);
+        }
+        visit::visit_item_use(self, node);
     }
 
     fn visit_expr_unary(&mut self, node: &'ast ExprUnary) {
@@ -460,8 +741,16 @@ impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
         // syn does not expand macros: the tokens inside are opaque to the
         // AST walk above, so this cannot tell negated from safe — hard fail
         // by default (see module doc), never allowlistable in src/.
-        let rendered = node.tokens.to_string();
-        if rendered.contains("mul_add") {
+        // identifiers only: a fma name inside a string literal (an assert
+        // message) is not a call
+        fn mentions_fma(tokens: proc_macro2::TokenStream) -> bool {
+            tokens.into_iter().any(|t| match t {
+                proc_macro2::TokenTree::Ident(i) => fma_kind(&i.to_string()).is_some(),
+                proc_macro2::TokenTree::Group(g) => mentions_fma(g.stream()),
+                _ => false,
+            })
+        }
+        if mentions_fma(node.tokens.clone()) {
             let line = node.span().start().line;
             self.findings.push(Finding {
                 rel: self.rel.to_string(),
@@ -479,21 +768,6 @@ fn is_allowlist_eligible(rel: &str) -> bool {
     ALLOWLIST_SCOPE_DIRS
         .iter()
         .any(|d| parts.iter().any(|p| p == d))
-}
-
-fn read_allowlist(root: &Path) -> BTreeSet<String> {
-    let path = root.join(ALLOWLIST_REL);
-    let mut out = BTreeSet::new();
-    let Ok(text) = fs::read_to_string(&path) else {
-        return out;
-    };
-    for raw in text.lines() {
-        let line = raw.split('#').next().unwrap_or("").trim();
-        if !line.is_empty() {
-            out.insert(line.to_string());
-        }
-    }
-    out
 }
 
 fn walk_rs_files(base: &Path, out: &mut Vec<PathBuf>) {
@@ -516,18 +790,123 @@ struct Report {
     errors: Vec<String>,
     files: usize,
     unary_neg_exprs: usize,
+    /// `mul_add` calls (method and path spellings)
     mul_add_calls: usize,
+    /// `fma` / `fmaf` / `fmaf32` / `fmaf64` calls
+    scalar_fma_calls: usize,
+    /// SIMD fused multiply-add intrinsic calls
+    simd_fma_calls: usize,
+    /// every fma-family call
+    fma_calls: usize,
+    /// fma-family calls in files under a `src/` directory
+    src_fma_calls: usize,
     violations: usize,
     allowed: usize,
     macro_hits: usize,
     macro_allowed: usize,
+    aliases: usize,
+}
+
+/// `[[allow]]`: a finding by path, exact trimmed line text and count.
+struct AllowEntry {
+    path: String,
+    line: String,
+    count: usize,
+    reason: String,
+}
+
+struct Allowlist {
+    expected_fma_calls: Option<usize>,
+    expected_src_fma_calls: Option<usize>,
+    entries: Vec<AllowEntry>,
+    errors: Vec<String>,
+}
+
+fn read_allowlist(root: &Path) -> Allowlist {
+    let mut out = Allowlist {
+        expected_fma_calls: None,
+        expected_src_fma_calls: None,
+        entries: Vec::new(),
+        errors: Vec::new(),
+    };
+    let path = root.join(ALLOWLIST_REL);
+    let Ok(text) = fs::read_to_string(&path) else {
+        return out;
+    };
+    let table = match text.parse::<toml::Table>() {
+        Ok(t) => t,
+        Err(e) => {
+            out.errors
+                .push(format!("error: {ALLOWLIST_REL}: TOML として読めない ({e})"));
+            return out;
+        }
+    };
+    let count = |key: &str| {
+        table
+            .get(key)
+            .and_then(toml::Value::as_integer)
+            .and_then(|v| usize::try_from(v).ok())
+    };
+    out.expected_fma_calls = count("expected-fma-calls");
+    out.expected_src_fma_calls = count("expected-src-fma-calls");
+    if let Some(toml::Value::Array(list)) = table.get("allow") {
+        for (i, item) in list.iter().enumerate() {
+            let field = |k: &str| {
+                item.get(k)
+                    .and_then(toml::Value::as_str)
+                    .map(str::to_string)
+            };
+            let n = item
+                .get("count")
+                .and_then(toml::Value::as_integer)
+                .and_then(|v| usize::try_from(v).ok());
+            match (field("path"), field("line"), n, field("reason")) {
+                (Some(path), Some(line), Some(count), Some(reason)) if !reason.trim().is_empty() && count > 0 => {
+                    out.entries.push(AllowEntry { path, line: line.trim().to_string(), count, reason });
+                }
+                _ => out.errors.push(format!(
+                    "error: {ALLOWLIST_REL}: allow[{i}] には path / line / count (1 以上) / reason (空でない) が要る"
+                )),
+            }
+        }
+    }
+    out
+}
+
+/// The count headers against what the tool found: both are required, both
+/// must be equal (a repository without fma calls declares 0).
+fn check_expected(report: &Report, allow: &Allowlist) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (key, want, got) in [
+        (
+            "expected-fma-calls",
+            allow.expected_fma_calls,
+            report.fma_calls,
+        ),
+        (
+            "expected-src-fma-calls",
+            allow.expected_src_fma_calls,
+            report.src_fma_calls,
+        ),
+    ] {
+        match want {
+            None => errors.push(format!(
+                "error: {ALLOWLIST_REL} に {key} が無い (見つけた数は {got})"
+            )),
+            Some(n) if n != got => errors.push(format!(
+                "error: {key} = {n} だが見つけた数は {got} — 呼び出しを足した / 消した commit で値を更新する (走査範囲が変わったなら原因を確かめる)"
+            )),
+            Some(_) => {}
+        }
+    }
+    errors
 }
 
 fn check(root: &Path, src_dirs: &[String]) -> Report {
     let mut errors = Vec::new();
     let mut files = 0usize;
-    let mut unary_neg_exprs = 0usize;
-    let mut mul_add_calls = 0usize;
+    let mut totals = FileCounts::default();
+    let mut src_fma_calls = 0usize;
     let mut found: Vec<Finding> = Vec::new();
 
     for src_dir in src_dirs {
@@ -561,104 +940,129 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
                 rel: &rel,
                 src: &src,
                 findings: Vec::new(),
-                counts: FileCounts {
-                    unary_neg_exprs: 0,
-                    mul_add_calls: 0,
-                },
+                counts: FileCounts::default(),
             };
             visitor.visit_file(&parsed);
-            unary_neg_exprs += visitor.counts.unary_neg_exprs;
-            mul_add_calls += visitor.counts.mul_add_calls;
+            totals.unary_neg_exprs += visitor.counts.unary_neg_exprs;
+            totals.mul_add_calls += visitor.counts.mul_add_calls;
+            totals.scalar_fma_calls += visitor.counts.scalar_fma_calls;
+            totals.simd_fma_calls += visitor.counts.simd_fma_calls;
+            if rel.split('/').any(|p| p == "src") {
+                src_fma_calls += visitor.counts.fma_calls();
+            }
             found.extend(visitor.findings);
         }
     }
 
+    let mut report = Report {
+        errors: Vec::new(),
+        files,
+        unary_neg_exprs: totals.unary_neg_exprs,
+        mul_add_calls: totals.mul_add_calls,
+        scalar_fma_calls: totals.scalar_fma_calls,
+        simd_fma_calls: totals.simd_fma_calls,
+        fma_calls: totals.fma_calls(),
+        src_fma_calls,
+        violations: 0,
+        allowed: 0,
+        macro_hits: 0,
+        macro_allowed: 0,
+        aliases: 0,
+    };
     if files == 0 {
         errors.push(format!(
             "error: src file を 1 つも読めなかった — 検査が空振りしている (対象: {})",
             src_dirs.join(", ")
         ));
-        return Report {
-            errors,
-            files,
-            unary_neg_exprs,
-            mul_add_calls,
-            violations: 0,
-            allowed: 0,
-            macro_hits: 0,
-            macro_allowed: 0,
-        };
-    }
-    if mul_add_calls == 0 {
-        errors.push(format!(
-            "error: mul_add 呼び出しが 0 件 — file 一覧か AST 走査が壊れている (読めた file {files} 件)"
-        ));
+        report.errors = errors;
+        return report;
     }
 
     let allowlist = read_allowlist(root);
-    let mut allowed = 0usize;
-    let mut macro_allowed = 0usize;
-    let mut violations = 0usize;
-    let mut macro_hits = 0usize;
-    let found_keys: BTreeSet<String> = found
-        .iter()
-        .map(|v| format!("{}:{}", v.rel, v.line))
-        .collect();
-
+    errors.extend(allowlist.errors.iter().cloned());
+    // findings grouped by (path, exact trimmed line text)
+    let mut groups: BTreeMap<(String, String), Vec<&Finding>> = BTreeMap::new();
     for f in &found {
-        let key = format!("{}:{}", f.rel, f.line);
-        let (default_label, src_blocked_label) = match f.kind {
-            FindingKind::NegatedMulAdd => {
-                violations += 1;
-                (
-                    "呼び出し結果全体を negate する fma、禁止形",
-                    "src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す",
-                )
-            }
-            FindingKind::MacroMulAdd => {
-                macro_hits += 1;
-                (
-                    "macro 呼び出しの中に mul_add がある、AST 未検証 — allowlist に理由付きで明記する",
-                    "src/ 配下は allowlist 不可、macro 呼び出しの外に出して書き直す — allowlist の行も消す",
-                )
-            }
-        };
-        if allowlist.contains(&key) {
-            if is_allowlist_eligible(&f.rel) {
-                match f.kind {
-                    FindingKind::NegatedMulAdd => allowed += 1,
-                    FindingKind::MacroMulAdd => macro_allowed += 1,
+        match f.kind {
+            FindingKind::NegatedMulAdd => report.violations += 1,
+            FindingKind::MacroMulAdd => report.macro_hits += 1,
+            FindingKind::AliasedFma => report.aliases += 1,
+        }
+        groups
+            .entry((f.rel.clone(), f.excerpt.clone()))
+            .or_default()
+            .push(f);
+    }
+    let mut used: BTreeSet<usize> = BTreeSet::new();
+    for ((rel, text), fs_) in &groups {
+        let entry = allowlist
+            .entries
+            .iter()
+            .position(|e| &e.path == rel && &e.line == text);
+        let aliased = fs_
+            .iter()
+            .any(|f| matches!(f.kind, FindingKind::AliasedFma));
+        if let Some(idx) = entry {
+            used.insert(idx);
+            let e = &allowlist.entries[idx];
+            if aliased {
+                errors.push(format!(
+                    "error: {rel}:{}: {text}  (fma-family の改名 import は allowlist 不可、元の名前で import する — allowlist の行も消す)",
+                    fs_[0].line
+                ));
+            } else if !is_allowlist_eligible(rel) {
+                let label = if fs_
+                    .iter()
+                    .any(|f| matches!(f.kind, FindingKind::MacroMulAdd))
+                {
+                    "src/ 配下は allowlist 不可、macro 呼び出しの外に出して書き直す — allowlist の行も消す"
+                } else {
+                    "src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す"
+                };
+                errors.push(format!("error: {rel}:{}: {text}  ({label})", fs_[0].line));
+            } else if e.count != fs_.len() {
+                errors.push(format!(
+                    "error: {rel}: \"{text}\": allowlist の count = {} だが見つけた数は {} — 実物に合わせる",
+                    e.count,
+                    fs_.len()
+                ));
+            } else {
+                for f in fs_ {
+                    match f.kind {
+                        FindingKind::NegatedMulAdd => report.allowed += 1,
+                        FindingKind::MacroMulAdd => report.macro_allowed += 1,
+                        FindingKind::AliasedFma => {}
+                    }
                 }
-                continue;
             }
-            errors.push(format!(
-                "error: {}:{}: {}  ({})",
-                f.rel, f.line, f.excerpt, src_blocked_label
-            ));
             continue;
         }
-        errors.push(format!(
-            "error: {}:{}: {}  ({})",
-            f.rel, f.line, f.excerpt, default_label
-        ));
+        for f in fs_ {
+            let label = match f.kind {
+                FindingKind::NegatedMulAdd => "呼び出し結果全体を negate する fma、禁止形",
+                FindingKind::MacroMulAdd => {
+                    "macro 呼び出しの中に fma-family の名前がある、AST 未検証 — allowlist に理由付きで明記する"
+                }
+                FindingKind::AliasedFma => {
+                    "fma-family を別名で import している、検査が名前で見るので見えなくなる — 元の名前で import する"
+                }
+            };
+            errors.push(format!(
+                "error: {}:{}: {}  ({label})",
+                f.rel, f.line, f.excerpt
+            ));
+        }
     }
-
-    for key in allowlist.difference(&found_keys) {
-        errors.push(format!(
-            "error: {key}: allowlist にあるが実物が無い — 行を消す"
-        ));
+    for (idx, e) in allowlist.entries.iter().enumerate() {
+        if !used.contains(&idx) {
+            errors.push(format!(
+                "error: {}: \"{}\": allowlist にあるが実物が無い — 行を消す ({})",
+                e.path, e.line, e.reason
+            ));
+        }
     }
-
-    Report {
-        errors,
-        files,
-        unary_neg_exprs,
-        mul_add_calls,
-        violations,
-        allowed,
-        macro_hits,
-        macro_allowed,
-    }
+    report.errors = errors;
+    report
 }
 
 fn main() {
@@ -684,25 +1088,35 @@ fn main() {
     }
     if src_dirs.is_empty() {
         eprintln!(
-            "error: {}/Cargo.toml の [workspace] members を読めなかった (走査する dir が無い)",
+            "error: {}/Cargo.toml から走査する dir を決められなかった ([workspace] members も [package] も無い、または members に glob がある)",
             root.display()
         );
         std::process::exit(2);
     }
 
-    let report = check(&root, &src_dirs);
+    let mut report = check(&root, &src_dirs);
+    if report.files > 0 {
+        let allow = read_allowlist(&root);
+        let expected = check_expected(&report, &allow);
+        report.errors.extend(expected);
+    }
     for e in &report.errors {
         println!("{e}");
     }
     println!(
-        "compared: files {}, unary-neg exprs examined {}, mul_add calls {}, mul_add under neg {}, allowed (tests/examples) {}, macro mul_add mentions {}, macro allowed {}",
+        "compared: files parsed {}, fma calls {} (mul_add {}, scalar fma {}, simd {}; in src/ {}), unary-neg exprs examined {}, fma under neg {}, allowed (tests/examples) {}, macro fma mentions {}, macro allowed {}, renamed fma imports {}",
         report.files,
-        report.unary_neg_exprs,
+        report.fma_calls,
         report.mul_add_calls,
+        report.scalar_fma_calls,
+        report.simd_fma_calls,
+        report.src_fma_calls,
+        report.unary_neg_exprs,
         report.violations,
         report.allowed,
         report.macro_hits,
-        report.macro_allowed
+        report.macro_allowed,
+        report.aliases
     );
     if !report.errors.is_empty() {
         println!("no-outer-fneg-of-fma: {} violation(s)", report.errors.len());
@@ -735,6 +1149,11 @@ mod tests {
     }
 
     const SRC: &str = "alice-lol/src/lib.rs";
+
+    /// One `[[allow]]` entry in the TOML allowlist format.
+    fn allow(path: &str, line: &str, count: usize) -> String {
+        format!("[[allow]]\npath = \"{path}\"\nline = \"{line}\"\ncount = {count}\nreason = \"comparison baseline\"\n")
+    }
 
     const CLEAN: &str = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, -c)\n}\n";
 
@@ -862,7 +1281,7 @@ mod tests {
     #[test]
     fn a_src_site_fails_even_when_the_allowlist_carries_it() {
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
-        let r = run(&[(SRC, src)], Some(&format!("# 理由\n{SRC}:2\n")));
+        let r = run(&[(SRC, src)], Some(&allow(SRC, "-(a.mul_add(b, c))", 1)));
         assert_eq!(r.violations, 1);
         assert_eq!(r.allowed, 0);
         assert!(r.errors.iter().any(|e| e.contains("allowlist 不可")));
@@ -874,7 +1293,7 @@ mod tests {
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
         let r = run(
             &[(oracle, src)],
-            Some(&format!("# 比較用の旧形\n{oracle}:2\n")),
+            Some(&allow(oracle, "-(a.mul_add(b, c))", 1)),
         );
         assert_eq!(r.errors, Vec::<String>::new());
         assert_eq!(r.violations, 1);
@@ -887,7 +1306,7 @@ mod tests {
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
         let r = run(
             &[(oracle, src)],
-            Some(&format!("# 比較用の旧形\n{oracle}:2\n")),
+            Some(&allow(oracle, "-(a.mul_add(b, c))", 1)),
         );
         assert_eq!(r.errors, Vec::<String>::new());
         assert_eq!(r.violations, 1);
@@ -896,7 +1315,7 @@ mod tests {
 
     #[test]
     fn an_allowlist_entry_without_the_site_fails() {
-        let r = run(&[(SRC, CLEAN)], Some(&format!("{SRC}:2\n")));
+        let r = run(&[(SRC, CLEAN)], Some(&allow(SRC, "-(a.mul_add(b, c))", 1)));
         assert!(r
             .errors
             .iter()
@@ -910,11 +1329,104 @@ mod tests {
         assert!(r.errors.iter().any(|e| e.contains("1 つも読めなかった")));
     }
 
+    fn header(all: usize, src: usize) -> String {
+        format!("expected-fma-calls = {all}\nexpected-src-fma-calls = {src}\n")
+    }
+
+    fn expected_errors(files: &[(&str, &str)], allowlist: Option<&str>) -> Vec<String> {
+        let dir = tempfile::tempdir().expect("tmpdir");
+        for (rel, text) in files {
+            let path = dir.path().join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, text).unwrap();
+        }
+        if let Some(a) = allowlist {
+            let path = dir.path().join(ALLOWLIST_REL);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, a).unwrap();
+        }
+        let src_dirs: Vec<String> = DEFAULT_SRC_DIRS.iter().map(|s| s.to_string()).collect();
+        let r = check(dir.path(), &src_dirs);
+        check_expected(&r, &read_allowlist(dir.path()))
+    }
+
     #[test]
-    fn zero_mul_add_calls_fails_even_with_files_present() {
-        let r = run(&[(SRC, "fn f() {}\n")], None);
-        assert_eq!(r.mul_add_calls, 0);
-        assert!(r.errors.iter().any(|e| e.contains("0 件")));
+    fn a_missing_count_header_fails() {
+        let e = expected_errors(&[(SRC, CLEAN)], None);
+        assert_eq!(e.len(), 2, "{e:?}");
+        assert!(e.iter().all(|x| x.contains("が無い")));
+    }
+
+    #[test]
+    fn a_count_header_that_differs_fails_with_both_numbers() {
+        let e = expected_errors(&[(SRC, CLEAN)], Some(&header(2, 1)));
+        assert!(
+            e.iter()
+                .any(|x| x.contains("expected-fma-calls = 2") && x.contains("1")),
+            "{e:?}"
+        );
+    }
+
+    #[test]
+    fn a_matching_count_header_passes() {
+        let e = expected_errors(&[(SRC, CLEAN)], Some(&header(1, 1)));
+        assert_eq!(e, Vec::<String>::new());
+    }
+
+    #[test]
+    fn zero_calls_pass_only_when_declared_zero() {
+        // a repository without any fma call declares 0 explicitly
+        let files = [(SRC, "fn f() {}\n")];
+        assert_eq!(
+            expected_errors(&files, Some(&header(0, 0))),
+            Vec::<String>::new()
+        );
+        // without the declaration the same tree fails (a broken walk looks the same)
+        assert!(!expected_errors(&files, None).is_empty());
+    }
+
+    #[test]
+    fn a_call_found_while_zero_is_declared_fails() {
+        let e = expected_errors(&[(SRC, CLEAN)], Some(&header(0, 0)));
+        assert_eq!(e.len(), 2, "{e:?}");
+    }
+
+    #[test]
+    fn only_src_calls_count_towards_the_src_header() {
+        let files = [(SRC, CLEAN), ("alice-lol/tests/t.rs", CLEAN)];
+        assert_eq!(
+            expected_errors(&files, Some(&header(2, 1))),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn an_allowlist_count_that_differs_fails() {
+        let oracle = "alice-lol/tests/oracle.rs";
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
+        let r = run(
+            &[(oracle, src)],
+            Some(&allow(oracle, "-(a.mul_add(b, c))", 2)),
+        );
+        assert!(
+            r.errors.iter().any(|e| e.contains("count = 2")),
+            "{:?}",
+            r.errors
+        );
+        assert_eq!(r.allowed, 0);
+    }
+
+    #[test]
+    fn an_allowlist_entry_without_a_reason_fails() {
+        let oracle = "alice-lol/tests/oracle.rs";
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -(a.mul_add(b, c))\n}\n";
+        let entry = format!("[[allow]]\npath = \"{oracle}\"\nline = \"-(a.mul_add(b, c))\"\ncount = 1\nreason = \"\"\n");
+        let r = run(&[(oracle, src)], Some(&entry));
+        assert!(
+            r.errors.iter().any(|e| e.contains("reason")),
+            "{:?}",
+            r.errors
+        );
     }
 
     #[test]
@@ -948,7 +1460,7 @@ mod tests {
         assert!(r
             .errors
             .iter()
-            .any(|e| e.contains("macro 呼び出しの中に mul_add")));
+            .any(|e| e.contains("macro 呼び出しの中に fma-family")));
     }
 
     #[test]
@@ -957,7 +1469,10 @@ mod tests {
         // mention in src/ cannot be allowlisted away, only rewritten out of
         // the macro so the AST walk can verify it directly.
         let src = "fn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
-        let r = run(&[(SRC, src)], Some(&format!("# 理由\n{SRC}:2\n")));
+        let r = run(
+            &[(SRC, src)],
+            Some(&allow(SRC, "println!(\\\"{}\\\", a.mul_add(b, c));", 1)),
+        );
         assert_eq!(r.macro_hits, 1);
         assert_eq!(r.macro_allowed, 0);
         assert!(r
@@ -970,7 +1485,10 @@ mod tests {
     fn macro_mul_add_in_tests_dir_passes_with_an_allowlist_entry() {
         let oracle = "alice-lol/tests/oracle.rs";
         let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    a.mul_add(b, c)\n}\nfn g(a: f32, b: f32, c: f32) {\n    println!(\"{}\", a.mul_add(b, c));\n}\n";
-        let r = run(&[(oracle, src)], Some(&format!("# 比較用\n{oracle}:5\n")));
+        let r = run(
+            &[(oracle, src)],
+            Some(&allow(oracle, "println!(\\\"{}\\\", a.mul_add(b, c));", 1)),
+        );
         assert_eq!(r.errors, Vec::<String>::new());
         assert_eq!(r.macro_hits, 1);
         assert_eq!(r.macro_allowed, 1);
@@ -1189,8 +1707,168 @@ mod tests {
     fn unreadable_members_give_no_dirs() {
         let dir = tempfile::tempdir().unwrap();
         assert!(workspace_src_dirs(dir.path()).is_empty());
-        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        // neither a workspace nor a package
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[profile.release]\nopt-level = 3\n",
+        )
+        .unwrap();
         assert!(workspace_src_dirs(dir.path()).is_empty());
+        // a glob member is not expanded: refuse rather than scan less
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        assert!(workspace_src_dirs(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn a_single_crate_repository_scans_its_root_package() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let dirs = workspace_src_dirs(dir.path());
+        assert_eq!(dirs, vec!["src", "tests", "examples", "benches"]);
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::write(
+            dir.path().join("src/lib.rs"),
+            "fn f(a: f32, b: f32, c: f32) -> f32 {\n    -a.mul_add(b, c)\n}\n",
+        )
+        .unwrap();
+        let r = check(dir.path(), &dirs);
+        assert_eq!(r.violations, 1);
+        assert_eq!(r.src_fma_calls, 1);
+    }
+
+    #[test]
+    fn every_fma_family_callee_is_counted_by_kind() {
+        let src = "fn f(a: f32, b: f32, c: f32, v: V) {\n    let _ = a.mul_add(b, c);\n    let _ = f32::mul_add(a, b, c);\n    let _ = libm::fma(1.0, 2.0, 3.0);\n    let _ = libm::fmaf(a, b, c);\n    let _ = core::intrinsics::fmaf32(a, b, c);\n    let _ = vfmaq_f32(v, v, v);\n    let _ = vfmsq_laneq_f32::<1>(v, v, v);\n    let _ = _mm256_fmadd_ps(v, v, v);\n    let _ = _mm_fnmsub_sd(v, v, v);\n    let _ = _mm512_mask_fmaddsub_pd(v, 1, v, v);\n    let _ = a.max(b);\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(
+            (r.mul_add_calls, r.scalar_fma_calls, r.simd_fma_calls),
+            (2, 3, 5)
+        );
+        assert_eq!(r.fma_calls, 10);
+    }
+
+    #[test]
+    fn a_negated_libm_fma_is_caught() {
+        for call in [
+            "libm::fma(a, b, c)",
+            "fmaf(a, b, c)",
+            "core::intrinsics::fmaf64(a, b, c)",
+        ] {
+            let src = format!("fn f(a: f64, b: f64, c: f64) -> f64 {{\n    -{call}\n}}\n");
+            let r = run(&[(SRC, &src)], None);
+            assert_eq!(r.violations, 1, "{call}");
+        }
+    }
+
+    #[test]
+    fn a_wide_vector_receiver_is_caught_by_the_method_name() {
+        let src = "use wide::f32x8;\nfn f(v: f32x8, a: f32x8, b: f32x8) -> f32x8 {\n    -v.mul_add(a, b)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.violations, 1);
+    }
+
+    #[test]
+    fn renaming_a_fma_family_item_on_import_fails_even_with_an_allowlist_entry() {
+        let src = "use libm::fma as fused;\nfn f(a: f64, b: f64, c: f64) -> f64 {\n    -fused(a, b, c)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.aliases, 1);
+        assert!(
+            r.errors.iter().any(|e| e.contains("別名で import")),
+            "{:?}",
+            r.errors
+        );
+        let nested = "use core::arch::aarch64::{vdupq_n_f32, vfmaq_f32 as f};\n";
+        assert_eq!(run(&[(SRC, nested)], None).aliases, 1);
+        let oracle = "alice-lol/tests/oracle.rs";
+        let r = run(
+            &[(oracle, src)],
+            Some(&allow(oracle, "use libm::fma as fused;", 1)),
+        );
+        assert!(
+            r.errors
+                .iter()
+                .any(|e| e.contains("改名 import は allowlist 不可")),
+            "{:?}",
+            r.errors
+        );
+    }
+
+    #[test]
+    fn importing_a_fma_family_item_under_its_own_name_is_fine() {
+        let src = "use libm::fma;\nuse core::arch::aarch64::vfmaq_f32 as vfmaq_f32;\nfn f(a: f64, b: f64, c: f64) -> f64 {\n    fma(a, b, -c)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.aliases, 0);
+        assert_eq!(r.errors, Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_fma_name_inside_a_string_literal_of_a_macro_is_not_a_mention() {
+        let src = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    assert!(a > 0.0, \"the fma and mul_add forms differ\");\n    a.mul_add(b, c)\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.macro_hits, 0);
+    }
+
+    #[test]
+    fn a_simd_fma_name_in_a_macro_is_a_mention() {
+        let src = "fn f(v: V) {\n    println!(\"{:?}\", vfmaq_f32(v, v, v));\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.macro_hits, 1);
+    }
+
+    /// Every probe of `tools/fneg-fma-ir-probes` (shared with the IR check's
+    /// tests) with its `expect-syn` verdict: `flag` must be found, `clean` must
+    /// not, and `miss` (a shape beyond a syntax tree: a closure, a wrapper
+    /// function, a tuple field) must stay unfound so the documented limit of
+    /// this pre-check is pinned; the IR check covers those.
+    #[test]
+    fn every_shared_probe_has_its_expected_syntax_tree_verdict() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fneg-fma-ir-probes");
+        let mut probes: Vec<PathBuf> = fs::read_dir(&dir)
+            .expect("tools/fneg-fma-ir-probes")
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+            .collect();
+        probes.sort();
+        assert!(probes.len() >= 40, "only {} probes", probes.len());
+        let mut wrong = Vec::new();
+        for probe in &probes {
+            let text = fs::read_to_string(probe).unwrap();
+            let expect = text
+                .lines()
+                .find_map(|l| l.strip_prefix("// expect-syn: "))
+                .expect("expect-syn line")
+                .trim()
+                .to_string();
+            let r = run(&[(SRC, &text)], None);
+            let found = r.violations > 0;
+            let ok = match expect.as_str() {
+                "flag" => found,
+                "clean" | "miss" => !found,
+                other => panic!("{}: unknown expect-syn {other}", probe.display()),
+            };
+            if !ok {
+                wrong.push(format!(
+                    "{}: expect {expect}, violations {}",
+                    probe.display(),
+                    r.violations
+                ));
+            }
+            assert!(
+                r.fma_calls > 0 || probe.to_string_lossy().contains("no_fma"),
+                "{}: no fma call counted",
+                probe.display()
+            );
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     #[test]
@@ -1212,12 +1890,12 @@ mod tests {
     /// bare-identifier unparenthesised branch survives, or vice versa), one
     /// of `parenthesised_outer_negation_is_caught` /
     /// `bare_unparenthesised_outer_negation_is_caught` goes red because each
-    /// exercises a different code path through `is_mul_add_result`. Verified
+    /// exercises a different code path through `is_fma_result`. Verified
     /// by hand: commenting out the `Expr::Paren`/`Expr::Group` arms of
     /// `peel()` turns `parenthesised_outer_negation_is_caught` red while
     /// `bare_unparenthesised_outer_negation_is_caught` stays green, and vice
     /// versa for commenting out the direct `Expr::MethodCall`/`Expr::Call`
-    /// match arms in `is_mul_add_result`.
+    /// match arms in `is_fma_result`.
     #[test]
     fn mutation_teeth_marker_both_branches_have_dedicated_tests() {
         // this test exists only as a signpost to the doc comment above;

@@ -1,0 +1,130 @@
+name: G3 IR
+
+# ALICE-Law G3, IR half: no negation of a whole fused multiply-add result in the optimised
+# LLVM IR of alice-lol (scripts/fneg_fma_ir_check.py). The syntax-tree pre-check
+# (tools/no-outer-fneg-of-fma) runs in ci.yml's wiring-guard job on every push; this
+# workflow builds the release IR, so it runs only when a path that can change the IR
+# changed, and weekly (a sibling crate inlined into alice-lol can change it too)
+
+on:
+  push:
+    # no paths here (see fuzz.yml): the changes job compares with merge-base(origin/main)
+    branches: [main, 'ci/**']
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/src/**'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'tools/no-outer-fneg-of-fma/**'
+      - 'tools/fneg-fma-ir-probes/**'
+      - 'scripts/fneg_fma_ir_check.py'
+      - 'scripts/test_fneg_fma_ir_check.py'
+      - 'scripts/no-outer-fneg-of-fma-allowlist.toml'
+      - '.github/workflows/g3-ir.yml'
+      - '.github/paths/g3-ir.txt'
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (a cancelled main commit is unverified)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after || github.sha }}
+          CREATED: ${{ github.event.created }}
+          FORCED: ${{ github.event.forced }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/changed_paths.py decide --event "$EVENT"
+          --before "$BEFORE" --after "$AFTER" --created "$CREATED" --forced "$FORCED"
+          --base "$PR_BASE" --head "$PR_HEAD"
+          --patterns-file .github/paths/g3-ir.txt
+
+  ir:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    name: fneg of fma in the release IR (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # each target on a runner native to it: alice-lol depends on stacker -> psm, whose
+        # build script compiles C, so a cross build would need a cross C toolchain
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: ALICE-LOL
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      # alice-lol's path dependencies (--all-features includes llm-bridge and physics)
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-SDF
+          path: ALICE-SDF
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Zip
+          path: ALICE-Zip
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-LLM
+          path: ALICE-LLM
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Physics
+          path: ALICE-Physics
+      - uses: actions/checkout@v5
+        with:
+          repository: ext-sakamoro/ALICE-Kinematics
+          path: ALICE-Kinematics
+      # the toolchain is rust-toolchain.toml's (the IR text depends on the LLVM version);
+      # both targets are installed for the probe tests, which build for each architecture
+      # (the probes have no build script, so the other architecture's is a plain cross build)
+      - name: Targets for the pinned toolchain
+        run: |
+          rustc -vV
+          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL -> target/g3-ir
+          key: g3-ir-${{ matrix.target }}
+      - name: Probe tests (each probe compiled for both architectures, expected verdicts)
+        run: python3 scripts/test_fneg_fma_ir_check.py
+      - name: No negated fma result in alice-lol's release IR
+        env:
+          CARGO_TARGET_DIR: target/g3-ir
+        run: python3 scripts/fneg_fma_ir_check.py --package alice-lol --all-features --target ${{ matrix.target }}

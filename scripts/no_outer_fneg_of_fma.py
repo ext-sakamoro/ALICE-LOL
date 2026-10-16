@@ -23,7 +23,7 @@ Rust の既定 (nsz を立てない) codegen に対しても適用するため�
 ⚠️ **lib `src/` には allowance が無い**: `src/` 配下 (path の構成要素に `src` を含む
 file) で見つかった形は allowlist に書いても fail する — Law form への書き換えのみが
 正しい直し方 既知の許容は `tests/` / `examples/` 配下の oracle file 限定
-(`scripts/no-outer-fneg-of-fma-allowlist.txt` に `<file>:<line>` + 理由、わざと旧形を
+(`scripts/no-outer-fneg-of-fma-allowlist.toml` の `[[allow]]` に path / 行の文字列 / 件数 / 理由、わざと旧形を
 比較用の基準として使っている箇所だけ)
 
 ⚠️ 検査対象の file が 1 つも読めなければ fail する (path が壊れて空振りするのを防ぐ)
@@ -41,10 +41,11 @@ Usage: `python3 scripts/no_outer_fneg_of_fma.py` (exit 1 on any finding)
 from __future__ import annotations
 
 import os
+import tomllib
 import re
 import sys
 
-ALLOWLIST = "scripts/no-outer-fneg-of-fma-allowlist.txt"
+ALLOWLIST = "scripts/no-outer-fneg-of-fma-allowlist.toml"
 SRC_DIRS_DEFAULT = ("alice-lol/src", "alice-lol/tests", "alice-lol/examples")
 MEMBER_SUBDIRS = ("src", "tests", "examples", "benches")
 
@@ -76,17 +77,14 @@ def is_allowlist_eligible(rel: str) -> bool:
     return any(p in ALLOWLIST_SCOPE_DIRS for p in parts)
 
 
-def read_allowlist(root: str) -> set[str]:
+def read_allowlist(root: str) -> dict[tuple[str, str], int]:
+    """`[[allow]]` の (path, 前後の空白を除いた行の文字列) -> 件数 (tools/no-outer-fneg-of-fma と同じ file)."""
     path = os.path.join(root, ALLOWLIST)
-    keys: set[str] = set()
     if not os.path.exists(path):
-        return keys
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.split("#", 1)[0].strip()
-            if line:
-                keys.add(line)
-    return keys
+        return {}
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return {(e["path"], e["line"].strip()): int(e["count"]) for e in data.get("allow", [])}
 
 
 def strip_comments_and_strings(text: str) -> str:
@@ -243,21 +241,27 @@ def check(root: str, src_dirs: tuple[str, ...] = SRC_DIRS_DEFAULT) -> tuple[list
     if calls == 0:
         errors.append(f"error: .mul_add( 呼び出しが 0 件 — file 一覧か scan が壊れている (読めた file {files} 件)")
 
+    groups: dict[tuple[str, str], list[str]] = {}
     for entry in found:
-        key = entry.split(": ", 1)[0]
-        rel = key.rsplit(":", 1)[0]
-        if key in allowlist:
-            if is_allowlist_eligible(rel):
-                allowed += 1
-                continue
-            errors.append(
-                f"error: {entry}  (src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す)"
-            )
-            continue
-        errors.append(f"error: {entry}  (呼び出し結果全体を negate する fma、禁止形)")
+        loc, excerpt = entry.split(": ", 1)
+        rel = loc.rsplit(":", 1)[0]
+        groups.setdefault((rel, excerpt.strip()), []).append(entry)
+    for (rel, text), entries in groups.items():
+        want = allowlist.get((rel, text))
+        if want is None:
+            errors += [f"error: {e}  (呼び出し結果全体を negate する fma、禁止形)" for e in entries]
+        elif not is_allowlist_eligible(rel):
+            errors += [
+                f"error: {e}  (src/ 配下は allowlist 不可、Law form への書き換えのみ — allowlist の行も消す)"
+                for e in entries
+            ]
+        elif want != len(entries):
+            errors.append(f'error: {rel}: "{text}": allowlist の count = {want} だが見つけた数は {len(entries)}')
+        else:
+            allowed += len(entries)
 
-    for key in sorted(allowlist - {e.split(": ", 1)[0] for e in found}):
-        errors.append(f"error: {key}: allowlist にあるが実物が無い — 行を消す")
+    for rel, text in sorted(set(allowlist) - set(groups)):
+        errors.append(f'error: {rel}: "{text}": allowlist にあるが実物が無い — 行を消す')
 
     return errors, {"files": files, "calls": calls, "violations": len(found), "allowed": allowed}
 
