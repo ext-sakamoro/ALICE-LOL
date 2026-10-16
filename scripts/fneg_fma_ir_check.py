@@ -127,27 +127,38 @@ def _operands(text: str) -> list[str]:
 
 def _locations(lines: list[str]) -> dict[str, str]:
     """`!N` of a DILocation -> "file:line:column". An inlined location is reported
-    at the first place in the inlining chain that is in the crate's own files (a
-    relative file name), so a negation inlined from the standard library (Neg::neg,
-    a SIMD intrinsic's wrapper) points at the line of the crate that wrote it."""
-    files: dict[str, str] = {}
+    at the first place in the inlining chain that is in the crate's own files, so a
+    negation inlined from the standard library (Neg::neg, a SIMD intrinsic's
+    wrapper) points at the line of the crate that wrote it. A file is the crate's
+    own when its DIFile directory is the compile unit's (the directory rustc ran
+    in) and its name is relative: the standard library's files carry a remapped
+    or absolute path, and with the rust-src component missing they are relative
+    names under another directory, so the name alone does not tell them apart."""
+    files: dict[str, tuple[str, str]] = {}
+    unit_file = ""
     scopes: dict[str, str] = {}
     locs: dict[str, tuple[str, str, str | None]] = {}
-    file_re = re.compile(r'^(!\d+) = !DIFile\(filename: "([^"]*)"')
+    file_re = re.compile(r'^(!\d+) = !DIFile\(filename: "([^"]*)", directory: "([^"]*)"')
+    unit_re = re.compile(r"^!\d+ = distinct !DICompileUnit\(.*?file: (!\d+)")
     scope_re = re.compile(r"^(!\d+) = (?:distinct )?!DI(?:Subprogram|LexicalBlock(?:File)?)\(.*?file: (!\d+)")
     loc_re = re.compile(r"^(!\d+) = (?:distinct )?!DILocation\(line: (\d+)(?:, column: (\d+))?, scope: (!\d+)(?:, inlinedAt: (!\d+))?")
     for line in lines:
         if m := file_re.match(line):
-            files[m.group(1)] = m.group(2)
+            files[m.group(1)] = (m.group(2), m.group(3))
+        elif m := unit_re.match(line):
+            unit_file = m.group(1)
         elif m := scope_re.match(line):
             scopes[m.group(1)] = m.group(2)
         elif m := loc_re.match(line):
             locs[m.group(1)] = (f"{m.group(2)}:{m.group(3) or 0}", m.group(4), m.group(5))
 
+    unit_dir = files.get(unit_file, ("", ""))[1]
+
     def render(key: str) -> tuple[str, bool]:
         pos, scope, _ = locs[key]
-        name = files.get(scopes.get(scope, ""), "?")
-        return f"{name}:{pos}", not name.startswith("/") and name != "?"
+        name, directory = files.get(scopes.get(scope, ""), ("?", ""))
+        own = bool(unit_dir) and directory == unit_dir and not name.startswith("/") and name != "?"
+        return f"{name}:{pos}", own
 
     out = {}
     for key in locs:

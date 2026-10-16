@@ -107,14 +107,21 @@
 //! `vmul*_n_*(x, -1.0)`, `_mm*_xor_p[sd](x, _mm*_set1_p[sd](-0.0))`,
 //! `_mm*_sub_p[sd](_mm*_set1_p[sd](-0.0), x)` and
 //! `_mm*_mul_p[sd](x, _mm*_set1_p[sd](-1.0))` (either operand order where the
-//! operation commutes). A fma result is also seen through `as` casts,
+//! operation commutes; a vector of negative zeros may also be the sign-bit
+//! integer mask reinterpreted, `_mm*_castsi*_p[sd](_mm*_set1_epi32(SIGN))` or
+//! `vreinterpret*_f32_u32(vdup*_n_u32(SIGN))`). Each constant (`-0.0`, `-1.0`,
+//! a sign mask) is matched as a literal or through a `const` / `static` / `let`
+//! name that the file binds to that constant only (`const SIGN: u32 = 1 << 31;`);
+//! a name the file also binds to anything else is not followed. A fma result is also seen through `as` casts,
 //! `T::from(x)` / `x.into()`, `*&x`, a block's tail expression, and any arm of
 //! an `if` / `match`. A binding is tracked through `let u = t;` aliases and a
 //! deferred `let t; t = <fma>;`.
 //!
-//! Renaming a fma-family item on import (`use libm::fma as fused;`) is a hard
-//! failure anywhere: the check reads names, so a renamed fma would be invisible
-//! to it. Import it under its own name.
+//! Renaming a fma-family item on import (`use libm::fma as fused;`) and using a
+//! fma-family path as a value (`let f = f32::mul_add;`, `.map(f32::mul_add)`)
+//! are hard failures anywhere: the check reads names at call sites, so either
+//! would hide the call (and leave it out of the counts). Import it under its own
+//! name and call it directly.
 //!
 //! What stays out of reach of a syntax tree (a fma returned from a helper
 //! function or a closure and negated by the caller, a fma stored in a tuple or
@@ -211,7 +218,9 @@ enum FindingKind {
     /// a macro invocation's token stream mentions a fma-family name —
     /// AST-unverified, hard fail unless allowlisted (never allowlistable in `src/`).
     MacroMulAdd,
-    /// `use <fma-family path> as <other name>`: never allowlistable.
+    /// `use <fma-family path> as <other name>`, or a fma-family path used as a
+    /// value (`let f = f32::mul_add;`): the check reads names at call sites, so
+    /// either would hide the call. Never allowlistable.
     AliasedFma,
 }
 
@@ -371,39 +380,151 @@ fn is_float_one_literal(e: &Expr) -> bool {
     matches!(peel(e), Expr::Lit(l) if matches!(&l.lit, Lit::Float(f) if matches!(f.base10_parse::<f64>(), Ok(v) if v == 1.0)))
 }
 
+/// The constants a negation is written with, as a literal or through a name.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum ConstKind {
+    NegZero,
+    NegOne,
+    SignMask,
+}
+
+thread_local! {
+    /// Names bound to one of the [`ConstKind`] constants in the file being
+    /// checked (see [`named_constants`]).
+    static NAMED: std::cell::RefCell<BTreeMap<String, ConstKind>> =
+        const { std::cell::RefCell::new(BTreeMap::new()) };
+}
+
+fn named_kind(e: &Expr) -> Option<ConstKind> {
+    let Expr::Path(p) = peel(e) else { return None };
+    let name = p.path.segments.last()?.ident.to_string();
+    NAMED.with(|n| n.borrow().get(&name).copied())
+}
+
+fn literal_kind(e: &Expr) -> Option<ConstKind> {
+    match peel(e) {
+        Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_zero_literal(&u.expr) => {
+            Some(ConstKind::NegZero)
+        }
+        Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_one_literal(&u.expr) => {
+            Some(ConstKind::NegOne)
+        }
+        e if is_sign_mask_literal(e) => Some(ConstKind::SignMask),
+        _ => None,
+    }
+}
+
+/// `const` / `static` items and `let` bindings of the file, by name, whose every
+/// binding is the same [`ConstKind`] constant: `const SIGN: u32 = 1 << 31;` and
+/// `let z = -0.0;` are then read as the literal they name. A name also bound to
+/// anything else in the file is not followed (no scope analysis), so a reused
+/// name cannot turn an unrelated value into a negation.
+fn named_constants(file: &syn::File) -> BTreeMap<String, ConstKind> {
+    struct Collect(BTreeMap<String, BTreeSet<Option<ConstKind>>>);
+    impl<'ast> Visit<'ast> for Collect {
+        fn visit_item_const(&mut self, node: &'ast syn::ItemConst) {
+            self.0
+                .entry(node.ident.to_string())
+                .or_default()
+                .insert(literal_kind(&node.expr));
+            visit::visit_item_const(self, node);
+        }
+        fn visit_item_static(&mut self, node: &'ast syn::ItemStatic) {
+            self.0
+                .entry(node.ident.to_string())
+                .or_default()
+                .insert(literal_kind(&node.expr));
+            visit::visit_item_static(self, node);
+        }
+        fn visit_local(&mut self, node: &'ast syn::Local) {
+            let pat = match &node.pat {
+                Pat::Type(t) => &*t.pat,
+                p => p,
+            };
+            if let Pat::Ident(pi) = pat {
+                let kind = node.init.as_ref().and_then(|i| literal_kind(&i.expr));
+                self.0.entry(pi.ident.to_string()).or_default().insert(kind);
+            }
+            visit::visit_local(self, node);
+        }
+    }
+    let mut c = Collect(BTreeMap::new());
+    c.visit_file(file);
+    c.0.into_iter()
+        .filter_map(
+            |(name, kinds)| match kinds.into_iter().collect::<Vec<_>>().as_slice() {
+                [Some(k)] => Some((name, *k)),
+                _ => None,
+            },
+        )
+        .collect()
+}
+
 /// `-0.0` specifically (not `0.0`): `0.0 - x` is a different, incidentally
 /// safer operation (it forces `+0` for a `+0` input instead of propagating
 /// `x`'s own sign), so only the negative-zero spelling is treated as negation.
+/// A name bound to `-0.0` counts too ([`named_constants`]).
 fn is_negative_zero_literal(e: &Expr) -> bool {
-    matches!(peel(e), Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_zero_literal(&u.expr))
+    literal_kind(e) == Some(ConstKind::NegZero) || named_kind(e) == Some(ConstKind::NegZero)
 }
 
-/// `-1.0` specifically.
+/// `-1.0` specifically, as a literal or through a name.
 fn is_negative_one_literal(e: &Expr) -> bool {
-    matches!(peel(e), Expr::Unary(u) if matches!(u.op, UnOp::Neg(_)) && is_float_one_literal(&u.expr))
+    literal_kind(e) == Some(ConstKind::NegOne) || named_kind(e) == Some(ConstKind::NegOne)
 }
 
 /// A SIMD splat of a literal: `vdup*_n_*(lit)` / `vmov*_n_*(lit)` /
-/// `_mm*_set1_p[sd](lit)`, true when `lit` satisfies `pred`.
+/// `_mm*_set1_*(lit)` (float or integer lanes), true when `lit` satisfies `pred`.
 fn is_simd_splat_of(e: &Expr, pred: &dyn Fn(&Expr) -> bool) -> bool {
     let Expr::Call(c) = peel(e) else { return false };
     let Some(name) = call_name(c) else {
         return false;
     };
     let splat = (name.starts_with("vdup") || name.starts_with("vmov")) && name.contains("_n_")
-        || (name.starts_with("_mm") && (name.ends_with("_set1_ps") || name.ends_with("_set1_pd")));
+        || (name.starts_with("_mm") && name.contains("_set1_"));
     splat && c.args.len() == 1 && pred(&c.args[0])
 }
 
-/// The sign bit of an f32 or f64 as an integer literal or shift:
-/// `0x8000_0000`, `1 << 31`, `0x8000_0000_0000_0000`, `1 << 63`.
+/// A vector of negative zeros: a float splat of `-0.0`, or the sign-bit
+/// integer mask reinterpreted as floats (`_mm*_castsi*_p[sd](_mm*_set1_epi32(SIGN))`,
+/// `vreinterpret*_f32_u32(vdup*_n_u32(SIGN))` and the 64-bit forms).
+fn is_simd_negative_zero(e: &Expr) -> bool {
+    if is_simd_splat_of(e, &|x| is_negative_zero_literal(x)) {
+        return true;
+    }
+    let Expr::Call(c) = peel(e) else { return false };
+    let Some(name) = call_name(c) else {
+        return false;
+    };
+    let cast = (name.starts_with("_mm") && name.contains("_castsi"))
+        || (name.starts_with("vreinterpret") && (name.contains("_f32_") || name.contains("_f64_")));
+    cast && c.args.len() == 1 && is_simd_splat_of(&c.args[0], &is_sign_mask)
+}
+
+/// The sign bit of an f32 or f64 as an integer literal, shift, or a name bound
+/// to one: `0x8000_0000`, `1 << 31`, `0x8000_0000_0000_0000`, `1 << 63`.
 fn is_sign_mask(e: &Expr) -> bool {
+    is_sign_mask_literal(e) || named_kind(e) == Some(ConstKind::SignMask)
+}
+
+fn is_sign_mask_literal(e: &Expr) -> bool {
     match peel(e) {
         Expr::Lit(l) => matches!(&l.lit, Lit::Int(i)
             if matches!(i.base10_parse::<u64>(), Ok(0x8000_0000) | Ok(0x8000_0000_0000_0000))),
         Expr::Binary(b) if matches!(b.op, BinOp::Shl(_)) => {
             matches!(peel(&b.left), Expr::Lit(l) if matches!(&l.lit, Lit::Int(i) if matches!(i.base10_parse::<u64>(), Ok(1))))
                 && matches!(peel(&b.right), Expr::Lit(l) if matches!(&l.lit, Lit::Int(i) if matches!(i.base10_parse::<u64>(), Ok(31) | Ok(63))))
+        }
+        // `0x8000_0000u32 as i32`, and `i32::MIN` / `i64::MIN` (the same bits)
+        Expr::Cast(c) => is_sign_mask_literal(&c.expr),
+        Expr::Path(p) => {
+            let segs: Vec<String> = p
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect();
+            matches!(segs.as_slice(), [t, m] if m == "MIN" && (t == "i32" || t == "i64"))
         }
         _ => false,
     }
@@ -417,7 +538,6 @@ fn is_negation_call_of(c: &ExprCall, target: &dyn Fn(&Expr) -> bool) -> bool {
         return false;
     };
     let args: Vec<&Expr> = c.args.iter().collect();
-    let neg_zero = |e: &Expr| is_negative_zero_literal(e);
     let neg_one = |e: &Expr| is_negative_one_literal(e);
     match (name.as_str(), args.as_slice()) {
         ("neg", [x]) => target(x),
@@ -433,7 +553,7 @@ fn is_negation_call_of(c: &ExprCall, target: &dyn Fn(&Expr) -> bool) -> bool {
             _ => false,
         },
         (n, [x]) if n.starts_with("vneg") => target(x),
-        (n, [z, x]) if n.starts_with("vsub") => is_simd_splat_of(z, &neg_zero) && target(x),
+        (n, [z, x]) if n.starts_with("vsub") => is_simd_negative_zero(z) && target(x),
         (n, [x, k]) if n.starts_with("vmul") && n.contains("_n_") => neg_one(k) && target(x),
         (n, [x, y]) if n.starts_with("vmul") => {
             (is_simd_splat_of(y, &neg_one) && target(x))
@@ -442,13 +562,12 @@ fn is_negation_call_of(c: &ExprCall, target: &dyn Fn(&Expr) -> bool) -> bool {
         (n, [x, y])
             if n.starts_with("_mm") && (n.ends_with("_xor_ps") || n.ends_with("_xor_pd")) =>
         {
-            (is_simd_splat_of(y, &neg_zero) && target(x))
-                || (is_simd_splat_of(x, &neg_zero) && target(y))
+            (is_simd_negative_zero(y) && target(x)) || (is_simd_negative_zero(x) && target(y))
         }
         (n, [z, x])
             if n.starts_with("_mm") && (n.ends_with("_sub_ps") || n.ends_with("_sub_pd")) =>
         {
-            is_simd_splat_of(z, &neg_zero) && target(x)
+            is_simd_negative_zero(z) && target(x)
         }
         (n, [x, y])
             if n.starts_with("_mm") && (n.ends_with("_mul_ps") || n.ends_with("_mul_pd")) =>
@@ -694,11 +813,32 @@ impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
     }
 
     fn visit_expr_call(&mut self, node: &'ast ExprCall) {
-        self.count(path_call_fma_kind(node));
+        let kind = path_call_fma_kind(node);
+        self.count(kind);
         if is_negation_call_of(node, &is_fma_result) {
             self.record_finding_at(node.func.span());
         }
-        visit::visit_expr_call(self, node);
+        if kind.is_some() {
+            // the callee path is the call itself: only the arguments are visited,
+            // so `visit_expr_path` sees a fma-family path only where it is a value
+            for arg in &node.args {
+                self.visit_expr(arg);
+            }
+        } else {
+            visit::visit_expr_call(self, node);
+        }
+    }
+
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        if node
+            .path
+            .segments
+            .last()
+            .is_some_and(|s| fma_kind(&s.ident.to_string()).is_some())
+        {
+            self.record_kind_at(node.span(), FindingKind::AliasedFma);
+        }
+        visit::visit_expr_path(self, node);
     }
 
     fn visit_item_use(&mut self, node: &'ast ItemUse) {
@@ -942,7 +1082,9 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
                 findings: Vec::new(),
                 counts: FileCounts::default(),
             };
+            NAMED.with(|n| *n.borrow_mut() = named_constants(&parsed));
             visitor.visit_file(&parsed);
+            NAMED.with(|n| n.borrow_mut().clear());
             totals.unary_neg_exprs += visitor.counts.unary_neg_exprs;
             totals.mul_add_calls += visitor.counts.mul_add_calls;
             totals.scalar_fma_calls += visitor.counts.scalar_fma_calls;
@@ -1044,7 +1186,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
                     "macro 呼び出しの中に fma-family の名前がある、AST 未検証 — allowlist に理由付きで明記する"
                 }
                 FindingKind::AliasedFma => {
-                    "fma-family を別名で import している、検査が名前で見るので見えなくなる — 元の名前で import する"
+                    "fma-family を別名で import している、または値として使っている、検査が呼び出しの名前で見るので見えなくなる — 元の名前で直接呼ぶ"
                 }
             };
             errors.push(format!(
@@ -1823,11 +1965,28 @@ mod tests {
         assert_eq!(r.macro_hits, 1);
     }
 
+    #[test]
+    fn a_name_bound_to_negative_zero_and_to_something_else_is_not_followed() {
+        let followed = "fn f(a: f32, b: f32, c: f32) -> f32 {\n    let z = -0.0f32;\n    z - a.mul_add(b, c)\n}\n";
+        assert_eq!(run(&[(SRC, followed)], None).violations, 1);
+        let reused = "fn g() -> f32 {\n    let z = 3.0;\n    z\n}\nfn f(a: f32, b: f32, c: f32) -> f32 {\n    let z = -0.0f32;\n    z - a.mul_add(b, c)\n}\n";
+        assert_eq!(run(&[(SRC, reused)], None).violations, 0);
+    }
+
+    #[test]
+    fn a_fma_family_path_used_as_a_value_is_refused() {
+        let src = "fn f(v: &[(f32, f32, f32)]) -> Vec<f32> {\n    v.iter().map(|&(a, b, c)| a).map(f32::sqrt).collect()\n}\nfn g(a: f32, b: f32, c: f32) -> f32 {\n    [a].iter().map(|&x| x).fold(c, |acc, x| f32::mul_add(x, b, acc))\n}\nfn h() -> fn(f64, f64, f64) -> f64 {\n    libm::fma\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert_eq!(r.aliases, 1, "{:?}", r.errors);
+        assert_eq!(r.scalar_fma_calls + r.mul_add_calls, 1);
+    }
+
     /// Every probe of `tools/fneg-fma-ir-probes` (shared with the IR check's
     /// tests) with its `expect-syn` verdict: `flag` must be found, `clean` must
-    /// not, and `miss` (a shape beyond a syntax tree: a closure, a wrapper
-    /// function, a tuple field) must stay unfound so the documented limit of
-    /// this pre-check is pinned; the IR check covers those.
+    /// not, `refused` must fail as a renamed or value-used fma, and `miss` (a
+    /// shape beyond a syntax tree: a closure, a wrapper function, a tuple field)
+    /// must stay unfound so the documented limit of this pre-check is pinned; the
+    /// IR check covers those.
     #[test]
     fn every_shared_probe_has_its_expected_syntax_tree_verdict() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fneg-fma-ir-probes");
@@ -1852,7 +2011,8 @@ mod tests {
             let found = r.violations > 0;
             let ok = match expect.as_str() {
                 "flag" => found,
-                "clean" | "miss" => !found,
+                "clean" | "miss" => !found && r.aliases == 0,
+                "refused" => r.aliases > 0,
                 other => panic!("{}: unknown expect-syn {other}", probe.display()),
             };
             if !ok {
@@ -1863,7 +2023,9 @@ mod tests {
                 ));
             }
             assert!(
-                r.fma_calls > 0 || probe.to_string_lossy().contains("no_fma"),
+                r.fma_calls > 0
+                    || expect == "refused"
+                    || probe.to_string_lossy().contains("no_fma"),
                 "{}: no fma call counted",
                 probe.display()
             );

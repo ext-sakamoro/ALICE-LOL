@@ -113,6 +113,26 @@ class Probes(unittest.TestCase):
         self.assertTrue(loc.startswith("tools/fneg-fma-ir-probes/01_bare_unary.rs:5:"), loc)
 
 
+    def test_library_files_without_rust_src_are_not_taken_for_the_crate(self):
+        # without the rust-src component the standard library's DIFile entries are
+        # relative names under the remapped /rustc/<hash> directory (seen on CI);
+        # derive that form from a real build and check the location still resolves
+        # to the probe, not to library/core/src/ops/arith.rs
+        target = self.targets["aarch64"]
+        probe = PROBES / "03_neg_method.rs"
+        ll = Path(self.tmp.name) / "remapped-03.ll"
+        text = compile_probe(probe, target, ll)
+        remapped = re.sub(
+            r'!DIFile\(filename: "[^"]*?/(library/[^"]+)", directory: "[^"]*"',
+            r'!DIFile(filename: "\1", directory: "/rustc/0000000000000000000000000000000000000000"',
+            text)
+        self.assertNotEqual(remapped, text, "no library DIFile entry was rewritten")
+        found = g.analyse(remapped).findings
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].location.startswith("tools/fneg-fma-ir-probes/03_neg_method.rs:"),
+                        found[0].location)
+
+
 class Counts(unittest.TestCase):
     def analysis(self, fma: int, functions: int = 3) -> g.Analysis:
         return g.Analysis(fma_calls=fma, functions=functions)
