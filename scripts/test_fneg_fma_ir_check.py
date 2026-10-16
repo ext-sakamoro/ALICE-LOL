@@ -122,11 +122,15 @@ class Probes(unittest.TestCase):
         probe = PROBES / "03_neg_method.rs"
         ll = Path(self.tmp.name) / "remapped-03.ll"
         text = compile_probe(probe, target, ll)
+        # (a toolchain without rust-src already writes this form; one with it writes
+        # absolute paths, which are rewritten into it)
+        library = r'!DIFile\(filename: "(?:[^"]*?/)?(library/[^"]+)", directory: "[^"]*"'
         remapped = re.sub(
-            r'!DIFile\(filename: "[^"]*?/(library/[^"]+)", directory: "[^"]*"',
+            library,
             r'!DIFile(filename: "\1", directory: "/rustc/0000000000000000000000000000000000000000"',
             text)
-        self.assertNotEqual(remapped, text, "no library DIFile entry was rewritten")
+        self.assertTrue(re.search(r'!DIFile\(filename: "library/', remapped),
+                        "no standard-library DIFile entry in the IR")
         found = g.analyse(remapped).findings
         self.assertEqual(len(found), 1)
         self.assertTrue(found[0].location.startswith("tools/fneg-fma-ir-probes/03_neg_method.rs:"),

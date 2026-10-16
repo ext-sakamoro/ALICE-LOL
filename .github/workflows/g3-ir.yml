@@ -124,7 +124,9 @@ jobs:
           key: g3-ir-${{ matrix.target }}
       - name: Probe tests (each probe compiled for both architectures, expected verdicts)
         run: python3 scripts/test_fneg_fma_ir_check.py
+      # runs even when the probe tests failed, so both results are reported
       - name: No negated fma result in alice-lol's release IR
+        if: ${{ !cancelled() }}
         env:
           CARGO_TARGET_DIR: target/g3-ir
         run: python3 scripts/fneg_fma_ir_check.py --package alice-lol --all-features --target ${{ matrix.target }}
