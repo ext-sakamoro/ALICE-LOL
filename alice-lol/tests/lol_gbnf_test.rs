@@ -453,3 +453,47 @@ fn rejects_an_unknown_audit_clause() {
     assert!(rejects(g, law));
     assert!(alice_lol::runtime_parser::parse_law(law).is_err());
 }
+
+// ─── units declarations (the `units` rule): the grammar and `parse_declared` agree ──────
+
+#[test]
+fn accepts_every_declared_unit_and_purpose_the_parser_accepts() {
+    use alice_lol::units::{Purpose, Unit, UnitsDecl};
+    let g = lol_grammar();
+    let mut compared = 0;
+    for unit in Unit::ALL {
+        for purpose in Purpose::ALL {
+            for body in [
+                "sphere(1.0)",
+                "program(sphere(1.0), entities(box3d(0.1, 0.1, 0.1)), rest(500))",
+            ] {
+                let text = format!("units({}, {}, {body})", unit.name(), purpose.name());
+                let parsed = alice_lol::runtime_parser::parse_declared(&text);
+                let valid = UnitsDecl::new(unit, purpose).is_some();
+                assert_eq!(parsed.is_ok(), valid, "{text}: {parsed:?}");
+                assert_eq!(accepts(g, &text), valid, "{text}");
+                compared += 1;
+            }
+        }
+    }
+    assert_eq!(compared, 20);
+}
+
+#[test]
+fn rejects_unknown_nested_and_misplaced_units_declarations() {
+    let g = lol_grammar();
+    for text in [
+        "units(km, print, sphere(1.0))",
+        "units(mm, show, sphere(1.0))",
+        "units(mm, print, units(mm, print, sphere(1.0)))",
+        "union(units(mm, print, sphere(1.0)), sphere(1.0))",
+        "units(mm, print)",
+        "units(mm, print, sphere(1.0)) sphere(1.0)",
+    ] {
+        assert!(rejects(g, text), "grammar accepted {text:?}");
+        assert!(
+            alice_lol::runtime_parser::parse_declared(text).is_err(),
+            "parser accepted {text:?}"
+        );
+    }
+}
