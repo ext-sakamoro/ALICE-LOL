@@ -103,7 +103,7 @@ const INTENT_SYNTAX: &[&str] = &[
 ];
 
 /// The clause keywords of an audit law (`parse_law`), one per line of the law
-const LAW_SYNTAX: &[&str] = &["audit", "evidence", "expect", "range"];
+const LAW_SYNTAX: &[&str] = &["audit", "evidence", "expect", "range", "includes"];
 
 /// SDF names the `lol!` macro does not accept (runtime parser only), in
 /// addition to the whole `stdlib` group

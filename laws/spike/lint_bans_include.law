@@ -1,0 +1,17 @@
+# A lint configuration bans at least the listed methods
+law lint_bans_include
+kind audit
+claim a lint configuration bans every method of the list, and may ban more
+claim the comparison is of names as text, in any order, duplicates ignored
+source ALICE-Law G1 (the methods a crate that states a deterministic result must not call)
+
+input compared 1
+x-input banned list of text      # the method names the configuration bans
+
+begin audit
+audit lint-bans-include
+evidence compared
+includes banned f32::sin f32::cos f64::sin_cos
+end audit
+
+verdict the verdict of the audit block for the given measurements

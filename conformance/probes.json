@@ -1925,5 +1925,93 @@
    "hh": null
   },
   "expect": "rejected"
+ },
+ {
+  "note": "includes: a superset supports",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 1,
+   "banned": [
+    "f32::sin",
+    "f32::cos",
+    "f64::sin_cos",
+    "f64::powi"
+   ]
+  },
+  "expect": {
+   "verdict": "supports",
+   "subject": null
+  }
+ },
+ {
+  "note": "includes: one listed value missing breaks",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 1,
+   "banned": [
+    "f32::sin",
+    "f32::cos"
+   ]
+  },
+  "expect": {
+   "verdict": "breaks",
+   "subject": "banned"
+  }
+ },
+ {
+  "note": "includes: not measured is undecided",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 1
+  },
+  "expect": {
+   "verdict": "undecided",
+   "subject": "banned"
+  }
+ },
+ {
+  "note": "includes: a value that is not text makes the key not measured",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 1,
+   "banned": [
+    "f32::sin",
+    2,
+    "f64::sin_cos",
+    "f32::cos"
+   ]
+  },
+  "expect": {
+   "verdict": "undecided",
+   "subject": "banned"
+  }
+ },
+ {
+  "note": "includes: values compare as text (case matters)",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 1,
+   "banned": [
+    "F32::SIN",
+    "f32::cos",
+    "f64::sin_cos"
+   ]
+  },
+  "expect": {
+   "verdict": "breaks",
+   "subject": "banned"
+  }
+ },
+ {
+  "note": "includes: evidence comes first",
+  "law": "lint_bans_include",
+  "inputs": {
+   "compared": 0,
+   "banned": []
+  },
+  "expect": {
+   "verdict": "no_evidence",
+   "subject": "compared"
+  }
  }
 ]
