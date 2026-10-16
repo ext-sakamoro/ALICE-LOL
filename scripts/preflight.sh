@@ -371,6 +371,9 @@ step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 step "ci.yml / doc-programs: Programs in the documents (parse, grammar, closed export under 1M triangles, resolved at the export resolution)"
 ( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh --release -p alice-lol --features llm-bridge --test doc_programs -- --include-ignored )
 
+step "ci.yml / doc-programs: Argument kinds (an H argument grows the shape by twice its change, an L argument does not)"
+( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh --release -p alice-lol --test args_kinds -- --include-ignored )
+
 step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-same / pairwise, ~35,000 cases, ~90s)"
 ( export CARGO_TERM_COLOR="always"; cargo test -p alice-lol --test degenerate_grid -- --ignored --nocapture )
 
