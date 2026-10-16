@@ -656,6 +656,10 @@ jobs:
         run: python scripts/test_gen_gbnf.py
       - name: gen-gbnf (lol.gbnf と配布用の写しが language/constructs.toml から生成したものと一致)
         run: python scripts/gen_gbnf.py --check
+      - name: gen-units-doc oracle (検査器自身の試験)
+        run: python scripts/test_gen_units_doc.py
+      - name: gen-units-doc (文書の単位の段落が language/constructs.toml の unit 表から生成したものと一致)
+        run: python scripts/gen_units_doc.py --check
       - name: lock-single-version oracle (検査器自身の試験)
         run: python scripts/test_lock_single_version.py
       - name: lock-single-version (alice-* が 2 版以上 lock に入っていない)

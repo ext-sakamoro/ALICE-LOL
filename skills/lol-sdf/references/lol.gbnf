@@ -42,9 +42,30 @@
 # ─── Root ──────────────────────────────────────────────────────────────
 #
 # Either a bare SDF expression (Phase 2 Law, backward compatible) or a
-# full `program(...)` wrapping SDF + entity registry + Intent (Phase 3).
+# full `program(...)` wrapping SDF + entity registry + Intent (Phase 3),
+# optionally declared with its units and purpose (root only, not nested).
 
-root ::= ws (program | expr | law) ws
+root ::= ws (units | program | expr | law) ws
+
+# ─── Units (`runtime_parser::parse_declared`) ─────────────────────────
+#
+#   units(mm, print, <expr | program>)
+#   units(world, render, <expr | program>)
+#
+# The unit says what one program unit is (a length unit, or `world` for a
+# scene with no physical size); the purpose says what the program is for.
+# A unit with no length is accepted for `render` only. The unit names come
+# from the `unit` table of `alice-lol/language/constructs.toml`.
+
+units ::= "units" ws "(" ws unitpurpose ws "," ws (program | expr) ws ")"
+unitpurpose ::= unit_length ws "," ws purpose | unit_render_only ws "," ws "render"
+unit_length ::= "mm"
+              | "cm"
+              | "m"
+              | "in"
+unit_render_only ::= "world"
+purpose ::= "print"
+          | "render"
 
 # ─── 監査 Law (行ごとに 1 項、`runtime_parser::parse_law`) ──────────────
 #

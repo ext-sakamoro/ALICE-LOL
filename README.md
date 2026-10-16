@@ -200,6 +200,19 @@ grasp release catch walk gaze point throw push pull turn align follow avoid
 rest latent seq par music
 ```
 
+### Units
+
+A program says what its numbers are with one declaration at the root:
+`units(<unit>, <purpose>, <program>)`, for example `units(mm, print, cylinder(50, 5))`. The units
+are `mm`, `cm`, `m`, `in` and `world` (no physical size, `render` only), the purposes `print` and
+`render`; the table is `alice-lol/language/constructs.toml`, from which the grammar and the
+documents' units paragraph are generated. `runtime_parser::parse_declared` reads the declaration
+(`parse_lol` / `parse_program` refuse one rather than drop it). Exporting a declared program
+(`print_export::lol_to_stl` / `lol_to_3mf` / `lol_to_fbx`, or `declared_config`) takes the scale
+from the unit and the bounds from the shape's own box; a program without a declaration is exported
+with the caller's `PrintConfig` as before and gets the warning `LOL-U001`
+(`ExportStats::warnings`).
+
 ## Audit laws (`audit_law`)
 
 An audit law states what a check must find, never how to measure it. One clause
