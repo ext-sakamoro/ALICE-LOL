@@ -198,7 +198,9 @@ program は root に 1 つの宣言で数値が何かを言う: `units(<unit>, <
 (`parse_lol` / `parse_program` は宣言を捨てずに error を返す) 宣言した program の書き出し
 (`print_export::lol_to_stl` / `lol_to_3mf` / `lol_to_fbx`、または `declared_config`) は倍率を単位から、
 範囲を形の外接箱から決める 宣言の無い program は今までどおり呼ぶ側の `PrintConfig` で書き出し、
-警告 `LOL-U001` を出す (`ExportStats::warnings`)
+警告 `LOL-U001` を出す (`ExportStats::warnings`) 0.4.x からの移行: 0.4.x の preset は 1 単位 = 10 mm で
+書き出し、文書は 20 mm と書いていた 宣言した program は宣言どおりの大きさで書き出すので、文書の例は
+文章に書かれた大きさ (0.4.x の既定の書き出しの 2 倍) で出る
 
 ## 監査法則 (`audit_law`)
 

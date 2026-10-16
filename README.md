@@ -211,7 +211,9 @@ documents' units paragraph are generated. `runtime_parser::parse_declared` reads
 (`print_export::lol_to_stl` / `lol_to_3mf` / `lol_to_fbx`, or `declared_config`) takes the scale
 from the unit and the bounds from the shape's own box; a program without a declaration is exported
 with the caller's `PrintConfig` as before and gets the warning `LOL-U001`
-(`ExportStats::warnings`).
+(`ExportStats::warnings`). Migrating from 0.4.x: the 0.4.x presets exported at 10 mm/unit while the
+documents said 20; a declared program is exported at its declared size, so the documented
+examples print at the size their text states (twice the 0.4.x default export).
 
 ## Audit laws (`audit_law`)
 
