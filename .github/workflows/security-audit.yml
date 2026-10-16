@@ -3,6 +3,7 @@ name: Security & Hygiene
 # ALICE-* 共通の CI 構成
 # ALICE-SDF v1.7.7 (commit 5a6056a) を base に ALICE-LOL 用に調整
 # ALICE-LOL は workspace (alice-lol / alice-lol-macro / alice-lol-humanoid)
+# 公開 API の crates.io 最新版に対する検査は semver-checks.yml (失敗させる)
 
 on:
   push:
@@ -313,64 +314,3 @@ jobs:
           name: coverage-summary
           path: ALICE-LOL/coverage-summary.txt
           retention-days: 30
-
-  semver-checks:
-    name: cargo-semver-checks (API compat、informational)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # ALICE-LOL は crates.io publish 予定 (現状 pending)、
-    # publish 済 version があれば default baseline (crates.io) 使用
-    # 未 publish なら --baseline-rev fallback
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: ALICE-LOL
-    steps:
-      # Real siblings, same layout as ci.yml / fuzz.yml (the manifest-only stubs
-      # that used to stand in here hid alice-sdf's whole dependency tree from
-      # audit / deny and their version had to be bumped by hand — 2026-09-16,
-      # alice-sdf 2.0.0). Everything the workspace path-depends on is checked
-      # out for real; unpublished siblings would need a stub again.
-      - uses: actions/checkout@v5
-        with:
-          path: ALICE-LOL
-          fetch-depth: 0
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ALICE-LOL
-
-      # version 明示 pin: `@latest` は rustc MSRV を追いかける (0.50.0 = 1.93+) ので、
-      # rust-toolchain.toml の pin が遅れると赤になる (2026-09-14 事案) toolchain と
-      # 一緒に月次で bump する
-      - name: Install cargo-semver-checks
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-semver-checks@0.50.0
-
-      # publish package 全て検査 (alice-lol / alice-lol-macro / alice-lol-humanoid)
-      # 未 publish crate は 自動で skip される
-      - name: Run cargo semver-checks
-        run: cargo semver-checks check-release --workspace

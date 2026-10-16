@@ -23,7 +23,6 @@ has_toolchain() { rustup toolchain list | grep -q "^$1"; }
 #   - security-audit.yml:audit:Install cargo-audit (needs network / runner-only)
 #   - security-audit.yml:deny:Install cargo-deny (needs network / runner-only)
 #   - security-audit.yml:coverage (job is continue-on-error: informational in CI)
-#   - security-audit.yml:semver-checks (job is continue-on-error: informational in CI)
 #   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_lol_parse] (no cargo / grep)
 #   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_lol_parse] (needs network / runner-only)
 #   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_parse] (no cargo / grep)
@@ -383,5 +382,12 @@ step "conformance.yml / corpus: score the reference implementation (corpus + pro
 ( export PYTHON="$conf_py" MIN_VECTORS="$(sed -n 's/^ *MIN_VECTORS: *//p' .github/workflows/conformance.yml)"
   conformance/score.sh --kind reader "$conf_py" conformance/ref_impl.py
   conformance/controls.sh )
+
+step "semver-checks.yml / semver-checks: semver gate (tests)"
+python3 scripts/test_semver_gate.py
+
+step "semver-checks.yml / semver-checks: semver gate (alice-lol, latest crates.io release, every consumer feature set)"
+need cargo-semver-checks "cargo install cargo-semver-checks --version 0.50.0 --locked"
+python3 scripts/semver_gate.py --manifest alice-lol/Cargo.toml --config .github/semver-gate.toml --target-dir "${CARGO_TARGET_DIR:-target}/semver"
 
 echo; echo "preflight OK"
