@@ -19,6 +19,7 @@ cd "$(dirname "$0")/.."
 DEFAULT_TARGETS=(
   "alice-lol|--lib law::|"
   "alice-lol|--test law_tests|"
+  "alice-lol|--test audit_law_includes|"
   "alice-lol|--test audit_law_parity|"
   "alice-lol|--test audit_law_semantics|"
     "alice-lol|--test law_id_oracle|"
