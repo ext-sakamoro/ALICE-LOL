@@ -52,6 +52,9 @@ pub const LOL_GBNF: &str = include_str!("../lol.gbnf");
 
 pub mod runtime_parser;
 
+/// 単位の宣言 (`units(<unit>, <purpose>, <program>)`)
+pub mod units;
+
 pub mod limits;
 
 /// Canonicalizing a user-supplied angle before it is converted to radians

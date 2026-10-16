@@ -17,8 +17,10 @@ usage: python3 scripts/gen_gbnf.py           write the generated files
        python3 scripts/gen_gbnf.py --check   compare instead (exit 1 on a difference)
 
 Either mode fails when the definition and the template do not agree: no rows, a name twice,
-a row whose rule has no place in the template, a `@names` place with no rows, or an `intent_*`
-row whose rule in the template spells a different name
+a row whose rule has no place in the template, a `@names` place with no rows, an `intent_*`
+row whose rule in the template spells a different name, no purpose values (or none named
+`render`), no unit rows, a unit whose `mm` is not a positive float, or a row whose `args` (the kind of each
+number argument) has another length than its rule's number count
 """
 from __future__ import annotations
 
@@ -58,6 +60,18 @@ def name_list(rule: str, names: list[str]) -> str:
     return "\n".join([first] + [f'{pad}| "{n}"' for n in names[1:]])
 
 
+def rule_numbers(rule: str) -> int | None:
+    """how many number arguments a `name_*` rule takes before its children (None: not known here)"""
+    m = re.fullmatch(r"name_(\d+)f(?:_child|_children)?", rule)
+    if m:
+        return int(m.group(1))
+    if rule in ("name_k_children",):
+        return 1
+    if rule in ("name_ab", "name_variadic", "name_child_only"):
+        return 0
+    return None
+
+
 def render(definition: dict, template: str) -> str:
     rows = definition.get("construct", [])
     if not rows:
@@ -71,6 +85,11 @@ def render(definition: dict, template: str) -> str:
         if name in seen:
             raise DefinitionError(f"construct {name!r} is defined twice")
         seen.add(name)
+        if "args" in row:
+            args, count = row["args"], rule_numbers(rule)
+            if not re.fullmatch(r"[LIACR]*", args) or (count is not None and len(args) != count):
+                raise DefinitionError(f"construct {name!r}: args {args!r} do not fit rule {rule} "
+                                      f"({count} numbers, kinds L I A C R)")
         if rule.startswith("intent_"):
             if not re.search(rf'^{re.escape(rule)} ::= "{re.escape(name)}"', template, re.M):
                 raise DefinitionError(f"intent row {name!r}: the template's {rule} does not spell it")
@@ -80,6 +99,21 @@ def render(definition: dict, template: str) -> str:
     if not hands:
         raise DefinitionError("the definition has no hand values")
     lists["hand"] = list(hands)
+    purposes = definition.get("purpose", [])
+    if not purposes or "render" not in purposes:
+        raise DefinitionError("the definition has no purpose values (render among them)")
+    lists["purpose"] = list(purposes)
+    units = definition.get("unit", [])
+    if not units:
+        raise DefinitionError("the definition has no unit rows")
+    for u in units:
+        if not NAME.match(u["name"]) or u["name"] in seen:
+            raise DefinitionError(f"unit name {u['name']!r} is not a lower-case identifier or is taken")
+        seen.add(u["name"])
+        mm = u.get("mm")
+        if mm is not None and not (isinstance(mm, float) and mm > 0):
+            raise DefinitionError(f"unit {u['name']!r}: mm must be a positive float")
+        lists.setdefault("unit_length" if mm is not None else "unit_render_only", []).append(u["name"])
 
     places = PLACE.findall(template)
     if len(places) != len(set(places)):
