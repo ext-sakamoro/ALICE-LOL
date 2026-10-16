@@ -62,7 +62,7 @@ def name_list(rule: str, names: list[str]) -> str:
 
 def rule_numbers(rule: str) -> int | None:
     """how many number arguments a `name_*` rule takes before its children (None: not known here)"""
-    m = re.fullmatch(r"name_(\d+)f(?:_child|_children)?", rule)
+    m = re.fullmatch(r"name_(\d+)[fk](?:_child|_children|_ab)?", rule)
     if m:
         return int(m.group(1))
     if rule in ("name_k_children",):
@@ -87,9 +87,9 @@ def render(definition: dict, template: str) -> str:
         seen.add(name)
         if "args" in row:
             args, count = row["args"], rule_numbers(rule)
-            if not re.fullmatch(r"[LIACR]*", args) or (count is not None and len(args) != count):
+            if not re.fullmatch(r"[LIACRX]*", args) or (count is not None and len(args) != count):
                 raise DefinitionError(f"construct {name!r}: args {args!r} do not fit rule {rule} "
-                                      f"({count} numbers, kinds L I A C R)")
+                                      f"({count} numbers, kinds L I A C R X)")
         if rule.startswith("intent_"):
             if not re.search(rf'^{re.escape(rule)} ::= "{re.escape(name)}"', template, re.M):
                 raise DefinitionError(f"intent row {name!r}: the template's {rule} does not spell it")
