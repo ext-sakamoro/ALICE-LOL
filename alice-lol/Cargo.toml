@@ -53,6 +53,9 @@ naga = { version = "24", default-features = false, features = ["wgsl-in", "glsl-
 # rustc へ通して確かめる、`#[test]` 内では compile error を起こすとテスト binary 全体が
 # ビルドできなくなるため、別プロセスで ui test を回す必要がある
 trybuild = "1"
+# tests/export_producer_stamp.rs: 書き出した STL / FBX を alice-sdf とは別の読み手で読む
+stl_io = "0.11"
+fbxcel = { version = "0.9", features = ["tree"] }
 
 [features]
 default = ["glsl"]

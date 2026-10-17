@@ -16,9 +16,9 @@
 //! println!("{stats}");
 //! ```
 
-use crate::print_export::{node_to_mesh, ExportError, Mesh, PrintConfig};
+use crate::print_export::{node_to_mesh, ExportError, Mesh, PrintConfig, LOL_EXPORT_STAMP};
 use crate::SdfNode;
-use alice_sdf::io::{export_fbx, export_obj, FbxConfig, FbxUpAxis, ObjConfig};
+use alice_sdf::io::{export_fbx_with_stamp, export_obj, FbxConfig, FbxUpAxis, ObjConfig};
 use glam::Vec3;
 use std::path::Path;
 
@@ -408,7 +408,7 @@ pub fn node_to_fbx_roblox(
         up_axis: FbxUpAxis::Y,
         ..FbxConfig::default()
     };
-    export_fbx(&mesh, &path, &fbx_config, None)?;
+    export_fbx_with_stamp(&mesh, &path, &fbx_config, None, &LOL_EXPORT_STAMP)?;
 
     Ok(build_stats(&mesh, &path, validation))
 }
