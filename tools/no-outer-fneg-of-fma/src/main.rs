@@ -133,7 +133,12 @@
 //!
 //! `scripts/no-outer-fneg-of-fma-allowlist.toml` holds `expected-fma-calls`
 //! (every fma-family call in the scanned files) and `expected-src-fma-calls`
-//! (those in a `src/` directory). Both must equal what the tool finds; a missing
+//! (the library's: those in a `src/` directory outside a test-only item, i.e. an
+//! item under `#[test]` or a `#[cfg(..)]` that holds only under `test` (`test`,
+//! `all(.., test, ..)`, an `any` of such); `cfg(not(test))` and feature or target
+//! predicates are library code). A test-only item is compiled out of the library,
+//! so its calls are not in the release IR the IR check reads; the output prints
+//! both counts. Both must equal what the tool finds; a missing
 //! header fails, and a repository without any fma call declares 0. Reading no
 //! file fails whatever the header says. `[[allow]]` entries name a finding by
 //! `path`, the exact trimmed `line` text and the `count` of findings with that
@@ -237,6 +242,8 @@ struct FileCounts {
     mul_add_calls: usize,
     scalar_fma_calls: usize,
     simd_fma_calls: usize,
+    /// fma-family calls inside a test-only item (see [`is_test_only`])
+    test_fma_calls: usize,
 }
 
 impl FileCounts {
@@ -250,6 +257,39 @@ struct Visitor<'a> {
     src: &'a str,
     findings: Vec<Finding>,
     counts: FileCounts,
+    /// how many enclosing items are test-only (`#[test]`, `#[cfg(test)]`, ...)
+    test_depth: usize,
+}
+
+/// `#[test]`, or a `#[cfg(..)]` whose predicate holds only under `cfg(test)`: `test`, `all(.., test, ..)`,
+/// `any(..)` whose every branch is test-only. `not(..)` never is (`cfg(not(test))` is library code), nor is a
+/// feature or target predicate. Such an item is compiled out of the library, so its fma calls are not in the
+/// release IR and do not count towards `expected-src-fma-calls`.
+fn is_test_only(attrs: &[syn::Attribute]) -> bool {
+    fn test_only(meta: &syn::Meta) -> bool {
+        match meta {
+            syn::Meta::Path(p) => p.is_ident("test"),
+            syn::Meta::List(l) => {
+                let Ok(nested) = l.parse_args_with(
+                    syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+                ) else {
+                    return false;
+                };
+                if l.path.is_ident("all") {
+                    nested.iter().any(test_only)
+                } else if l.path.is_ident("any") {
+                    !nested.is_empty() && nested.iter().all(test_only)
+                } else {
+                    false
+                }
+            }
+            syn::Meta::NameValue(_) => false,
+        }
+    }
+    attrs.iter().any(|a| {
+        a.path().is_ident("test")
+            || (a.path().is_ident("cfg") && a.parse_args::<syn::Meta>().is_ok_and(|m| test_only(&m)))
+    })
 }
 
 fn excerpt_at(src: &str, line: usize) -> String {
@@ -644,6 +684,9 @@ impl<'a> Visitor<'a> {
     }
 
     fn count(&mut self, kind: Option<FmaKind>) {
+        if kind.is_some() && self.test_depth > 0 {
+            self.counts.test_fma_calls += 1;
+        }
         match kind {
             Some(FmaKind::MulAdd) => self.counts.mul_add_calls += 1,
             Some(FmaKind::Scalar) => self.counts.scalar_fma_calls += 1,
@@ -804,6 +847,59 @@ impl<'a, 'ast> Visit<'ast> for IdentNegationFinder<'a> {
 }
 
 impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
+    fn visit_item(&mut self, node: &'ast syn::Item) {
+        let attrs: &[syn::Attribute] = match node {
+            syn::Item::Const(i) => &i.attrs,
+            syn::Item::Enum(i) => &i.attrs,
+            syn::Item::ExternCrate(i) => &i.attrs,
+            syn::Item::Fn(i) => &i.attrs,
+            syn::Item::ForeignMod(i) => &i.attrs,
+            syn::Item::Impl(i) => &i.attrs,
+            syn::Item::Macro(i) => &i.attrs,
+            syn::Item::Mod(i) => &i.attrs,
+            syn::Item::Static(i) => &i.attrs,
+            syn::Item::Struct(i) => &i.attrs,
+            syn::Item::Trait(i) => &i.attrs,
+            syn::Item::TraitAlias(i) => &i.attrs,
+            syn::Item::Type(i) => &i.attrs,
+            syn::Item::Union(i) => &i.attrs,
+            syn::Item::Use(i) => &i.attrs,
+            _ => &[],
+        };
+        let test = is_test_only(attrs);
+        self.test_depth += usize::from(test);
+        visit::visit_item(self, node);
+        self.test_depth -= usize::from(test);
+    }
+
+    fn visit_impl_item(&mut self, node: &'ast syn::ImplItem) {
+        let attrs: &[syn::Attribute] = match node {
+            syn::ImplItem::Const(i) => &i.attrs,
+            syn::ImplItem::Fn(i) => &i.attrs,
+            syn::ImplItem::Type(i) => &i.attrs,
+            syn::ImplItem::Macro(i) => &i.attrs,
+            _ => &[],
+        };
+        let test = is_test_only(attrs);
+        self.test_depth += usize::from(test);
+        visit::visit_impl_item(self, node);
+        self.test_depth -= usize::from(test);
+    }
+
+    fn visit_trait_item(&mut self, node: &'ast syn::TraitItem) {
+        let attrs: &[syn::Attribute] = match node {
+            syn::TraitItem::Const(i) => &i.attrs,
+            syn::TraitItem::Fn(i) => &i.attrs,
+            syn::TraitItem::Type(i) => &i.attrs,
+            syn::TraitItem::Macro(i) => &i.attrs,
+            _ => &[],
+        };
+        let test = is_test_only(attrs);
+        self.test_depth += usize::from(test);
+        visit::visit_trait_item(self, node);
+        self.test_depth -= usize::from(test);
+    }
+
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         self.count(method_fma_kind(node));
         if is_neg_method_call(node) && is_fma_result(&node.receiver) {
@@ -938,8 +1034,10 @@ struct Report {
     simd_fma_calls: usize,
     /// every fma-family call
     fma_calls: usize,
-    /// fma-family calls in files under a `src/` directory
+    /// fma-family calls of the library: in files under a `src/` directory, outside test-only items
     src_fma_calls: usize,
+    /// fma-family calls in test-only items (`#[test]`, `#[cfg(test)]`, ...) of files under `src/`
+    src_test_fma_calls: usize,
     violations: usize,
     allowed: usize,
     macro_hits: usize,
@@ -1047,6 +1145,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
     let mut files = 0usize;
     let mut totals = FileCounts::default();
     let mut src_fma_calls = 0usize;
+    let mut src_test_fma_calls = 0usize;
     let mut found: Vec<Finding> = Vec::new();
 
     for src_dir in src_dirs {
@@ -1081,6 +1180,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
                 src: &src,
                 findings: Vec::new(),
                 counts: FileCounts::default(),
+                test_depth: 0,
             };
             NAMED.with(|n| *n.borrow_mut() = named_constants(&parsed));
             visitor.visit_file(&parsed);
@@ -1090,7 +1190,9 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             totals.scalar_fma_calls += visitor.counts.scalar_fma_calls;
             totals.simd_fma_calls += visitor.counts.simd_fma_calls;
             if rel.split('/').any(|p| p == "src") {
-                src_fma_calls += visitor.counts.fma_calls();
+                // the library's own calls: a test-only item in src/ is not in the release build
+                src_fma_calls += visitor.counts.fma_calls() - visitor.counts.test_fma_calls;
+                src_test_fma_calls += visitor.counts.test_fma_calls;
             }
             found.extend(visitor.findings);
         }
@@ -1105,6 +1207,7 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
         simd_fma_calls: totals.simd_fma_calls,
         fma_calls: totals.fma_calls(),
         src_fma_calls,
+        src_test_fma_calls,
         violations: 0,
         allowed: 0,
         macro_hits: 0,
@@ -1246,13 +1349,14 @@ fn main() {
         println!("{e}");
     }
     println!(
-        "compared: files parsed {}, fma calls {} (mul_add {}, scalar fma {}, simd {}; in src/ {}), unary-neg exprs examined {}, fma under neg {}, allowed (tests/examples) {}, macro fma mentions {}, macro allowed {}, renamed fma imports {}",
+        "compared: files parsed {}, fma calls {} (mul_add {}, scalar fma {}, simd {}; library in src/ {}, test-only in src/ {}), unary-neg exprs examined {}, fma under neg {}, allowed (tests/examples) {}, macro fma mentions {}, macro allowed {}, renamed fma imports {}",
         report.files,
         report.fma_calls,
         report.mul_add_calls,
         report.scalar_fma_calls,
         report.simd_fma_calls,
         report.src_fma_calls,
+        report.src_test_fma_calls,
         report.unary_neg_exprs,
         report.violations,
         report.allowed,
@@ -1531,6 +1635,70 @@ mod tests {
     fn a_call_found_while_zero_is_declared_fails() {
         let e = expected_errors(&[(SRC, CLEAN)], Some(&header(0, 0)));
         assert_eq!(e.len(), 2, "{e:?}");
+    }
+
+    /// (library, test-only) fma counts of one src file
+    fn lib_test(src: &str) -> (usize, usize) {
+        let r = run(&[(SRC, src)], None);
+        (r.src_fma_calls, r.src_test_fma_calls)
+    }
+
+    #[test]
+    fn a_cfg_test_module_in_src_is_not_library_code() {
+        let src = "pub fn lib(a: f32, b: f32, c: f32) -> f32 { a.mul_add(b, c) }\n\
+                   #[cfg(test)]\nmod tests {\n    fn t(a: f32) -> f32 { a.mul_add(a, a) }\n    \
+                   mod inner { fn u(a: f32) -> f32 { a.mul_add(a, a) } }\n}\n";
+        assert_eq!(lib_test(src), (1, 2));
+    }
+
+    #[test]
+    fn test_only_predicates_and_attributes() {
+        for (attr, test_only) in [
+            ("#[test]", true),
+            ("#[cfg(test)]", true),
+            ("#[cfg(all(test, feature = \"x\"))]", true),
+            ("#[cfg(all(feature = \"x\", test))]", true),
+            ("#[cfg(any(test, all(test, unix)))]", true),
+            ("#[cfg(not(test))]", false),
+            ("#[cfg(feature = \"x\")]", false),
+            ("#[cfg(any(test, feature = \"x\"))]", false),
+            ("#[cfg(all(not(test), unix))]", false),
+            ("#[cfg_attr(test, allow(dead_code))]", false),
+        ] {
+            let src = format!("{attr}\nfn f(a: f32) -> f32 {{ a.mul_add(a, a) }}\n");
+            let want = if test_only { (0, 1) } else { (1, 0) };
+            assert_eq!(lib_test(&src), want, "{attr}");
+        }
+    }
+
+    #[test]
+    fn a_test_only_impl_item_and_trait_item_are_not_library_code() {
+        let src = "struct S;\nimpl S {\n    pub fn lib(a: f32) -> f32 { a.mul_add(a, a) }\n    \
+                   #[cfg(test)]\n    fn t(a: f32) -> f32 { a.mul_add(a, a) }\n}\n\
+                   trait T {\n    #[cfg(test)]\n    fn d(a: f32) -> f32 { a.mul_add(a, a) }\n}\n";
+        assert_eq!(lib_test(src), (1, 2));
+    }
+
+    #[test]
+    fn a_test_only_impl_block_is_not_library_code() {
+        let src = "struct S;\n#[cfg(test)]\nimpl S { fn t(a: f32) -> f32 { a.mul_add(a, a) } }\n";
+        assert_eq!(lib_test(src), (0, 1));
+    }
+
+    #[test]
+    fn the_header_compares_the_library_count_and_the_output_prints_both() {
+        let src = "pub fn lib(a: f32) -> f32 { a.mul_add(a, a) }\n#[cfg(test)]\nmod tests { fn t(a: f32) -> f32 { a.mul_add(a, a) } }\n";
+        // every call 2, library calls 1: the src header is the library's
+        assert_eq!(expected_errors(&[(SRC, src)], Some(&header(2, 1))), Vec::<String>::new());
+        assert!(!expected_errors(&[(SRC, src)], Some(&header(2, 2))).is_empty());
+    }
+
+    #[test]
+    fn a_fma_in_a_test_only_macro_in_src_still_fails() {
+        // a macro's tokens are opaque: a fma mentioned in one stays a hard failure in src/, test-only or not
+        let src = "#[cfg(test)]\nmod tests {\n    macro_rules! m { ($a:expr) => { $a.mul_add($a, $a) } }\n}\n";
+        let r = run(&[(SRC, src)], None);
+        assert!(r.errors.iter().any(|e| e.contains("macro")), "{:?}", r.errors);
     }
 
     #[test]
