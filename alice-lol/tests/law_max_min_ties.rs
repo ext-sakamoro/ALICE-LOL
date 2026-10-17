@@ -13,7 +13,8 @@
 //! which a positive NaN reaches, and the min to `a.is_sign_negative()`, which a negative
 //! NaN reaches, so each sign catches one of the two.
 //!
-//! Mutants: dropping the NaN rule of `det_math::max` or of `det_math::min`, or a mutant
+//! Mutants: dropping a NaN rule of `det_math::max` or of `det_math::min` (for the first or,
+//! with the roblox trailing-NaN case in `law_max_min_ties_roblox.rs`, the second operand), or a mutant
 //! that returns the first operand (or -0) for an equal pair of zeros, turns these tests
 //! red. The one mutant they leave green is `det_math::max` returning the second operand `b`
 //! on any equal pair (dropping `|| !a.is_sign_negative()`): it differs from the Law only for

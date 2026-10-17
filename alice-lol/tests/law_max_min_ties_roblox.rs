@@ -50,3 +50,25 @@ fn roblox_bounds_of_mixed_zeros_in_both_orders_and_a_nan_vertex() {
         [f.x.to_bits(), f.y.to_bits(), f.z.to_bits()]
     );
 }
+
+/// A NaN vertex that comes last, after a negative coordinate, is the second operand of the
+/// running max / min: the Law keeps the finite lane, so the extent of a single finite point is
+/// +0 in every lane, for a NaN of either sign (a max that drops its rule for a NaN second
+/// operand would return the NaN when the first operand is sign-negative)
+#[test]
+fn roblox_bounds_skip_a_trailing_nan_vertex_of_either_sign() {
+    let config = RobloxConfig::default();
+    for nan in [f32::from_bits(0x7FC0_0000), f32::from_bits(0xFFC0_0000)] {
+        let v = validate_for_roblox(
+            &mesh_of(&[Vec3::new(-3.0, -1.0, -1.0), Vec3::new(nan, nan, nan)]),
+            &config,
+        )
+        .bounds_studs;
+        assert_eq!(
+            [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()],
+            [POS_ZERO; 3],
+            "trailing NaN {:#x}",
+            nan.to_bits()
+        );
+    }
+}
