@@ -122,6 +122,10 @@ python3 scripts/test_fuzz_runs.py
 python3 scripts/license_check.py
 python3 scripts/test_published_source_check.py
 
+step "law-readme-block.yml: README ALICE-Law block (tests, then the check the job runs, at the block's ALICE-Law pin)"
+python3 scripts/test_law_readme_block_check.py
+python3 scripts/law_readme_block_check.py
+
 step "ci.yml / wiring-guard: oracle + 判定経路に platform 依存の超越関数が無い"
 python3 scripts/test_det_math_guard.py
 python3 scripts/det_math_guard.py
