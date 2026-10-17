@@ -32,10 +32,22 @@ use std::path::Path;
 
 // ── re-export ──
 pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, FbxConfig};
+use alice_sdf::io::{export_3mf_with_stamp, export_fbx_with_stamp, export_stl_with_stamp};
 pub use alice_sdf::mesh::{
     dual_contouring, sdf_to_mesh, validate_mesh, DualContouringConfig, MarchingCubesConfig, Mesh,
     MeshRepair, MeshValidation, Vertex,
 };
+use alice_sdf::provenance::{Provenance, Stamp};
+
+/// LOL の書き出し (STL / 3MF / FBX) が持つ識別子: 主は alice-sdf の mesh の意味
+/// ([`Provenance::sdf`])、producer は形を作った LOL の幾何の意味
+/// ([`crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID`])
+///
+/// 読み戻しは `alice_sdf::provenance::read_with_producer` / `check_producer` LOL 自身は
+/// これらの file を読み込まない (読み手は書き出し先の slicer / DCC) ので、読む側の検査は無い
+pub const LOL_EXPORT_STAMP: Stamp = Stamp::sdf_with_producer(Provenance::new(
+    crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID,
+));
 
 /// 頂点マージ許容量を cell 幅の何倍にするか
 ///
@@ -448,7 +460,7 @@ pub fn node_to_stl(
         return Err(ExportError::EmptyMesh);
     }
     let stats = ExportStats::from_mesh(&mesh, &path);
-    export_stl(&mesh, path)?;
+    export_stl_with_stamp(&mesh, path, &LOL_EXPORT_STAMP)?;
     Ok(stats)
 }
 
@@ -467,7 +479,7 @@ pub fn node_to_3mf(
         return Err(ExportError::EmptyMesh);
     }
     let stats = ExportStats::from_mesh(&mesh, &path);
-    export_3mf(&mesh, path)?;
+    export_3mf_with_stamp(&mesh, path, &LOL_EXPORT_STAMP)?;
     Ok(stats)
 }
 
@@ -518,7 +530,7 @@ pub fn node_to_fbx(
         return Err(ExportError::EmptyMesh);
     }
     let stats = ExportStats::from_mesh(&mesh, &path);
-    export_fbx(&mesh, path, &FbxConfig::binary(), None)?;
+    export_fbx_with_stamp(&mesh, path, &FbxConfig::binary(), None, &LOL_EXPORT_STAMP)?;
     Ok(stats)
 }
 
@@ -649,7 +661,7 @@ pub fn node_to_stl_dual_contouring(
         return Err(ExportError::EmptyMesh);
     }
     let stats = ExportStats::from_mesh(&mesh, &path);
-    export_stl(&mesh, path)?;
+    export_stl_with_stamp(&mesh, path, &LOL_EXPORT_STAMP)?;
     Ok(stats)
 }
 
@@ -676,7 +688,7 @@ pub fn node_to_3mf_dual_contouring(
         return Err(ExportError::EmptyMesh);
     }
     let stats = ExportStats::from_mesh(&mesh, &path);
-    export_3mf(&mesh, path)?;
+    export_3mf_with_stamp(&mesh, path, &LOL_EXPORT_STAMP)?;
     Ok(stats)
 }
 

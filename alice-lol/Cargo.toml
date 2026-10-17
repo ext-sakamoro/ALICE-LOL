@@ -15,7 +15,7 @@ categories = ["graphics", "game-development", "mathematics"]
 
 [dependencies]
 alice-lol-macro = { path = "../alice-lol-macro", version = "0.3" }
-alice-sdf = { path = "../../ALICE-SDF", version = ">=6.1.0, <8", default-features = false, features = ["glsl"] }
+alice-sdf = { path = "../../ALICE-SDF", version = ">=7.0.0, <8", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # `research_law` が成立範囲 / 残差統計 / 出典 / 判定閾値の型を共有する
 # (no_std の `law` module だけを使うので default feature の zlib は引かない)
@@ -53,6 +53,9 @@ naga = { version = "24", default-features = false, features = ["wgsl-in", "glsl-
 # rustc へ通して確かめる、`#[test]` 内では compile error を起こすとテスト binary 全体が
 # ビルドできなくなるため、別プロセスで ui test を回す必要がある
 trybuild = "1"
+# tests/export_producer_stamp.rs: 書き出した STL / FBX を alice-sdf とは別の読み手で読む
+stl_io = "0.11"
+fbxcel = { version = "0.9", features = ["tree"] }
 
 [features]
 default = ["glsl"]
