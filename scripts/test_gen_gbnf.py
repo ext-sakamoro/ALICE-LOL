@@ -94,7 +94,7 @@ class Disagreement(unittest.TestCase):
                     "construct": [{"name": "sphere", "rule": "name_1f", "args": args},
                                   {"name": "subtract", "rule": "name_ab"}]}
         gg.render(d("L"), TEMPLATE)
-        for bad in ("", "LL", "X"):
+        for bad in ("", "LL", "Z"):
             self.fails(d(bad), message="do not fit rule")
 
     def test_a_name_twice(self):
