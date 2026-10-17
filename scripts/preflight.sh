@@ -135,6 +135,7 @@ python3 scripts/test_det_math_guard.py
 python3 scripts/det_math_guard.py
 
 step "ci.yml / fma-guard: oracle + Law code に mul_add の結果全体を negate する形が無い (syn AST、主検査)"
+cargo fmt --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --check
 cargo test --quiet --locked --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
 cargo run --quiet --locked --release --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --root .
 

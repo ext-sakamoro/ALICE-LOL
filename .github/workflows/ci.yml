@@ -704,6 +704,8 @@ jobs:
         run: python scripts/test_det_math_guard.py
       - name: det-math-guard (判定経路に platform 依存の超越関数が無い)
         run: python scripts/det_math_guard.py
+      - name: fma-guard の format (独自の workspace なので repository 全体の cargo fmt に入らない)
+        run: cargo fmt --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml -- --check
       - name: fma-guard oracle (syn AST、検査器自身の試験)
         run: cargo test --quiet --locked --manifest-path tools/no-outer-fneg-of-fma/Cargo.toml
       - name: fma-guard (syn AST、mul_add の結果全体を negate する形が無い、主検査)

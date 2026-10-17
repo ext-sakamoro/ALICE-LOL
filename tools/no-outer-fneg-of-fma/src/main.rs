@@ -136,7 +136,11 @@
 //! (the library's: those in a `src/` directory outside a test-only item, i.e. an
 //! item under `#[test]` or a `#[cfg(..)]` that holds only under `test` (`test`,
 //! `all(.., test, ..)`, an `any` of such); `cfg(not(test))` and feature or target
-//! predicates are library code). A test-only item is compiled out of the library,
+//! predicates are library code). A statement with such an attribute inside a
+//! library function is test-only too, and so is a whole file reached through a
+//! test-only `mod y;` (`y.rs` / `y/mod.rs` / `#[path]`, under an inline module's
+//! directory, or a non-root file's `<stem>/`) or declared from such a file.
+//! A test-only item is compiled out of the library,
 //! so its calls are not in the release IR the IR check reads; the output prints
 //! both counts. Both must equal what the tool finds; a missing
 //! header fails, and a repository without any fma call declares 0. Reading no
@@ -254,11 +258,68 @@ impl FileCounts {
 
 struct Visitor<'a> {
     rel: &'a str,
+    path: &'a Path,
     src: &'a str,
     findings: Vec<Finding>,
     counts: FileCounts,
     /// how many enclosing items are test-only (`#[test]`, `#[cfg(test)]`, ...)
     test_depth: usize,
+    /// the names of the enclosing inline `mod x { .. }`, for where a nested `mod y;` file lives
+    mod_stack: Vec<String>,
+    /// every `mod y;` declared in this file: its candidate files and whether it is declared test-only
+    mod_decls: Vec<ModDecl>,
+}
+
+/// a `mod y;` whose body is another file: where that file can be, and whether the declaration is test-only
+struct ModDecl {
+    candidates: Vec<PathBuf>,
+    test_only: bool,
+}
+
+/// the directory the `mod y;` declarations of the file at `path` resolve against: the file's own directory
+/// for a crate root or a `mod.rs`, `<dir>/<stem>/` for any other file
+fn module_dir(path: &Path) -> PathBuf {
+    let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
+    match path.file_name().and_then(|n| n.to_str()) {
+        Some("lib.rs" | "main.rs" | "mod.rs") => dir,
+        _ => dir.join(path.file_stem().and_then(|s| s.to_str()).unwrap_or("")),
+    }
+}
+
+/// `#[path = "..."]` on a module declaration
+fn path_attr(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|a| match &a.meta {
+        syn::Meta::NameValue(nv) if nv.path.is_ident("path") => match &nv.value {
+            Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
+/// the files whose every item is test-only: reached through a `mod y;` declared test-only, or declared from
+/// such a file (a test-only parent compiles its children out too)
+fn test_only_files(decls: &BTreeMap<PathBuf, Vec<ModDecl>>) -> BTreeSet<PathBuf> {
+    let mut out = BTreeSet::new();
+    loop {
+        let before = out.len();
+        for (parent, list) in decls {
+            let parent_test = out.contains(parent);
+            for d in list {
+                if d.test_only || parent_test {
+                    if let Some(c) = d.candidates.iter().find(|c| decls.contains_key(*c)) {
+                        out.insert(c.clone());
+                    }
+                }
+            }
+        }
+        if out.len() == before {
+            return out;
+        }
+    }
 }
 
 /// `#[test]`, or a `#[cfg(..)]` whose predicate holds only under `cfg(test)`: `test`, `all(.., test, ..)`,
@@ -288,8 +349,27 @@ fn is_test_only(attrs: &[syn::Attribute]) -> bool {
     }
     attrs.iter().any(|a| {
         a.path().is_ident("test")
-            || (a.path().is_ident("cfg") && a.parse_args::<syn::Meta>().is_ok_and(|m| test_only(&m)))
+            || (a.path().is_ident("cfg")
+                && a.parse_args::<syn::Meta>().is_ok_and(|m| test_only(&m)))
     })
+}
+
+/// the outer attributes of an expression statement (`#[cfg(test)] { .. }`, `#[cfg(test)] f();`)
+fn expr_attrs(e: &Expr) -> &[syn::Attribute] {
+    match e {
+        Expr::Block(b) => &b.attrs,
+        Expr::Call(c) => &c.attrs,
+        Expr::MethodCall(m) => &m.attrs,
+        Expr::Assign(a) => &a.attrs,
+        Expr::Macro(m) => &m.attrs,
+        Expr::If(i) => &i.attrs,
+        Expr::Match(m) => &m.attrs,
+        Expr::ForLoop(f) => &f.attrs,
+        Expr::While(w) => &w.attrs,
+        Expr::Loop(l) => &l.attrs,
+        Expr::Unsafe(u) => &u.attrs,
+        _ => &[],
+    }
 }
 
 fn excerpt_at(src: &str, line: usize) -> String {
@@ -847,6 +927,50 @@ impl<'a, 'ast> Visit<'ast> for IdentNegationFinder<'a> {
 }
 
 impl<'a, 'ast> Visit<'ast> for Visitor<'a> {
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        let name = node.ident.to_string();
+        if node.content.is_some() {
+            self.mod_stack.push(name);
+            visit::visit_item_mod(self, node);
+            self.mod_stack.pop();
+            return;
+        }
+        let dir = module_dir(self.path);
+        let candidates = match path_attr(&node.attrs) {
+            // outside an inline module a `#[path]` is relative to the declaring file's directory
+            Some(p) if self.mod_stack.is_empty() => {
+                vec![self.path.parent().unwrap_or(Path::new("")).join(p)]
+            }
+            Some(p) => vec![self.mod_stack.iter().fold(dir, |d, m| d.join(m)).join(p)],
+            None => {
+                let base = self.mod_stack.iter().fold(dir, |d, m| d.join(m));
+                vec![
+                    base.join(format!("{name}.rs")),
+                    base.join(&name).join("mod.rs"),
+                ]
+            }
+        };
+        self.mod_decls.push(ModDecl {
+            candidates,
+            test_only: self.test_depth > 0,
+        });
+        visit::visit_item_mod(self, node);
+    }
+
+    fn visit_stmt(&mut self, node: &'ast syn::Stmt) {
+        // a statement compiled only under test (`#[cfg(test)] let ..;` / `#[cfg(test)] { .. }`) inside a library fn
+        let attrs: &[syn::Attribute] = match node {
+            syn::Stmt::Local(l) => &l.attrs,
+            syn::Stmt::Macro(m) => &m.attrs,
+            syn::Stmt::Expr(e, _) => expr_attrs(e),
+            syn::Stmt::Item(_) => &[],
+        };
+        let test = is_test_only(attrs);
+        self.test_depth += usize::from(test);
+        visit::visit_stmt(self, node);
+        self.test_depth -= usize::from(test);
+    }
+
     fn visit_item(&mut self, node: &'ast syn::Item) {
         let attrs: &[syn::Attribute] = match node {
             syn::Item::Const(i) => &i.attrs,
@@ -1144,9 +1268,10 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
     let mut errors = Vec::new();
     let mut files = 0usize;
     let mut totals = FileCounts::default();
-    let mut src_fma_calls = 0usize;
-    let mut src_test_fma_calls = 0usize;
     let mut found: Vec<Finding> = Vec::new();
+    // per src/ file: (fma calls, test-only fma calls), and its `mod y;` declarations
+    let mut src_counts: BTreeMap<PathBuf, (usize, usize)> = BTreeMap::new();
+    let mut decls: BTreeMap<PathBuf, Vec<ModDecl>> = BTreeMap::new();
 
     for src_dir in src_dirs {
         let base = root.join(src_dir);
@@ -1177,10 +1302,13 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             };
             let mut visitor = Visitor {
                 rel: &rel,
+                path: &path,
                 src: &src,
                 findings: Vec::new(),
                 counts: FileCounts::default(),
                 test_depth: 0,
+                mod_stack: Vec::new(),
+                mod_decls: Vec::new(),
             };
             NAMED.with(|n| *n.borrow_mut() = named_constants(&parsed));
             visitor.visit_file(&parsed);
@@ -1190,12 +1318,28 @@ fn check(root: &Path, src_dirs: &[String]) -> Report {
             totals.scalar_fma_calls += visitor.counts.scalar_fma_calls;
             totals.simd_fma_calls += visitor.counts.simd_fma_calls;
             if rel.split('/').any(|p| p == "src") {
-                // the library's own calls: a test-only item in src/ is not in the release build
-                src_fma_calls += visitor.counts.fma_calls() - visitor.counts.test_fma_calls;
-                src_test_fma_calls += visitor.counts.test_fma_calls;
+                src_counts.insert(
+                    path.clone(),
+                    (visitor.counts.fma_calls(), visitor.counts.test_fma_calls),
+                );
             }
+            decls.insert(path.clone(), visitor.mod_decls);
             found.extend(visitor.findings);
         }
+    }
+    // the library's own calls: a test-only item in src/, or a whole file reached only through a test-only
+    // `mod y;`, is not in the release build
+    let test_files = test_only_files(&decls);
+    let mut src_fma_calls = 0usize;
+    let mut src_test_fma_calls = 0usize;
+    for (path, (all, test)) in &src_counts {
+        let test = if test_files.contains(path) {
+            *all
+        } else {
+            *test
+        };
+        src_fma_calls += all - test;
+        src_test_fma_calls += test;
     }
 
     let mut report = Report {
@@ -1689,8 +1833,71 @@ mod tests {
     fn the_header_compares_the_library_count_and_the_output_prints_both() {
         let src = "pub fn lib(a: f32) -> f32 { a.mul_add(a, a) }\n#[cfg(test)]\nmod tests { fn t(a: f32) -> f32 { a.mul_add(a, a) } }\n";
         // every call 2, library calls 1: the src header is the library's
-        assert_eq!(expected_errors(&[(SRC, src)], Some(&header(2, 1))), Vec::<String>::new());
+        assert_eq!(
+            expected_errors(&[(SRC, src)], Some(&header(2, 1))),
+            Vec::<String>::new()
+        );
         assert!(!expected_errors(&[(SRC, src)], Some(&header(2, 2))).is_empty());
+    }
+
+    /// (library, test-only) fma counts of several src files
+    fn lib_test_files(files: &[(&str, &str)]) -> (usize, usize) {
+        let r = run(files, None);
+        (r.src_fma_calls, r.src_test_fma_calls)
+    }
+
+    const FMA_FN: &str = "pub fn f(a: f32) -> f32 { a.mul_add(a, a) }\n";
+
+    #[test]
+    fn a_file_declared_by_a_test_only_mod_is_not_library_code() {
+        let lib = "#[cfg(test)]\nmod t;\nmod l;\n";
+        let files = [
+            (SRC, lib),
+            ("alice-lol/src/t.rs", FMA_FN),
+            ("alice-lol/src/l.rs", FMA_FN),
+        ];
+        assert_eq!(lib_test_files(&files), (1, 1));
+    }
+
+    #[test]
+    fn the_children_of_a_test_only_file_and_the_mod_rs_form_are_test_only() {
+        let files = [
+            (SRC, "#[cfg(test)]\nmod t;\n"),
+            ("alice-lol/src/t/mod.rs", "mod deeper;\n"),
+            ("alice-lol/src/t/deeper.rs", FMA_FN),
+        ];
+        assert_eq!(lib_test_files(&files), (0, 1));
+    }
+
+    #[test]
+    fn a_mod_inside_a_test_only_inline_module_and_a_path_attribute_are_followed() {
+        let files = [
+            (SRC, "#[cfg(test)]\nmod outer {\n    mod inner;\n}\n#[cfg(test)]\n#[path = \"elsewhere.rs\"]\nmod p;\n"),
+            ("alice-lol/src/outer/inner.rs", FMA_FN),
+            ("alice-lol/src/elsewhere.rs", FMA_FN),
+        ];
+        assert_eq!(lib_test_files(&files), (0, 2));
+    }
+
+    #[test]
+    fn a_mod_of_a_non_root_file_resolves_under_its_stem() {
+        // a.rs declares `#[cfg(test)] mod b;` -> a/b.rs (2 calls, test-only), not src/b.rs (1 call, library)
+        let two = "pub fn f(a: f32) -> f32 { a.mul_add(a, a) }\npub fn g(a: f32) -> f32 { a.mul_add(a, a) }\n";
+        let files = [
+            (SRC, "mod a;\nmod b;\n"),
+            ("alice-lol/src/a.rs", "#[cfg(test)]\nmod b;\n"),
+            ("alice-lol/src/a/b.rs", two),
+            ("alice-lol/src/b.rs", FMA_FN),
+        ];
+        assert_eq!(lib_test_files(&files), (1, 2));
+    }
+
+    #[test]
+    fn a_test_only_statement_in_a_library_fn_is_not_library_code() {
+        let src = "pub fn f(a: f32) -> f32 {\n    #[cfg(test)]\n    let _t = a.mul_add(a, a);\n    \
+                   #[cfg(test)]\n    { let _u = a.mul_add(a, a); }\n    #[cfg(not(test))]\n    let _l = a.mul_add(a, a);\n    \
+                   a.mul_add(a, a)\n}\n";
+        assert_eq!(lib_test(src), (2, 2));
     }
 
     #[test]
@@ -1698,7 +1905,11 @@ mod tests {
         // a macro's tokens are opaque: a fma mentioned in one stays a hard failure in src/, test-only or not
         let src = "#[cfg(test)]\nmod tests {\n    macro_rules! m { ($a:expr) => { $a.mul_add($a, $a) } }\n}\n";
         let r = run(&[(SRC, src)], None);
-        assert!(r.errors.iter().any(|e| e.contains("macro")), "{:?}", r.errors);
+        assert!(
+            r.errors.iter().any(|e| e.contains("macro")),
+            "{:?}",
+            r.errors
+        );
     }
 
     #[test]
