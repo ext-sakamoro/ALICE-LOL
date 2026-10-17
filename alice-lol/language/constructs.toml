@@ -7,6 +7,11 @@
 # rule = the grammar rule that accepts it (its argument shape): a `name_*` rule lists every row
 #        that names it, in the order of this file; an `intent_*` rule spells its one name itself
 #        in the template, and the generator checks that the row and the template agree
+# args = what each number argument is, in order (optional; the generator checks its length against
+#        the rule's number count): L length, I inverse length (a frequency or a rate per length),
+#        A angle in degrees, C count / id / seed, R ratio (a factor or a normal component)
+#        Under `units(<unit>, ...)` an L argument is in that unit; rescaling a program by k
+#        multiplies the L arguments by k and divides the I arguments by k
 #
 # Not here: the syntax keywords `program` / `entities` and the Law lines (`audit` / `evidence` /
 # `expect` / `range`), which are part of the template's fixed rules
@@ -23,7 +28,7 @@ construct = [
   { name = "avoid",                   rule = "name_intent_id_1f" },
   { name = "seq",                     rule = "name_intent_compose" },
   { name = "par",                     rule = "name_intent_compose" },
-  { name = "skadis_hook_l",           rule = "name_0f" },
+  { name = "skadis_hook_l",           rule = "name_0f", args = "" },
   { name = "skadis_hook_j",           rule = "name_0f" },
   { name = "skadis_hook_s",           rule = "name_0f" },
   { name = "skadis_container",        rule = "name_0f" },
@@ -33,7 +38,7 @@ construct = [
   { name = "wall_hook",               rule = "name_0f" },
   { name = "drawer_organizer",        rule = "name_0f" },
   { name = "shelf_divider",           rule = "name_0f" },
-  { name = "sphere",                  rule = "name_1f" },
+  { name = "sphere",                  rule = "name_1f", args = "L" },
   { name = "octahedron",              rule = "name_1f" },
   { name = "pyramid",                 rule = "name_1f" },
   { name = "heart",                   rule = "name_1f" },
@@ -50,13 +55,13 @@ construct = [
   { name = "profile_3030",            rule = "name_1f" },
   { name = "servo_mount",             rule = "name_1f" },
   { name = "jst_ph_slot",             rule = "name_1f" },
-  { name = "cylinder",                rule = "name_2f" },
-  { name = "torus",                   rule = "name_2f" },
+  { name = "cylinder",                rule = "name_2f", args = "LL" },
+  { name = "torus",                   rule = "name_2f", args = "LL" },
   { name = "cone",                    rule = "name_2f" },
-  { name = "capsule",                 rule = "name_2f" },
-  { name = "hex_prism",               rule = "name_2f" },
+  { name = "capsule",                 rule = "name_2f", args = "LL" },
+  { name = "hex_prism",               rule = "name_2f", args = "LL" },
   { name = "egg",                     rule = "name_2f" },
-  { name = "diamond",                 rule = "name_2f" },
+  { name = "diamond",                 rule = "name_2f", args = "LL" },
   { name = "triangular_prism",        rule = "name_2f" },
   { name = "cut_sphere",              rule = "name_2f" },
   { name = "solid_angle",             rule = "name_2f" },
@@ -73,7 +78,7 @@ construct = [
   { name = "circle_2d",               rule = "name_2f" },
   { name = "blobby_cross",            rule = "name_2f" },
   { name = "terrain",                 rule = "name_2f" },
-  { name = "shopping_cart_coin",      rule = "name_2f" },
+  { name = "shopping_cart_coin",      rule = "name_2f", args = "LL" },
   { name = "mug",                     rule = "name_2f" },
   { name = "pen_cup",                 rule = "name_2f" },
   { name = "coaster",                 rule = "name_2f" },
@@ -94,8 +99,8 @@ construct = [
   { name = "wood_screw_pilot",        rule = "name_2f" },
   { name = "arduino_mount_plate",     rule = "name_2f" },
   { name = "pixhawk_mount",           rule = "name_2f" },
-  { name = "box3d",                   rule = "name_3f" },
-  { name = "ellipsoid",               rule = "name_3f" },
+  { name = "box3d",                   rule = "name_3f", args = "LLL" },
+  { name = "ellipsoid",               rule = "name_3f", args = "LLL" },
   { name = "rounded_cone",            rule = "name_3f" },
   { name = "link",                    rule = "name_3f" },
   { name = "capped_cone",             rule = "name_3f" },
@@ -108,7 +113,7 @@ construct = [
   { name = "rect_2d",                 rule = "name_3f" },
   { name = "annular_2d",              rule = "name_3f" },
   { name = "parabola_segment",        rule = "name_3f" },
-  { name = "skadis_panel",            rule = "name_3f" },
+  { name = "skadis_panel",            rule = "name_3f", args = "LLL" },
   { name = "regular_polygon",         rule = "name_3f" },
   { name = "tunnel",                  rule = "name_3f" },
   { name = "rounded_x",               rule = "name_3f" },
@@ -177,8 +182,8 @@ construct = [
   { name = "pin_hinge_knuckle",       rule = "name_3f" },
   { name = "rib",                     rule = "name_3f" },
   { name = "bearing_seat",            rule = "name_3f" },
-  { name = "rounded_box",             rule = "name_4f" },
-  { name = "plane",                   rule = "name_4f" },
+  { name = "rounded_box",             rule = "name_4f", args = "LLLL" },
+  { name = "plane",                   rule = "name_4f", args = "RRRL" },
   { name = "helix",                   rule = "name_4f" },
   { name = "box_frame",               rule = "name_4f" },
   { name = "star_polygon",            rule = "name_4f" },
@@ -208,10 +213,10 @@ construct = [
   { name = "capsule_ab",              rule = "name_7f" },
   { name = "triangle",                rule = "name_9f" },
   { name = "bezier",                  rule = "name_10f" },
-  { name = "union",                   rule = "name_variadic" },
+  { name = "union",                   rule = "name_variadic", args = "" },
   { name = "intersection",            rule = "name_variadic" },
-  { name = "smooth_union",            rule = "name_k_children" },
-  { name = "smooth_intersection",     rule = "name_k_children" },
+  { name = "smooth_union",            rule = "name_k_children", args = "L" },
+  { name = "smooth_intersection",     rule = "name_k_children", args = "L" },
   { name = "chamfer_union",           rule = "name_k_children" },
   { name = "chamfer_intersection",    rule = "name_k_children" },
   { name = "exp_smooth_union",        rule = "name_k_children" },
@@ -220,7 +225,7 @@ construct = [
   { name = "stairs_intersection",     rule = "name_2k_children" },
   { name = "columns_union",           rule = "name_2k_children" },
   { name = "columns_intersection",    rule = "name_2k_children" },
-  { name = "subtract",                rule = "name_ab" },
+  { name = "subtract",                rule = "name_ab", args = "" },
   { name = "xor",                     rule = "name_ab" },
   { name = "smooth_subtract",         rule = "name_1f_ab" },
   { name = "chamfer_subtraction",     rule = "name_1f_ab" },
@@ -234,33 +239,33 @@ construct = [
   { name = "columns_subtraction",     rule = "name_2f_ab" },
   { name = "scale",                   rule = "name_1f_child" },
   { name = "round",                   rule = "name_1f_child" },
-  { name = "onion",                   rule = "name_1f_child" },
-  { name = "twist",                   rule = "name_1f_child" },
+  { name = "onion",                   rule = "name_1f_child", args = "L" },
+  { name = "twist",                   rule = "name_1f_child", args = "I" },
   { name = "bend",                    rule = "name_1f_child" },
   { name = "revolution",              rule = "name_1f_child" },
   { name = "extrude",                 rule = "name_1f_child" },
-  { name = "taper",                   rule = "name_1f_child" },
+  { name = "taper",                   rule = "name_1f_child", args = "I" },
   { name = "displacement",            rule = "name_1f_child" },
-  { name = "polar_repeat",            rule = "name_1f_child" },
-  { name = "with_material",           rule = "name_1f_child" },
+  { name = "polar_repeat",            rule = "name_1f_child", args = "C" },
+  { name = "with_material",           rule = "name_1f_child", args = "C" },
   { name = "animate",                 rule = "name_2f_child" },
-  { name = "translate",               rule = "name_3f_child" },
-  { name = "rotate",                  rule = "name_3f_child" },
-  { name = "scale_non_uniform",       rule = "name_3f_child" },
+  { name = "translate",               rule = "name_3f_child", args = "LLL" },
+  { name = "rotate",                  rule = "name_3f_child", args = "AAA" },
+  { name = "scale_non_uniform",       rule = "name_3f_child", args = "RRR" },
   { name = "mirror",                  rule = "name_3f_child" },
   { name = "repeat",                  rule = "name_3f_child" },
   { name = "elongate",                rule = "name_3f_child" },
   { name = "shear",                   rule = "name_3f_child" },
-  { name = "noise",                   rule = "name_3f_child" },
+  { name = "noise",                   rule = "name_3f_child", args = "LIC" },
   { name = "surface_roughness",       rule = "name_3f_child" },
-  { name = "lattice_infill",          rule = "name_3f_child" },
-  { name = "diamond_infill",          rule = "name_3f_child" },
-  { name = "schwarz_infill",          rule = "name_3f_child" },
+  { name = "lattice_infill",          rule = "name_3f_child", args = "LIL" },
+  { name = "diamond_infill",          rule = "name_3f_child", args = "LIL" },
+  { name = "schwarz_infill",          rule = "name_3f_child", args = "LIL" },
   { name = "rotate_q",                rule = "name_4f_child" },
   { name = "repeat_finite",           rule = "name_6f_child" },
   { name = "sweep_bezier",            rule = "name_6f_child" },
   { name = "octant_mirror",           rule = "name_child_only" },
-  { name = "icosahedral_symmetry",    rule = "name_child_only" },
+  { name = "icosahedral_symmetry",    rule = "name_child_only", args = "" },
   { name = "grasp",                   rule = "intent_grasp" },
   { name = "point",                   rule = "intent_point" },
   { name = "throw",                   rule = "intent_throw" },
@@ -272,3 +277,28 @@ construct = [
 
 # values of the `hand` argument of the intent verbs
 hand = ["left", "right", "both"]
+
+# what a program declares it is for (`units(<unit>, <purpose>, <program>)`, root only)
+purpose = ["print", "render"]
+
+# what one program unit is (`units(<unit>, ...)`): `mm` = millimetres per program unit
+# a unit with no `mm` has no physical size and is declared for `render` only
+# (alice_lol::units::Unit is checked against this table by tests/units_table.rs)
+[[unit]]
+name = "mm"
+mm = 1.0
+
+[[unit]]
+name = "cm"
+mm = 10.0
+
+[[unit]]
+name = "m"
+mm = 1000.0
+
+[[unit]]
+name = "in"
+mm = 25.4
+
+[[unit]]
+name = "world"

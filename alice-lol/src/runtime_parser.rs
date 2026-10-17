@@ -19,6 +19,7 @@ crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use crate::audit_law::{sorted_values, AuditLaw, Clause};
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
+use crate::units::{Declared, Purpose, Unit, UnitsDecl};
 use crate::SdfNode;
 use glam::{Vec2, Vec3};
 use std::sync::Arc;
@@ -3122,6 +3123,7 @@ impl<'a> Parser<'a> {
 /// ```
 pub fn parse_lol(input: &str) -> Result<SdfNode, ParseError> {
     let mut parser = Parser::new(input);
+    parser.refuse_units_declaration()?;
     let node = parser.parse_expr()?;
     // 末尾にゴミがないか確認
     parser.lexer.skip_whitespace();
@@ -3543,6 +3545,7 @@ impl Parser<'_> {
 /// 構文エラー / 未知の verb / entity id 範囲外 / 整数が要る箇所に小数 / 末尾ゴミ
 pub fn parse_program(input: &str) -> Result<Program, ParseError> {
     let mut parser = Parser::new(input);
+    parser.refuse_units_declaration()?;
     let is_program = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "program");
     let program = if is_program {
         parser.next()?;
@@ -3558,6 +3561,102 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
         });
     }
     Ok(program)
+}
+
+/// 単位の宣言があれば読み、program を読む
+///
+/// ```text
+/// units(<unit>, <purpose>, <expr | program>)   単位と用途を宣言した program (root だけ)
+/// <expr | program>                             宣言の無い program ([`parse_program`] と同じ)
+/// ```
+///
+/// 単位と用途の名前は [`Unit`] / [`Purpose`] (`constructs.toml` の `unit` 表と `purpose`)
+/// 長さを持たない単位 (`world`) は `render` にだけ使える
+///
+/// [`parse_lol`] / [`parse_program`] は宣言を黙って捨てないよう、宣言を見ると error を返す
+///
+/// ```
+/// use alice_lol::runtime_parser::parse_declared;
+/// use alice_lol::units::{Purpose, Unit};
+///
+/// let d = parse_declared("units(mm, print, cylinder(50.0, 5.0))").unwrap();
+/// let u = d.units.unwrap();
+/// assert_eq!((u.unit, u.purpose), (Unit::Mm, Purpose::Print));
+/// assert_eq!(u.unit.mm_per_unit(), Some(1.0));
+///
+/// assert!(parse_declared("sphere(1.0)").unwrap().units.is_none());
+/// assert!(parse_declared("units(world, print, sphere(1.0))").is_err());
+/// ```
+///
+/// # Errors
+///
+/// 知らない単位・用途 / 長さを持たない単位を `print` に使った / 宣言の入れ子 /
+/// 中身の構文エラー ([`parse_program`] と同じ) / 末尾ゴミ
+pub fn parse_declared(input: &str) -> Result<Declared, ParseError> {
+    let mut parser = Parser::new(input);
+    let declared = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "units");
+    let units = if declared {
+        parser.next()?;
+        parser.expect_lparen("units")?;
+        let unit_name = parser.expect_ident()?;
+        let Some(unit) = Unit::from_name(&unit_name) else {
+            let known: Vec<&str> = Unit::ALL.iter().map(|u| u.name()).collect();
+            return parser.err(format!(
+                "unknown unit '{unit_name}' (one of {})",
+                known.join("|")
+            ));
+        };
+        parser.expect_comma()?;
+        let purpose_name = parser.expect_ident()?;
+        let Some(purpose) = Purpose::from_name(&purpose_name) else {
+            let known: Vec<&str> = Purpose::ALL.iter().map(|p| p.name()).collect();
+            return parser.err(format!(
+                "unknown purpose '{purpose_name}' (one of {})",
+                known.join("|")
+            ));
+        };
+        let Some(decl) = UnitsDecl::new(unit, purpose) else {
+            return parser.err(format!(
+                "unit '{unit_name}' has no length and is declared for render only, not '{purpose_name}'"
+            ));
+        };
+        parser.expect_comma()?;
+        Some(decl)
+    } else {
+        None
+    };
+    parser.refuse_units_declaration()?;
+    let is_program = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "program");
+    let program = if is_program {
+        parser.next()?;
+        parser.parse_program_body()?
+    } else {
+        Program::sdf_only(parser.parse_expr()?)
+    };
+    if declared {
+        parser.expect_rparen()?;
+    }
+    parser.lexer.skip_whitespace();
+    if parser.lexer.position() < parser.lexer.input.len() {
+        return Err(ParseError {
+            message: "unexpected trailing content".into(),
+            position: parser.lexer.position(),
+        });
+    }
+    Ok(Declared::new(units, program))
+}
+
+impl Parser<'_> {
+    /// 次が `units` なら error (宣言は root に 1 つだけで、[`parse_declared`] が読む)
+    fn refuse_units_declaration(&mut self) -> Result<(), ParseError> {
+        if matches!(self.peek()?, Some(Token::Ident(s)) if s == "units") {
+            return self.err(
+                "a units declaration is read by parse_declared, only at the root (not nested)"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
