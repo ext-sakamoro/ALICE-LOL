@@ -14,8 +14,9 @@ dependencies = [
 
 [[package]]
 name = "alice-kinematics"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
+ "alice-det-math",
  "alice-lol",
 ]
 
