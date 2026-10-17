@@ -245,6 +245,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
+          # the release tags: scripts/id_move_check.py compares with the newest one
+          fetch-depth: 0
 
       - uses: actions/checkout@v5
         with:
@@ -292,6 +294,25 @@ jobs:
         # 2026-09-17: -W → -D、lib のみ → workspace 全 target 全 feature
         # (toolchain は rust-toolchain.toml pin)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery
+      # G9: an identifier (LOL_SEMANTICS_ID, LOL_GEOMETRY_SEMANTICS_ID) moves only with a breaking version, with the
+      # released value in its previous list (when it has one) and both values named in
+      # CHANGELOG.md; the released value is read from the published crate at the newest
+      # release tag (scripts/id_move_check.py, shared with the other ALICE crates). A
+      # registry that cannot be read fails on main and warns on ci/ branches and PRs
+      - name: Identifier moves (tests)
+        working-directory: ALICE-LOL
+        run: python3 scripts/test_id_move_check.py
+      - name: Identifier moves (the release compared with)
+        working-directory: ALICE-LOL
+        id: id-base
+        run: echo "crate=$(python3 scripts/id_move_check.py --print-base)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cargo/registry/cache/*/${{ steps.id-base.outputs.crate }}.crate
+          key: id-move-${{ steps.id-base.outputs.crate }}
+      - name: Identifier moves (against the published release)
+        working-directory: ALICE-LOL
+        run: python3 scripts/id_move_check.py
 
   # 他の job は sibling crate を path (各 repo の main) で引くので、公開した `alice-lol` が
   # crates.io から引く版では一度も build されない ここでは package した `alice-lol` だけに

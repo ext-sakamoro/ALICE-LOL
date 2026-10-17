@@ -1,0 +1,16 @@
+# scripts/id_move_check.py (ALICE-Law G9): the identifiers whose value may move only with a
+# breaking version, the previous-identifier lists that must keep the released value (none yet:
+# PREVIOUS_LOL_* do not exist, so a moved identifier needs the breaking version), and the
+# release tags the base is read from (its values come from the published crate)
+package = "alice-lol"
+manifest = "alice-lol/Cargo.toml"
+tags = ["alice-lol-v{version}"]
+
+[exempt]
+LAW_ID_DOMAIN = "alice-zip's domain-separation tag for law identifiers, re-exported (bytes, not an identifier of what was computed); it is hashed into every per-law identifier, and its own history is alice-zip's"
+
+[[id]]
+path = "alice_lol::law_id::LOL_SEMANTICS_ID"
+
+[[id]]
+path = "alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID"

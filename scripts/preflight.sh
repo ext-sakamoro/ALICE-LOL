@@ -80,6 +80,10 @@ step "ci.yml / test: Build [features=--features roblox]"
 step "ci.yml / test: Build examples [features=--features roblox]"
 ( export CARGO_TERM_COLOR="always"; cargo build --examples --features roblox )
 
+step "ci.yml / clippy: Identifier moves (tests, then against the published release)"
+python3 scripts/test_id_move_check.py
+python3 scripts/id_move_check.py
+
 step "ci.yml / clippy: Clippy"
 relint
 ( export CARGO_TERM_COLOR="always"; cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::pedantic -D clippy::nursery )
