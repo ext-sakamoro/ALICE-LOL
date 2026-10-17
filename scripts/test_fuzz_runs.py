@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/fuzz_runs.py の試験 (libFuzzer の log の形は CI run 38050442101 の実物から)"""
+"""scripts/fuzz_runs.py の試験 (libFuzzer の log の形は実際の CI run の出力から)"""
 from __future__ import annotations
 
 import os
@@ -22,7 +22,6 @@ min > max, or either was NaN. min = 0.0, max = -65.0
 SUMMARY: libFuzzer: deadly signal
 """
 
-
 # AddressSanitizer / LeakSanitizer reports (no space after "==N=="), each with
 # a "Done N runs" line so that only the crash detection can make it red
 ASAN = """==9==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x602000000011
@@ -37,13 +36,12 @@ Done 12 runs in 1 second(s)
 """
 
 
-
 class FuzzRuns(unittest.TestCase):
     def run_on(self, log: str) -> int:
         with tempfile.TemporaryDirectory() as d:
             p = Path(d, "fuzz.log")
             p.write_text(log, encoding="utf-8")
-            return fr.main(["fuzz_lol_parse", str(p)])
+            return fr.main(["fuzz_lz77_decode", str(p)])
 
     def test_a_clean_run_passes(self):
         self.assertEqual(fr.read(CLEAN), (1682447, 61, False))

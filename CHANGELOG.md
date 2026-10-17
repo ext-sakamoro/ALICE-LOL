@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI: `scripts/fuzz_runs.py` と試験を ALICE-Zip / ALICE-DetMath / ALICE-SDF と同じ bytes にした (違いは説明文と試験の合成 log の target 名だけで、判定は変わらない)
 - CI (ALICE-Law G3): `tools/no-outer-fneg-of-fma` の `expected-src-fma-calls` を src/ の library code の fma 呼び出し数にした (`#[test]` と test の時だけ成り立つ cfg (`cfg(test)` / test を含む `all` / 全枝が test の `any`、`not` は含めない) の下の item と文、test-only の `mod y;` (`y.rs` / `y/mod.rs` / `#[path]`) で読み込む file とその子の file は数えず、別に test-only の数を表示する) LOL は 346 → 323 (test-only 23) IR は library しか含まないので、IR の下限と比べる値が test の呼び出しで水増しされなくなる `scripts/fneg_fma_ir_check.py` は library の source に fma が無いのに IR に fma がある時を失敗にし、library の fma が 0 の時は `tools/fneg-fma-ir-probes/` の probe をその target で compile して期待どおりの判定を確かめる (0 件実行は失敗) tool は独自の workspace なので repository 全体の `cargo fmt -- --check` に入っていなかった wiring-guard job と preflight に tool の format の検査を足した
 - `alice-lol` と `alice-lol-ui` の `alice-sdf` の要求を `">=6.1.0, <7"` から `">=6.1.0, <8"` に広げた (下限 6.1.0 は解析的な bound が要るので残す、6.x でも 7 でも build できる)
 - `alice-lol` と `alice-world-auditor` の `alice-physics` の要求を `"3.0"` から `">=3.0, <5"` に広げた (alice-physics 4.0.0 の変更は bridge の構築子・GPU bridge の trait・privacy の構築子で、この workspace はどれも使わない 3.1.0 でも 4.0.0 でも build できる)

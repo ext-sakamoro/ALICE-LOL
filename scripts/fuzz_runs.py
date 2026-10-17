@@ -2,9 +2,8 @@
 """Read a libFuzzer log: how many inputs ran, and whether it crashed.
 
 The fuzz job is green only when the target ran at least one input and did not crash.
-Before this check the run step ignored its own failure, so a crash showed as a warning on a
-green run (the last 4 main runs had 2 to 4 of 4 targets crashing), and a run that never
-started would have been green too.
+Before this check the time-boxed run step had `continue-on-error: true`, so a crash
+showed only as a warning on a green job, and a run that never started was green too.
 
 usage: fuzz_runs.py <target> <log>
 Prints one Markdown table row (target, runs, seconds, result) for the job summary.
