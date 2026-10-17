@@ -298,7 +298,10 @@ pub fn skadis_peg_compat(board_thickness: f32) -> SdfNode {
     // `RoundedBox` の外寸は `half_extents + round_radius` (全方向に R が足される) ので、
     // 外寸 `half` を得るには内側の寸法 `half - R` を渡す  R は最小の半寸法を超えられない
     // (幅 4.8 の半寸法 2.4 は `SKADIS_PEG_R` 2.5 より小さい)
-    let r = crate::det_math::max(crate::det_math::min(SKADIS_PEG_R, half.min_element()), 0.0);
+    let r = crate::det_math::max(
+        crate::det_math::min(SKADIS_PEG_R, crate::det_vec::min_element(half)),
+        0.0,
+    );
     SdfNode::RoundedBox {
         half_extents: half - Vec3::splat(r),
         round_radius: r,

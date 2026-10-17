@@ -204,7 +204,8 @@ fn main() {
 
 fn monte_carlo_volume(node: &alice_lol::SdfNode, n: usize) -> f32 {
     let bounds = 1.3_f32; // sphere r=1.0 に余裕
-    let box_vol = (2.0 * bounds).powi(3);
+    let edge = 2.0 * bounds;
+    let box_vol = edge * edge * edge;
     let mut inside = 0u32;
     // 疑似ランダム（Halton sequence 風）
     for i in 0..n {

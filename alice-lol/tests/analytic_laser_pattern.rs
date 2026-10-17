@@ -51,6 +51,11 @@ use std::f64::consts::{PI, TAU};
 //  取り出し helper
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+/// Euclidean length from correctly rounded operations (platform hypot is banned by ALICE-Law G1)
+fn len2(dx: f64, dy: f64) -> f64 {
+    dx.mul_add(dx, dy * dy).sqrt()
+}
+
 /// 唯一の `Polyline` の点列を、中心を原点に移した相対座標で返す
 fn polyline_about(elements: &[LaserElement], center: (f64, f64)) -> Vec<(f64, f64)> {
     assert_eq!(elements.len(), 1, "曲線は Polyline 1 本で返る約束");
@@ -94,7 +99,7 @@ fn segments(elements: &[LaserElement]) -> Vec<(f64, f64, f64, f64)> {
 }
 
 fn radius(p: (f64, f64)) -> f64 {
-    p.0.hypot(p.1)
+    len2(p.0, p.1)
 }
 
 /// 教科書の Euclid 互除法 (実装側の `gcd_f64` とは独立、oracle 側の参照)
@@ -312,7 +317,8 @@ fn phyllotaxis_point_density_is_uniform_per_unit_area() {
             .iter()
             .filter(|&&p| radius((p.0 - center.0, p.1 - center.1)) <= r_cut)
             .count();
-        let expected = (r_cut / scale).powi(2);
+        let ratio = r_cut / scale;
+        let expected = ratio * ratio;
         assert!(
             (inside as f64 - expected).abs() <= 1.0,
             "半径 {r_cut} 内の点数 {inside} が面積則 (R/s)² = {expected} と 1 点を超えてずれた"
@@ -375,7 +381,7 @@ fn guilloche_returns_to_its_start_point() {
         );
         let first = points[0];
         let last = points[points.len() - 1];
-        let gap = (first.0 - last.0).hypot(first.1 - last.1);
+        let gap = len2(first.0 - last.0, first.1 - last.1);
         assert!(
             gap < 1e-6,
             "R={big_r} r={small_r} d={pen_d}: 終点が始点から {gap} 離れている \
@@ -427,7 +433,7 @@ fn guilloche_matches_the_hypotrochoid_point_by_point() {
             diff.mul_add(t.sin(), -(pen_d * (ratio * t).sin())),
         );
         let got = points[i];
-        let err = (got.0 - want.0).hypot(got.1 - want.1);
+        let err = len2(got.0 - want.0, got.1 - want.1);
         assert!(
             err < 1e-6,
             "i={i} (t={t}): 点 {got:?} が閉形式 {want:?} と {err} ずれた"
@@ -475,7 +481,7 @@ fn hatch_line_direction_matches_the_requested_angle() {
     for angle in [0.0_f64, 17.0, 30.0, 45.0, 73.0, 123.0] {
         for seg in segments(&hatch(angle, 3.0, &bounds)) {
             let (dx, dy) = (seg.2 - seg.0, seg.3 - seg.1);
-            if dx.hypot(dy) < 1e-9 {
+            if len2(dx, dy) < 1e-9 {
                 continue; // 角で 1 点に潰れた線は向きを持たない
             }
             let got = dy.atan2(dx).to_degrees().rem_euclid(180.0);
@@ -609,7 +615,7 @@ fn crosshatch_is_two_orthogonal_families() {
     );
     let mut directions: Vec<f64> = all
         .iter()
-        .filter(|s| (s.2 - s.0).hypot(s.3 - s.1) > 1e-9)
+        .filter(|s| len2(s.2 - s.0, s.3 - s.1) > 1e-9)
         .map(|s| (s.3 - s.1).atan2(s.2 - s.0).to_degrees().rem_euclid(180.0))
         .collect();
     directions.sort_by(f64::total_cmp);
@@ -676,8 +682,10 @@ fn lissajous_closes_for_integer_frequencies() {
     let bounds = wide();
     for (a, b) in [(1.0, 1.0), (3.0, 2.0), (5.0, 4.0)] {
         let points = polyline_about(&lissajous(a, b, 0.3, 20.0, 4_000, &bounds), bounds.center());
-        let gap = (points[0].0 - points[points.len() - 1].0)
-            .hypot(points[0].1 - points[points.len() - 1].1);
+        let gap = len2(
+            points[0].0 - points[points.len() - 1].0,
+            points[0].1 - points[points.len() - 1].1,
+        );
         assert!(gap < 1e-9, "a={a} b={b}: 終点が始点から {gap} 離れている");
     }
 }
@@ -748,8 +756,9 @@ fn halftone_tone_response_is_radius_linear_not_area_linear() {
     let cell = 25.4 / 12.7;
     let covered: f64 =
         found.iter().map(|&(_, _, r)| PI * r * r).sum::<f64>() / (found.len() as f64 * cell * cell);
-    let radius_linear = PI * (max_radius * ink).powi(2) / (cell * cell);
-    let area_linear = PI * max_radius.powi(2) * ink / (cell * cell);
+    let r_ink = max_radius * ink;
+    let radius_linear = PI * r_ink * r_ink / (cell * cell);
+    let area_linear = PI * max_radius * max_radius * ink / (cell * cell);
     assert!(
         (covered - radius_linear).abs() < 1e-12,
         "被覆率 {covered} が半径線形モデル {radius_linear} と違う"

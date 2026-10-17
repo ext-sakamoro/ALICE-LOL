@@ -75,7 +75,11 @@ const CASES: &[Case] = &[
     },
     Case {
         name: "density_hatch(0.5, 4.0, 15)",
-        elements: || density_hatch(0.5, 4.0, 15.0, &bounds(), &|x, y| 1.0 - x.hypot(y) / 70.0),
+        elements: || {
+            density_hatch(0.5, 4.0, 15.0, &bounds(), &|x, y| {
+                1.0 - x.mul_add(x, y * y).sqrt() / 70.0
+            })
+        },
     },
     Case {
         name: "guilloche(31, 13, 2.0, steps=720)",

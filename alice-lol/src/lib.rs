@@ -124,6 +124,7 @@ pub mod stdlib;
 
 // ── crate 内専用の決定論的 max / min (clippy-lib gate が f32/f64::max/min 直呼びを禁止) ──
 mod det_math;
+mod det_vec;
 
 // ── G2: 証明済みに安全な raw max/min 呼び出しの唯一の置き場 (scripts/raw_minmax_manifest.py が数える) ──
 mod raw_minmax;

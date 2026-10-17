@@ -452,7 +452,13 @@ fn ingest_parameter_update_recovers_g() {
         } => {
             // 旧法則の residual は閉じた式 0.5 (9.81 - 9.70) t² の RMS
             let ts = [0.5_f64, 1.0, 2.0, 3.0, 4.0, 5.0];
-            let ss: f64 = ts.iter().map(|t| (0.5 * 0.11 * t * t).powi(2)).sum();
+            let ss: f64 = ts
+                .iter()
+                .map(|t| {
+                    let x = 0.5 * 0.11 * t * t;
+                    x * x
+                })
+                .sum();
             let rms0 = (ss / ts.len() as f64).sqrt();
             assert!((previous_rms - rms0).abs() <= 1e-9 * rms0, "{previous_rms}");
             let g = updated.param("g").unwrap();

@@ -4,8 +4,8 @@
 # expected-fma-calls / expected-src-fma-calls: the fma-family calls the syntax-tree
 # check finds in every scanned file / in src/. Both must equal what it finds: update
 # them in the commit that adds or removes a call (a repository without any declares 0).
-expected-fma-calls = 411
-expected-src-fma-calls = 344
+expected-fma-calls = 416
+expected-src-fma-calls = 346
 
 # [[ir]]: per target and package, the floor of fma-family calls in the optimised IR
 # (scripts/fneg_fma_ir_check.py --write-floor, run on the CI host class). Fewer fails,

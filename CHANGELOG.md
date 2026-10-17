@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CI: clippy の禁止一覧に ALICE-Law G1 の banned 25 名を f32 / f64 の両方で揃え (足りなかった 21 組を追加)、`powi` も両幅で禁止した 本体用の設定は glam の `Vec2` / `Vec3` / `Vec3A` / `Vec4` の `min` / `max` / `min_element` / `max_element` / `clamp` も禁止し、canary に各形を 1 つずつ足した
 - CI: README の ALICE-Law 節の検査 (law-readme-block.yml) を preflight でも同じに走らせる `scripts/law_readme_block_check.py` と試験 `scripts/test_law_readme_block_check.py` を足した (ALICE-DB と同じ中身の共有 file、workflow の check の引数と節の pin の生成器を使い、比較 0 件・件数の行なし・pin が無い・fetch の失敗は失敗、未 commit の入力は検査していないと表示) 試験は CI と preflight で走る
 - CI (ALICE-Law G9): `scripts/id_move_check.py` (ALICE の識別子を持つ crate で共有、ALICE-Zip と同じ file) を追加 最新の `alice-lol-v*` tag の公開版と作業 tree で `LOL_SEMANTICS_ID` と `LOL_GEOMETRY_SEMANTICS_ID` の値を読み、動いたのに破壊的な版になっていない / CHANGELOG が両方の値を書いていない時に fail する (ci.yml の clippy job と preflight) 公開済みの 0.4.1 → 0.4.2 (patch で両方が動いた) を再現すると red になる
 - CI (ALICE-Law G3): `tools/no-outer-fneg-of-fma` を wiring-guard job (3 OS) と preflight で `cargo test --locked` / `cargo run --locked` で build・試験するようにした tool の `Cargo.lock` が無い・ずれている時に解き直さず失敗する (全 repo の写しも同じ形で走らせる)
@@ -38,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 決定論: 本体の glam ベクトルの min / max / min_element / max_element (8 箇所、roblox_export の外形寸法、print_export の格子と余白、mount の peg 半径) を `det_vec` の lane ごとの Law helper に通した ±0 の組で x86_64 と aarch64 の結果が揃う 形状の digest と識別子は変わらない
+- 決定論: 本体の `powi` (pattern_sdf の段の半径、alice-lol-ui の間隔) を `alice_det_math::powi` (掛け算の順序が固定) に置き換えた test と example の `powi` / `hypot` は正確な掛け算と `sqrt` に書き換えた (golden は不変)
 - `scripts/fneg_fma_ir_check.py`: `CARGO_TARGET_DIR` が無い時、作ったばかりの一時 directory に `cargo clean` を掛けて 失敗していた (cargo は `CACHEDIR.TAG` の無い directory の clean を拒否する) clean は共有の target directory の時だけにした `CARGO_TARGET_DIR` を外した fixture crate で走らせる試験を `scripts/test_fneg_fma_ir_check.py` に足した (旧版では失敗する)
 
 ## [0.4.2] - 2026-10-15

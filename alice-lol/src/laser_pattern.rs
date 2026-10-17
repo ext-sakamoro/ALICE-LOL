@@ -941,11 +941,11 @@ mod tests {
     fn test_density_hatch_center_dense() {
         let bounds = card_bounds();
         let (cx, cy) = bounds.center();
-        let max_dist = cx.hypot(cy);
+        let max_dist = cx.mul_add(cx, cy * cy).sqrt();
         let elems = density_hatch(0.5, 4.0, 0.0, &bounds, &|x, y| {
             let dx = x - cx;
             let dy = y - cy;
-            1.0 - dx.hypot(dy) / max_dist
+            1.0 - dx.mul_add(dx, dy * dy).sqrt() / max_dist
         });
         assert!(!elems.is_empty());
     }

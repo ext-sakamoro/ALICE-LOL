@@ -5140,7 +5140,7 @@ pub fn jewelry_stand(spec: &JewelryStandSpec) -> SdfNode {
     for i in 0..count {
         let tier_r = spec.bottom_tier_diameter
             * 0.5
-            * spec.tier_ratio.powi(i32::try_from(i).unwrap_or(i32::MAX));
+            * alice_det_math::powi(spec.tier_ratio, i32::try_from(i).unwrap_or(i32::MAX));
         let tier_z = tier_spacing * (n_f32(i) + 1.0) - tier_hz;
         let tier = translate(cylinder_z(tier_r, tier_hz), Vec3::new(0.0, 0.0, tier_z));
         cutters.push(tier);

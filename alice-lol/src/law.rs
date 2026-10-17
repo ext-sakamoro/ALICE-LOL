@@ -4475,7 +4475,8 @@ mod evidence_gate_tests {
         let (config, solid) = filled_cube(n, half);
         let (watts, ambient) = (50.0_f32, 20.0_f32);
 
-        let volume = (2.0 * half).powi(3);
+        let edge = 2.0 * half;
+        let volume = edge * edge * edge;
         #[allow(clippy::cast_precision_loss)]
         let cell_volume = volume / (n * n * n) as f32;
 

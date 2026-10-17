@@ -69,20 +69,20 @@ impl Theme {
     /// - n=-1 → 2.5 px
     #[must_use]
     pub fn spacing(&self, n: i32) -> f32 {
-        self.spacing_base * PHI.powi(n)
+        self.spacing_base * alice_det_math::powi(PHI, n)
     }
 
     /// n-th radius step
     #[must_use]
     pub fn radius(&self, n: i32) -> f32 {
-        self.radius_base * PHI.powi(n)
+        self.radius_base * alice_det_math::powi(PHI, n)
     }
 }
 
-/// golden ratio step 単独 helper (`PHI.powi(n)` の shorthand)
+/// golden ratio step 単独 helper (`alice_det_math::powi(PHI, n)` の shorthand)
 #[must_use]
 pub fn golden_ratio_step(n: i32) -> f32 {
-    PHI.powi(n)
+    alice_det_math::powi(PHI, n)
 }
 
 /// WCAG relative luminance (sRGB → luminance) — a11y contrast 計算に使う

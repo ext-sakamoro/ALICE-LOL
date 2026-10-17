@@ -343,7 +343,8 @@ fn scale_mm_scales_the_volume_exactly_by_its_cube() {
     assert!(base > 0.0, "scale_mm = 1 の体積 {base} が正でない");
     for s in [2.0f32, 10.0, 25.4] {
         let v = signed_volume(&node_to_mesh(&node, &cfg(32, s)));
-        let cube = f64::from(s).powi(3);
+        let side = f64::from(s);
+        let cube = side * side * side;
         let rel = (v / base / cube - 1.0).abs();
         assert!(
             rel < 1e-5,

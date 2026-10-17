@@ -238,8 +238,8 @@ fn compute_bounds_studs(mesh: &Mesh) -> Vec3 {
     let mut min = Vec3::splat(f32::MAX);
     let mut max = Vec3::splat(f32::MIN);
     for v in &mesh.vertices {
-        min = min.min(v.position);
-        max = max.max(v.position);
+        min = crate::det_vec::min(min, v.position);
+        max = crate::det_vec::max(max, v.position);
     }
     max - min
 }

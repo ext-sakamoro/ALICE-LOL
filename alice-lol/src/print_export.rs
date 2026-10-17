@@ -419,7 +419,7 @@ pub fn node_to_mesh(node: &SdfNode, config: &PrintConfig) -> Mesh {
     // メッシュ修復 ⚠️ **非回帰** — 水密なら破壊的操作を掛けず、掛けた結果が悪化したら
     // 採らない (詳細は [`repair_preserving_watertightness`])
     // 許容量は cell 幅相対 (⚠️ 旧実装の固定 `5e-3` は res 128 で cell の 16%)
-    let cell = (config.bounds_max - config.bounds_min).max_element()
+    let cell = crate::det_vec::max_element(config.bounds_max - config.bounds_min)
         / resolution_as_f32(config.resolution.max(1));
     let mut mesh = repair_preserving_watertightness(&raw, VERTEX_MERGE_CELL_RATIO * cell);
 
@@ -582,18 +582,20 @@ pub fn declared_config(
         }
     };
     let extent = aabb.max - aabb.min;
-    let widest = extent.max_element();
+    let widest = crate::det_vec::max_element(extent);
     if widest.is_nan() || widest <= 0.0 || !aabb.min.is_finite() || !aabb.max.is_finite() {
         return Err(ExportError::EmptyMesh);
     }
     let edge = half * (1.0 - 1e-3);
-    if aabb.min.min_element() <= -edge || aabb.max.max_element() >= edge {
+    if crate::det_vec::min_element(aabb.min) <= -edge
+        || crate::det_vec::max_element(aabb.max) >= edge
+    {
         return Err(ExportError::Units(format!(
             "the shape reaches the ±{DECLARED_SEARCH_HALF_MM} mm search box (declared unit '{}')",
             decl.unit.name()
         )));
     }
-    let cell = extent.max_element() / resolution_as_f32(base.resolution.max(1));
+    let cell = crate::det_vec::max_element(extent) / resolution_as_f32(base.resolution.max(1));
     let pad = Vec3::splat(DECLARED_MARGIN_CELLS * cell);
     let config = PrintConfig {
         resolution: base.resolution,

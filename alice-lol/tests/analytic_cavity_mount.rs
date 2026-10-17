@@ -420,7 +420,8 @@ fn bracket_l_fillet_only_adds_material_near_the_inner_corner() {
             assert!(!a || b, "{p:?}: fillet が材料を削った");
             if !a && b {
                 added += 1;
-                let d = (p.x - corner.x).hypot(p.y - corner.y);
+                let (dx, dy) = (p.x - corner.x, p.y - corner.y);
+                let d = dx.mul_add(dx, dy * dy).sqrt();
                 assert!(
                     d < 2.0 * r,
                     "{p:?}: 内角から {d:.2} mm 離れた点に材料が足された"

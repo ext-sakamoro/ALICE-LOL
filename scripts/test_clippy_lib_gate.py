@@ -47,6 +47,33 @@ pub fn h(y: f32, x: f32) -> f32 {
 pub fn i(z: f32) -> f32 {
     z.tan()
 }
+pub fn j(p: Vec3, q: Vec3) -> Vec3 {
+    p.min(q)
+}
+pub fn k(p: Vec3, q: Vec3) -> Vec3 {
+    p.max(q)
+}
+pub fn l(p: Vec3) -> f32 {
+    p.min_element()
+}
+pub fn m(p: Vec3) -> f32 {
+    p.max_element()
+}
+pub fn n(p: Vec3, q: Vec3, r: Vec3) -> Vec3 {
+    p.clamp(q, r)
+}
+pub fn o(p: Vec3, q: Vec3) -> Vec3 {
+    Vec3::min(p, q)
+}
+pub fn q(u: Vec2, w: Vec2) -> Vec2 {
+    u.max(w)
+}
+pub fn r(h: Vec4) -> f32 {
+    h.min_element()
+}
+pub fn s(k: Vec3A) -> Vec3A {
+    k.clamp(k, k)
+}
 """
 
 
@@ -60,13 +87,22 @@ class Render(unittest.TestCase):
         self.assertTrue(out.startswith(g.HEADER))
         body = out[len(g.HEADER) + 1:]
         self.assertEqual(body.replace("".join(
-            f'    {{ path = "{p}", reason = "{g.REASON}" }},\n' for p in g.EXTRA), ""), ROOT)
+            f'    {{ path = "{p}", reason = "{g.reason_of(p)}" }},\n' for p in g.EXTRA), ""), ROOT)
         i = body.index("disallowed-methods = [\n")
         self.assertIn('path = "f32::max"', body[i:body.index('path = "f32::sin"')])
         self.assertEqual(g.count_entries(out), 2 + len(g.EXTRA))
 
-    def test_the_four_extra_paths_are_exactly_f32_and_f64_max_and_min(self):
-        self.assertEqual(g.EXTRA, ["f32::max", "f32::min", "f64::max", "f64::min"])
+    def test_the_extra_paths_are_f32_f64_max_min_then_every_glam_vector_form(self):
+        self.assertEqual(g.EXTRA[:4], ["f32::max", "f32::min", "f64::max", "f64::min"])
+        glam = g.EXTRA[4:]
+        self.assertEqual(len(glam), 20)
+        for t in ["Vec2", "Vec3", "Vec3A", "Vec4"]:
+            for m in ["min", "max", "min_element", "max_element", "clamp"]:
+                self.assertIn(f"glam::{t}::{m}", glam)
+
+    def test_glam_entries_carry_the_glam_reason_and_the_scalar_ones_the_scalar_reason(self):
+        self.assertEqual(g.reason_of("glam::Vec3::min"), g.GLAM_REASON)
+        self.assertEqual(g.reason_of("f32::max"), g.REASON)
 
     def test_a_root_list_that_already_forbids_max_is_refused(self):
         with self.assertRaises(ValueError):
@@ -103,13 +139,13 @@ class Canary(unittest.TestCase):
     def setUp(self):
         self.want = g.canary_lines(CANARY)
 
-    def test_the_seven_forms_are_found_on_their_lines(self):
-        self.assertEqual(sorted(self.want), [3, 6, 9, 12, 15, 18, 21])
+    def test_the_sixteen_forms_are_found_on_their_lines(self):
+        self.assertEqual(sorted(self.want), list(range(3, 49, 3)))
 
     def test_a_diagnostic_on_every_line_and_a_non_zero_exit_passes(self):
         out = "\n".join(diag(n, "x") for n in self.want)
         errors, n = g.judge_canary(101, out, self.want)
-        self.assertEqual((errors, n), ([], 7))
+        self.assertEqual((errors, n), ([], 16))
 
     def test_a_missing_line_fails(self):
         out = "\n".join(diag(n, "x") for n in self.want if n != 9)
