@@ -3,11 +3,13 @@
 //! A fenced block in a tracked `*.md` (CHANGELOGs excepted, they record history) is a LOL
 //! program when its info string starts with `lol`, and the second word says what it is:
 //!
-//! - `lol print`: a part meant to be printed; it parses, it is one bounded solid (some point is
-//!   inside, and there is a box whose faces are all outside), and the export path
-//!   (`print_export::node_to_mesh` at its default resolution, with its repair) gives a closed mesh
-//!   (no boundary edge and no non-manifold edge) of at most 1M triangles
-//! - `lol render`: a scene for the shader path (a ground `plane`, an infinite repeat); it parses
+//! - `lol print`: a part meant to be printed; it is declared `units(<length unit>, print, ...)`,
+//!   it parses, and the export path for a declared program (`print_export::declared_config`: the
+//!   unit's scale, the shape's tight box, which also refuses a shape that is empty or unbounded;
+//!   then `node_to_mesh` at the default resolution, with its repair) gives a closed mesh (no
+//!   boundary edge and no non-manifold edge) of at most 1M triangles that fits the build volume
+//! - `lol render`: a scene for the shader path (a ground `plane`, an infinite repeat); it is
+//!   declared `units(<unit>, render, ...)` and parses
 //! - `lol fragment`: not a whole program (a template with names standing for numbers, a fragment
 //!   of a larger one); not run
 //!
@@ -18,12 +20,14 @@
 //! `language/constructs.toml`, is reported here as a warning; it becomes a failure in the next
 //! change of this test
 //!
-//! Units and printability (wall thickness, size, overhang) are not checked here: those criteria
-//! are measured by the printing pipeline and are not part of the language definition yet
+//! The declaration's purpose is the fence's second word. Printability beyond the size (wall
+//! thickness, overhang) is not checked here: those criteria are measured by the printing pipeline
+//! and are not part of the language definition yet
 
-use alice_lol::print_export::{node_to_mesh, validate_mesh, PrintConfig};
-use alice_lol::runtime_parser::parse_program;
-use alice_lol::{eval, SdfNode};
+use alice_lol::print_export::{declared_config, node_to_mesh, validate_mesh, PrintConfig};
+use alice_lol::runtime_parser::{parse_declared, parse_program};
+use alice_lol::units::{Declared, Purpose};
+use alice_lol::SdfNode;
 use glam::Vec3;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -143,73 +147,62 @@ fn fences() -> (Vec<Program>, Vec<String>) {
     (programs, untagged)
 }
 
-/// a box around the solid: the smallest of a few cubes whose surface samples are all clear of it
-///
-/// A sample whose distance is below half a cell diagonal may have surface inside its cell (a
-/// distance field changes by at most the distance moved), so such a sample extends the box by a
-/// cell and must not lie on the cube's surface; counting only the samples that are inside would
-/// miss a wall thinner than the sample spacing and cut it off
-fn bounding_box(node: &SdfNode) -> Result<(Vec3, Vec3), String> {
-    const N: u8 = 33;
-    const RADII: [f32; 7] = [2.0, 5.0, 12.0, 30.0, 80.0, 200.0, 500.0];
-    for (which, r) in RADII.into_iter().enumerate() {
-        let step = 2.0 * r / f32::from(N - 1);
-        let reach = step * 3.0_f32.sqrt() / 2.0;
-        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-        let (mut near, mut near_face) = (0_u32, 0_u32);
-        for i in 0..N {
-            for j in 0..N {
-                for k in 0..N {
-                    let p = Vec3::splat(-r)
-                        + step * Vec3::new(f32::from(i), f32::from(j), f32::from(k));
-                    if eval(node, p) < reach {
-                        near += 1;
-                        lo = lo.min(p);
-                        hi = hi.max(p);
-                        if [i, j, k].iter().any(|&c| c == 0 || c == N - 1) {
-                            near_face += 1;
-                        }
-                    }
-                }
-            }
-        }
-        if near > 0 && near_face == 0 {
-            let pad = Vec3::splat(2.0 * step);
-            return Ok((lo - pad, hi + pad));
-        }
-        if which + 1 == RADII.len() {
-            return Err(if near == 0 {
-                "no point is inside".into()
-            } else {
-                "not bounded within ±500".into()
-            });
-        }
-    }
-    unreachable!()
-}
+/// the build volume a `lol print` part must fit, in mm (the printer the print guide assumes,
+/// `skills/lol-sdf/references/print-guide.md`: 315 × 310 × 315 with 5 mm margin per side)
+const BUILD_VOLUME_MM: [f32; 3] = [305.0, 300.0, 305.0];
 
-/// the checks every leg runs: no comment, and the program parses
-fn check_text(p: &Program) -> Result<alice_lol::intent::Program, String> {
+/// the checks every leg runs: no comment, a units declaration whose purpose is the fence's, and
+/// the program parses
+fn check_text(p: &Program) -> Result<Declared, String> {
     if p.src.contains("//") {
         return Err("has a `//` comment (the grammar does not accept one)".into());
     }
-    parse_program(&p.src).map_err(|e| format!("does not parse: {} at {}", e.message, e.position))
+    let declared = parse_declared(&p.src)
+        .map_err(|e| format!("does not parse: {} at {}", e.message, e.position))?;
+    let Some(units) = declared.units else {
+        return Err("has no units declaration (`units(<unit>, <purpose>, ...)`)".into());
+    };
+    let want = if p.kind == Kind::Print {
+        Purpose::Print
+    } else {
+        Purpose::Render
+    };
+    if units.purpose != want {
+        return Err(format!(
+            "declares purpose `{}` in a `lol {}` fence",
+            units.purpose.name(),
+            want.name()
+        ));
+    }
+    Ok(declared)
 }
 
 /// the export of a `print` program (heavy: run in release)
 fn check_export(p: &Program) -> Result<(), String> {
-    let program = check_text(p)?;
-    let (lo, hi) = bounding_box(&program.sdf)?;
+    let declared = check_text(p)?;
     // the export's own default resolution, the one a program is printed at unless the caller asks
-    let config = PrintConfig {
-        bounds_min: lo,
-        bounds_max: hi,
-        scale_mm: 1.0,
-        ..PrintConfig::default()
-    };
-    let mesh = node_to_mesh(&program.sdf, &config);
+    let (config, _) =
+        declared_config(&declared, &PrintConfig::default()).map_err(|e| e.to_string())?;
+    let mesh = node_to_mesh(&declared.program.sdf, &config);
     if mesh.indices.is_empty() {
         return Err("the export gives no triangles".into());
+    }
+    let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    for v in &mesh.vertices {
+        lo = lo.min(v.position);
+        hi = hi.max(v.position);
+    }
+    let mut size = (hi - lo).to_array();
+    let mut volume = BUILD_VOLUME_MM;
+    size.sort_by(f32::total_cmp);
+    volume.sort_by(f32::total_cmp);
+    if size.iter().zip(volume).any(|(s, v)| *s > v) {
+        return Err(format!(
+            "the part is {:.1} × {:.1} × {:.1} mm, it does not fit the build volume {BUILD_VOLUME_MM:?} mm",
+            hi.x - lo.x,
+            hi.y - lo.y,
+            hi.z - lo.z
+        ));
     }
     // the slicer limit the documents state; measured on these examples: at 128 the largest is 0.72M
     let triangles = mesh.indices.len() / 3;
@@ -488,16 +481,10 @@ fn the_unresolved_print_programs_are_the_known_ones() {
     for p in programs.iter().filter(|p| p.kind == Kind::Print) {
         let doc = p.at.rsplit_once(':').unwrap().0.to_string();
         let n = *nth.entry(doc.clone()).and_modify(|n| *n += 1).or_insert(1);
-        let program = check_text(p).unwrap();
-        let (lo, hi) = bounding_box(&program.sdf).unwrap();
-        let config = PrintConfig {
-            bounds_min: lo,
-            bounds_max: hi,
-            scale_mm: 1.0,
-            ..PrintConfig::default()
-        };
+        let declared = check_text(p).unwrap();
+        let (config, _) = declared_config(&declared, &PrintConfig::default()).unwrap();
         checked += 1;
-        if !resolved_at_export_resolution(&program.sdf, &config) {
+        if !resolved_at_export_resolution(&declared.program.sdf, &config) {
             unresolved.extend([(doc, n, p.at.clone())]);
         }
     }

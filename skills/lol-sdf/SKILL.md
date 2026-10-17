@@ -12,7 +12,9 @@ Provenance: maintained in [ext-sakamoro/ALICE-LOL](https://github.com/ext-sakamo
 Write concise DSL for 3D geometry that compiles at build-time (via `proc_macro`) or parses at runtime (via `alice_lol::runtime_parser::parse_lol`) into a Signed Distance Function tree. The DSL is designed for both human authors and LLMs — the accompanying GBNF grammar (`references/lol.gbnf`) enables **constrained decoding** so a well-behaved LLM inference stack (llama.cpp, vLLM, TGI) cannot emit syntactically invalid LOL.
 
 ```lol print
-smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))
+units(mm, print,
+smooth_union(6, sphere(20), box3d(10, 10, 10))
+)
 ```
 
 That single line compiles to a valid `SdfNode`, evaluable on CPU (SIMD 8-wide), GPU (wgpu), or transpiled to GLSL / WGSL / HLSL for engine integration.
@@ -124,7 +126,7 @@ The `Law` API (`NonOverlap`, `Containment`, `MinThickness`) lets the author decl
 ```
 LawSet::new()
     .with_law(NonOverlap { a, b, priority: Hard })
-    .with_law(MinThickness { child: wall, min_mm: 1.2 })
+    .with_law(MinThickness { node: wall, min_thickness: 1.2 })   // in the program's unit (mm under units(mm, ...))
     .check(&scene) → Report { violations: [...], residuals: [...] }
 ```
 

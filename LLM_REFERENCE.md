@@ -10,7 +10,9 @@ ALICE-LOL (Law-Oriented Language) is a DSL for describing 3D scenes using Signed
 Instead of writing verbose JSON trees, you write concise function-call syntax:
 
 ```lol print
-smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))
+units(mm, print,
+smooth_union(6, sphere(20), box3d(10, 10, 10))
+)
 ```
 
 This compiles to an `SdfNode` tree that can be:
@@ -148,15 +150,21 @@ ALICE 三相原理 Phase 2 Law 経路 (SDF+Dual Contouring)、mesh 化は
 
 **Usage 例**:
 ```lol print
+units(mm, print,
 skadis_panel(300, 5, 5)
+)
 ```
 
 ```lol print
+units(mm, print,
 shopping_cart_coin(22.8, 1.7)
+)
 ```
 
 ```lol print
+units(mm, print,
 skadis_hook_l()
+)
 ```
 
 これらは実プリント合格 baseline (pipeline canonical Python 版と同 spec) を LOL DSL で
@@ -221,6 +229,7 @@ Form 1 is geometry only (same as a bare `<sdf>`), form 2 adds the entity registr
 Example — pick up the small box on a table and put it down:
 
 ```lol render
+units(world, render,
 program(
 box3d(1.0, 0.05, 0.6),
 entities(box3d(0.05, 0.05, 0.05)),
@@ -231,6 +240,7 @@ rest(300),
 release(0)
 )
 )
+)
 ```
 
 ## Examples for LLMs
@@ -238,34 +248,40 @@ release(0)
 ### Simple: Snowman
 
 ```lol print
+units(mm, print,
 union(
-sphere(1.0),
-translate(0.0, 1.3, 0.0, sphere(0.7)),
-translate(0.0, 2.2, 0.0, sphere(0.5))
+sphere(20),
+translate(0.0, 26, 0.0, sphere(14)),
+translate(0.0, 44, 0.0, sphere(10))
+)
 )
 ```
 
 ### Organic: Mushroom
 
 ```lol print
-smooth_union(0.2,
-translate(0.0, 1.0, 0.0,
-scale_non_uniform(1.5, 0.4, 1.5, sphere(1.0))
+units(mm, print,
+smooth_union(4,
+translate(0.0, 20, 0.0,
+scale_non_uniform(1.5, 0.4, 1.5, sphere(20))
 ),
-cylinder(0.3, 0.8)
+cylinder(6, 16)
+)
 )
 ```
 
 ### Mechanical: Gear
 
 ```lol print
+units(mm, print,
 union(
 subtract(
-cylinder(1.5, 0.2),
-cylinder(0.5, 0.3)
+cylinder(30, 4),
+cylinder(10, 6)
 ),
 polar_repeat(12,
-translate(1.55, 0.0, 0.0, cylinder(0.15, 0.2))
+translate(31, 0.0, 0.0, cylinder(3, 4))
+)
 )
 )
 ```
@@ -273,10 +289,12 @@ translate(1.55, 0.0, 0.0, cylinder(0.15, 0.2))
 ### Architecture: Arch
 
 ```lol print
+units(mm, print,
 subtract(
-box3d(2.0, 2.0, 0.5),
-translate(0.0, 0.5, 0.0,
-cylinder(1.2, 0.6)
+box3d(40, 40, 10),
+translate(0.0, 10, 0.0,
+cylinder(24, 12)
+)
 )
 )
 ```
@@ -284,10 +302,12 @@ cylinder(1.2, 0.6)
 ### Organic: Twisted Vase
 
 ```lol print
-onion(0.05,
-twist(0.5,
-taper(0.3,
-cylinder(1.0, 2.0)
+units(mm, print,
+onion(1,
+twist(0.025,
+taper(0.015,
+cylinder(20, 40)
+)
 )
 )
 )
@@ -296,13 +316,15 @@ cylinder(1.0, 2.0)
 ### Crystal Cluster
 
 ```lol print
-smooth_union(0.1,
-diamond(0.5, 1.5),
-translate(0.8, -0.5, 0.3,
-rotate(0.0, 0.0, 15.0, diamond(0.3, 1.0))
+units(mm, print,
+smooth_union(2,
+diamond(10, 30),
+translate(16, -10, 6,
+rotate(0.0, 0.0, 15.0, diamond(6, 20))
 ),
-translate(-0.6, -0.3, -0.5,
-rotate(10.0, 0.0, -10.0, diamond(0.4, 1.2))
+translate(-12, -6, -10,
+rotate(10.0, 0.0, -10.0, diamond(8, 24))
+)
 )
 )
 ```
@@ -310,14 +332,17 @@ rotate(10.0, 0.0, -10.0, diamond(0.4, 1.2))
 ### Fractal-like: Symmetric Object
 
 ```lol print
+units(mm, print,
 icosahedral_symmetry(
-translate(1.0, 0.0, 0.0, sphere(0.3))
+translate(20, 0.0, 0.0, sphere(6))
+)
 )
 ```
 
 ### Scene with Ground
 
 ```lol render
+units(world, render,
 union(
 noise(0.1, 2.0, 42,
 plane(0.0, 1.0, 0.0, 0.0)
@@ -329,6 +354,7 @@ translate(0.0, 1.0, 0.0, sphere(0.5))
 )
 )
 )
+)
 ```
 
 ### 3D Printable: ALICE Coaster (10cm round, gyroid openwork)
@@ -336,20 +362,22 @@ translate(0.0, 1.0, 0.0, sphere(0.5))
 SDF geometric coaster, 10cm round and 5mm thick. Subtracts are nested sequentially (never union the cutters together): outer ring of 12 round holes, middle ring of 12 smaller holes rotated 15°, inner ring of 6 hexagonal holes, then a hexagonal recess (not through) in the center.
 
 ```lol print
+units(mm, print,
 subtract(
 subtract(
 subtract(
 subtract(
-cylinder(2.5, 0.125),
-polar_repeat(12, translate(1.8, 0.0, 0.0, cylinder(0.3, 0.2)))
+cylinder(50, 2.5),
+polar_repeat(12, translate(36, 0.0, 0.0, cylinder(6, 4)))
 ),
 rotate(0.0, 15.0, 0.0,
-polar_repeat(12, translate(1.2, 0.0, 0.0, cylinder(0.2, 0.2)))
+polar_repeat(12, translate(24, 0.0, 0.0, cylinder(4, 4)))
 )
 ),
-polar_repeat(6, translate(0.6, 0.0, 0.0, hex_prism(0.15, 0.2)))
+polar_repeat(6, translate(12, 0.0, 0.0, hex_prism(3, 4)))
 ),
-translate(0.0, 0.04, 0.0, hex_prism(0.25, 0.1))
+translate(0.0, 0.8, 0.0, hex_prism(5, 2))
+)
 )
 ```
 
@@ -369,9 +397,11 @@ When generating objects for 3D printing, consider their physical purpose. LOL pr
 
 ### Parameter Guide
 
-- `shell_t`: Outer wall thickness (0.02–0.1 typical, thicker = stronger walls)
-- `scale`: TPMS spatial frequency (3.0–8.0 typical, higher = denser lattice = stronger but heavier)
-- `lattice_t`: TPMS wall thickness (0.01–0.05 typical, thicker = stronger lattice struts)
+Values for `units(mm, print, ...)`:
+
+- `shell_t`: Outer wall thickness in mm (0.4–2.0 typical, thicker = stronger walls)
+- `scale`: TPMS spatial frequency per mm (0.15–0.4 typical, cells of about 2π / scale mm; higher = denser lattice = stronger but heavier)
+- `lattice_t`: TPMS wall thickness in mm (0.2–1.0 typical, thicker = stronger lattice struts)
 
 ### STL/3MF Output Pipeline
 
@@ -398,36 +428,44 @@ pipeline 側の `scripts/` にH2D用テンプレートを格納済み。`export_
 
 **Decorative vase** (hollow, minimal material):
 ```lol print
-onion(0.02,
-twist(0.5,
-taper(0.3, cylinder(1.0, 2.0))
+units(mm, print,
+onion(0.4,
+twist(0.025,
+taper(0.015, cylinder(20, 40))
+)
 )
 )
 ```
 
 **Structural bracket** (gyroid infill for strength + weight savings):
 ```lol print
-lattice_infill(0.05, 5.0, 0.02,
+units(mm, print,
+lattice_infill(1, 0.25, 0.4,
 subtract(
-box3d(2.0, 1.0, 0.5),
-translate(1.0, 0.0, 0.0, cylinder(0.3, 0.6))
+box3d(40, 20, 10),
+translate(20, 0.0, 0.0, cylinder(6, 12))
+)
 )
 )
 ```
 
 **Drone arm** (diamond infill for maximum stiffness):
 ```lol print
-diamond_infill(0.04, 6.0, 0.03,
-smooth_union(0.1,
-capsule(0.3, 2.0),
-translate(0.0, 2.0, 0.0, sphere(0.5))
+units(mm, print,
+diamond_infill(0.8, 0.3, 0.6,
+smooth_union(2,
+capsule(6, 40),
+translate(0.0, 40, 0.0, sphere(10))
+)
 )
 )
 ```
 
 **Isotropic test specimen** (Schwarz-P for equal strength in all axes):
 ```lol print
-schwarz_infill(0.05, 4.0, 0.02, box3d(1.0, 1.0, 1.0))
+units(mm, print,
+schwarz_infill(1, 0.2, 0.4, box3d(20, 20, 20))
+)
 ```
 
 ## Laser Engraving — Comprehensive Technical Reference
@@ -799,10 +837,12 @@ Alternative: laser command → G-code directly (rasterize → scanlines → G-co
 
 ### LOL (concise):
 ```lol print
+units(mm, print,
 union(
-sphere(1.0),
-translate(0.0, 1.3, 0.0, sphere(0.7)),
-translate(0.0, 2.2, 0.0, sphere(0.5))
+sphere(20),
+translate(0.0, 26, 0.0, sphere(14)),
+translate(0.0, 44, 0.0, sphere(10))
+)
 )
 ```
 
@@ -812,7 +852,7 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 
 - Keep total node count under 20 for real-time evaluation
 - Maximum nesting depth: 6-8 levels
-- All geometry should fit within bounds [-5, 5] on all axes
+- A render scene (`units(world, render, ...)`) should fit within [-5, 5] on all axes; a print program is exported at its declared size
 - Use `smooth_union` (k=0.1-0.3) for organic forms
 - Use `subtract` / `smooth_subtract` for mechanical cuts
 - Use `polar_repeat` / `repeat_finite` / `mirror` instead of duplicating nodes
@@ -843,8 +883,27 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 - Y-up, right-handed
 - Origin (0,0,0) = center of scene
 - Ground level = Y=0
-- Scene bounds: [-5, 5] on all axes
-- Default print scale: 1.0 LOL unit = 20mm (configurable via `PrintConfig::scale_mm`)
+- Render scenes: [-5, 5] on all axes (`units(world, render, ...)`)
+- Print programs: the declared unit, `units(mm, print, ...)` for millimetres
+
+<!-- units:begin -->
+<!-- generated by scripts/gen_units_doc.py from alice-lol/language/constructs.toml; do not edit -->
+**Units.** A program says what its numbers are with one declaration at the root (never nested):
+`units(<unit>, <purpose>, <program>)`, for example `units(mm, print, cylinder(50, 5))`; a scene with no physical size is `units(world, render, <program>)`.
+Every length argument is in the declared unit; angles stay in degrees.
+
+| unit | one program unit | purposes |
+|------|------------------|----------|
+| `mm` | 1 mm | `print`, `render` |
+| `cm` | 10 mm | `print`, `render` |
+| `m` | 1000 mm | `print`, `render` |
+| `in` | 25.4 mm | `print`, `render` |
+| `world` | no physical size | `render` only |
+
+Exported with a declaration, the scale is the unit and the bounds are the shape's own tight box
+(no fixed scene box, nothing is cut off). A program without a declaration is exported with the
+`PrintConfig` scale and bounds of the caller and gets the warning `LOL-U001`.
+<!-- units:end -->
 
 ## SDF Optimization Rules for 3D Printing
 
@@ -1343,13 +1402,17 @@ let glsl = to_glsl_full(&scene, &config);
 The simplest ground is a Y=0 plane:
 
 ```lol render
+units(world, render,
 plane(0.0, 1.0, 0.0, 0.0)
+)
 ```
 
 Add surface detail with `noise` or `displacement`:
 
 ```lol render
+units(world, render,
 noise(0.1, 2.0, 42, plane(0.0, 1.0, 0.0, 0.0))
+)
 ```
 
 For biome-based terrain (snow, rock, desert, grass with phase transitions), enable `biome_terrain: true` in `RenderConfig`. This uses Voronoi erosion and FBM per biome.
@@ -1408,12 +1471,14 @@ let config = RenderConfig {
 For scenes with different materials per object, set `material_slots > 1`. Your LOL scene must use `with_material(id, ...)`:
 
 ```lol render
+units(world, render,
 union(
 with_material(0, plane(0.0, 1.0, 0.0, 0.0)),
 with_material(1, translate(0.0, 2.0, 0.0, sphere(1.0))),
 with_material(2, translate(3.0, 1.5, 0.0,
 smooth_union(0.2, torus(1.0, 0.3), cylinder(0.2, 1.5))
 ))
+)
 )
 ```
 
@@ -1472,6 +1537,7 @@ The application layer samples physics fields each frame and uploads to shader un
 ### Example: Complete Outdoor Scene
 
 ```lol render
+units(world, render,
 union(
 noise(0.08, 1.5, 42, plane(0.0, 1.0, 0.0, 0.0)),
 translate(0.0, 3.0, 0.0,
@@ -1485,6 +1551,7 @@ twist(0.3, taper(0.2, cylinder(0.8, 3.0)))
 ),
 translate(-4.0, 1.5, 2.0,
 icosahedral_symmetry(translate(1.0, 0.0, 0.0, sphere(0.15)))
+)
 )
 )
 ```
