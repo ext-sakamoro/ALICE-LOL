@@ -460,12 +460,9 @@ const KNOWN_UNRESOLVED: &[(&str, usize)] = &[
     ("LLM_PRINT_PROMPT.md", 3),
     ("LLM_PRINT_PROMPT.md", 5),
     ("LLM_PRINT_PROMPT.md", 6),
-    ("LLM_PRINT_PROMPT.md", 11),
     ("LLM_REFERENCE.md", 2),
-    ("LLM_REFERENCE.md", 13),
     ("LLM_REFERENCE.md", 14),
     ("LLM_REFERENCE.md", 15),
-    ("LLM_REFERENCE.md", 16),
 ];
 
 #[test]
@@ -507,4 +504,50 @@ fn the_unresolved_print_programs_are_the_known_ones() {
         new.is_empty() && stale.is_empty(),
         "newly unresolved: {new:?}\nlisted but now resolved (remove from KNOWN_UNRESOLVED): {stale:?}"
     );
+}
+
+/// the size the documents' units baseline gives a part, pinned on one example so the baseline cannot
+/// drift: the coaster of `LLM_REFERENCE.md` ("10cm round and 5mm thick") is exported at 100 mm across
+/// and 5 mm thick (oracle: the prose; 0.4.x read the same program at its 10 mm/unit preset, half this)
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "exports the coaster: run in release (CI job doc-programs, preflight)"
+)]
+fn the_coaster_example_is_exported_at_the_size_its_prose_states() {
+    let (programs, _) = fences();
+    let coaster: Vec<&Program> = programs
+        .iter()
+        .filter(|p| {
+            p.kind == Kind::Print
+                && p.src.contains("hex_prism(5, 2)")
+                && p.at.starts_with("LLM_REFERENCE.md:")
+        })
+        .collect();
+    assert_eq!(
+        coaster.len(),
+        1,
+        "the coaster fence of LLM_REFERENCE.md: {coaster:?}"
+    );
+    let declared = check_text(coaster[0]).unwrap();
+    let (config, _) = declared_config(&declared, &PrintConfig::default()).unwrap();
+    let mesh = node_to_mesh(&declared.program.sdf, &config);
+    let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    for v in &mesh.vertices {
+        lo = lo.min(v.position);
+        hi = hi.max(v.position);
+    }
+    let size = hi - lo;
+    let cell = (config.bounds_max - config.bounds_min).max_element() * config.scale_mm
+        / f32::from(u16::try_from(config.resolution).unwrap());
+    for (got, want, what) in [
+        (size.x, 100.0, "across x"),
+        (size.z, 100.0, "across z"),
+        (size.y, 5.0, "thick"),
+    ] {
+        assert!(
+            (got - want).abs() <= 2.0 * cell,
+            "the coaster is {got} mm {what}, the prose says {want} mm (cell {cell})"
+        );
+    }
 }
