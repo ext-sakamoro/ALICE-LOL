@@ -7,19 +7,20 @@
 //! and ignore a NaN operand; the platform `f32::max` / `min` and glam's lane
 //! forms leave both unspecified.
 //!
-//! Equivalent mutant (recorded, not tested here): removing the zero-sign rule of
-//! `det_math::max` changes only `max(+0, -0)`. The stdlib floors take the literal
-//! `+0.0` as their second operand, so that pair cannot occur there, and the export
-//! bounds are `max - min`, which erases the sign unless max gives -0 and min gives +0
-//! at the same time (the platform forms can do that on `x86_64`; the Law helpers
-//! never do). On an `aarch64` host the mutant therefore stays green.
-
-use alice_lol::roblox_export::{validate_for_roblox, RobloxConfig};
+//! Mutants: dropping the NaN rule of `det_math::max` / `min`, or any mutant that returns
+//! the first operand (or -0) for an equal pair of zeros, turns these tests red. The one
+//! mutant they leave green is `det_math::max` returning the second operand `b` on any
+//! equal pair (dropping `|| !a.is_sign_negative()`): it differs from the Law only for
+//! `max(+0, -0)`, and every max site tested here gets its +0 operand second (a literal
+//! `+0.0`, or `plate_thickness + c`, which is never -0), so that pair cannot occur.
+//! The roblox export bounds are in `law_max_min_ties_roblox.rs` (feature `roblox`).
 use alice_lol::stdlib::hardsurface::mount::skadis_peg_compat;
+use alice_lol::stdlib::hardsurface::pattern_sdf::{
+    drawer_organizer, l_bracket, t_slot_bracket_2020, DrawerSpec, LBracketSpec,
+    TSlotBracket2020Spec,
+};
 use alice_lol::stdlib::hardsurface::reinforcement::honeycomb_infill;
 use alice_lol::SdfNode;
-use alice_sdf::mesh::{Mesh, Vertex};
-use glam::Vec3;
 
 /// The `(field, value)` pairs printed for `field` in the node's debug form, as bits
 fn field_bits(node: &SdfNode, field: &str) -> Vec<u32> {
@@ -73,49 +74,6 @@ fn peg_round_radius_with_negative_zero_and_nan_thickness() {
     );
 }
 
-fn mesh_of(points: &[Vec3]) -> Mesh {
-    Mesh {
-        vertices: points.iter().map(|&p| Vertex::new(p, Vec3::Y)).collect(),
-        indices: Vec::new(),
-    }
-}
-
-/// Bounding size of an export (`roblox_export::validate_for_roblox`, lane-wise
-/// `det_vec` min / max): a +0 / -0 pair of vertices in either order gives a +0
-/// extent, and a NaN coordinate is skipped by the lane fold
-#[test]
-fn roblox_bounds_of_mixed_zeros_in_both_orders_and_a_nan_vertex() {
-    let config = RobloxConfig::default();
-    let a = validate_for_roblox(
-        &mesh_of(&[Vec3::new(0.0, 0.0, 0.0), Vec3::new(-0.0, -0.0, -0.0)]),
-        &config,
-    );
-    let b = validate_for_roblox(
-        &mesh_of(&[Vec3::new(-0.0, -0.0, -0.0), Vec3::new(0.0, 0.0, 0.0)]),
-        &config,
-    );
-    for v in [a.bounds_studs, b.bounds_studs] {
-        assert_eq!([v.x.to_bits(), v.y.to_bits(), v.z.to_bits()], [POS_ZERO; 3]);
-    }
-    let with_nan = validate_for_roblox(
-        &mesh_of(&[
-            Vec3::new(f32::NAN, 1.0, 1.0),
-            Vec3::new(1.0, 2.0, 3.0),
-            Vec3::new(3.0, 1.0, 1.0),
-        ]),
-        &config,
-    );
-    let finite = validate_for_roblox(
-        &mesh_of(&[Vec3::new(1.0, 2.0, 3.0), Vec3::new(3.0, 1.0, 1.0)]),
-        &config,
-    );
-    let (n, f) = (with_nan.bounds_studs, finite.bounds_studs);
-    assert_eq!(
-        [n.x.to_bits(), n.y.to_bits(), n.z.to_bits()],
-        [f.x.to_bits(), f.y.to_bits(), f.z.to_bits()]
-    );
-}
-
 /// Runtime parser count (`runtime_parser.rs` `count`, `max(v.round(), 1.0)` then a cast
 /// to `u32`): the floor is the literal 1.0, so no equal pair of zeros can reach the max,
 /// and a non-finite count is refused before it (so no NaN operand either); a -0 count
@@ -129,5 +87,80 @@ fn parser_count_of_negative_zero_is_the_floor_and_non_finite_is_refused() {
     assert!(
         alice_lol::runtime_parser::parse_lol("token_well(10, 5, 1e39)").is_err(),
         "an infinite count is refused"
+    );
+}
+
+fn debug(node: &SdfNode) -> String {
+    format!("{node:?}")
+}
+
+/// L bracket arm floors (`pattern_sdf::l_bracket`, `max(arm, plate_thickness + 1.0)` on both
+/// arms): with a plate of -1 the floor is +0, so a -0 arm is the pair (-0, +0), which gives
+/// +0, the same node as a +0 arm; a NaN arm falls to the floor
+#[test]
+fn l_bracket_arm_floor_of_negative_zero_and_nan() {
+    let spec = |arm: f32| LBracketSpec {
+        arm_width: arm,
+        arm_height: arm,
+        plate_thickness: -1.0,
+        ..LBracketSpec::m4_2holes()
+    };
+    let positive = debug(&l_bracket(&spec(0.0)));
+    assert!(!positive.contains("-0.0"), "the +0 baseline carries no -0");
+    assert_eq!(debug(&l_bracket(&spec(-0.0))), positive);
+    assert_eq!(debug(&l_bracket(&spec(f32::NAN))), positive);
+}
+
+/// T-slot bracket arm floor (`pattern_sdf::t_slot_bracket_2020`, `max(arm, plate + 5.0)`):
+/// with a plate of -5 the floor is +0; a -0 arm gives the +0 node, a NaN arm the floor
+#[test]
+fn t_slot_bracket_arm_floor_of_negative_zero_and_nan() {
+    let spec = |arm: f32| TSlotBracket2020Spec {
+        arm_size: arm,
+        plate_thickness: -5.0,
+        ..TSlotBracket2020Spec::standard_20()
+    };
+    let positive = debug(&t_slot_bracket_2020(&spec(0.0)));
+    assert_eq!(debug(&t_slot_bracket_2020(&spec(-0.0))), positive);
+    assert_eq!(debug(&t_slot_bracket_2020(&spec(f32::NAN))), positive);
+}
+
+/// Drawer slot depth (`pattern_sdf::drawer_organizer`, `min(min_depth, depth - 2 * wall)`):
+/// with wall 0 the second operand is the drawer depth itself. (+0, -0) gives -0, the same
+/// node as (-0, -0); (-0, +0) gives -0, which differs from (+0, +0); a NaN min depth falls to
+/// the drawer depth, the same node as an infinite min depth
+#[test]
+fn drawer_slot_depth_min_of_mixed_zeros_and_nan() {
+    let spec = |min_depth: f32, depth: f32| {
+        let mut s = DrawerSpec::default_chopsticks_set();
+        s.wall_thickness = 0.0;
+        s.depth = depth;
+        for slot in &mut s.slots {
+            slot.min_depth = min_depth;
+        }
+        s
+    };
+    assert_eq!(
+        debug(&drawer_organizer(&spec(0.0, -0.0))),
+        debug(&drawer_organizer(&spec(-0.0, -0.0))),
+        "min(+0, -0) is -0"
+    );
+    assert_ne!(
+        debug(&drawer_organizer(&spec(-0.0, 0.0))),
+        debug(&drawer_organizer(&spec(0.0, 0.0))),
+        "min(-0, +0) is -0, not +0"
+    );
+    let finite = DrawerSpec::default_chopsticks_set();
+    let with = |min_depth: f32| {
+        let mut s = finite.clone();
+        for slot in &mut s.slots {
+            slot.min_depth = min_depth;
+        }
+        debug(&drawer_organizer(&s))
+    };
+    assert_eq!(
+        with(f32::NAN),
+        with(f32::INFINITY),
+        "a NaN min depth falls to the drawer depth"
     );
 }
