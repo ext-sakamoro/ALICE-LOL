@@ -92,28 +92,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-
-      # alice-lol-robot (default features) の mandatory path dep
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
+          repo-dir: ALICE-LOL
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
