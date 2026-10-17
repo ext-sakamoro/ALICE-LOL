@@ -10,5 +10,7 @@ tools/fneg-fma-ir-probes/**
 scripts/fneg_fma_ir_check.py
 scripts/test_fneg_fma_ir_check.py
 scripts/no-outer-fneg-of-fma-allowlist.toml
+.github/actions/alice-siblings/**
+.github/alice-siblings
 .github/workflows/g3-ir.yml
 .github/paths/g3-ir.txt

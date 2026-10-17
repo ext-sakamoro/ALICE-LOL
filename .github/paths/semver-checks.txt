@@ -18,5 +18,7 @@ scripts/test_semver_gate.py
 .github/semver-gate.toml
 # the changes and gate jobs
 scripts/changed_paths.py
+.github/actions/alice-siblings/**
+.github/alice-siblings
 .github/workflows/semver-checks.yml
 .github/paths/semver-checks.txt

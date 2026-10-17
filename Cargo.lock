@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "alice-physics"
-version = "3.1.0"
+version = "4.0.0"
 dependencies = [
  "alice-det-math",
  "sha2",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "alice-sdf"
-version = "6.1.0"
+version = "7.0.0"
 dependencies = [
  "alice-det-math",
  "bincode",
@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "alice-zip"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "alice-det-math",
  "libm",
