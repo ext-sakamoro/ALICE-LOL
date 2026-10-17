@@ -598,6 +598,10 @@ jobs:
       - name: Programs in the documents (parse, grammar, closed export under 1M triangles, resolved at the export resolution)
         working-directory: ALICE-LOL
         run: scripts/cargo_test_nonzero.sh --release -p alice-lol --features llm-bridge --test doc_programs -- --include-ignored
+      # 引数の種類 H (1 増やすと形の全体が 2 増える長さ) を構文ごとに測る (debug では数分なので release でここ)
+      - name: Argument kinds (an H argument grows the shape by twice its change, an L argument does not)
+        working-directory: ALICE-LOL
+        run: scripts/cargo_test_nonzero.sh --release -p alice-lol --test args_kinds -- --include-ignored
 
   # 2 通りに評価されうる) 状態を止める (既存分は scripts/lock-duplicates-baseline.txt)
   # 併せて算術ガード: 判定を出す file で platform の libm (値が IEEE 754 で規定されて
