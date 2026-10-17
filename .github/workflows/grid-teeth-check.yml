@@ -78,26 +78,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

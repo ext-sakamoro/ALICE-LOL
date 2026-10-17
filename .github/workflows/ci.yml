@@ -66,29 +66,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-
-      # alice-lol-robot (default features) の mandatory path dep
-      # (kinematics feature 経由の 8-byte packet bridge)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
+          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -96,15 +76,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ALICE-LOL
-
-      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
-      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
-      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
-      # どの Cargo.toml も参照していなかった (dead) ので撤去
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
 
       - name: Build
         working-directory: ALICE-LOL
@@ -187,26 +158,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -247,29 +201,9 @@ jobs:
           path: ALICE-LOL
           # the release tags: scripts/id_move_check.py compares with the newest one
           fetch-depth: 0
-
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-
-      # alice-lol-robot (default features) の mandatory path dep
-      # (kinematics feature 経由の 8-byte packet bridge)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
+          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -279,15 +213,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ALICE-LOL
-
-      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
-      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
-      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
-      # どの Cargo.toml も参照していなかった (dead) ので撤去
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
 
       - name: Clippy
         working-directory: ALICE-LOL
@@ -326,32 +251,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-
-      # cargo package が path dep の manifest を読むので sibling は要る (build には使わない)
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -389,37 +291,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-
-      # alice-lol-robot (default features) の mandatory path dep
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-
-      # alice-lol `physics` feature の optional path dep (--all-features で実 compile)
-      # 2026-09-17: manifest-only stub (空 lib) は --all-features で E0433 になるので
-      # real sibling checkout に置換、Codec / Streaming / Cache / Foundry の stub は
-      # どの Cargo.toml も参照していなかった (dead) ので撤去
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -445,28 +319,10 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
+          repo-dir: ALICE-LOL
 
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -499,28 +355,10 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
+          repo-dir: ALICE-LOL
 
-      # research_law が使う alice-zip (path dep `../../ALICE-Zip`)
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
       # Cargo.toml `rust-version` を実証する (宣言だけの MSRV は
       # clippy の incompatible_msrv を黙らせる)
       # 宣言値と同じ toolchain を pin し、全 feature で check が通ることを確認
@@ -554,26 +392,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -592,26 +413,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -653,26 +457,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: actions/checkout@v5
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
         with:
-          repository: ext-sakamoro/ALICE-SDF
-          path: ALICE-SDF
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Zip
-          path: ALICE-Zip
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-LLM
-          path: ALICE-LLM
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Kinematics
-          path: ALICE-Kinematics
-      - uses: actions/checkout@v5
-        with:
-          repository: ext-sakamoro/ALICE-Physics
-          path: ALICE-Physics
+          repo-dir: ALICE-LOL
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
