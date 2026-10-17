@@ -119,6 +119,8 @@ python3 scripts/test_release_roster.py
 python3 scripts/release_roster.py
 python3 scripts/test_release_siblings.py
 python3 scripts/release_siblings.py
+python3 scripts/test_alice_siblings_check.py
+python3 scripts/alice_siblings_check.py
 python3 scripts/test_root_artifacts.py
 python3 scripts/root_artifacts.py
 python3 scripts/test_license_check.py

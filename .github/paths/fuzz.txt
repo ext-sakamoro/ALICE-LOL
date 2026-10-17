@@ -3,6 +3,7 @@
 # (scripts/changed_paths.py sync)
 **/src/**
 fuzz/**
+.github/alice-siblings
 .github/workflows/fuzz.yml
 .github/actions/**
 .github/paths/fuzz.txt
