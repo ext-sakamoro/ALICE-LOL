@@ -100,6 +100,12 @@ class Render(unittest.TestCase):
             for m in ["min", "max", "min_element", "max_element", "clamp"]:
                 self.assertIn(f"glam::{t}::{m}", glam)
 
+    def test_two_entries_on_one_line_of_the_root_list_fail(self):
+        crowded = ROOT.replace('" },\n    { path = "f64::cos"', '" },    { path = "f64::cos"', 1)
+        self.assertNotEqual(crowded, ROOT)
+        errors = g.check(crowded, g.render(ROOT))
+        self.assertTrue(errors and "more than one entry" in errors[0], errors)
+
     def test_glam_entries_carry_the_glam_reason_and_the_scalar_ones_the_scalar_reason(self):
         self.assertEqual(g.reason_of("glam::Vec3::min"), g.GLAM_REASON)
         self.assertEqual(g.reason_of("f32::max"), g.REASON)

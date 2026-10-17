@@ -114,7 +114,19 @@ def count_entries(text: str) -> int:
     return len(re.findall(r'path\s*=\s*"', text[i:j]))
 
 
+def entries_one_per_line(text: str) -> list[str]:
+    """Lines of `disallowed-methods` holding more than one entry (each entry is one line)."""
+    i = text.index("disallowed-methods = [")
+    j = text.index("\n]", i)
+    lines = text[i:j].split("\n")[1:]
+    return [l.strip()[:60] for l in lines if len(re.findall(r'path\s*=\s*"', l)) > 1]
+
+
 def check(root_text: str, lib_text: str | None) -> list[str]:
+    crowded = entries_one_per_line(root_text)
+    if crowded:
+        return [f"clippy.toml: {len(crowded)} line(s) of disallowed-methods hold more than one entry: "
+                + "; ".join(crowded)]
     want = render(root_text)
     if lib_text is None:
         return [f"{os.path.relpath(LIB_CONFIG, ROOT)} is missing (python3 scripts/clippy_lib_gate.py --write)"]

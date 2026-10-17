@@ -118,6 +118,58 @@ pub fn contrast_ratio(fg: [f32; 3], bg: [f32; 3]) -> f32 {
 
 #[cfg(test)]
 mod tests {
+
+    /// FNV-1a 64 over the bits of each value, in order
+    fn fnv(values: impl Iterator<Item = f32>) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for v in values {
+            for b in v.to_bits().to_le_bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        h
+    }
+
+    /// The steps go through `alice_det_math::powi`, which takes the reciprocal first for
+    /// a negative exponent ((1 / x)^|n|); for n <= -2 that differs from the earlier
+    /// `f32::powi` (x^|n| then the reciprocal) by up to 25 ulp. The values for n in
+    /// -40..=40 are pinned so a later change of the order is visible
+    #[test]
+    fn steps_for_n_in_minus_40_to_40_are_pinned() {
+        let t = Theme::light();
+        let steps = || (-40..=40).map(golden_ratio_step);
+        let spacing = || (-40..=40).map(|n| t.spacing(n));
+        let radius = || (-40..=40).map(|n| t.radius(n));
+        assert_eq!(steps().count(), 81);
+        assert_eq!(
+            [
+                golden_ratio_step(-40).to_bits(),
+                golden_ratio_step(-2).to_bits(),
+                golden_ratio_step(-1).to_bits(),
+                golden_ratio_step(0).to_bits(),
+                golden_ratio_step(2).to_bits(),
+                golden_ratio_step(40).to_bits()
+            ],
+            [
+                0x3196_281b,
+                0x3ec3_910d,
+                0x3f1e_377a,
+                0x3f80_0000,
+                0x4027_8ddf,
+                0x4d5a_39cc
+            ]
+        );
+        assert_eq!(
+            [fnv(steps()), fnv(spacing()), fnv(radius())],
+            [
+                0xa6a3_33d8_eb91_935d,
+                0xc422_8066_5f68_23d4,
+                0xc422_8066_5f68_23d4
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

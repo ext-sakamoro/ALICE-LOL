@@ -9,6 +9,7 @@ use crate::det_math;
 use glam::Vec3;
 
 /// Lane-wise minimum, each lane by [`det_math::min`]
+#[cfg(any(test, feature = "roblox"))]
 #[must_use]
 pub fn min(a: Vec3, b: Vec3) -> Vec3 {
     Vec3::new(
@@ -19,6 +20,7 @@ pub fn min(a: Vec3, b: Vec3) -> Vec3 {
 }
 
 /// Lane-wise maximum, each lane by [`det_math::max`]
+#[cfg(any(test, feature = "roblox"))]
 #[must_use]
 pub fn max(a: Vec3, b: Vec3) -> Vec3 {
     Vec3::new(
