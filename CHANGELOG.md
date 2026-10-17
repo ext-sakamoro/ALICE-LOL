@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `alice-lol` の版を 0.5.0 にし、workspace の他の crate (`alice-lol-humanoid` / `alice-lol-robot` / `alice-lol-ui` / `alice-lol-datagen`) の要求も 0.5.0 にした 破壊的変更 (cargo-semver-checks 0.50.0 を公開済みの 0.4.1 と比べて 2 件): 監査 Law の `Clause` に `Includes` を足した (`Clause` は閉じた enum) / `ExportStats` に `warnings` を足し `#[non_exhaustive]` にした 検査器が見ない振る舞いの変化: 宣言のある program の `lol_to_*` の倍率と範囲が宣言から決まる、`parse_lol` / `parse_program` は宣言を error にする (`ExportError::Units` の追加は `ExportError` が `#[non_exhaustive]` なので破壊的でない) 0.4 を要求する crate は 0.5 を受け取らないので、利用する側が要求を広げてから公開する
 - 0.4.2 の `scripts/docs_lint.py` の項の補足: 公開 text の検査の機器名の class は所有する機材の名前に限る (計算機の platform の名前は含まないので、docs_lint の機器名の正規表現にあった platform の名前は検出の対象から外れた、意図した変更)
 
+### Fixed
+
+- `scripts/fneg_fma_ir_check.py`: `CARGO_TARGET_DIR` が無い時、作ったばかりの一時 directory に `cargo clean` を掛けて 失敗していた (cargo は `CACHEDIR.TAG` の無い directory の clean を拒否する) clean は共有の target directory の時だけにした `CARGO_TARGET_DIR` を外した fixture crate で走らせる試験を `scripts/test_fneg_fma_ir_check.py` に足した (旧版では失敗する)
+
 ## [0.4.2] - 2026-10-15
 
 ### Added
