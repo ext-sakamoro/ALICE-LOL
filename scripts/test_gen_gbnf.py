@@ -20,11 +20,18 @@ intent_grasp ::= "grasp" ws "(" ws hand ws ")"
 @names name_1f@
 @names name_ab@
 @names hand@
+@names unit_length@
+@names unit_render_only@
+@names purpose@
 """
 
+UNITS = [{"name": "mm", "mm": 1.0}, {"name": "in", "mm": 25.4}, {"name": "world"}]
 
-def definition(*rows: tuple[str, str], hands=("left", "right")) -> dict:
-    return {"construct": [{"name": n, "rule": r} for n, r in rows], "hand": list(hands)}
+
+def definition(*rows: tuple[str, str], hands=("left", "right"), purposes=("print", "render"),
+               units=UNITS) -> dict:
+    return {"construct": [{"name": n, "rule": r} for n, r in rows], "hand": list(hands),
+            "purpose": list(purposes), "unit": list(units)}
 
 
 GOOD = definition(("sphere", "name_1f"), ("heart", "name_1f"), ("subtract", "name_ab"), ("grasp", "intent_grasp"))
@@ -36,16 +43,19 @@ class Render(unittest.TestCase):
         self.assertIn('name_1f ::= "sphere"\n          | "heart"\n', out)
         self.assertIn('name_ab ::= "subtract"\n', out)
         self.assertIn('hand ::= "left"\n       | "right"\n', out)
+        self.assertIn('unit_length ::= "mm"\n              | "in"\n', out)
+        self.assertIn('unit_render_only ::= "world"\n', out)
+        self.assertIn('purpose ::= "print"\n          | "render"\n', out)
         self.assertNotIn("@names", out)
 
     def test_a_dropped_row_drops_its_name(self):
         rows = [r for r in GOOD["construct"] if r["name"] != "heart"]
-        out = gg.render({"construct": rows, "hand": GOOD["hand"]}, TEMPLATE)
+        out = gg.render({**GOOD, "construct": rows}, TEMPLATE)
         self.assertNotIn('"heart"', out)
 
     def test_row_order_is_the_output_order(self):
         rows = list(reversed(GOOD["construct"]))
-        out = gg.render({"construct": rows, "hand": GOOD["hand"]}, TEMPLATE)
+        out = gg.render({**GOOD, "construct": rows}, TEMPLATE)
         self.assertIn('name_1f ::= "heart"\n          | "sphere"\n', out)
 
 
@@ -60,6 +70,32 @@ class Disagreement(unittest.TestCase):
 
     def test_no_hand_values(self):
         self.fails(definition(("sphere", "name_1f"), ("subtract", "name_ab"), hands=()), message="no hand values")
+
+    def test_no_purpose_values_or_no_render(self):
+        base = (("sphere", "name_1f"), ("subtract", "name_ab"))
+        self.fails(definition(*base, purposes=()), message="no purpose values")
+        self.fails(definition(*base, purposes=("print",)), message="no purpose values")
+
+    def test_no_unit_rows(self):
+        self.fails(definition(("sphere", "name_1f"), ("subtract", "name_ab"), units=()), message="no unit rows")
+
+    def test_a_unit_with_a_bad_scale_or_name(self):
+        base = (("sphere", "name_1f"), ("subtract", "name_ab"))
+        for bad in ({"name": "mm", "mm": 0.0}, {"name": "mm", "mm": -1.0}, {"name": "mm", "mm": 1}):
+            self.fails(definition(*base, units=[bad, {"name": "world"}]), message="positive float")
+        self.fails(definition(*base, units=[{"name": "sphere", "mm": 1.0}, {"name": "world"}]),
+                   message="is taken")
+        self.fails(definition(*base, units=[{"name": "mm", "mm": 1.0}, {"name": "mm", "mm": 2.0},
+                                            {"name": "world"}]), message="is taken")
+
+    def test_args_that_do_not_fit_the_rule(self):
+        def d(args):
+            return {**definition(("sphere", "name_1f"), ("subtract", "name_ab")),
+                    "construct": [{"name": "sphere", "rule": "name_1f", "args": args},
+                                  {"name": "subtract", "rule": "name_ab"}]}
+        gg.render(d("L"), TEMPLATE)
+        for bad in ("", "LL", "X"):
+            self.fails(d(bad), message="do not fit rule")
 
     def test_a_name_twice(self):
         self.fails(definition(("sphere", "name_1f"), ("sphere", "name_ab")), message="defined twice")
