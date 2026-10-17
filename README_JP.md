@@ -458,7 +458,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G5 release-profile-test-leg | 未確認 | the geometry-digest job (ci.yml:175) has an aarch64 release leg (macos-latest, --release) but nothing turns red when it is removed: with macos-latest taken out … |
 | G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
 | G7 handshake-carries-id | 未確認 | no scan or test lists the crate's type-erasing boundaries or feeds a mismatched identifier, so the list below is a manual survey and not a checked fact: … |
-| G8 persisted-semantics-id | 未達 | under the premise shared with G6 and G7 (this crate's outputs are Law-bearing unless its owner rules otherwise) the durable forms the crate writes carry no … |
+| G8 persisted-semantics-id | 適合 | the durable forms the crate writes are the mesh files of print_export (STL, 3MF, FBX, and the dual-contouring STL / 3MF) and roblox_export (FBX); each carries … |
 | G9 persisted-meaning-change-is-major | 未達 | history audit of the identifier definitions (git log -S over LOL_SEMANTICS_BY_DET_MATH and the pin tables): the identifiers were introduced before alice-lol … |
 | G10 no-run-varying-artifacts | 未達 | the gate's lint or CI scan with a canary is absent: clippy.toml:25 (disallowed-methods) holds no SystemTime::now, Instant::now, Uuid::new_v4, thread_rng, … |
 | G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
