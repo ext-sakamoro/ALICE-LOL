@@ -17,6 +17,7 @@ REF_BUG=12: a list input of the wrong shape is read with each malformed element 
 REF_BUG=13: a request without the inputs key is a request error (exit 2) instead of inputs {}
 REF_BUG=14: inputs that is null or not an object is passed to the law unchecked
 REF_BUG=15: a list input of the wrong shape is read element by element (still counted) instead of as a whole
+REF_BUG=16: audit `includes` read as set equality (a measured superset breaks)
 
 An unknown law, a missing input, inputs that is not an object (null is read as {}) or a
 request that is not a JSON object exits with status 2 and writes nothing on stdout.
@@ -292,12 +293,20 @@ def audit(clauses, nums, ranges, raw=None):
             same = (sorted(got, key=vkey) == sorted(c[2], key=vkey)) if BUG == "10" else set(got) == set(c[2])
             if not same:
                 return "parameter_update", c[1]
+    # the claims (expect and includes), in file order
     for c in clauses:
         if c[0] == "expect":
             got = nums.get(c[1])
             if got is None:
                 return "undecided", c[1]
             if abs(got - c[2]) > c[3]:
+                return "breaks", c[1]
+        elif c[0] == "includes":
+            got = ranges.get(c[1])
+            if got is None:
+                return "undecided", c[1]
+            holds = set(got) == set(c[2]) if BUG == "16" else set(c[2]) <= set(got)
+            if not holds:
                 return "breaks", c[1]
     return "supports", None
 
@@ -456,6 +465,8 @@ def read_audit_law(name):
                 law["clauses"].append(("expect", w[1], value, tol))
             elif w[0] == "range" and len(w) >= 3:
                 law["clauses"].append(("range", w[1], w[2:]))
+            elif w[0] == "includes" and len(w) >= 3:
+                law["clauses"].append(("includes", w[1], w[2:]))
             else:
                 raise ValueError(f"audit block: not a clause: {l!r}")
         elif l == "begin audit":
@@ -539,7 +550,7 @@ def generic_audit(law):
         nums = {k: v for k, v in i.items()
                 if is_num(v) and k not in law["types"] and k not in metric_names}
         typed = {k: v for k, v in i.items() if k in law["types"] and fits(v, law["types"][k])}
-        ranges = {c[1]: typed[c[1]] for c in law["clauses"] if c[0] == "range" and c[1] in typed}
+        ranges = {c[1]: typed[c[1]] for c in law["clauses"] if c[0] in ("range", "includes") and c[1] in typed}
         for name, expr in law["metrics"]:
             v = derive(expr, typed.get(expr[1]), i.get(expr[1]))
             if v is not None:

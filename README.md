@@ -210,7 +210,7 @@ so the same law can be fed from Rust or from another language.
 
 <!-- readme-sync: syntax-law -->
 ```text
-audit evidence expect range
+audit evidence expect range includes
 ```
 
 `evidence <metric>` requires that the metric was measured at all — a check that
@@ -220,7 +220,10 @@ greater than 0 is evidence; 0, a negative number, NaN and infinity are not.
 `range <key> <value>...` records a known violation: it is allowed while the
 measurement matches, becomes `OutOfRange` once the row no longer applies, and
 `ParameterUpdate` when the values move. The values are compared as a set (order
-and duplicates are ignored). Evidence is judged before expectations, so `0 == 0` cannot pass by
+and duplicates are ignored). `includes <key> <value>...` is a claim like `expect`:
+the measured list must contain every listed value and may hold more (a lint
+configuration that bans at least these methods); a missing value `Breaks`, and a
+key that was not measured is `Undecided`. Evidence is judged before expectations, so `0 == 0` cannot pass by
 accident on an empty measurement.
 
 ## Law identity (`law_id`)
