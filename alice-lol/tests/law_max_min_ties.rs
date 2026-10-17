@@ -7,10 +7,16 @@
 //! and ignore a NaN operand; the platform `f32::max` / `min` and glam's lane
 //! forms leave both unspecified.
 //!
-//! Mutants: dropping the NaN rule of `det_math::max` / `min`, or any mutant that returns
-//! the first operand (or -0) for an equal pair of zeros, turns these tests red. The one
-//! mutant they leave green is `det_math::max` returning the second operand `b` on any
-//! equal pair (dropping `|| !a.is_sign_negative()`): it differs from the Law only for
+//! NaN operands are driven with both sign bits (`POS_NAN` / `NEG_NAN`, built with
+//! `from_bits`: the bits of `f32::NAN` and of its negation are not specified) and in the
+//! first operand: without its NaN rule the max falls through to `!a.is_sign_negative()`,
+//! which a positive NaN reaches, and the min to `a.is_sign_negative()`, which a negative
+//! NaN reaches, so each sign catches one of the two.
+//!
+//! Mutants: dropping the NaN rule of `det_math::max` or of `det_math::min`, or a mutant
+//! that returns the first operand (or -0) for an equal pair of zeros, turns these tests
+//! red. The one mutant they leave green is `det_math::max` returning the second operand `b`
+//! on any equal pair (dropping `|| !a.is_sign_negative()`): it differs from the Law only for
 //! `max(+0, -0)`, and every max site tested here gets its +0 operand second (a literal
 //! `+0.0`, or `plate_thickness + c`, which is never -0), so that pair cannot occur.
 //! The roblox export bounds are in `law_max_min_ties_roblox.rs` (feature `roblox`).
@@ -42,6 +48,11 @@ fn field_bits(node: &SdfNode, field: &str) -> Vec<u32> {
 
 const POS_ZERO: u32 = 0x0000_0000;
 
+/// A quiet NaN with the sign bit clear
+const POS_NAN: f32 = f32::from_bits(0x7FC0_0000);
+/// A quiet NaN with the sign bit set
+const NEG_NAN: f32 = f32::from_bits(0xFFC0_0000);
+
 /// Hex-cell radius floor (`reinforcement::honeycomb_infill`, `max(r - wall / 2, 0)`):
 /// a -0 radius against the +0 floor is +0, and a NaN cell size falls to the floor
 #[test]
@@ -51,8 +62,10 @@ fn honeycomb_cell_radius_floor_of_negative_zero_and_nan() {
     let zero = honeycomb_infill(container.clone(), -0.0, 0.0, 1);
     assert_eq!(field_bits(&zero, "hex_radius"), vec![POS_ZERO]);
     // a NaN cell size: max(NaN, +0) is the floor, not NaN
-    let nan = honeycomb_infill(container, f32::NAN, 1.0, 1);
-    assert_eq!(field_bits(&nan, "hex_radius"), vec![POS_ZERO]);
+    for nan in [POS_NAN, NEG_NAN] {
+        let node = honeycomb_infill(container.clone(), nan, 1.0, 1);
+        assert_eq!(field_bits(&node, "hex_radius"), vec![POS_ZERO]);
+    }
 }
 
 /// Peg round radius (`mount::skadis_peg_compat`, `max(min(R, min_element(half)), 0)`):
@@ -66,12 +79,14 @@ fn peg_round_radius_with_negative_zero_and_nan_thickness() {
     assert_eq!(field_bits(&positive, "round_radius"), vec![POS_ZERO]);
     // NaN thickness: min_element(x, y, NaN) is min(x, y), so the radius is the
     // one the two finite half extents give, the same as for a thick board
-    let nan = skadis_peg_compat(f32::NAN);
     let thick = skadis_peg_compat(100.0);
-    assert_eq!(
-        field_bits(&nan, "round_radius"),
-        field_bits(&thick, "round_radius")
-    );
+    for nan in [POS_NAN, NEG_NAN] {
+        let node = skadis_peg_compat(nan);
+        assert_eq!(
+            field_bits(&node, "round_radius"),
+            field_bits(&thick, "round_radius")
+        );
+    }
 }
 
 /// Runtime parser count (`runtime_parser.rs` `count`, `max(v.round(), 1.0)` then a cast
@@ -108,7 +123,16 @@ fn l_bracket_arm_floor_of_negative_zero_and_nan() {
     let positive = debug(&l_bracket(&spec(0.0)));
     assert!(!positive.contains("-0.0"), "the +0 baseline carries no -0");
     assert_eq!(debug(&l_bracket(&spec(-0.0))), positive);
-    assert_eq!(debug(&l_bracket(&spec(f32::NAN))), positive);
+    assert_eq!(
+        debug(&l_bracket(&spec(POS_NAN))),
+        positive,
+        "a positive NaN arm"
+    );
+    assert_eq!(
+        debug(&l_bracket(&spec(NEG_NAN))),
+        positive,
+        "a negative NaN arm"
+    );
 }
 
 /// T-slot bracket arm floor (`pattern_sdf::t_slot_bracket_2020`, `max(arm, plate + 5.0)`):
@@ -122,7 +146,8 @@ fn t_slot_bracket_arm_floor_of_negative_zero_and_nan() {
     };
     let positive = debug(&t_slot_bracket_2020(&spec(0.0)));
     assert_eq!(debug(&t_slot_bracket_2020(&spec(-0.0))), positive);
-    assert_eq!(debug(&t_slot_bracket_2020(&spec(f32::NAN))), positive);
+    assert_eq!(debug(&t_slot_bracket_2020(&spec(POS_NAN))), positive);
+    assert_eq!(debug(&t_slot_bracket_2020(&spec(NEG_NAN))), positive);
 }
 
 /// Drawer slot depth (`pattern_sdf::drawer_organizer`, `min(min_depth, depth - 2 * wall)`):
@@ -159,8 +184,13 @@ fn drawer_slot_depth_min_of_mixed_zeros_and_nan() {
         debug(&drawer_organizer(&s))
     };
     assert_eq!(
-        with(f32::NAN),
+        with(POS_NAN),
         with(f32::INFINITY),
-        "a NaN min depth falls to the drawer depth"
+        "a positive NaN min depth (first operand) falls to the drawer depth"
+    );
+    assert_eq!(
+        with(NEG_NAN),
+        with(f32::INFINITY),
+        "a negative NaN min depth (first operand) falls to the drawer depth"
     );
 }
