@@ -87,9 +87,9 @@ def render(definition: dict, template: str) -> str:
         seen.add(name)
         if "args" in row:
             args, count = row["args"], rule_numbers(rule)
-            if not re.fullmatch(r"[LIACRX]*", args) or (count is not None and len(args) != count):
+            if not re.fullmatch(r"[HLIACRX]*", args) or (count is not None and len(args) != count):
                 raise DefinitionError(f"construct {name!r}: args {args!r} do not fit rule {rule} "
-                                      f"({count} numbers, kinds L I A C R X)")
+                                      f"({count} numbers, kinds H L I A C R X)")
         if rule.startswith("intent_"):
             if not re.search(rf'^{re.escape(rule)} ::= "{re.escape(name)}"', template, re.M):
                 raise DefinitionError(f"intent row {name!r}: the template's {rule} does not spell it")
