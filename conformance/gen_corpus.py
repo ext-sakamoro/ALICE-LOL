@@ -156,12 +156,18 @@ def audit_verdict(law, metrics, ranges):
                 return "out_of_range", c[1]
             if set(ranges[c[1]]) != set(c[2:]):
                 return "parameter_update", c[1]
+    # the claims (expect and includes), in file order
     for c in clauses:
         if c[0] == "expect":
             want = float(c[3]); tol = float(c[5]) if len(c) > 5 and c[4] == "within" else 0.0
             if c[1] not in metrics:
                 return "undecided", c[1]
             if abs(metrics[c[1]] - want) > tol:
+                return "breaks", c[1]
+        elif c[0] == "includes":
+            if c[1] not in ranges:
+                return "undecided", c[1]
+            if not set(c[2:]) <= set(ranges[c[1]]):
                 return "breaks", c[1]
     return "supports", None
 
@@ -298,9 +304,29 @@ DESIGN = {
     },
     "gate_compares_nonzero": {"cases": [], "edges": {}},
     "identifier_feature_independent": {"cases": [], "edges": {}},
+    "lint_bans_include": {"cases": [], "edges": {}},
 }
 
 INF = float("inf")  # written on the wire as the literal 1e400 (run_conformance.py)
+BANS = ["f32::sin", "f32::cos", "f64::sin_cos"]
+DESIGN["lint_bans_include"]["cases"] = [
+    ({"compared": 3, "banned": BANS}, "exactly the list"),
+    ({"compared": 3, "banned": ["f64::sin_cos", "f32::cos", "f32::sin"]}, "the list in another order"),
+    ({"compared": 3, "banned": BANS + ["f64::powi", "f32::tan"]}, "more than the list"),
+    ({"compared": 3, "banned": BANS + BANS}, "duplicates"),
+    ({"compared": 3, "banned": ["f32::tan"] + BANS}, "one more than the list, first"),
+    ({"compared": 3, "banned": BANS + ["f32::exp", "f64::ln"] + BANS}, "more than the list, with duplicates"),
+    ({"compared": 3, "banned": ["f32::sin", "f32::cos"]}, "one listed method missing"),
+    ({"compared": 3, "banned": ["f64::powi"]}, "every listed method missing"),
+    ({"compared": 3, "banned": []}, "empty list"),
+    ({"compared": 3}, "banned not reported"),
+    ({"compared": 3, "banned": None}, "banned null"),
+    ({"compared": 3, "banned": "f32::sin"}, "banned not a list"),
+    ({"compared": 3, "banned": ["f32::sin", 1, "f64::sin_cos"]}, "a value that is not text"),
+    ({"compared": 3, "banned": ["F32::SIN", "f32::cos", "f64::sin_cos"]}, "case differs (text compare)"),
+    ({"compared": 0, "banned": []}, "evidence before includes"),
+    ({"banned": BANS}, "compared not reported"),
+]
 K42 = ["case-17", "case-42"]
 DESIGN["gate_compares_nonzero"]["cases"] = [(i, n) for i, n in [
     ({"compared": 12, "mismatches": 0, "known-mismatches": K42}, "all good"),
