@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `alice-lol` と `alice-lol-ui` の `alice-sdf` の要求を `">=6.1.0, <7"` から `">=6.1.0, <8"` に広げた (下限 6.1.0 は解析的な bound が要るので残す、6.x でも 7 でも build できる)
 - `alice-lol` と `alice-world-auditor` の `alice-physics` の要求を `"3.0"` から `">=3.0, <5"` に広げた (alice-physics 4.0.0 の変更は bridge の構築子・GPU bridge の trait・privacy の構築子で、この workspace はどれも使わない 3.1.0 でも 4.0.0 でも build できる)
 - `alice-lol` の `alice-llm` (`llm-bridge` feature) の要求を `2` から `>=2, <4` にした ALICE-LLM の main が 3.0.0 になり、sibling を main で取る CI で依存が解決しなくなっていた (optional な依存も解決される) 2.0.1 と 3.0.0 のどちらでも `llm-bridge` 付きの library の試験と文法の試験が通る
 - `alice-lol` の `alice-zip` の要求を `0.10` から `>=0.10, <0.12` にした 次の ALICE-Zip 0.11.0 (law の書き出しの識別子などの互換性のない変更) を受け取れるようにする 0.11.0 の branch で alice-lol の library の試験 745 件と alice-zip を使う試験 5 本 (law の識別子の oracle と bit 一致を含む) が通り、`alice-zip` と `alice-det-math` は 1 版ずつ
