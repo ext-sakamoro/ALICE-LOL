@@ -3629,6 +3629,18 @@ pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
                     values: sorted_values(values),
                 });
             }
+            "includes" => {
+                let (key, values) = rest
+                    .split_first()
+                    .ok_or_else(|| law_error("`includes <key> <value>...`", at))?;
+                if values.is_empty() {
+                    return Err(law_error("`includes` needs at least one value", at));
+                }
+                clauses.push(Clause::Includes {
+                    key: (*key).to_owned(),
+                    values: sorted_values(values),
+                });
+            }
             other => {
                 return Err(law_error(
                     &format!("unknown audit law clause `{other}`"),

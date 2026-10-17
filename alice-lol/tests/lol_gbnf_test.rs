@@ -425,3 +425,31 @@ fn rejects_a_law_value_with_a_comment_character() {
     let g = lol_grammar();
     assert!(rejects(g, "audit lint\nrange known a#b\n"));
 }
+
+// ─── audit laws (the `law` rule): the grammar and `parse_law` agree ──────────
+
+const AUDIT_LAW_EVERY_CLAUSE: &str =
+    "audit lint-bans\nevidence compared\nexpect mismatches == 0 within 0\nrange known a b\nincludes banned f32::sin f64::sin_cos\n";
+
+#[test]
+fn accepts_an_audit_law_with_every_clause() {
+    let g = lol_grammar();
+    assert!(accepts(g, AUDIT_LAW_EVERY_CLAUSE));
+    assert!(alice_lol::runtime_parser::parse_law(AUDIT_LAW_EVERY_CLAUSE).is_ok());
+}
+
+#[test]
+fn rejects_an_includes_clause_without_a_value() {
+    let g = lol_grammar();
+    let law = "audit lint-bans\nincludes banned\n";
+    assert!(rejects(g, law));
+    assert!(alice_lol::runtime_parser::parse_law(law).is_err());
+}
+
+#[test]
+fn rejects_an_unknown_audit_clause() {
+    let g = lol_grammar();
+    let law = "audit lint-bans\ncontains banned f32::sin\n";
+    assert!(rejects(g, law));
+    assert!(alice_lol::runtime_parser::parse_law(law).is_err());
+}
