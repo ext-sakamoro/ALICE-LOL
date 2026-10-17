@@ -437,6 +437,41 @@ fn ingest_supports_exact_observations() {
     }
 }
 
+/// The tolerance band is `max64(abs_tolerance, residual rms)` (ALICE-Law G2): a NaN
+/// tolerance is skipped, so the band is the law's own residual rms and the law's own
+/// evidence is supported, the same verdict as a +0 or -0 tolerance (the band is only
+/// compared, so the zero sign is not observable here; a NaN band would compare false
+/// and break the law)
+#[test]
+fn ingest_with_a_nan_tolerance_keeps_the_residual_band() {
+    // a law fitted to evidence: the parameter update of free_fall(9.70) on g = 9.81 data
+    let fit_policy = IngestPolicy {
+        abs_tolerance: 1e-6,
+        break_factor: 4.0,
+    };
+    let ResearchVerdict::ParameterUpdate { updated, .. } =
+        free_fall(9.70).ingest(&obs(9.81, &[0.5, 1.0, 2.0, 3.0, 4.0, 5.0]), &fit_policy)
+    else {
+        panic!("the fixture did not refit");
+    };
+    let law = *updated;
+    let evidence = law.evidence().to_vec();
+    assert!(
+        !evidence.is_empty(),
+        "the law carries no evidence to re-ingest"
+    );
+    for tol in [f64::NAN, 0.0, -0.0] {
+        let pol = IngestPolicy {
+            abs_tolerance: tol,
+            break_factor: 4.0,
+        };
+        match law.ingest(&evidence, &pol) {
+            ResearchVerdict::Supports { .. } => {}
+            other => panic!("tolerance {tol}: {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn ingest_parameter_update_recovers_g() {
     let law = free_fall(9.70);
