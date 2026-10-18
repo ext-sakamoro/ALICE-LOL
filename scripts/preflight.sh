@@ -178,9 +178,6 @@ step "ci.yml / raw-minmax-manifest: raw_minmax_here!() を呼ぶ module を一�
 python3 scripts/test_raw_minmax_manifest.py
 python3 scripts/raw_minmax_manifest.py
 
-step "ci.yml / print-export-no-hashmap-iteration: print_export.rs の HashMap/HashSet local は lookup/len のみ (G13)"
-python3 scripts/test_print_export_no_hashmap_iteration.py
-python3 scripts/print_export_no_hashmap_iteration.py
 
 step "ci.yml / libm-hidden-check: disallowed_methods の allow を全部外し、libm が src/ scope に漏れていないか clippy で検査"
 python3 scripts/test_libm_hidden_check.py
