@@ -408,7 +408,7 @@ Values for `units(mm, print, ...)`:
 LOL text can be directly converted to printable mesh files:
 
 ```
-厚物(>5mm): LOL text → parse_lol() → SdfNode → sdf_to_mesh() → export_stl()/export_3mf() → Bambu Studio → Printer
+厚物(>5mm): LOL text → parse_lol() → SdfNode → node_to_stl()/node_to_3mf() → Bambu Studio → Printer
 薄物(≤5mm): Python Shapely 2D polygon → trimesh.extrude_polygon() → export_bambu_3mf() → Printer/MakerWorld
 ```
 

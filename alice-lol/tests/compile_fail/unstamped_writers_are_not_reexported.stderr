@@ -1,0 +1,9 @@
+error[E0432]: unresolved imports `alice_lol::print_export::export_3mf`, `alice_lol::print_export::export_fbx`, `alice_lol::print_export::export_stl`, `alice_lol::print_export::export_stl_ascii`
+ --> tests/compile_fail/unstamped_writers_are_not_reexported.rs:3:31
+  |
+3 | use alice_lol::print_export::{export_3mf, export_fbx, export_stl, export_stl_ascii};
+  |                               ^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^^^^^^^ no `export_stl_ascii` in `print_export`
+  |                               |           |           |
+  |                               |           |           no `export_stl` in `print_export`
+  |                               |           no `export_fbx` in `print_export`
+  |                               no `export_3mf` in `print_export`

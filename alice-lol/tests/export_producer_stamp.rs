@@ -9,10 +9,11 @@
 
 use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use alice_lol::print_export::{
-    export_stl, node_to_3mf, node_to_3mf_dual_contouring, node_to_fbx, node_to_mesh, node_to_stl,
+    node_to_3mf, node_to_3mf_dual_contouring, node_to_fbx, node_to_mesh, node_to_stl,
     node_to_stl_dual_contouring, PrintConfig, LOL_EXPORT_STAMP,
 };
 use alice_lol::{lol, SdfNode, Vec3};
+use alice_sdf::io::export_stl;
 use alice_sdf::provenance::{self, Provenance, ProvenanceError};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;

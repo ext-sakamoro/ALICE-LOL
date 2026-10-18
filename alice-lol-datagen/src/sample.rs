@@ -1,6 +1,8 @@
 //! Sample 型 + JSONL 出力 + 自己検証
 
+use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use alice_lol::intent::{IntentNode, Program};
+use alice_lol::law_id::LOL_SEMANTICS_ID;
 use alice_lol::runtime_parser::parse_program;
 use alice_lol::{eval, Vec3};
 use std::fmt::Write as _;
@@ -177,12 +179,23 @@ impl Sample {
     }
 
     /// 1 行 JSON (serde 不使用、手書き escape)
+    ///
+    /// 各行が識別子を 2 つ持つ (ALICE-Law G8): `lol_semantics_id` は `lol` / `lol_canonical` の文の意味
+    /// (`LOL_SEMANTICS_ID`)、`lol_geometry_semantics_id` は `oracle` の内外の判定をした幾何の意味
+    /// (`LOL_GEOMETRY_SEMANTICS_ID`) 行は学習の前に並べ替えられ・抜き出されるので、file の
+    /// 先頭でなく行ごとに書く
     #[must_use]
     pub fn to_jsonl(&self) -> String {
-        let mut s = String::with_capacity(self.lol.len() + self.caption_en.len() + 256);
+        let mut s = String::with_capacity(self.lol.len() + self.caption_en.len() + 384);
         let _ = write!(
             s,
-            "{{\"id\":\"{}\",\"family\":\"{}\",\"seed\":{},\"caption_en\":\"{}\",\"caption_ja\":\"{}\",\"lol\":\"{}\",\"lol_canonical\":\"{}\",\"oracle\":[",
+            "{{\"lol_semantics_id\":\"{}\",\"lol_geometry_semantics_id\":\"{}\",",
+            hex(&LOL_SEMANTICS_ID),
+            hex(&LOL_GEOMETRY_SEMANTICS_ID)
+        );
+        let _ = write!(
+            s,
+            "\"id\":\"{}\",\"family\":\"{}\",\"seed\":{},\"caption_en\":\"{}\",\"caption_ja\":\"{}\",\"lol\":\"{}\",\"lol_canonical\":\"{}\",\"oracle\":[",
             esc(&self.id),
             self.family,
             self.seed,
@@ -217,6 +230,13 @@ impl Sample {
         s.push_str("]}");
         s
     }
+}
+
+fn hex(id: &[u8; 32]) -> String {
+    id.iter().fold(String::with_capacity(64), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 fn verb_names(node: &IntentNode) -> Vec<String> {
