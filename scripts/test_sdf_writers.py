@@ -257,6 +257,42 @@ class SecondPass(unittest.TestCase):
         self.assertEqual(g.fn_lines(SRC, "node_to_obj_roblox"), (1, 4))
 
 
+class CfgCoverage(unittest.TestCase):
+    DEFAULTS = {"alice-lol/": {"glsl"}}
+
+    def found(self, src, rel="alice-lol/src/x.rs"):
+        return g.cfg_findings({rel: src}, self.DEFAULTS)
+
+    def test_features_on_test_and_non_default_features_off_pass(self):
+        src = ('#[cfg(feature = "roblox")]\nfn a() {}\n#[cfg(test)]\nmod t {}\n#[cfg(any(test, feature = "x"))]\nfn b() {}\n'
+               '#[cfg(not(feature = "roblox"))]\nfn c() {}\n#[cfg(not(test))]\nfn d() {}\n'
+               '#[cfg_attr(feature = "x", derive(Debug))]\nstruct S;\nfn e() -> bool { cfg!(feature = "y") }\n')
+        self.assertEqual(self.found(src), ([], 7))
+
+    def test_what_the_second_pass_never_compiles(self):
+        for pred, word in [("not(clippy)", "not(clippy)"), ("clippy", "clippy"), ('target_os = "windows"', "target_os=windows"),
+                           ('target_arch = "wasm32"', "target_arch=wasm32"), ("windows", "windows"), ("unix", "unix"),
+                           ("not(debug_assertions)", "not(debug_assertions)"), ("my_custom_cfg", "my_custom_cfg"),
+                           ('all(feature = "a", not(feature = "b"))', "both on and under not"),
+                           ('not(feature = "glsl")', 'a default feature')]:
+            with self.subTest(pred=pred):
+                out, n = self.found(f"#[cfg({pred})]\nfn w() {{}}\n")
+                self.assertEqual(n, 1)
+                self.assertTrue(out and word in out[0], out)
+
+    def test_cfg_attr_and_cfg_macro_and_inner_attributes(self):
+        for src in ['#[cfg_attr(windows, path = "x.rs")]\nmod m;\n', "fn f() -> bool { cfg!(clippy) }\n",
+                    "#![cfg(target_os = \"linux\")]\n"]:
+            with self.subTest(src=src):
+                self.assertEqual(len(self.found(src)[0]), 1)
+
+    def test_comments_and_strings_are_not_read(self):
+        self.assertEqual(self.found('// #[cfg(windows)]\n/// #[cfg(not(clippy))]\nconst S: &str = "#[cfg(unix)]";\n'), ([], 0))
+
+    def test_the_default_of_another_member_does_not_apply(self):
+        self.assertEqual(self.found('#[cfg(not(feature = "glsl"))]\nfn w() {}\n', rel="alice-lol-humanoid/src/x.rs")[0], [])
+
+
 class SecondPassWiring(unittest.TestCase):
     def test_the_check_runs_the_second_pass(self):
         with mock.patch.object(g, "check_lock", return_value=[]), mock.patch.object(g, "sdf_count", return_value=COUNT), \
@@ -270,16 +306,48 @@ class SecondPassWiring(unittest.TestCase):
 
     def test_a_second_pass_that_linted_nothing_afresh_exits_2(self):
         cached = [artifact("alice-lol", fresh=True)]
-        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol"}], "workspace_members": ["a"]})
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
+                           "workspace_members": ["a"]})
         with mock.patch.object(g, "clippy_json", return_value=cached), mock.patch.object(g, "clean"), \
+                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError) as e:
                 g.second_pass({"open": []}, {"writer": []})
         self.assertIn("linted no workspace crate afresh", str(e.exception))
 
+    def test_both_legs_run_and_the_default_leg_needs_a_fresh_crate(self):
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
+                           "workspace_members": ["a"]})
+        calls = []
+
+        def cj(args, target, manifest=g.ROOT / "Cargo.toml"):
+            calls.append(args)
+            return [artifact("alice-lol")] if len(calls) <= 2 else [artifact("alice-lol", fresh=True)]
+        with mock.patch.object(g, "clippy_json", side_effect=cj), mock.patch.object(g, "clean"), \
+                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
+                mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
+            with self.assertRaises(ValueError) as e:
+                g.second_pass({"open": []}, {"writer": []})
+        self.assertIn("default-feature leg", str(e.exception))
+        self.assertIn("--all-features", calls[0])
+        self.assertNotIn("--all-features", calls[2])
+        self.assertNotIn("--no-default-features", calls[2])
+
+    def test_no_cfg_read_in_the_library_sources_is_compared_nothing(self):
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
+                           "workspace_members": ["a"]})
+        with mock.patch.object(g, "clippy_json", return_value=[artifact("alice-lol")]), mock.patch.object(g, "clean"), \
+                mock.patch.object(g, "library_sources", return_value={"a.rs": "fn f() {}"}), \
+                mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
+            with self.assertRaises(ValueError) as e:
+                g.second_pass({"open": []}, {"writer": []})
+        self.assertIn("no cfg predicate read", str(e.exception))
+
     def test_the_second_pass_cleans_the_members_first(self):
-        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol"}], "workspace_members": ["a"]})
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
+                           "workspace_members": ["a"]})
         with mock.patch.object(g, "clippy_json", return_value=[]), mock.patch.object(g, "clean") as cl, \
+                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError):
                 g.second_pass({"open": []}, {"writer": []})

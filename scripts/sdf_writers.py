@@ -13,7 +13,11 @@ writer out of alice-lol in two ways:
     examples, every feature) with a configuration holding only these writers (.github/clippy-writers),
     run at `--force-warn clippy::disallowed_methods`, which no `#[allow]` / `#[expect]` / `cfg_attr` / lint
     group in the source lowers; a report is a finding whatever reaches the writer (a wrapper, an alias
-    import, a local macro). The members are cleaned first and the run must lint at least one afresh. The
+    import, a local macro). It runs twice, with every feature and with the default features, the members
+    cleaned first each time and at least one linted afresh. Code under a cfg neither run compiles is refused
+    in library sources: a predicate may name only features (all on, or all under `not` and none a default)
+    and `test`; `clippy`, a target, `debug_assertions` or any other cfg is a finding (this also covers a
+    `pub use` the host-only rustdoc check would not see). The
     one call left is named in [[open]] (file, function, writer) and must occur exactly once. The canary
     crate is linted the same way and must report each writer once by its own path. Not seen: a call inside
     the expansion of a macro defined in a dependency (clippy does not report those; no dependency of
@@ -474,6 +478,111 @@ def clean(packages: list[str], target: Path, manifest: Path = ROOT / "Cargo.toml
                        cwd=ROOT, capture_output=True, text=True)
 
 
+RUST_NON_CODE = re.compile(r'//[^\n]*|/\*.*?\*/|(?<![\w])b?r(#*)".*?"\1|"(?:\\.|[^"\\])*"', re.S)
+CFG_START = re.compile(r"#\s*!?\s*\[\s*cfg(?P<attr>_attr)?\s*\(|\bcfg!\s*\(")
+
+
+def balanced(code: str, i: int) -> int:
+    """the index just past the `)` that closes the `(` at `i`"""
+    depth = 0
+    for j in range(i, len(code)):
+        depth += {"(": 1, ")": -1}.get(code[j], 0)
+        if depth == 0:
+            return j + 1
+    return len(code)
+
+
+def predicate_atoms(pred: str, negated: bool = False) -> list[tuple[str, bool]]:
+    """(atom, under not) for every leaf of a cfg predicate: `feature = "x"`, `test`, `target_os = "y"`, ..."""
+    pred = pred.strip()
+    m = re.match(r"(all|any|not)\s*\(", pred)
+    if m:
+        inner = pred[m.end():balanced(pred, m.end() - 1) - 1]
+        parts, depth, start = [], 0, 0
+        for k, c in enumerate(inner):
+            depth += {"(": 1, ")": -1}.get(c, 0)
+            if c == "," and depth == 0:
+                parts.append(inner[start:k])
+                start = k + 1
+        parts.append(inner[start:])
+        neg = negated ^ (m.group(1) == "not")
+        return [a for part in parts if part.strip() for a in predicate_atoms(part, neg)]
+    if "=" in pred:
+        key, _, val = pred.partition("=")
+        return [(f"{key.strip()}={val.strip().strip(chr(34))}", negated)]
+    return [(re.sub(r"\s+", "", pred), negated)]
+
+
+def cfg_findings(files: dict[str, str], defaults: dict[str, set[str]] | None = None) -> tuple[list[str], int]:
+    """(findings, cfg predicates read) for library code: the second pass compiles the host target in the debug
+    profile, under clippy, once with every feature and once with the default features, so code that only exists
+    under any other cfg is never linted. Apart from `test` (either way: test code is out of scope, `not(test)` code
+    is in every build), a predicate may name only features, all of them on (the every-feature leg) or all of them
+    under `not` and none a default feature of the file's package (`defaults`: path prefix -> default features;
+    the default-feature leg); `clippy`, a target predicate, `debug_assertions`, any other cfg, features both on
+    and off in one predicate, or a default feature under `not`, is a finding"""
+    defaults = defaults or {}
+    out, read = [], 0
+    for rel, text in sorted(files.items()):
+        code = RUST_NON_CODE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+        # strings are blanked, so the feature names are gone; the shape `feature = ` stays
+        for m in CFG_START.finditer(code):
+            open_paren = m.end() - 1
+            # located in the blanked code, read from the source (the feature names are strings)
+            body = text[open_paren + 1:balanced(code, open_paren) - 1]
+            if m.group("attr"):
+                depth, cut = 0, len(body)
+                for k, c in enumerate(body):
+                    depth += {"(": 1, ")": -1}.get(c, 0)
+                    if c == "," and depth == 0:
+                        cut = k
+                        break
+                body = body[:cut]
+            read += 1
+            line = code.count("\n", 0, m.start()) + 1
+            atoms = [(a, n) for a, n in predicate_atoms(body) if a != "test"]
+            other = [a for a, _ in atoms if not a.startswith("feature=")]
+            feats = [(a.split("=", 1)[1], n) for a, n in atoms if a.startswith("feature=")]
+            polarities = {n for _, n in feats}
+            pkg_defaults = next((d for pre, d in sorted(defaults.items(), key=lambda kv: -len(kv[0]))
+                                 if rel.startswith(pre)), set())
+            negated_defaults = [f for f, n in feats if n and f in pkg_defaults]
+            if other:
+                out.append(f"{rel}:{line}: cfg `{'not(' if dict(atoms).get(other[0]) else ''}{other[0]}"
+                           f"{')' if dict(atoms).get(other[0]) else ''}`: the second pass (host target, debug, under clippy) never "
+                           "compiles code under it")
+            elif len(polarities) > 1:
+                out.append(f"{rel}:{line}: cfg with features both on and under not(..): neither the every-feature "
+                           "nor the default-feature leg of the second pass compiles code under it")
+            elif negated_defaults:
+                out.append(f"{rel}:{line}: cfg not(feature = \"{negated_defaults[0]}\"), a default feature: neither "
+                           "leg of the second pass compiles code under it")
+    return out, read
+
+
+def package_defaults(meta: dict) -> dict[str, set[str]]:
+    """member directory (relative, with a trailing /) -> its default features"""
+    out = {}
+    for pkg in meta["packages"]:
+        if pkg["id"] in set(meta["workspace_members"]):
+            rel = Path(pkg["manifest_path"]).parent.relative_to(ROOT).as_posix()
+            out["" if rel == "." else rel + "/"] = set(pkg.get("features", {}).get("default", []))
+    return out
+
+
+def library_sources(meta: dict) -> dict[str, str]:
+    """the .rs files of every workspace member's src/ and examples/ (library, binaries, examples)"""
+    out = {}
+    for pkg in meta["packages"]:
+        if pkg["id"] not in set(meta["workspace_members"]):
+            continue
+        base = Path(pkg["manifest_path"]).parent
+        for sub in ("src", "examples"):
+            for f in sorted((base / sub).rglob("*.rs")) if (base / sub).is_dir() else []:
+                out[f.relative_to(ROOT).as_posix()] = f.read_text(encoding="utf-8")
+    return out
+
+
 def second_pass(cfg: dict, lock: dict) -> list[str]:
     """the library code (alice-lol's lib and the other members' lib / bins / examples, every feature) linted
     afresh with only the lock's writers at --force-warn, which no allow / expect / cfg_attr / lint group in the
@@ -481,11 +590,22 @@ def second_pass(cfg: dict, lock: dict) -> list[str]:
     meta = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=ROOT,
                                      capture_output=True, text=True, check=True).stdout)
     members = {p["name"] for p in meta["packages"] if p["id"] in set(meta["workspace_members"])}
+    cfg_found, cfgs = cfg_findings(library_sources(meta), package_defaults(meta))
+    if cfgs == 0:
+        raise ValueError("no cfg predicate read in the library sources (compared nothing)")
     clean(sorted(members), PASS2_TARGET)
     msgs = clippy_json(["-p", "alice-lol", "--lib", "--all-features"], PASS2_TARGET)
     msgs += clippy_json(["--workspace", "--exclude", "alice-lol", "--lib", "--bins", "--examples", "--all-features"],
                         PASS2_TARGET)
-    found, fresh, _ = judge(msgs, members, cfg.get("open", []))
+    # the default-feature leg: code under `not(feature = ...)` of a non-default feature (members cleaned again, so
+    # it is linted afresh too)
+    found_all, fresh_all, _ = judge(msgs, members, cfg.get("open", []))
+    clean(sorted(members), PASS2_TARGET)
+    msgs_none = clippy_json(["--workspace", "--lib", "--bins", "--examples"], PASS2_TARGET)
+    found_none, fresh_none, _ = judge(msgs_none, members, [])
+    if fresh_none == 0:
+        raise ValueError("the default-feature leg of the second pass linted no workspace crate afresh (compared nothing)")
+    found, fresh = cfg_found + found_all + found_none, fresh_all
     if fresh == 0:
         raise ValueError("the second pass linted no workspace crate afresh (compared nothing)")
     canary_target = ROOT / "scripts" / "clippy-lib-canary" / "target"
@@ -496,7 +616,7 @@ def second_pass(cfg: dict, lock: dict) -> list[str]:
                and m.get("target", {}).get("name") == "clippy_lib_canary" for m in cmsgs):
         raise ValueError("the second pass did not lint the canary afresh (compared nothing)")
     print(f"sdf-writers: second pass: {fresh} crate(s) linted afresh, {len(lock.get('writer', []))} writer(s) "
-          f"reported in the canary")
+          f"reported in the canary, {cfgs} cfg predicate(s) read in the library sources")
     return found
 
 
