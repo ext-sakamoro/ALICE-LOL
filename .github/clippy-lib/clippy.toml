@@ -54,6 +54,11 @@ disallowed-methods = [
     { path = "glam::Vec4::min_element", reason = "lane-wise platform f32 min / max: the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_vec helpers" },
     { path = "glam::Vec4::max_element", reason = "lane-wise platform f32 min / max: the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_vec helpers" },
     { path = "glam::Vec4::clamp", reason = "lane-wise platform f32 min / max: the sign of an equal pair of zeros is unspecified and differs between targets; use this crate's det_vec helpers" },
+    { path = "std::time::Instant::now", reason = "ALICE-Law G10: the wall clock makes a Law-bearing value depend on when it ran; take the time as an input" },
+    { path = "std::time::SystemTime::now", reason = "ALICE-Law G10: the wall clock makes a Law-bearing value depend on when it ran; take the time as an input" },
+    { path = "std::time::Instant::elapsed", reason = "ALICE-Law G10: reads the wall clock the same as Instant::now; duration_since between two held values does not" },
+    { path = "std::time::SystemTime::elapsed", reason = "ALICE-Law G10: reads the wall clock the same as SystemTime::now; duration_since between two held values does not" },
+    { path = "std::collections::hash_map::RandomState::new", reason = "ALICE-Law G10: seeds from OS randomness" },
     { path = "f32::sin", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::sin" },
     { path = "f32::cos", reason = "platform libm is not cross-platform bit-exact; use alice_det_math::cos" },
     { path = "f32::sin_cos", reason = "two platform libm calls, not cross-platform bit-exact; use alice_det_math::sin_cos" },
@@ -106,4 +111,9 @@ disallowed-methods = [
     { path = "f64::hypot", reason = "not correctly rounded by IEEE 754 (ALICE-Law G1 banned list); no call in this workspace, compute it from allowed operations or add an alice-det-math function" },
     { path = "f32::powi", reason = "integer power: ALICE-Law G1 pending, banned by default; use alice_det_math::powi (fixed multiplication order) or exact multiplications" },
     { path = "f64::powi", reason = "integer power: ALICE-Law G1 pending, banned by default; use exact multiplications (alice-det-math 0.5 has no f64 powi)" },
+]
+
+# (no type is forbidden for every target; the library-only ones are in scripts/clippy_lib_gate.toml)
+disallowed-types = [
+    { path = "std::collections::hash_map::RandomState", reason = "ALICE-Law G10: seeds from OS randomness (also through ::default())" },
 ]

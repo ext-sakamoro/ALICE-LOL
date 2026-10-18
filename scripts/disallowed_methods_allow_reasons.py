@@ -32,6 +32,10 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
     counted and named by `scripts/raw_minmax_manifest.py`'s own manifest —
     this prefix is only accepted on that one file (`RAW_HELPER_FILE_REL`
     below), never on a caller claiming the same prefix elsewhere
+  * `cli-report:` — a binary's own report of how long it ran (the wall clock read by
+    `Instant::now` / `.elapsed()`, ALICE-Law G10), printed to the terminal and never written
+    into what the binary produces — this prefix is only accepted in a file under a `src/bin/`
+    directory, never in library code
 
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
@@ -96,7 +100,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "cli-report:"]
 
 # the one file `raw-helper:` is accepted on; `test-probe-alternative:` is
 # additionally accepted inside a `#[cfg(test)] mod ... { }` block in any
@@ -277,6 +281,12 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     errors.append(
                         f"error: {rel}:{line}: raw-helper: は {RAW_HELPER_FILE_REL} 以外の file で"
                         "名乗れない (caller 側が同じ prefix を自称しても検査は通さない)"
+                    )
+                    continue
+                if prefix == "cli-report:" and "/src/bin/" not in "/" + rel:
+                    errors.append(
+                        f"error: {rel}:{line}: cli-report: は src/bin/ 配下の file でしか名乗れない "
+                        "(library の code が時計を読む理由にはならない)"
                     )
                     continue
                 if prefix == "test-probe-alternative:" and not (

@@ -44,7 +44,7 @@ class Check(unittest.TestCase):
         # the Scoping class below), so this writes each prefix to a location
         # where it is actually valid, not all into one plain function
         with tempfile.TemporaryDirectory() as root:
-            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:")]
+            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "cli-report:")]
             write(root, SRC, "\n".join(
                 f'#[allow(clippy::disallowed_methods, reason = "{p} x")]\nfn f{i}() {{}}\n'
                 for i, p in enumerate(unscoped)
@@ -60,10 +60,23 @@ class Check(unittest.TestCase):
                 '#[allow(clippy::disallowed_methods, reason = "raw-helper: x")]\n'
                 "fn raw() {}\n"
             ))
+            write(root, "alice-lol/src/bin/tool.rs", (
+                '#[allow(clippy::disallowed_methods, reason = "cli-report: x")]\n'
+                "fn timed() {}\n"
+            ))
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
             for p in g.PREFIXES:
                 self.assertEqual(counts[p], 1, p)
+
+    def test_cli_report_only_in_a_binary(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "cli-report: the run time")]\n'
+                "fn f() -> std::time::Instant { std::time::Instant::now() }\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("cli-report: は src/bin/" in e for e in errors), errors)
 
     def test_an_unknown_prefix_fails(self):
         with tempfile.TemporaryDirectory() as root:

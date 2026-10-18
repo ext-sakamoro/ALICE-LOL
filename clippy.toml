@@ -76,3 +76,7 @@ disallowed-methods = [
     { path = "f32::powi", reason = "integer power: ALICE-Law G1 pending, banned by default; use alice_det_math::powi (fixed multiplication order) or exact multiplications" },
     { path = "f64::powi", reason = "integer power: ALICE-Law G1 pending, banned by default; use exact multiplications (alice-det-math 0.5 has no f64 powi)" },
 ]
+
+# (no type is forbidden for every target; the library-only ones are in scripts/clippy_lib_gate.toml)
+disallowed-types = [
+]

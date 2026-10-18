@@ -219,3 +219,55 @@ path = "glam::Vec4::max_element"
 [[form]]
 text = "a4.clamp(a4_lo, a4_hi)"
 path = "glam::Vec4::clamp"
+
+[[method]]
+path = "std::time::Instant::now"
+reason = "ALICE-Law G10: the wall clock makes a Law-bearing value depend on when it ran; take the time as an input"
+
+[[method]]
+path = "std::time::SystemTime::now"
+reason = "ALICE-Law G10: the wall clock makes a Law-bearing value depend on when it ran; take the time as an input"
+
+[[method]]
+path = "std::time::Instant::elapsed"
+reason = "ALICE-Law G10: reads the wall clock the same as Instant::now; duration_since between two held values does not"
+
+[[method]]
+path = "std::time::SystemTime::elapsed"
+reason = "ALICE-Law G10: reads the wall clock the same as SystemTime::now; duration_since between two held values does not"
+
+[[method]]
+path = "std::collections::hash_map::RandomState::new"
+reason = "ALICE-Law G10: seeds from OS randomness"
+
+[[type]]
+path = "std::collections::hash_map::RandomState"
+reason = "ALICE-Law G10: seeds from OS randomness (also through ::default())"
+
+[[form]]
+text = "std::time::Instant::now()"
+path = "std::time::Instant::now"
+
+[[form]]
+text = "std::time::SystemTime::now()"
+path = "std::time::SystemTime::now"
+
+[[form]]
+text = "started.elapsed()"
+path = "std::time::Instant::elapsed"
+
+[[form]]
+text = "stamp.elapsed()"
+path = "std::time::SystemTime::elapsed"
+
+[[form]]
+text = "std::collections::hash_map::RandomState::new()"
+path = "std::collections::hash_map::RandomState::new"
+also = ["std::collections::hash_map::RandomState"]
+
+[[form]]
+text = "_seeded: std::collections::hash_map::RandomState"
+path = "std::collections::hash_map::RandomState"
+
+[[clean]]
+text = "later.duration_since(earlier)"

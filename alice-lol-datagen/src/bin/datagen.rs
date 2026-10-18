@@ -49,8 +49,16 @@ fn main() {
     };
     let out_path = arg_after(&args, "--out");
 
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "cli-report: the run time printed to stderr below, not part of the generated samples"
+    )]
     let t0 = Instant::now();
     let (samples, rejected) = generate(&families, n, seed);
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "cli-report: the run time printed to stderr below, not part of the generated samples"
+    )]
     let elapsed = t0.elapsed();
 
     let mut out: Box<dyn Write> = match out_path {

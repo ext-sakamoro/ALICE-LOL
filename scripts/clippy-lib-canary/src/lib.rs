@@ -124,3 +124,30 @@ pub fn glam_vec4_max_element(a4: Vec4) -> f32 {
 pub fn glam_vec4_clamp(a4: Vec4, a4_lo: Vec4, a4_hi: Vec4) -> Vec4 {
     a4.clamp(a4_lo, a4_hi)
 }
+
+// ALICE-Law G10: the wall clock and OS-seeded hashing (each line one form of scripts/clippy_lib_gate.toml)
+pub fn clock_instant_now() -> std::time::Instant {
+    std::time::Instant::now()
+}
+
+pub fn clock_system_now() -> std::time::SystemTime {
+    std::time::SystemTime::now()
+}
+
+pub fn clock_instant_elapsed(started: std::time::Instant) -> std::time::Duration {
+    started.elapsed()
+}
+
+pub fn clock_system_elapsed(stamp: std::time::SystemTime) -> Result<std::time::Duration, std::time::SystemTimeError> {
+    stamp.elapsed()
+}
+
+pub fn seeded_state() {
+    let _ = std::collections::hash_map::RandomState::new();
+}
+
+pub fn seeded_param(_seeded: std::collections::hash_map::RandomState) {}
+
+pub fn held_clock(later: std::time::Instant, earlier: std::time::Instant) -> std::time::Duration {
+    later.duration_since(earlier)
+}
