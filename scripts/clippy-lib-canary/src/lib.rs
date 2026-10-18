@@ -73,3 +73,54 @@ pub fn glam_vec4_min_element(h: Vec4) -> f32 {
 pub fn glam_vec3a_clamp(k: Vec3A) -> Vec3A {
     k.clamp(k, k)
 }
+
+// the rest of the glam entries, so every library-only entry has a form (a mistyped or removed
+// entry forbids nothing and clippy does not say so for a method path)
+
+pub fn glam_vec2_min(a2: Vec2, a2_o: Vec2) -> Vec2 {
+    a2.min(a2_o)
+}
+
+pub fn glam_vec2_min_element(a2: Vec2) -> f32 {
+    a2.min_element()
+}
+
+pub fn glam_vec2_max_element(a2: Vec2) -> f32 {
+    a2.max_element()
+}
+
+pub fn glam_vec2_clamp(a2: Vec2, a2_lo: Vec2, a2_hi: Vec2) -> Vec2 {
+    a2.clamp(a2_lo, a2_hi)
+}
+
+pub fn glam_vec3a_min(a3: Vec3A, a3_o: Vec3A) -> Vec3A {
+    a3.min(a3_o)
+}
+
+pub fn glam_vec3a_max(a3: Vec3A, a3_o: Vec3A) -> Vec3A {
+    a3.max(a3_o)
+}
+
+pub fn glam_vec3a_min_element(a3: Vec3A) -> f32 {
+    a3.min_element()
+}
+
+pub fn glam_vec3a_max_element(a3: Vec3A) -> f32 {
+    a3.max_element()
+}
+
+pub fn glam_vec4_min(a4: Vec4, a4_o: Vec4) -> Vec4 {
+    a4.min(a4_o)
+}
+
+pub fn glam_vec4_max(a4: Vec4, a4_o: Vec4) -> Vec4 {
+    a4.max(a4_o)
+}
+
+pub fn glam_vec4_max_element(a4: Vec4) -> f32 {
+    a4.max_element()
+}
+
+pub fn glam_vec4_clamp(a4: Vec4, a4_lo: Vec4, a4_hi: Vec4) -> Vec4 {
+    a4.clamp(a4_lo, a4_hi)
+}
