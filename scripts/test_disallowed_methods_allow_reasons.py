@@ -44,7 +44,7 @@ class Check(unittest.TestCase):
         # the Scoping class below), so this writes each prefix to a location
         # where it is actually valid, not all into one plain function
         with tempfile.TemporaryDirectory() as root:
-            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "cli-report:")]
+            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "cli-report:", "unstamped-writer:")]
             write(root, SRC, "\n".join(
                 f'#[allow(clippy::disallowed_methods, reason = "{p} x")]\nfn f{i}() {{}}\n'
                 for i, p in enumerate(unscoped)
@@ -63,6 +63,10 @@ class Check(unittest.TestCase):
             write(root, "alice-lol/src/bin/tool.rs", (
                 '#[allow(clippy::disallowed_methods, reason = "cli-report: x")]\n'
                 "fn timed() {}\n"
+            ))
+            write(root, g.UNSTAMPED_WRITER_FILE_REL, (
+                '#[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
+                "fn obj() {}\n"
             ))
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
@@ -186,6 +190,15 @@ class Scoping(unittest.TestCase):
             ))
             errors, _ = g.check(root)
             self.assertTrue(any("raw-helper" in e and "名乗れない" in e for e in errors))
+
+    def test_unstamped_writer_outside_the_designated_file_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, SRC, (
+                '#[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
+                "fn w() {}\n"
+            ))
+            errors, _ = g.check(root)
+            self.assertTrue(any("unstamped-writer" in e and "名乗れない" in e for e in errors), errors)
 
     def test_raw_helper_on_the_designated_file_passes(self):
         with tempfile.TemporaryDirectory() as root:

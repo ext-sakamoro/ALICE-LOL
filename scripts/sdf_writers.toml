@@ -1,0 +1,77 @@
+# scripts/sdf_writers.py: the alice-sdf writers alice-lol may not re-export or call (ALICE-Law G8)
+
+# the nightly that builds rustdoc's JSON (a dated one, so the JSON layout does not move under the check)
+nightly = "nightly-2026-09-26"
+
+# a writer's name, as alice-sdf's scripts/provenance_writers.py names one
+name = '(?:export|save|write)\w*|to_bytes'
+
+# Where alice-sdf's own writer count and its public API (with the features alice-lol enables) disagree,
+# each entry says what the item is. kind: writer (treated as one), not-a-writer, not-built (counted by
+# alice-sdf but not compiled with alice-lol's features; when alice-lol starts building it, the entry is
+# stale and the run fails until the item is classified)
+
+[[outside]]
+key = "src/neural.rs::save"
+kind = "writer"
+reason = "NeuralSdf::save writes the network's weights to a stream; alice-sdf's count does not scan neural.rs"
+
+[[outside]]
+key = "src/compiled/glsl/transpiler.rs::export_unity_shader_graph"
+kind = "not-a-writer"
+reason = "returns shader source text for a material; it writes no file and stores no SDF value"
+
+[[outside]]
+key = "src/compiled/hlsl/transpiler.rs::export_unity_shader_graph"
+kind = "not-a-writer"
+reason = "returns shader source text for a material; it writes no file and stores no SDF value"
+
+[[outside]]
+key = "src/compiled/hlsl/transpiler.rs::export_ue5_material_function"
+kind = "not-a-writer"
+reason = "returns shader source text for a material function; it writes no file and stores no SDF value"
+
+[[outside]]
+key = "src/svo/streaming.rs::to_bytes"
+kind = "not-built"
+reason = "the svo module is behind alice-sdf's svo feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_dds_3d"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_dds_3d_distgrad"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_dds_3d_distgrad_with_provenance"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_dds_3d_with_provenance"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_raw"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_raw_with_mips"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_raw_with_mips_with_provenance"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/volume/export.rs::export_raw_with_provenance"
+kind = "not-built"
+reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"

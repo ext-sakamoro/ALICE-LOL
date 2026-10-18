@@ -36,6 +36,10 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
     `Instant::now` / `.elapsed()`, ALICE-Law G10), printed to the terminal and never written
     into what the binary produces — this prefix is only accepted in a file under a `src/bin/`
     directory, never in library code
+  * `unstamped-writer:` — the one call of an alice-sdf writer that cannot store LOL's producer
+    identifier yet (ALICE-Law G8: alice-sdf has no stamped OBJ writer, so `roblox_export` writes OBJ
+    with alice-sdf's own identifier only); every other alice-sdf writer is refused by the library
+    clippy (scripts/sdf_writers.py) — this prefix is only accepted in `UNSTAMPED_WRITER_FILE_REL`
 
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
@@ -100,7 +104,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "cli-report:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "cli-report:",
+            "unstamped-writer:"]
 
 # the one file `raw-helper:` is accepted on; `test-probe-alternative:` is
 # additionally accepted inside a `#[cfg(test)] mod ... { }` block in any
@@ -108,6 +113,7 @@ PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:
 # this script today — only `src/` is — but checked the same way if that ever
 # changes, rather than silently accepting an unscoped claim)
 RAW_HELPER_FILE_REL = "alice-lol/src/raw_minmax.rs"
+UNSTAMPED_WRITER_FILE_REL = "alice-lol/src/roblox_export.rs"
 
 MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
 MEMBER_NAME_RE = re.compile(r'"([^"]+)"')
@@ -281,6 +287,12 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     errors.append(
                         f"error: {rel}:{line}: raw-helper: は {RAW_HELPER_FILE_REL} 以外の file で"
                         "名乗れない (caller 側が同じ prefix を自称しても検査は通さない)"
+                    )
+                    continue
+                if prefix == "unstamped-writer:" and rel != UNSTAMPED_WRITER_FILE_REL:
+                    errors.append(
+                        f"error: {rel}:{line}: unstamped-writer: は {UNSTAMPED_WRITER_FILE_REL} 以外の file で"
+                        "名乗れない (producer の識別子を書けない書き出しは OBJ の 1 箇所だけ)"
                     )
                     continue
                 if prefix == "cli-report:" and "/src/bin/" not in "/" + rel:
