@@ -340,12 +340,12 @@ python3 scripts/build_config_guard.py
 python3 scripts/test_build_flags_check.py
 python3 scripts/test_run_tests.py
 python3 scripts/test_cargo_test_nonzero.py
-python3 scripts/test_reexport_guard.py
+python3 scripts/test_sdf_writers.py
 
-step "ci.yml / reexport-guard: Public re-exports (G8)"
-nightly=$(python3 -c 'import tomllib; print(tomllib.load(open("scripts/reexport_guard.toml", "rb"))["nightly"])')
+step "ci.yml / sdf-writers: alice-sdf writers (G8)"
+nightly=$(python3 -c 'import tomllib; print(tomllib.load(open("scripts/sdf_writers.toml", "rb"))["nightly"])')
 if has_toolchain "$nightly"; then
-  python3 scripts/reexport_guard.py
+  python3 scripts/sdf_writers.py
 else
   echo "skip: $nightly not installed (rustup toolchain install $nightly); CI runs it" >&2
 fi

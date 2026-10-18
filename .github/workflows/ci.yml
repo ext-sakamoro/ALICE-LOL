@@ -395,11 +395,13 @@ jobs:
   # the existing Test matrix already runs the full suite (this file
   # included, but `#[ignore]`d there) on every OS -- this job's value is the
   # breadth of the sweep (~35,000 cases, ~90s), not its OS coverage
-  # ALICE-Law G8: no public re-export of alice-lol reaches an alice-sdf writer that skips the LOL
-  # producer identifier, under any name, module, glob or the crate root (rustdoc JSON of alice-lol with
-  # every feature, built by the dated nightly in scripts/reexport_guard.toml)
-  reexport-guard:
-    name: Public re-exports (G8)
+  # ALICE-Law G8: alice-lol cannot reach an alice-sdf writer that skips the LOL producer identifier.
+  # scripts/sdf_writers.py checks that scripts/sdf_writers.lock is for the pinned alice-sdf and its own writer
+  # count, that the library clippy entries and canary forms are the lock's writers, and reads alice-lol's
+  # rustdoc JSON (hidden and private items, every feature, the dated nightly in scripts/sdf_writers.toml)
+  # for re-exports of a writer, its module or a type with a writer method
+  sdf-writers:
+    name: alice-sdf writers (G8)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -418,10 +420,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ALICE-LOL
-      - name: Re-export guard (tests, then the check)
+      - name: alice-sdf writers (tests, then the check)
         run: |
-          python3 scripts/test_reexport_guard.py
-          python3 scripts/reexport_guard.py
+          python3 scripts/test_sdf_writers.py
+          python3 scripts/sdf_writers.py
 
   degenerate-grid:
     name: Degenerate-parameter grid (ubuntu)
@@ -622,7 +624,7 @@ jobs:
           python scripts/test_build_flags_check.py
           python scripts/test_run_tests.py
           python scripts/test_cargo_test_nonzero.py
-          python scripts/test_reexport_guard.py
+          python scripts/test_sdf_writers.py
       # ALICE-Law G11 (c): the files shared with the other crates are the bytes ALICE-Law's
       # table records (table and checker fetched at .github/shared-files-pin, both SHA-256
       # pinned); a difference, an unlisted shared path or nothing compared fails
