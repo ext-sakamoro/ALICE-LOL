@@ -18,7 +18,9 @@
 crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use crate::audit_law::{sorted_values, AuditLaw, Clause};
+use crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
+use crate::law_id::LOL_SEMANTICS_ID;
 use crate::units::{Declared, Purpose, Unit, UnitsDecl};
 use crate::SdfNode;
 use glam::{Vec2, Vec3};
@@ -61,8 +63,30 @@ pub const MAX_STDLIB_GRID_CELLS: f32 = 4096.0;
 /// LOL パースエラー
 #[derive(Debug, Clone)]
 pub struct ParseError {
+    /// 構文の誤りか、識別子の不一致 / 欠落か ([`ParseErrorKind`])
+    pub kind: ParseErrorKind,
     pub message: String,
     pub position: usize,
+}
+
+/// パースエラーの種類
+///
+/// `semantics(<id>, ...)` で包んだ text の識別子が読み手の識別子と違う時と、包みを必須にする
+/// 入口 (`*_stamped`) で包みが無い時は、構文の誤りとは別の種類として返す (ALICE-Law G7)
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ParseErrorKind {
+    /// 構文の誤り (未知の構文・引数の数・数値の範囲・末尾ゴミ など)
+    Syntax,
+    /// 包みの識別子 (`theirs`、書いた側) がこの版の識別子 (`ours`) と違う
+    SemanticsMismatch {
+        /// この版の識別子
+        ours: [u8; 32],
+        /// text が持っていた識別子
+        theirs: [u8; 32],
+    },
+    /// 包みを必須にする入口に、包みの無い text が来た
+    SemanticsMissing,
 }
 
 impl std::fmt::Display for ParseError {
@@ -146,6 +170,7 @@ impl<'a> Lexer<'a> {
             b'-' | b'0'..=b'9' => self.read_number(),
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => self.read_ident(),
             _ => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("unexpected character: '{}'", ch as char),
                 position: self.pos,
             }),
@@ -181,10 +206,12 @@ impl<'a> Lexer<'a> {
             }
         }
         let s = std::str::from_utf8(&self.input[start..self.pos]).map_err(|_| ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "invalid UTF-8 in number".into(),
             position: start,
         })?;
         let v: f32 = s.parse().map_err(|_| ParseError {
+            kind: ParseErrorKind::Syntax,
             message: format!("invalid number: '{s}'"),
             position: start,
         })?;
@@ -192,6 +219,7 @@ impl<'a> Lexer<'a> {
         // (emit never writes inf, so an accepted inf could not be written back)
         if !v.is_finite() {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("number out of range: '{s}'"),
                 position: start,
             });
@@ -207,6 +235,7 @@ impl<'a> Lexer<'a> {
             self.pos += 1;
         }
         let s = std::str::from_utf8(&self.input[start..self.pos]).map_err(|_| ParseError {
+            kind: ParseErrorKind::Syntax,
             message: "invalid UTF-8 in identifier".into(),
             position: start,
         })?;
@@ -254,6 +283,7 @@ impl<'a> Parser<'a> {
         match self.next()? {
             Some(Token::Number(v)) => Ok(v),
             other => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected number, got {other:?}"),
                 position: self.lexer.position(),
             }),
@@ -264,6 +294,7 @@ impl<'a> Parser<'a> {
         match self.next()? {
             Some(Token::Comma) => Ok(()),
             other => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected comma, got {other:?}"),
                 position: self.lexer.position(),
             }),
@@ -274,6 +305,7 @@ impl<'a> Parser<'a> {
         match self.next()? {
             Some(Token::RParen) => Ok(()),
             other => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("expected ')', got {other:?}"),
                 position: self.lexer.position(),
             }),
@@ -363,6 +395,7 @@ impl<'a> Parser<'a> {
     ) -> Result<crate::stdlib::hardsurface::fastener::MetricSize, ParseError> {
         crate::stdlib::hardsurface::fastener::MetricSize::try_from_f32(m_size).ok_or_else(|| {
             ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("ねじ呼び径が有限の数値でない: {m_size}"),
                 position: self.lexer.pos,
             }
@@ -618,6 +651,7 @@ impl<'a> Parser<'a> {
         self.expect_rparen()?;
         if children.len() < 2 {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: "operations require at least 2 children".into(),
                 position: self.lexer.position(),
             });
@@ -657,6 +691,7 @@ impl<'a> Parser<'a> {
             Some(Token::Ident(s)) => s,
             other => {
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!("expected function name, got {other:?}"),
                     position: self.lexer.position(),
                 })
@@ -670,6 +705,7 @@ impl<'a> Parser<'a> {
                 Some(Token::Ident(s)) => s,
                 other => {
                     return Err(ParseError {
+                        kind: ParseErrorKind::Syntax,
                         message: format!("expected field name, got {other:?}"),
                         position: self.lexer.position(),
                     })
@@ -685,6 +721,7 @@ impl<'a> Parser<'a> {
             Some(Token::LParen) => {}
             other => {
                 return Err(ParseError {
+                    kind: ParseErrorKind::Syntax,
                     message: format!("expected '(' after '{name}', got {other:?}"),
                     position: self.lexer.position(),
                 })
@@ -3086,11 +3123,165 @@ impl<'a> Parser<'a> {
             }
 
             other => Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("unknown LOL expression: '{other}'"),
                 position: self.lexer.position(),
             }),
         }
     }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 識別子の包み `semantics(<id>, ...)` (ALICE-Law G7)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// text は Rust の型を運ばないので、別の process / 別の版が書いた text は、書いた側の識別子を
+// 一緒に運び、読む側が自分の識別子と比べる `semantics(<64 桁の小文字 16 進>, <中身>)` が
+// その包み 包みの無い text は人や model が書いた source として従来どおり読む (`parse_*`)
+// 交換の経路は包みを必須にする入口 (`parse_*_stamped`) を使う 識別子は等しいかだけを見る
+// (一回のやり取りの中の照合 保存して後で読む形式の照合は G8 の規則で、ここではない)
+
+/// 包みを必須にするか
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stamp {
+    /// 包みは任意 (あれば照合する)
+    Optional,
+    /// 包みが無ければ [`ParseErrorKind::SemanticsMissing`]
+    Required,
+}
+
+/// 包みの 16 進の桁数
+const SEMANTICS_HEX_LEN: usize = 64;
+
+/// 識別子の 16 進表記 (小文字)
+pub(crate) fn semantics_hex(id: &[u8; 32]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(SEMANTICS_HEX_LEN);
+    for b in id {
+        out.push(char::from(DIGITS[usize::from(b >> 4)]));
+        out.push(char::from(DIGITS[usize::from(b & 0xf)]));
+    }
+    out
+}
+
+/// 64 桁の小文字 16 進を 32 byte に (それ以外は `None`)
+fn semantics_from_hex(hex: &[u8]) -> Option<[u8; 32]> {
+    const fn nibble(c: u8) -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            _ => None,
+        }
+    }
+    if hex.len() != SEMANTICS_HEX_LEN {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    let (pairs, _) = hex.as_chunks::<2>();
+    for (byte, [hi, lo]) in out.iter_mut().zip(pairs) {
+        *byte = (nibble(*hi)? << 4) | nibble(*lo)?;
+    }
+    Some(out)
+}
+
+/// 識別子の不一致の error (両方の識別子を名指す)
+fn semantics_mismatch(ours: &[u8; 32], theirs: [u8; 32], position: usize) -> ParseError {
+    ParseError {
+        kind: ParseErrorKind::SemanticsMismatch {
+            ours: *ours,
+            theirs,
+        },
+        message: format!(
+            "the text was written with semantics identifier {} but this release reads {}",
+            semantics_hex(&theirs),
+            semantics_hex(ours)
+        ),
+        position,
+    }
+}
+
+/// 包みが必須の入口に包みの無い text が来た error
+fn semantics_missing(ours: &[u8; 32]) -> ParseError {
+    ParseError {
+        kind: ParseErrorKind::SemanticsMissing,
+        message: format!(
+            "this entry point reads text exchanged between programs, which starts with \
+             `semantics({}, ...)`; a text without it is read by the entry point without `_stamped`",
+            semantics_hex(ours)
+        ),
+        position: 0,
+    }
+}
+
+impl Parser<'_> {
+    /// text が `semantics(` で始まれば識別子と `,` までを読み、識別子を返す
+    ///
+    /// 始まらなければ何も読まずに `None` 16 進は lexer の数値と名前の規則に合わないので
+    /// byte を直接読む
+    fn read_semantics_open(&mut self) -> Result<Option<([u8; 32], usize)>, ParseError> {
+        const KEYWORD: &[u8] = b"semantics";
+        let lexer = &mut self.lexer;
+        lexer.skip_whitespace();
+        let rest = &lexer.input[lexer.pos..];
+        let follows_ident = rest
+            .get(KEYWORD.len())
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_');
+        if !rest.starts_with(KEYWORD) || follows_ident {
+            return Ok(None);
+        }
+        lexer.pos += KEYWORD.len();
+        lexer.skip_whitespace();
+        if lexer.input.get(lexer.pos) != Some(&b'(') {
+            return self.err("expected '(' after semantics".into());
+        }
+        self.lexer.pos += 1;
+        self.lexer.skip_whitespace();
+        let start = self.lexer.pos;
+        let end = (start + SEMANTICS_HEX_LEN).min(self.lexer.input.len());
+        let next = self.lexer.input.get(end);
+        let id = semantics_from_hex(&self.lexer.input[start..end])
+            .filter(|_| !next.is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_'));
+        let Some(id) = id else {
+            return self.err(format!(
+                "semantics takes an identifier of {SEMANTICS_HEX_LEN} lower-case hex digits"
+            ));
+        };
+        self.lexer.pos = end;
+        self.expect_comma()?;
+        Ok(Some((id, start)))
+    }
+}
+
+/// 包みを読み (任意 / 必須)、識別子を照合してから中身を読み、末尾を確かめる
+///
+/// 識別子の照合は中身より先: 別の版の文法で書かれた中身の構文エラーより、識別子の不一致を返す
+fn read_wrapped<'a, T>(
+    input: &'a str,
+    ours: &[u8; 32],
+    stamp: Stamp,
+    body: impl FnOnce(&mut Parser<'a>) -> Result<T, ParseError>,
+) -> Result<T, ParseError> {
+    let mut parser = Parser::new(input);
+    let wrapped = parser.read_semantics_open()?;
+    match wrapped {
+        Some((theirs, at)) if theirs != *ours => return Err(semantics_mismatch(ours, theirs, at)),
+        None if stamp == Stamp::Required => return Err(semantics_missing(ours)),
+        _ => {}
+    }
+    let value = body(&mut parser)?;
+    if wrapped.is_some() {
+        parser.expect_rparen()?;
+    }
+    // 末尾にゴミがないか確認
+    parser.lexer.skip_whitespace();
+    if parser.lexer.position() < parser.lexer.input.len() {
+        return Err(ParseError {
+            kind: ParseErrorKind::Syntax,
+            message: "unexpected trailing content".into(),
+            position: parser.lexer.position(),
+        });
+    }
+    Ok(value)
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3102,9 +3293,15 @@ impl<'a> Parser<'a> {
 /// LLM が生成した LOL 構文テキストを受け取り、ALICE-SDF の [`SdfNode`] ツリーに変換。
 /// `proc_macro` 版と同等の 76 構文をサポート（値は `f32` リテラルのみ）。
 ///
+/// `semantics(<id>, <text>)` で包んだ text も読む (包みは任意、ALICE-Law G7): 識別子が
+/// [`LOL_GEOMETRY_SEMANTICS_ID`] と違えば [`ParseErrorKind::SemanticsMismatch`] (両方の識別子を持つ、
+/// 中身は読まない) 包みの無い text は包みが入る前と同じに読む 別の process / 版が書いた text を
+/// 受け取る経路は包みを必須にする `*_stamped` を使う
+///
 /// # Errors
 ///
-/// 構文エラー、未知の関数名、引数の不足・過剰の場合に [`ParseError`] を返す。
+/// 構文エラー、未知の関数名、引数の不足・過剰の場合に [`ParseError`] を返す ([`ParseErrorKind::Syntax`])
+/// 包みの識別子がこの版と違えば [`ParseErrorKind::SemanticsMismatch`]
 ///
 /// # Examples
 ///
@@ -3122,18 +3319,41 @@ impl<'a> Parser<'a> {
 /// let node = parse_lol("smooth_union(0.3, sphere(1.0), box3d(0.5, 0.5, 0.5))").unwrap();
 /// ```
 pub fn parse_lol(input: &str) -> Result<SdfNode, ParseError> {
-    let mut parser = Parser::new(input);
-    parser.refuse_units_declaration()?;
-    let node = parser.parse_expr()?;
-    // 末尾にゴミがないか確認
-    parser.lexer.skip_whitespace();
-    if parser.lexer.position() < parser.lexer.input.len() {
-        return Err(ParseError {
-            message: "unexpected trailing content".into(),
-            position: parser.lexer.position(),
-        });
-    }
-    Ok(node)
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        Stamp::Optional,
+        Parser::read_lol,
+    )
+}
+
+/// [`parse_lol`] の交換用: `semantics(<id>, ...)` の包みを必須にする
+///
+/// 別の process / 別の版が書いた text を受け取る経路 (ALICE-Law G7) で使う 包みの無い text は
+/// [`ParseErrorKind::SemanticsMissing`]、識別子が [`LOL_GEOMETRY_SEMANTICS_ID`] と違えば
+/// [`ParseErrorKind::SemanticsMismatch`] (両方の識別子を持つ)
+///
+/// ```
+/// use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
+/// use alice_lol::runtime_parser::{parse_lol_stamped, ParseErrorKind};
+///
+/// let hex: String = LOL_GEOMETRY_SEMANTICS_ID.iter().map(|b| format!("{b:02x}")).collect();
+/// assert!(parse_lol_stamped(&format!("semantics({hex}, sphere(1.0))")).is_ok());
+/// let bare = parse_lol_stamped("sphere(1.0)").unwrap_err();
+/// assert_eq!(bare.kind, ParseErrorKind::SemanticsMissing);
+/// ```
+///
+/// # Errors
+///
+/// 包みが無い / 識別子が違う / 中身の構文エラー ([`parse_lol`] と同じ)
+// ALLOW-UNWIRED: exchange reader for text another program or release wrote; its callers are outside this workspace (scripts/g7_boundaries.toml class exchange)
+pub fn parse_lol_stamped(input: &str) -> Result<SdfNode, ParseError> {
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        Stamp::Required,
+        Parser::read_lol,
+    )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3143,6 +3363,7 @@ pub fn parse_lol(input: &str) -> Result<SdfNode, ParseError> {
 impl Parser<'_> {
     const fn err<T>(&self, message: String) -> Result<T, ParseError> {
         Err(ParseError {
+            kind: ParseErrorKind::Syntax,
             message,
             position: self.lexer.position(),
         })
@@ -3194,6 +3415,7 @@ impl Parser<'_> {
     fn count_smooth_folded(&self, v: f32, min: f32) -> Result<u32, ParseError> {
         if v > MAX_STDLIB_SMOOTH_FOLD_COUNT {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(
                     "個数が上限 {MAX_STDLIB_SMOOTH_FOLD_COUNT} を超える (smooth union を線形に重ねる形状): {v}"
                 ),
@@ -3209,6 +3431,7 @@ impl Parser<'_> {
         let r = self.count(rows, 1.0)?;
         if f64::from(r) * f64::from(c) > f64::from(MAX_STDLIB_GRID_CELLS) {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("格子の要素数 {r} x {c} が上限 {MAX_STDLIB_GRID_CELLS} を超える"),
                 position: self.lexer.pos,
             });
@@ -3233,6 +3456,7 @@ impl Parser<'_> {
     /// 事案の根本対応、2026-10-10)
     fn spec_error(&self, e: crate::limits::SpecError) -> ParseError {
         ParseError {
+            kind: ParseErrorKind::Syntax,
             message: e.to_string(),
             position: self.lexer.pos,
         }
@@ -3241,6 +3465,7 @@ impl Parser<'_> {
     fn bounded_count(&self, v: f32) -> Result<f32, ParseError> {
         if !v.is_finite() || v > MAX_STDLIB_COUNT {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!("個数は有限で {MAX_STDLIB_COUNT} 以下でなければならない: {v}"),
                 position: self.lexer.pos,
             });
@@ -3540,27 +3765,33 @@ impl Parser<'_> {
 ///     if v[0] == IntentNode::Grasp { target_id: 0, hand: HandSide::Right, force: 5.0 }));
 /// ```
 ///
+/// `semantics(<id>, <text>)` で包んだ text も読む (包みは任意、ALICE-Law G7): 識別子が
+/// [`LOL_GEOMETRY_SEMANTICS_ID`] と違えば [`ParseErrorKind::SemanticsMismatch`] (両方の識別子を持つ、
+/// 中身は読まない) 包みの無い text は包みが入る前と同じに読む 別の process / 版が書いた text を
+/// 受け取る経路は包みを必須にする `*_stamped` を使う
+///
 /// # Errors
 ///
 /// 構文エラー / 未知の verb / entity id 範囲外 / 整数が要る箇所に小数 / 末尾ゴミ
+/// ([`ParseErrorKind::Syntax`]) / 包みの識別子がこの版と違う ([`ParseErrorKind::SemanticsMismatch`])
 pub fn parse_program(input: &str) -> Result<Program, ParseError> {
-    let mut parser = Parser::new(input);
-    parser.refuse_units_declaration()?;
-    let is_program = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "program");
-    let program = if is_program {
-        parser.next()?;
-        parser.parse_program_body()?
-    } else {
-        Program::sdf_only(parser.parse_expr()?)
-    };
-    parser.lexer.skip_whitespace();
-    if parser.lexer.position() < parser.lexer.input.len() {
-        return Err(ParseError {
-            message: "unexpected trailing content".into(),
-            position: parser.lexer.position(),
-        });
-    }
-    Ok(program)
+    read_wrapped(input, &LOL_GEOMETRY_SEMANTICS_ID, Stamp::Optional, |p| {
+        p.refuse_units_declaration()?;
+        p.read_program()
+    })
+}
+
+/// [`parse_program`] の交換用: `semantics(<id>, ...)` の包みを必須にする ([`parse_lol_stamped`] と同じ規則)
+///
+/// # Errors
+///
+/// 包みが無い / 識別子が違う / 中身の構文エラー ([`parse_program`] と同じ)
+// ALLOW-UNWIRED: exchange reader for text another program or release wrote; its callers are outside this workspace (scripts/g7_boundaries.toml class exchange)
+pub fn parse_program_stamped(input: &str) -> Result<Program, ParseError> {
+    read_wrapped(input, &LOL_GEOMETRY_SEMANTICS_ID, Stamp::Required, |p| {
+        p.refuse_units_declaration()?;
+        p.read_program()
+    })
 }
 
 /// 単位の宣言があれば読み、program を読む
@@ -3588,62 +3819,99 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
 /// assert!(parse_declared("units(world, print, sphere(1.0))").is_err());
 /// ```
 ///
+/// `semantics(<id>, <text>)` で包んだ text も読む (包みは任意、ALICE-Law G7): 識別子が
+/// [`LOL_GEOMETRY_SEMANTICS_ID`] と違えば [`ParseErrorKind::SemanticsMismatch`] (両方の識別子を持つ、
+/// 中身は読まない) 包みの無い text は包みが入る前と同じに読む 別の process / 版が書いた text を
+/// 受け取る経路は包みを必須にする `*_stamped` を使う
+///
 /// # Errors
 ///
 /// 知らない単位・用途 / 長さを持たない単位を `print` に使った / 宣言の入れ子 /
-/// 中身の構文エラー ([`parse_program`] と同じ) / 末尾ゴミ
+/// 中身の構文エラー ([`parse_program`] と同じ) / 末尾ゴミ ([`ParseErrorKind::Syntax`]) /
+/// 包みの識別子がこの版と違う ([`ParseErrorKind::SemanticsMismatch`])
 pub fn parse_declared(input: &str) -> Result<Declared, ParseError> {
-    let mut parser = Parser::new(input);
-    let declared = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "units");
-    let units = if declared {
-        parser.next()?;
-        parser.expect_lparen("units")?;
-        let unit_name = parser.expect_ident()?;
-        let Some(unit) = Unit::from_name(&unit_name) else {
-            let known: Vec<&str> = Unit::ALL.iter().map(|u| u.name()).collect();
-            return parser.err(format!(
-                "unknown unit '{unit_name}' (one of {})",
-                known.join("|")
-            ));
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        Stamp::Optional,
+        Parser::read_declared,
+    )
+}
+
+/// [`parse_declared`] の交換用: `semantics(<id>, ...)` の包みを必須にする ([`parse_lol_stamped`] と同じ規則)
+///
+/// # Errors
+///
+/// 包みが無い / 識別子が違う / 中身の構文エラー ([`parse_declared`] と同じ)
+// ALLOW-UNWIRED: exchange reader for text another program or release wrote; its callers are outside this workspace (scripts/g7_boundaries.toml class exchange)
+pub fn parse_declared_stamped(input: &str) -> Result<Declared, ParseError> {
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        Stamp::Required,
+        Parser::read_declared,
+    )
+}
+
+impl Parser<'_> {
+    /// 単位の宣言があれば読み、program を読む (末尾の検査は呼び出し側)
+    fn read_declared(&mut self) -> Result<Declared, ParseError> {
+        let parser = self;
+        let declared = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "units");
+        let units = if declared {
+            parser.next()?;
+            parser.expect_lparen("units")?;
+            let unit_name = parser.expect_ident()?;
+            let Some(unit) = Unit::from_name(&unit_name) else {
+                let known: Vec<&str> = Unit::ALL.iter().map(|u| u.name()).collect();
+                return parser.err(format!(
+                    "unknown unit '{unit_name}' (one of {})",
+                    known.join("|")
+                ));
+            };
+            parser.expect_comma()?;
+            let purpose_name = parser.expect_ident()?;
+            let Some(purpose) = Purpose::from_name(&purpose_name) else {
+                let known: Vec<&str> = Purpose::ALL.iter().map(|p| p.name()).collect();
+                return parser.err(format!(
+                    "unknown purpose '{purpose_name}' (one of {})",
+                    known.join("|")
+                ));
+            };
+            let Some(decl) = UnitsDecl::new(unit, purpose) else {
+                return parser.err(format!(
+                    "unit '{unit_name}' has no length and is declared for render only, not '{purpose_name}'"
+                ));
+            };
+            parser.expect_comma()?;
+            Some(decl)
+        } else {
+            None
         };
-        parser.expect_comma()?;
-        let purpose_name = parser.expect_ident()?;
-        let Some(purpose) = Purpose::from_name(&purpose_name) else {
-            let known: Vec<&str> = Purpose::ALL.iter().map(|p| p.name()).collect();
-            return parser.err(format!(
-                "unknown purpose '{purpose_name}' (one of {})",
-                known.join("|")
-            ));
-        };
-        let Some(decl) = UnitsDecl::new(unit, purpose) else {
-            return parser.err(format!(
-                "unit '{unit_name}' has no length and is declared for render only, not '{purpose_name}'"
-            ));
-        };
-        parser.expect_comma()?;
-        Some(decl)
-    } else {
-        None
-    };
-    parser.refuse_units_declaration()?;
-    let is_program = matches!(parser.peek()?, Some(Token::Ident(s)) if s == "program");
-    let program = if is_program {
-        parser.next()?;
-        parser.parse_program_body()?
-    } else {
-        Program::sdf_only(parser.parse_expr()?)
-    };
-    if declared {
-        parser.expect_rparen()?;
+        parser.refuse_units_declaration()?;
+        let program = parser.read_program()?;
+        if declared {
+            parser.expect_rparen()?;
+        }
+        Ok(Declared::new(units, program))
     }
-    parser.lexer.skip_whitespace();
-    if parser.lexer.position() < parser.lexer.input.len() {
-        return Err(ParseError {
-            message: "unexpected trailing content".into(),
-            position: parser.lexer.position(),
-        });
+
+    /// 単位の宣言の無い SDF の式 1 つ (末尾の検査は呼び出し側)
+    fn read_lol(&mut self) -> Result<SdfNode, ParseError> {
+        self.refuse_units_declaration()?;
+        self.parse_expr()
     }
-    Ok(Declared::new(units, program))
+
+    /// `program(...)` か裸の SDF の式 (末尾の検査は呼び出し側)
+    fn read_program(&mut self) -> Result<Program, ParseError> {
+        let is_program = matches!(self.peek()?, Some(Token::Ident(s)) if s == "program");
+        if is_program {
+            self.next()?;
+            self.parse_program_body()
+        } else {
+            Ok(Program::sdf_only(self.parse_expr()?))
+        }
+    }
 }
 
 impl Parser<'_> {
@@ -3677,11 +3945,33 @@ impl Parser<'_> {
 ///
 /// # Errors
 ///
-/// `audit` の行が無い / 項が 0 件 / 読めない行がある場合
+/// `audit` の行が無い / 項が 0 件 / 読めない行がある場合 ([`ParseErrorKind::Syntax`])
+/// 最初の行 `semantics <id>` (任意) の識別子が [`LOL_SEMANTICS_ID`] と違えば
+/// [`ParseErrorKind::SemanticsMismatch`] (包みの無い text は包みが入る前と同じに読む)
 pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
+    read_law(input, Stamp::Optional)
+}
+
+/// [`parse_law`] の交換用: 最初の行の `semantics <id>` を必須にする
+///
+/// 監査 Law は行ごとの文なので、包みは最初の行 `semantics <64 桁の小文字 16 進>` で書く
+/// ([`crate::emit`] の式の包み `semantics(<id>, ...)` と同じ識別子の表記) 識別子は
+/// [`LOL_SEMANTICS_ID`] と比べ、違えば [`ParseErrorKind::SemanticsMismatch`]、
+/// 行が無ければ [`ParseErrorKind::SemanticsMissing`]
+///
+/// # Errors
+///
+/// 行が無い / 識別子が違う / 中身の誤り ([`parse_law`] と同じ)
+// ALLOW-UNWIRED: exchange reader for text another program or release wrote; its callers are outside this workspace (scripts/g7_boundaries.toml class exchange)
+pub fn parse_law_stamped(input: &str) -> Result<AuditLaw, ParseError> {
+    read_law(input, Stamp::Required)
+}
+
+fn read_law(input: &str, stamp: Stamp) -> Result<AuditLaw, ParseError> {
     let mut name: Option<String> = None;
     let mut clauses: Vec<Clause> = Vec::new();
     let mut position = 0_usize;
+    let mut first = true;
 
     for raw in input.lines() {
         let at = position;
@@ -3693,7 +3983,28 @@ pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
         let mut words = line.split_whitespace();
         let head = words.next().unwrap_or("");
         let rest: Vec<&str> = words.collect();
+        let is_first = std::mem::replace(&mut first, false);
+        if is_first && head != "semantics" && stamp == Stamp::Required {
+            return Err(semantics_missing(&LOL_SEMANTICS_ID));
+        }
         match head {
+            "semantics" => {
+                if !is_first {
+                    return Err(law_error("`semantics <id>` is only the first line", at));
+                }
+                let [hex] = rest.as_slice() else {
+                    return Err(law_error("`semantics` takes one identifier", at));
+                };
+                let Some(theirs) = semantics_from_hex(hex.as_bytes()) else {
+                    return Err(law_error(
+                        "`semantics` takes an identifier of 64 lower-case hex digits",
+                        at,
+                    ));
+                };
+                if theirs != LOL_SEMANTICS_ID {
+                    return Err(semantics_mismatch(&LOL_SEMANTICS_ID, theirs, at));
+                }
+            }
             "audit" => {
                 if rest.len() != 1 {
                     return Err(law_error("`audit` takes one name", at));
@@ -3749,6 +4060,9 @@ pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
         }
     }
 
+    if first && stamp == Stamp::Required {
+        return Err(semantics_missing(&LOL_SEMANTICS_ID));
+    }
     let name = name.ok_or_else(|| law_error("no `audit <name>` line", 0))?;
     if clauses.is_empty() {
         return Err(law_error(
@@ -3761,6 +4075,7 @@ pub fn parse_law(input: &str) -> Result<AuditLaw, ParseError> {
 
 fn law_error(message: &str, position: usize) -> ParseError {
     ParseError {
+        kind: ParseErrorKind::Syntax,
         message: message.to_owned(),
         position,
     }

@@ -219,6 +219,17 @@ const SCENE_WGSL: &str = lol! {
 
 全段が既存 ALICE クレートの上に乗る。新規コードは「proc_macro のパーサー」と「空間枝刈り→WGSL 分岐生成」の接合部分のみ。
 
+### 5.4 型の消える境界の識別子 (ALICE-Law G7)
+
+Rust の値として渡す限り、型が版と構成を運ぶので識別子は要らない 型が消える境界では、書いた側の識別子が値と一緒に運ばれ、読む側が自分の識別子と比べる 違えば構文の誤りとは別の error で、両方の識別子を名指す
+
+- **`lol!` の展開**: `alice-lol` は `alice-lol-macro` を caret で要求し、展開は source text として届く 展開は毎回 `alice-lol-macro` の識別子 (probe corpus の展開の digest) を持ち、`alice-lol` が受理するのは自分が出た時の値だけ 違えば compile error で両方の識別子を出す
+- **text**: `semantics(<64 桁の小文字 16 進>, <中身>)` で包む 識別子は SDF の式・program・単位の宣言では `LOL_GEOMETRY_SEMANTICS_ID`、監査 Law では `LOL_SEMANTICS_ID` 監査 Law は行ごとの文なので、包みは最初の行 `semantics <16 進>` で書く
+  - `parse_lol` / `parse_program` / `parse_declared` / `parse_law`: 包みは任意 あれば照合し、違えば `ParseErrorKind::SemanticsMismatch { ours, theirs }` (中身は読まない) 包みの無い text は包みが入る前と同じに読む (人や model が書く source の形)
+  - `parse_*_stamped`: 包みが必須 別の process や別の版が書いた text を受け取る経路はこちらを使う 包みが無ければ `ParseErrorKind::SemanticsMissing`
+  - 照合は等しいかだけを見る (一回のやり取りの中) 保存して後で別の版が読む形式は G8 の規則 (記録時の識別子と比べる) で、ここではない
+  - `lol.gbnf` (model の生成の文法) は包みを含まない 包みは書き出しの側が付けるもの
+
 ---
 
 ## 6. エラーメッセージ設計: Law Checker
