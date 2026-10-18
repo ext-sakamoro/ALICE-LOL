@@ -140,4 +140,6 @@ disallowed-methods = [
 # (no type is forbidden for every target; the library-only ones are in scripts/clippy_lib_gate.toml)
 disallowed-types = [
     { path = "std::collections::hash_map::RandomState", reason = "ALICE-Law G10: seeds from OS randomness (also through ::default())" },
+    { path = "std::collections::HashMap", reason = "ALICE-Law G13: iterates in its per-run seed order (also through into_iter / IntoIterator); use alice_sdf::unordered::UnorderedMap (no iteration) or a BTreeMap" },
+    { path = "std::collections::HashSet", reason = "ALICE-Law G13: iterates in its per-run seed order (also through into_iter / IntoIterator); use alice_sdf::unordered::UnorderedSet (no iteration) or a BTreeSet" },
 ]

@@ -48,7 +48,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use alice_lol::{SdfNode, Vec3};
@@ -64,7 +64,7 @@ pub mod vrm;
 // ============================================================================
 
 /// 16 主要 joint (VRM humanoid 相当、`body_25` subset)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Joint {
     /// 頭頂
     Head,
@@ -380,7 +380,7 @@ pub struct HumanoidTemplate {
     /// bone list (from → to + thickness)
     pub bones: Vec<Bone>,
     /// joint → local 3D position (Y up)
-    pub joints: HashMap<Joint, [f32; 3]>,
+    pub joints: BTreeMap<Joint, [f32; 3]>,
 }
 
 impl Default for HumanoidTemplate {
@@ -421,7 +421,7 @@ impl HumanoidTemplate {
         let wrist_x = shoulder_x + arm_len;
         let hip_x = h * params.hip_ratio * 0.5;
 
-        let mut joints = HashMap::with_capacity(16);
+        let mut joints = BTreeMap::new();
         joints.insert(Joint::Head, [0.0, head_top_y, 0.0]);
         joints.insert(Joint::Neck, [0.0, neck_y, 0.0]);
         joints.insert(Joint::Chest, [0.0, chest_y, 0.0]);
@@ -503,12 +503,12 @@ impl HumanoidTemplate {
     ///
     /// - `self.joints` に [`Joint::Waist`] が存在しない (canonical topology 前提)
     #[must_use]
-    pub fn with_pose(&self, vrm_named_rotations: &HashMap<String, Quat>) -> Self {
-        let parent_map: HashMap<Joint, Joint> = VRM_PARENT_TABLE.iter().copied().collect();
+    pub fn with_pose(&self, vrm_named_rotations: &BTreeMap<String, Quat>) -> Self {
+        let parent_map: BTreeMap<Joint, Joint> = VRM_PARENT_TABLE.iter().copied().collect();
 
         // Step 1: bind pose local offsets
-        let mut local_offsets: HashMap<Joint, Vec3> = HashMap::with_capacity(15);
-        // (the table, not the map: a HashMap is visited in the order of its per-run seed)
+        let mut local_offsets: BTreeMap<Joint, Vec3> = BTreeMap::new();
+        // (in the table's order, which puts each parent before its children)
         for &(child, parent) in VRM_PARENT_TABLE {
             if let (Some(&c), Some(&p)) = (self.joints.get(&child), self.joints.get(&parent)) {
                 local_offsets.insert(child, Vec3::from(c) - Vec3::from(p));
@@ -529,7 +529,7 @@ impl HumanoidTemplate {
         let root_transform = Mat4::from_rotation_translation(root_rot, root_pos);
 
         // Step 3: FK walk
-        let mut world_transforms: HashMap<Joint, Mat4> = HashMap::with_capacity(16);
+        let mut world_transforms: BTreeMap<Joint, Mat4> = BTreeMap::new();
         world_transforms.insert(Joint::Waist, root_transform);
 
         for &joint in VRM_TOPO_ORDER {
@@ -552,8 +552,8 @@ impl HumanoidTemplate {
         }
 
         // Step 4: extract world positions
-        // (in the topological order, not the map's: a HashMap is visited in the order of its per-run seed)
-        let joints: HashMap<Joint, [f32; 3]> = VRM_TOPO_ORDER
+        // (in the topological order, so each parent's transform exists before its children's)
+        let joints: BTreeMap<Joint, [f32; 3]> = VRM_TOPO_ORDER
             .iter()
             .filter_map(|j| world_transforms.get(j).map(|t| (*j, t)))
             .map(|(j, t)| {
@@ -893,8 +893,8 @@ mod tests {
     #[test]
     fn joint_all_length_and_uniqueness() {
         assert_eq!(Joint::ALL.len(), 16);
-        // uniqueness: HashSet 化して同数なら重複なし
-        let set: std::collections::HashSet<Joint> = Joint::ALL.iter().copied().collect();
+        // uniqueness: BTreeSet 化して同数なら重複なし
+        let set: std::collections::BTreeSet<Joint> = Joint::ALL.iter().copied().collect();
         assert_eq!(set.len(), 16);
     }
 
@@ -1028,7 +1028,7 @@ mod tests {
     #[test]
     fn with_pose_identity_returns_bind_pose_equivalent_positions() {
         let t = HumanoidTemplate::default();
-        let rotations: HashMap<String, Quat> = HashMap::new();
+        let rotations: BTreeMap<String, Quat> = BTreeMap::new();
         let posed = t.with_pose(&rotations);
         assert_eq!(posed.joints.len(), t.joints.len());
         for joint in Joint::ALL {
@@ -1052,7 +1052,7 @@ mod tests {
         //   LWrist [-2.4, 1.5, 0] (offset [-0.9, 0, 0] from LElbow)
         // leftUpperArm に Z=-π/2 適用 → LShoulder 中心に arm が +Y に回転
         let t = HumanoidTemplate::default();
-        let mut rotations = HashMap::new();
+        let mut rotations = BTreeMap::new();
         rotations.insert(
             "leftUpperArm".to_string(),
             Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2),
@@ -1084,7 +1084,7 @@ mod tests {
         //   LShoulder の offset from Chest = (-0.6, 0, 0)、R_y(π/2) → (0, 0, 0.6)
         //   → LShoulder world = Chest(0, 1.5, 0) + (0, 0, 0.6) = (0, 1.5, 0.6)
         let t = HumanoidTemplate::default();
-        let mut rotations = HashMap::new();
+        let mut rotations = BTreeMap::new();
         rotations.insert(
             "hips".to_string(),
             Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
@@ -1116,7 +1116,7 @@ mod tests {
     fn with_pose_unmapped_bone_names_ignored() {
         // 不明な bone name は無視される (bind pose 保持)
         let t = HumanoidTemplate::default();
-        let mut rotations = HashMap::new();
+        let mut rotations = BTreeMap::new();
         rotations.insert("unknownBone".to_string(), Quat::from_rotation_x(1.0));
         let posed = t.with_pose(&rotations);
         // 全 joint bind pose 保持

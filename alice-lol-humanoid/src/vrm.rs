@@ -33,7 +33,7 @@
 //! VRM bone name → [`Joint`] mapping は 参照実装の `src/vrm_import.rs` から抜粋
 //! Phase H.5 で Manga / LOL 間の reconciliation 判断
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -404,14 +404,14 @@ impl HumanoidTemplate {
             ("leftFoot", Joint::LAnkle),
             ("rightFoot", Joint::RAnkle),
         ];
-        let mut joints: HashMap<Joint, [f32; 3]> = HashMap::with_capacity(16);
+        let mut joints: BTreeMap<Joint, [f32; 3]> = BTreeMap::new();
         for (vrm_name, joint) in mappings {
             if let Some(pos) = vrm_bones.get(vrm_name) {
                 joints.insert(*joint, pos.into());
             }
         }
         // chest fallback: chest 不在時 upperChest 採用
-        if let std::collections::hash_map::Entry::Vacant(e) = joints.entry(Joint::Chest) {
+        if let std::collections::btree_map::Entry::Vacant(e) = joints.entry(Joint::Chest) {
             if let Some(pos) = vrm_bones.get("upperChest") {
                 e.insert(pos.into());
             }

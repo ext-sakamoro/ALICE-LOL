@@ -27,7 +27,6 @@
 
 use crate::SdfNode;
 use glam::Vec3;
-use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 // ── re-export ──
@@ -40,6 +39,8 @@ pub use alice_sdf::mesh::{
     MeshRepair, MeshValidation, Vertex,
 };
 use alice_sdf::provenance::{Provenance, Stamp};
+// hash collections that cannot be iterated (ALICE-Law G13: the library names no std HashMap / HashSet)
+use alice_sdf::unordered::{UnorderedMap, UnorderedSet};
 
 /// LOL の書き出し (STL / 3MF / FBX) が主の識別子として書く、alice-sdf の mesh の意味の識別子
 ///
@@ -120,7 +121,7 @@ fn isolated_vertices(m: &Mesh) -> usize {
 /// (実測 2026-10-09: gyroid scale 3.0 res 64 の修復後で −127 に対し全頂点では −121)
 fn euler_characteristic(m: &Mesh) -> i64 {
     let v = referenced_vertices(m).iter().filter(|&&u| u).count();
-    let mut edges: HashSet<(u32, u32)> = HashSet::with_capacity(m.indices.len());
+    let mut edges: UnorderedSet<(u32, u32)> = UnorderedSet::with_capacity(m.indices.len());
     for t in m.indices.as_chunks::<3>().0 {
         for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
             edges.insert((a.min(b), a.max(b)));
@@ -220,7 +221,7 @@ fn weld_coincident_vertices(raw: &Mesh) -> Mesh {
     if u32::try_from(raw.vertices.len()).is_err() {
         return raw.clone();
     }
-    let mut id: HashMap<[u32; 3], usize> = HashMap::with_capacity(raw.vertices.len());
+    let mut id: UnorderedMap<[u32; 3], usize> = UnorderedMap::with_capacity(raw.vertices.len());
     let mut out = Mesh::new();
     let mut remap: Vec<usize> = Vec::with_capacity(raw.vertices.len());
     for v in &raw.vertices {

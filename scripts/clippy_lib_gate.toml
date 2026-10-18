@@ -244,6 +244,14 @@ reason = "ALICE-Law G10: seeds from OS randomness"
 path = "std::collections::hash_map::RandomState"
 reason = "ALICE-Law G10: seeds from OS randomness (also through ::default())"
 
+[[type]]
+path = "std::collections::HashMap"
+reason = "ALICE-Law G13: iterates in its per-run seed order (also through into_iter / IntoIterator); use alice_sdf::unordered::UnorderedMap (no iteration) or a BTreeMap"
+
+[[type]]
+path = "std::collections::HashSet"
+reason = "ALICE-Law G13: iterates in its per-run seed order (also through into_iter / IntoIterator); use alice_sdf::unordered::UnorderedSet (no iteration) or a BTreeSet"
+
 [[form]]
 text = "std::time::Instant::now()"
 path = "std::time::Instant::now"
@@ -463,3 +471,11 @@ path = "std::env::vars"
 [[form]]
 text = "std::env::vars_os()"
 path = "std::env::vars_os"
+
+[[form]]
+text = "type Hm = std::collections::HashMap<u8, u8>;"
+path = "std::collections::HashMap"
+
+[[form]]
+text = "type Hs = std::collections::HashSet<u8>;"
+path = "std::collections::HashSet"
