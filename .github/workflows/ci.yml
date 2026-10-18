@@ -176,7 +176,7 @@ jobs:
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib geometry_id
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib quat_from_euler_xyz_is_bit_identical_across_architectures
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib y_component_cancellation_preserves_a_negative_zero_input
-          scripts/run_tests.sh geometry_id_oracle,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare -- \
+          scripts/run_tests.sh geometry_id_oracle=4,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare=9 -- \
             cargo test -p alice-lol${{ matrix.profile }} --test geometry_id_oracle --test stdlib_profile_determinism_oracle \
             --test laser_pattern_digest_golden --test golden_compare
       # ALICE-Law G14: round-to-nearest-even and no flush-to-zero, asserted at run
