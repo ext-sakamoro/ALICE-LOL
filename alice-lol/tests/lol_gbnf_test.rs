@@ -348,6 +348,11 @@ fn grammar_covers_every_runtime_parser_construct() {
     // emittable under the grammar — they had been added to the parser and
     // to a downstream copy of the grammar, never here.
     const PARSER_SRC: &str = include_str!("../src/runtime_parser.rs");
+    // Not grammar constructs: `semantics` is the identifier wrapper (`semantics(<hex>, ...)`, and the
+    // first line `semantics <hex>` of an audit law, ALICE-Law G7). The program that wrote a value adds
+    // it (`emit::to_lol`); a model has no identifier to state, and a grammar that let it write one
+    // would let it claim an identifier it does not have. The authoring readers take text without it.
+    const NOT_IN_GRAMMAR: &[&str] = &["semantics"];
     let grammar_names: std::collections::HashSet<&str> = LOL_GBNF
         .split('"')
         .skip(1)
@@ -370,6 +375,7 @@ fn grammar_covers_every_runtime_parser_construct() {
                     .chars()
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
                 && !grammar_names.contains(name)
+                && !NOT_IN_GRAMMAR.contains(&name)
             {
                 missing.push(name.to_string());
             }
@@ -381,6 +387,16 @@ fn grammar_covers_every_runtime_parser_construct() {
         missing.is_empty(),
         "runtime_parser constructs missing from lol.gbnf: {missing:?}"
     );
+    for name in NOT_IN_GRAMMAR {
+        assert!(
+            PARSER_SRC.contains(&format!("\"{name}\" =>")),
+            "{name} is exempt but the parser no longer reads it"
+        );
+        assert!(
+            !grammar_names.contains(name),
+            "{name} is exempt but lol.gbnf has it"
+        );
+    }
 }
 
 #[test]

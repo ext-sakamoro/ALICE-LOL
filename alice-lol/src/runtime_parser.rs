@@ -4816,7 +4816,7 @@ mod tests {
             for scale in ["1e-45", "1e-10", "5e-7", "1e-6", "3.0"] {
                 let input = format!("{name}({scale}, 0.1)");
                 let node = parse_lol(&input).unwrap_or_else(|e| panic!("{input}: {e}"));
-                let text = crate::emit::to_lol(&node)
+                let text = crate::emit::to_lol_unstamped(&node)
                     .unwrap_or_else(|e| panic!("{input}: to_lol failed: {e}"));
                 assert!(
                     parse_lol(&text).is_ok(),

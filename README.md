@@ -225,8 +225,13 @@ so the same law can be fed from Rust or from another language.
 
 <!-- readme-sync: syntax-law -->
 ```text
-audit evidence expect range includes
+audit evidence expect range includes semantics
 ```
+
+`semantics <id>` is an optional first line: the writer's identifier (64 lower-case hex digits of
+`LOL_SEMANTICS_ID`), which `parse_law` compares when present and `parse_law_stamped` requires
+for a law another program wrote; a different identifier is `ParseErrorKind::SemanticsMismatch`
+naming both (ALICE-Law G7).
 
 `evidence <metric>` requires that the metric was measured at all — a check that
 compared nothing answers `NoEvidence` instead of passing. Only a finite number

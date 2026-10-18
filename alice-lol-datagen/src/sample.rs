@@ -115,7 +115,7 @@ impl Sample {
     ) -> Result<Self, VerifyError> {
         let program = parse_program(lol).map_err(|e| VerifyError::Parse(e.to_string()))?;
         let canonical = program
-            .to_lol()
+            .to_lol_unstamped()
             .map_err(|e| VerifyError::Emit(e.to_string()))?;
         let intent_verbs = program.intent.as_ref().map(verb_names).unwrap_or_default();
         Ok(Self {
@@ -139,7 +139,7 @@ impl Sample {
     pub fn verify(&self) -> Result<(), VerifyError> {
         let program = parse_program(&self.lol).map_err(|e| VerifyError::Parse(e.to_string()))?;
         let canonical = program
-            .to_lol()
+            .to_lol_unstamped()
             .map_err(|e| VerifyError::Emit(e.to_string()))?;
         if canonical != self.lol_canonical {
             return Err(VerifyError::Emit("canonical form drifted".to_string()));
@@ -147,7 +147,7 @@ impl Sample {
         // 正規形の冪等性 (emit ∘ parse ∘ emit = emit)
         let again = parse_program(&canonical)
             .map_err(|e| VerifyError::Parse(e.to_string()))?
-            .to_lol()
+            .to_lol_unstamped()
             .map_err(|e| VerifyError::Emit(e.to_string()))?;
         if again != canonical {
             return Err(VerifyError::Emit(format!("not idempotent: `{again}`")));

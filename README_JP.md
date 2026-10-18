@@ -212,8 +212,12 @@ program は root に 1 つの宣言で数値が何かを言う: `units(<unit>, <
 
 <!-- readme-sync: syntax-law -->
 ```text
-audit evidence expect range includes
+audit evidence expect range includes semantics
 ```
+
+`semantics <id>` は任意の最初の行で、書いた側の識別子 (`LOL_SEMANTICS_ID` の 64 桁の小文字 16 進)
+`parse_law` はあれば照合し、別のプログラムが書いた法則を読む `parse_law_stamped` は必須にする
+違う識別子は両方を名指す `ParseErrorKind::SemanticsMismatch` になる (ALICE-Law G7)
 
 `evidence <metric>` はその量が測られたこと自体を要求する — 1 件も比べていない検査は
 合格ではなく `NoEvidence` を返す 証拠になるのは有限で 0 より大きい数だけで、0・負の数・

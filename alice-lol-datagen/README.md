@@ -23,4 +23,4 @@ cargo run --release -p alice-lol-datagen --bin datagen -- --n 20000 --seed 42 --
 
 Each JSONL line: `{id, family, seed, caption_en, caption_ja, lol, lol_canonical, oracle:[[x,y,z,"in"|"out"],…], intent_verbs:[…]}`.
 
-Self-check per sample: `parse_program` succeeds, `to_lol` is idempotent, every oracle point evaluates to the expected side, and (with `--features grammar-check`) the LLM grammar accepts both `lol` and `lol_canonical`. Deterministic for a given seed (xorshift64\*, no external RNG dependency).
+Self-check per sample: `parse_program` succeeds, `to_lol_unstamped` (the canonical form, without the identifier wrapper `to_lol` adds) is idempotent, every oracle point evaluates to the expected side, and (with `--features grammar-check`) the LLM grammar accepts both `lol` and `lol_canonical`. Deterministic for a given seed (xorshift64\*, no external RNG dependency).

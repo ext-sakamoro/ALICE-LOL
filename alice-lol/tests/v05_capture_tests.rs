@@ -142,10 +142,10 @@ fn captured_valid_rotate_q_fields_still_work() {
 #[test]
 fn rotate_q_round_trips_bit_exact() {
     let node = lol! { rotate_q(0.6, 0.8, 0.0, 0.000_001, sphere(1.0)) };
-    let text = alice_lol::emit::to_lol(&node).unwrap();
+    let text = alice_lol::emit::to_lol_unstamped(&node).unwrap();
     assert_eq!(text, "rotate_q(0.6, 0.8, 0.0, 1e-6, sphere(1.0))");
     let back = alice_lol::runtime_parser::parse_lol(&text).unwrap();
-    let text2 = alice_lol::emit::to_lol(&back).unwrap();
+    let text2 = alice_lol::emit::to_lol_unstamped(&back).unwrap();
     assert_eq!(text, text2);
 }
 
@@ -162,7 +162,7 @@ fn literal_tpms_scale_below_the_old_1e_minus_6_floor_now_compiles() {
     };
     assert_eq!(scale.to_bits(), 5e-7_f32.to_bits());
     assert_eq!(thickness.to_bits(), 0.1_f32.to_bits());
-    let text = alice_lol::emit::to_lol(&node).unwrap();
+    let text = alice_lol::emit::to_lol_unstamped(&node).unwrap();
     assert_eq!(text, "gyroid(5e-7, 0.1)");
     let back = alice_lol::runtime_parser::parse_lol(&text).unwrap();
     let alice_lol::SdfNode::Gyroid {

@@ -102,8 +102,16 @@ const INTENT_SYNTAX: &[&str] = &[
     "align", "follow", "avoid", "rest", "latent", "seq", "par", "music",
 ];
 
-/// The clause keywords of an audit law (`parse_law`), one per line of the law
-const LAW_SYNTAX: &[&str] = &["audit", "evidence", "expect", "range", "includes"];
+/// The line keywords of an audit law (`parse_law`), one per line of the law: the clauses, and
+/// `semantics`, the optional first line carrying the writer's identifier (ALICE-Law G7)
+const LAW_SYNTAX: &[&str] = &[
+    "audit",
+    "evidence",
+    "expect",
+    "range",
+    "includes",
+    "semantics",
+];
 
 /// SDF names the `lol!` macro does not accept (runtime parser only), in
 /// addition to the whole `stdlib` group
@@ -191,11 +199,11 @@ mod tests {
     #[test]
     fn law_table_equals_the_parser_dispatch() {
         assert_no_duplicates(LAW_SYNTAX, "LAW_SYNTAX");
-        let parser = dispatched(fn_body("parse_law"));
+        let parser = dispatched(fn_body("read_law"));
         let parser: BTreeSet<&str> = parser.iter().map(String::as_str).collect();
         let table: BTreeSet<&str> = LAW_SYNTAX.iter().copied().collect();
         assert!(table.len() >= 4, "LAW_SYNTAX has {} names", table.len());
-        assert_eq!(parser, table, "parse_law arms vs LAW_SYNTAX");
+        assert_eq!(parser, table, "read_law arms vs LAW_SYNTAX");
     }
 
     #[test]
