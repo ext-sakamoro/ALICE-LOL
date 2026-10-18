@@ -44,6 +44,7 @@
 
 mod ast;
 mod codegen;
+mod expansion_id;
 mod parser;
 
 use crate::codegen::codegen;
@@ -81,5 +82,11 @@ use proc_macro::TokenStream;
 pub fn lol(input: TokenStream) -> TokenStream {
     let scene = syn::parse_macro_input!(input as LolInput);
     let node_code = codegen(&scene.body);
-    node_code.into()
+    // the identifier travels with the expansion and alice-lol compares it (ALICE-Law G7)
+    let id = expansion_id::EXPANSION_ID_HEX;
+    quote::quote!({
+        ::alice_lol::__expect_macro_id!(#id);
+        #node_code
+    })
+    .into()
 }

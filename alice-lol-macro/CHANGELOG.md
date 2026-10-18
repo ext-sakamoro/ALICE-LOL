@@ -6,6 +6,12 @@ The changes of the whole repository, `alice-lol` included, are in the root `CHAN
 
 ## [Unreleased]
 
+0.4.0 として公開する (公開の順は macro 0.4.0 → `alice-lol` 0.5.0) `alice-lol` 0.5.0 は macro 0.4 を要求する
+
+### Changed
+
+- 破壊的変更: 展開は毎回 `::alice_lol::__expect_macro_id!("<識別子>")` を呼び、この macro の識別子 (`EXPANSION_ID_HEX`、probe corpus の展開を正規化した token 列の SHA-256) を `alice-lol` に照合させる (ALICE-Law G7) `__expect_macro_id!` を持たない `alice-lol` 0.4.x とは組めないので minor を上げる `alice-lol` は自分の値と違う識別子を両方を名指す compile error にする
+
 ## [0.3.0] - 2026-10-13
 
 `alice-lol` 0.4.0 より前に公開する (公開の順は macro 0.3.0 → `alice-lol` 0.4.0) `alice-lol` 0.4.0 は macro 0.3 を要求する このバージョン自身は `alice-lol` を含むどの ALICE-* crate にも依存しない (`syn` / `quote` / `proc-macro2` のみ)

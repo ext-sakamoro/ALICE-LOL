@@ -98,6 +98,9 @@ pub mod law_id;
 // 受理境界・emit の canonical form 等、`SdfNode` の数値評価そのものを pin する
 pub mod geometry_id;
 
+// ── `lol!` の展開の識別子 (alice-lol-macro の版を compile 時に照合する、ALICE-Law G7) ──
+pub mod macro_id;
+
 // ── 研究 Law (単位付きの多変数の式 + 成立範囲 + 残差 + 出典 + oracle) ──
 // 上の `law` (SDF の幾何制約チェッカー) とは別物: データに対する主張としての式を扱う
 pub mod research_law;

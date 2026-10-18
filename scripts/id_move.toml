@@ -18,3 +18,8 @@ path = "alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID"
 # the primary identifier LOL's exports (STL / 3MF / FBX) write: alice-sdf's mesh meaning, the bytes LOL writes
 [[id]]
 path = "alice_lol::print_export::LOL_EXPORT_PRIMARY_SEMANTICS_ID"
+
+# the identifier of what lol! expands to that this alice-lol accepts (ALICE-Law G7): a different
+# expansion can change what a program written with lol! means, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::macro_id::EXPECTED_MACRO_EXPANSION_ID"
