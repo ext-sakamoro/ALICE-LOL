@@ -20,6 +20,15 @@
 # subtrees, so anything alice-lol's own build does must not assume a nearby Cargo.lock
 # exists at all.
 #
+# A sibling version this commit requires that crates.io does not have yet (an `alice-sdf`
+# release still to be published) cannot resolve from crates.io. `scripts/package_integrity.py`
+# (shared with the other ALICE crates) decides which dependencies are blocked that way and
+# prints one `--config=patch.crates-io.<name>.path=...` per blocked dependency; every cargo
+# command below takes exactly that set, it is written to `$OUT/patches.txt` (CI compares it
+# with a fresh run of the tool), and a blocked crate is the only one allowed to come from a
+# path in the consumer's lock. A dependency that is not blocked still has to come from
+# crates.io, and any other failure stays a failure.
+#
 # usage: scripts/registry_consumer.sh
 set -euo pipefail
 
@@ -30,7 +39,24 @@ mkdir -p "$OUT/pkg" "$OUT/tests"
 
 cd "$ROOT"
 python3 scripts/macro_kinds.py --check
-cargo package -q -p alice-lol-macro -p alice-lol --no-verify ${REGISTRY_CONSUMER_ALLOW_DIRTY:+--allow-dirty}
+# the blocked dependencies (stdout: one --config per blocked dependency; a finding exits 1)
+PATCH_OUT=$(python3 scripts/package_integrity.py --member alice-lol --patches)
+PATCHES=()
+BLOCKED=()
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  case "$line" in
+    --config=patch.crates-io.*.path=*) ;;
+    *) echo "error: unexpected line from package_integrity.py --patches: $line" >&2; exit 1 ;;
+  esac
+  PATCHES+=("$line")
+  name=${line#--config=patch.crates-io.}
+  BLOCKED+=("${name%%.path=*}")
+done <<< "$PATCH_OUT"
+printf '%s\n' ${PATCHES[@]+"${PATCHES[@]}"} > "$OUT/patches.txt"
+echo "registry consumer: ${#PATCHES[@]} blocked dependency patch(es)${BLOCKED[*]+: ${BLOCKED[*]}}"
+is_blocked() { local b; for b in ${BLOCKED[@]+"${BLOCKED[@]}"}; do [ "$b" = "$1" ] && return 0; done; return 1; }
+cargo package -q -p alice-lol-macro -p alice-lol --no-verify ${REGISTRY_CONSUMER_ALLOW_DIRTY:+--allow-dirty} ${PATCHES[@]+"${PATCHES[@]}"}
 version() { sed -n 's/^version = "\(.*\)"/\1/p' "$1" | head -1; }
 LOL=$(version alice-lol/Cargo.toml)
 MACRO=$(version alice-lol-macro/Cargo.toml)
@@ -64,18 +90,36 @@ echo "" > "$OUT/src/lib.rs"
 cp alice-lol/tests/macro_every_kind.rs "$OUT/tests/"
 
 LOG="$OUT/test.log"
-CARGO_TARGET_DIR="${REGISTRY_CONSUMER_TARGET:-$ROOT/target/registry-consumer-target}" cargo test --manifest-path "$OUT/Cargo.toml" --test macro_every_kind 2>&1 | tee "$LOG"
+CARGO_TARGET_DIR="${REGISTRY_CONSUMER_TARGET:-$ROOT/target/registry-consumer-target}" cargo ${PATCHES[@]+"${PATCHES[@]}"} test --manifest-path "$OUT/Cargo.toml" --test macro_every_kind 2>&1 | tee "$LOG"
 
 # the build used the packaged macro and crates.io for the siblings
 lock="$OUT/Cargo.lock"
-block() { awk -v n="$1" '/^\[\[package\]\]/{p=0} $0=="name = \""n"\""{p=1} p' "$lock"; }
+# the [[package]] entry of a crate (not a [[patch.unused]] entry: a patch cargo did not use
+# is listed there by name and must not read as linked)
+block() { awk -v n="$1" '/^\[/{pkg=($0=="[[package]]"); p=0} pkg && $0=="name = \""n"\""{p=1} p' "$lock"; }
 if block alice-lol-macro | grep -q '^source'; then
   echo "error: the [patch] for alice-lol-macro was not used (alice-lol requires another version)" >&2
   exit 1
 fi
 for c in alice-sdf alice-det-math; do
-  if ! block "$c" | grep -q '^source = "registry+'; then
+  if is_blocked "$c"; then
+    if block "$c" | grep -q '^source'; then
+      echo "error: $c is blocked (unpublished) but the consumer's lock took it from a registry, not the patch" >&2
+      exit 1
+    fi
+    echo "registry consumer: $c from its sibling (blocked: unpublished on crates.io)"
+  elif ! block "$c" | grep -q '^source = "registry+'; then
     echo "error: $c is not from crates.io in the consumer's lock" >&2
+    exit 1
+  fi
+done
+for b in ${BLOCKED[@]+"${BLOCKED[@]}"}; do
+  if [ -z "$(block "$b")" ]; then
+    echo "error: $b is blocked (unpublished) but is not in the consumer's lock at all" >&2
+    exit 1
+  fi
+  if block "$b" | grep -q '^source'; then
+    echo "error: $b is blocked (unpublished) but the consumer's lock did not use the patch" >&2
     exit 1
   fi
 done
@@ -120,7 +164,7 @@ alice-lol-macro = { path = "$ISOLATED/no-ancestor-lock/pkg/alice-lol-macro-$MACR
 EOF
 echo "" > "$ISOLATED/consumer/src/lib.rs"
 ISO_LOG="$ISOLATED/build.log"
-if ! CARGO_TARGET_DIR="$ISOLATED/target" cargo build --manifest-path "$ISOLATED/consumer/Cargo.toml" > "$ISO_LOG" 2>&1; then
+if ! CARGO_TARGET_DIR="$ISOLATED/target" cargo ${PATCHES[@]+"${PATCHES[@]}"} build --manifest-path "$ISOLATED/consumer/Cargo.toml" > "$ISO_LOG" 2>&1; then
   echo "error: alice-lol $LOL failed to build when its own Cargo.lock is not reachable by any ancestor walk (this must succeed for any real crates.io consumer):" >&2
   cat "$ISO_LOG" >&2
   rm -rf "$ISOLATED"
@@ -129,4 +173,9 @@ fi
 rm -rf "$ISOLATED"
 echo "registry consumer: alice-lol $LOL builds with no ancestor Cargo.lock reachable from its own extracted directory"
 
-echo "registry consumer: alice-lol $LOL + alice-lol-macro $MACRO built against crates.io ($(block alice-sdf | sed -n 's/^version = //p' | tr -d '"') alice-sdf)"
+sdf_version=$(block alice-sdf | sed -n 's/^version = //p' | tr -d '"')
+if is_blocked alice-sdf; then
+  echo "registry consumer: alice-lol $LOL + alice-lol-macro $MACRO built against crates.io, alice-sdf $sdf_version from its sibling (blocked)"
+else
+  echo "registry consumer: alice-lol $LOL + alice-lol-macro $MACRO built against crates.io (alice-sdf $sdf_version)"
+fi
