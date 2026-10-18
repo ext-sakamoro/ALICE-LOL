@@ -123,6 +123,8 @@ python3 scripts/test_alice_siblings_check.py
 python3 scripts/alice_siblings_check.py
 python3 scripts/test_entropy_deps_guard.py
 python3 scripts/entropy_deps_guard.py
+python3 scripts/test_release_leg_check.py
+python3 scripts/release_leg_check.py
 python3 scripts/test_root_artifacts.py
 python3 scripts/root_artifacts.py
 python3 scripts/test_license_check.py
@@ -360,6 +362,7 @@ if [[ $quick -eq 1 ]]; then
   echo "no --quick, runs all of them):"
   echo "  - cargo test (default + llm-bridge/glsl,wgsl,hlsl/physics/roblox features)"
   echo "  - law oracles (default + physics)"
+  echo "  - release-profile.yml: law oracles under --release (default + physics)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
   echo "  - doc-programs (export of every lol print program in the documents, release)"
   echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
@@ -389,6 +392,9 @@ step "ci.yml / test: Test [features=--features physics]"
 
 step "ci.yml / test: Law oracles (physics, each target ran at least one test)"
 ( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh physics )
+
+step "release-profile.yml / release: Law tests (release, default + physics)"
+( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default --release && scripts/law_tests.sh physics --release )
 
 step "ci.yml / test: Test [features=--features roblox]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features roblox )

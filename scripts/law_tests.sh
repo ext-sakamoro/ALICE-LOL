@@ -9,7 +9,8 @@
 # law modules but is not listed below also fails the run, so a new oracle file
 # cannot be skipped silently. Used by ci.yml and scripts/preflight.sh.
 #
-# usage: scripts/law_tests.sh [default|physics|all|list]   (default: all)
+# usage: scripts/law_tests.sh [default|physics|all|list] [cargo test args...]   (default: all)
+#   extra arguments go to every `cargo test` (e.g. `--release` for the release-profile leg)
 #   list: only check that every law test file is listed (CI counts the runs from
 #         the log of its full `cargo test` with scripts/law_tests_from_log.py)
 set -euo pipefail
@@ -41,6 +42,7 @@ PHYSICS_TARGETS=(
 )
 
 mode="${1:-all}"
+extra=("${@:2}")
 case "$mode" in
   default) targets=("${DEFAULT_TARGETS[@]}") ;;
   physics) targets=("${PHYSICS_TARGETS[@]}") ;;
@@ -70,10 +72,33 @@ if [ "$mode" = list ]; then
   exit 0
 fi
 
+# with --release among the extra arguments, every run must say it built the release profile: the arguments
+# reaching cargo are read back from what cargo did, not from what this script was asked
+release=0
+for a in ${extra[@]+"${extra[@]}"}; do [ "$a" = --release ] && release=1; done
+tlog=$(mktemp)
+trap 'rm -f "$tlog"' EXIT
+released=0
 for t in "${targets[@]}"; do
   pkg="${t%%|*}"; rest="${t#*|}"; args="${rest%%|*}"; features="${rest#*|}"
   echo "== law tests: -p $pkg $args${features:+ --features $features}"
   # shellcheck disable=SC2086  # $args is a flag and its value
-  scripts/cargo_test_nonzero.sh -p "$pkg" $args ${features:+--features "$features"}
+  scripts/cargo_test_nonzero.sh -p "$pkg" $args ${features:+--features "$features"} ${extra[@]+"${extra[@]}"} 2>&1 | tee "$tlog"
+  if [ "$release" -eq 1 ]; then
+    # (the colour codes of CARGO_TERM_COLOR=always sit between "Finished" and the profile: strip them first)
+    if ! python3 -c 'import re, sys; t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], errors="replace").read()); sys.exit(0 if "Finished `release` profile" in t else 1)' "$tlog"; then
+      echo "error: law tests: -p $pkg $args was asked for --release but cargo did not build the release profile" >&2
+      exit 1
+    fi
+    released=$((released + 1))
+  fi
 done
-echo "law tests: ${#targets[@]} targets, each ran at least one test"
+if [ "$release" -eq 1 ] && [ "$released" -ne "${#targets[@]}" ]; then
+  echo "error: law tests: $released of ${#targets[@]} targets built the release profile" >&2
+  exit 1
+fi
+if [ "$release" -eq 1 ]; then
+  echo "law tests: ${#targets[@]} targets, each ran at least one test, each in the release profile"
+else
+  echo "law tests: ${#targets[@]} targets, each ran at least one test"
+fi

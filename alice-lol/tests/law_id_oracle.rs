@@ -498,3 +498,18 @@ fn the_order_of_declarations_is_not_part_of_the_law_but_the_order_of_clauses_is(
     // swapping two clauses is another law (the clause order decides which failure is reported)
     assert_ne!(law(m, c), law(m, c_swapped));
 }
+
+/// The bytes of an audit law's identifier are fixed, not only their relations (the tests above compare one
+/// identifier with another, which a change of the encoding moves together). The semantics identifier here is the
+/// made-up `OTHER_SEMANTICS`, so the value does not move with alice-det-math's generation: a change of it is a
+/// change of how an audit law is hashed, which the identifier rules require to be deliberate (a breaking version
+/// and both values in CHANGELOG.md). Recorded 2026-10-18.
+#[test]
+fn an_audit_law_identifier_has_fixed_bytes() {
+    assert_eq!(
+        audit(LAW_A).law_id(&OTHER_SEMANTICS),
+        alice_lol::law_id::hex32(
+            "54a06caa4e5bcb3aa026ca19752e832b34a32bad35e4770549a862af672cffe4"
+        )
+    );
+}
