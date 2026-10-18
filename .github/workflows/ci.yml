@@ -279,9 +279,24 @@ jobs:
         working-directory: ALICE-LOL
         run: python3 scripts/license_check.py --package
 
+      - name: package-integrity oracle (検査器自身の試験)
+        working-directory: ALICE-LOL
+        run: python3 scripts/test_package_integrity.py
+      # 公開する alice-lol の .crate が単独で build する、または crates.io に無い隣の版 (blocked) を名指しする
+      - name: package integrity (alice-lol の .crate、blocked は .github/alice-siblings の commit で patch)
+        working-directory: ALICE-LOL
+        run: python3 scripts/package_integrity.py --member alice-lol
+
       - name: registry consumer (macro の全 keyword を crates.io の依存で compile)
         working-directory: ALICE-LOL
         run: scripts/registry_consumer.sh
+      # registry_consumer.sh が使った patch の組が package_integrity.py の出した組と同じ
+      - name: registry consumer の patch の組 = package_integrity.py --patches
+        working-directory: ALICE-LOL
+        run: |
+          python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt
+          diff -u target/patches-fresh.txt target/registry-consumer/patches.txt
+          echo "patch set: $(grep -c . target/patches-fresh.txt || true) blocked dependency patch(es), same in both"
 
   fmt:
     name: Format
