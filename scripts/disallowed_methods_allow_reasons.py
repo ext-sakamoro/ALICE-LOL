@@ -41,6 +41,16 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
     with alice-sdf's own identifier only); every other alice-sdf writer is refused by the library
     clippy (scripts/sdf_writers.py) — this prefix is only accepted in `UNSTAMPED_WRITER_FILE_REL`
 
+Only `allow` with one of these reasons may lower the lint. `#[expect(...)]` and `#[warn(...)]` on
+clippy::disallowed_methods, any of these inside `#[cfg_attr(...)]`, and an allow / expect / warn of a
+group that contains it (`clippy::all`, `clippy::style`) are refused: each turns the library clippy's
+`-D clippy::disallowed_methods` off without a reason this gate can read.
+
+The prefixes are bound to what they may cover: a statement under any prefix other than
+`unstamped-writer:` may not name an alice-sdf writer of scripts/sdf_writers.lock (ALICE-Law G8;
+otherwise `nonzero-const: x` on a wrapper would silence the writer ban), and a statement under
+`unstamped-writer:` must name one.
+
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
 site or widen the pattern list deliberately, in the same commit, not by
@@ -100,6 +110,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tomllib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
@@ -142,6 +153,71 @@ def workspace_members(root: str) -> list[str]:
 # reason inside is found regardless of argument order
 ALLOW_RE = re.compile(r"#\s*(?P<inner>!?)\s*\[\s*allow\s*\((?P<body>.*?)\)\s*\]", re.S)
 REASON_RE = re.compile(r'reason\s*=\s*"(?P<text>(?:[^"\\]|\\.)*)"')
+
+# any attribute: `#[` / `#![` up to its matching `]` (found by bracket depth in `attributes`)
+ATTR_START_RE = re.compile(r"#\s*!?\s*\[")
+LEVEL_RE = re.compile(r"\b(?P<level>allow|expect|warn)\s*\(")
+GROUPS_RE = re.compile(r"\bclippy\s*::\s*(?:all|style)\b")
+LOCK_REL = "scripts/sdf_writers.lock"
+
+
+def attributes(text: str):
+    """(start, attribute text) of every `#[...]` / `#![...]`, bracket depth counted (a nested `cfg_attr(..)`
+    or a reason string containing `]` does not end it early; strings are skipped)"""
+    for m in ATTR_START_RE.finditer(text):
+        depth, i, n = 0, m.end() - 1, len(text)
+        while i < n:
+            c = text[i]
+            if c == '"':
+                i += 1
+                while i < n and text[i] != '"':
+                    i += 2 if text[i] == "\\" else 1
+            elif c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    yield m.start(), text[m.start():i + 1]
+                    break
+            i += 1
+
+
+def level_findings(text: str, rel: str) -> list[str]:
+    """lint-level attributes that lower clippy::disallowed_methods other than a plain `#[allow(...)]`"""
+    out = []
+    for start, attr in attributes(text):
+        if not LEVEL_RE.search(attr):
+            continue
+        names_ban = "disallowed_methods" in attr
+        names_group = bool(GROUPS_RE.search(attr))
+        if not (names_ban or names_group):
+            continue
+        line = text.count("\n", 0, start) + 1
+        body = re.sub(r"\s+", "", attr)
+        if "cfg_attr(" in body:
+            out.append(f"error: {rel}:{line}: cfg_attr の中で lint の段を下げている — clippy::disallowed_methods は "
+                       "条件付きで下げられない")
+        elif names_group:
+            out.append(f"error: {rel}:{line}: clippy::all / clippy::style の段を下げると clippy::disallowed_methods も"
+                       "下がる — 下げる lint を名指しする")
+        elif not body.startswith(("#[allow(", "#![allow(")):
+            out.append(f"error: {rel}:{line}: clippy::disallowed_methods を下げるのは理由付きの #[allow] だけ "
+                       f"(expect / warn は不可): {attr[:80]!r}")
+    return out
+
+
+def writer_names(root: str) -> set[str] | None:
+    """the names of the alice-sdf writers in scripts/sdf_writers.lock (last path segment), None without the lock"""
+    path = os.path.join(root, LOCK_REL)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "rb") as f:
+        lock = tomllib.load(f)
+    names = set()
+    for w in lock.get("writer", []):
+        for key in ("path", "canonical"):
+            names.add(w[key].split("::")[-1])
+    return names
 
 # `#[cfg(test)]` immediately followed by `mod <name> {` (whitespace/comments
 # between the two are not handled — rustfmt never inserts either there) —
@@ -241,8 +317,12 @@ def iter_rs_files(base: str):
                 yield os.path.join(dirpath, name)
 
 
-def check(root: str) -> tuple[list[str], dict[str, int]]:
+def check(root: str, require_lock: bool = False) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
+    writers = writer_names(root)
+    if writers is None and require_lock:
+        return [f"error: {LOCK_REL}: 読めなかった (alice-sdf の書き出しの一覧)"], {p: 0 for p in PREFIXES}
+    writer_re = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, writers))) + r")\b") if writers else None
     counts = {p: 0 for p in PREFIXES}
     files = 0
     sites = 0
@@ -263,6 +343,7 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
             files += 1
             test_mod_spans = cfg_test_mod_spans(text)
             file_under_tests_dir = "tests" in rel.split("/")
+            errors.extend(level_findings(text, rel))
             for m in ALLOW_RE.finditer(text):
                 body = m.group("body")
                 if "disallowed_methods" not in body:
@@ -312,6 +393,19 @@ def check(root: str) -> tuple[list[str], dict[str, int]]:
                     continue
 
                 counts[prefix] += 1
+                inner = m.group("inner") == "!"
+                stmt = text[m.end() :] if inner else statement_after(text, m.end())
+                if writer_re is not None:
+                    wm = writer_re.search(stmt)
+                    if prefix != "unstamped-writer:" and wm:
+                        errors.append(
+                            f"error: {rel}:{line}: {prefix} の allow が alice-sdf の書き出し ({wm.group(0)}) を隠す — "
+                            "書き出しを下げてよいのは unstamped-writer: だけ (ALICE-Law G8)"
+                        )
+                    if prefix == "unstamped-writer:" and not wm:
+                        errors.append(
+                            f"error: {rel}:{line}: unstamped-writer: の allow の下に alice-sdf の書き出しが無い"
+                        )
                 if prefix != "test-probe-alternative:":
                     inner = m.group("inner") == "!"
                     stmt = text[m.end() :] if inner else statement_after(text, m.end())
@@ -336,7 +430,7 @@ def main(argv: list[str]) -> int:
     root = DEFAULT_ROOT
     if "--root" in argv:
         root = argv[argv.index("--root") + 1]
-    errors, counts = check(root)
+    errors, counts = check(root, require_lock=True)
     for e in errors:
         print(e, file=sys.stderr)
     total = sum(counts.values())

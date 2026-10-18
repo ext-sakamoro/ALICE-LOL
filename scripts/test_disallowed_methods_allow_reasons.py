@@ -324,5 +324,99 @@ class RealRepo(unittest.TestCase):
         self.assertGreater(sum(counts.values()), 0)
 
 
+
+LOCK = (
+    '[[writer]]\nkey = "src/io/stl.rs::export_stl"\npath = "alice_sdf::io::export_stl"\n'
+    'canonical = "alice_sdf::io::stl::export_stl"\ncall = "c"\n\n'
+    '[[writer]]\nkey = "src/io/obj.rs::export_obj"\npath = "alice_sdf::io::export_obj"\n'
+    'canonical = "alice_sdf::io::obj::export_obj"\ncall = "c"\n'
+)
+WRAPPER = "pub fn w(m: &Mesh, p: &Path) {\n    let _ = alice_sdf::io::export_stl(m, p);\n}\n"
+
+
+class LintLevel(unittest.TestCase):
+    """only a reasoned #[allow] lowers clippy::disallowed_methods, and only unstamped-writer: covers an
+    alice-sdf writer (ALICE-Law G8)"""
+
+    def errors(self, rel, text, lock=True):
+        with tempfile.TemporaryDirectory() as root:
+            # one valid site, so a fixture is never "no allow found"
+            write(root, "alice-lol/src/lib.rs", (
+                '#[allow(clippy::disallowed_methods, reason = "nonzero-const: 2.0")]\n'
+                "fn base(a: f32) -> f32 { a.max(2.0) }\n"))
+            if lock:
+                write(root, g.LOCK_REL, LOCK)
+            write(root, rel, text)
+            return g.check(root, require_lock=True)[0]
+
+    def test_a_writer_under_another_prefix_is_refused(self):
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n' + WRAPPER)
+        self.assertTrue(any("export_stl" in e and "unstamped-writer:" in e for e in errs), errs)
+
+    def test_a_writer_named_in_an_inner_allow_scope_is_refused(self):
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#![allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n' + WRAPPER)
+        self.assertTrue(any("export_stl" in e for e in errs), errs)
+
+    def test_unstamped_writer_over_a_writer_in_its_file_passes(self):
+        errs = self.errors(g.UNSTAMPED_WRITER_FILE_REL, (
+            "fn f() {\n"
+            '    #[allow(clippy::disallowed_methods, reason = "unstamped-writer: no stamped OBJ")]\n'
+            "    export_obj(&mesh, &path, &cfg, None)?;\n}\n"))
+        self.assertEqual(errs, [])
+
+    def test_unstamped_writer_over_no_writer_is_refused(self):
+        errs = self.errors(g.UNSTAMPED_WRITER_FILE_REL, (
+            "fn f() {\n"
+            '    #[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
+            "    let y = a.max(b);\n}\n"))
+        self.assertTrue(any("書き出しが無い" in e for e in errs), errs)
+
+    def test_expect_is_refused(self):
+        errs = self.errors("alice-lol/src/w.rs", "#[expect(clippy::disallowed_methods)]\n" + WRAPPER)
+        self.assertTrue(any("expect / warn" in e for e in errs), errs)
+
+    def test_expect_with_a_reason_is_refused_too(self):
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#[expect(clippy::disallowed_methods, reason = "nonzero-const: x")]\n' + WRAPPER)
+        self.assertTrue(any("expect / warn" in e for e in errs), errs)
+
+    def test_warn_is_refused(self):
+        errs = self.errors("alice-lol/src/w.rs", "#![warn(clippy::disallowed_methods)]\n" + WRAPPER)
+        self.assertTrue(any("expect / warn" in e for e in errs), errs)
+
+    def test_cfg_attr_is_refused(self):
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#[cfg_attr(all(), allow(clippy::disallowed_methods, reason = "nonzero-const: x"))]\n' + WRAPPER)
+        self.assertTrue(any("cfg_attr" in e and "条件付き" in e for e in errs), errs)
+
+    def test_a_group_that_holds_the_lint_is_refused(self):
+        for attr in ("#[allow(clippy::style)]", "#![allow(clippy::all)]", "#[expect(clippy::style, reason = \"x\")]"):
+            with self.subTest(attr=attr):
+                errs = self.errors("alice-lol/src/w.rs", attr + "\n" + WRAPPER)
+                self.assertTrue(any("clippy::all / clippy::style" in e for e in errs), errs)
+
+    def test_an_unrelated_lint_level_passes(self):
+        errs = self.errors("alice-lol/src/w.rs", "#[allow(clippy::too_many_lines)]\nfn f() {}\n")
+        self.assertEqual(errs, [])
+
+    def test_a_reason_containing_a_bracket_does_not_end_the_attribute(self):
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#[expect(clippy::too_many_lines, reason = "a ] b")]\n#[expect(clippy::disallowed_methods)]\n' + WRAPPER)
+        self.assertTrue(any("expect / warn" in e for e in errs), errs)
+
+    def test_an_escaped_quote_in_a_string_does_not_end_the_attribute(self):
+        # `"a\"]"` in the condition: a scan that ended the string at the escaped quote would end the attribute
+        # at that `]` and never see the expect behind it
+        errs = self.errors("alice-lol/src/w.rs",
+                           '#[cfg_attr(feature = "a\\"]", expect(clippy::disallowed_methods))]\n' + WRAPPER)
+        self.assertTrue(any("cfg_attr" in e and "条件付き" in e for e in errs), errs)
+
+    def test_the_lock_is_required_when_asked(self):
+        errs = self.errors("alice-lol/src/w.rs", "fn f() {}\n", lock=False)
+        self.assertTrue(any(g.LOCK_REL in e for e in errs), errs)
+
+
 if __name__ == "__main__":
     unittest.main()
