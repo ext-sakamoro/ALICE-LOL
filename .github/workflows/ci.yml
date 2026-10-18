@@ -395,6 +395,34 @@ jobs:
   # the existing Test matrix already runs the full suite (this file
   # included, but `#[ignore]`d there) on every OS -- this job's value is the
   # breadth of the sweep (~35,000 cases, ~90s), not its OS coverage
+  # ALICE-Law G8: no public re-export of alice-lol reaches an alice-sdf writer that skips the LOL
+  # producer identifier, under any name, module, glob or the crate root (rustdoc JSON of alice-lol with
+  # every feature, built by the dated nightly in scripts/reexport_guard.toml)
+  reexport-guard:
+    name: Public re-exports (G8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ALICE-LOL
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
+        with:
+          repo-dir: ALICE-LOL
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-09-26
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+      - name: Re-export guard (tests, then the check)
+        run: |
+          python3 scripts/test_reexport_guard.py
+          python3 scripts/reexport_guard.py
+
   degenerate-grid:
     name: Degenerate-parameter grid (ubuntu)
     runs-on: ubuntu-latest
@@ -594,6 +622,7 @@ jobs:
           python scripts/test_build_flags_check.py
           python scripts/test_run_tests.py
           python scripts/test_cargo_test_nonzero.py
+          python scripts/test_reexport_guard.py
       # ALICE-Law G11 (c): the files shared with the other crates are the bytes ALICE-Law's
       # table records (table and checker fetched at .github/shared-files-pin, both SHA-256
       # pinned); a difference, an unlisted shared path or nothing compared fails
