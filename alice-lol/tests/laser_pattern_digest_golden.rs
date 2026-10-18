@@ -15,14 +15,9 @@ use alice_lol::laser_pattern::{
     density_hatch, guilloche, hatch, lissajous, phyllotaxis, rose, Bounds, LaserElement,
 };
 use sha2::{Digest, Sha256};
-use std::fmt::Write as _;
 
-fn hex32(b: &[u8]) -> String {
-    b.iter().fold(String::new(), |mut s, x| {
-        let _ = write!(s, "{x:02x}");
-        s
-    })
-}
+#[path = "common/golden.rs"]
+mod golden;
 
 /// 各要素の座標 (f64 の bits、little endian) の SHA-256、要素の種類・個数も混ぜる
 fn elements_digest(elements: &[LaserElement]) -> (usize, String) {
@@ -56,7 +51,7 @@ fn elements_digest(elements: &[LaserElement]) -> (usize, String) {
             }
         }
     }
-    (elements.len(), hex32(&h.finalize()))
+    (elements.len(), golden::hex32(&h.finalize()))
 }
 
 const fn bounds() -> Bounds {
@@ -103,29 +98,15 @@ fn golden_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/laser_pattern_digest_golden.txt")
 }
 
-/// `<name>|<element 数>|<digest>` を 1 行 1 ケース
-fn parse_golden(text: &str) -> Vec<(String, usize, String)> {
-    text.lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| {
-            let mut parts = l.splitn(3, '|');
-            let name = parts.next().unwrap().to_string();
-            let n: usize = parts.next().unwrap().parse().unwrap();
-            let digest = parts.next().unwrap().to_string();
-            (name, n, digest)
-        })
-        .collect()
-}
-
 #[test]
 fn laser_pattern_digest_matches_release_profile_golden() {
-    let now: Vec<(String, usize, String)> = CASES
+    let now: Vec<golden::Row> = CASES
         .iter()
         .map(|c| {
             let elements = (c.elements)();
             assert!(!elements.is_empty(), "{}: 要素が 0 件", c.name);
             let (n, digest) = elements_digest(&elements);
-            (c.name.to_string(), n, digest)
+            (c.name.to_string(), n as u64, digest)
         })
         .collect();
 
@@ -137,30 +118,16 @@ fn laser_pattern_digest_matches_release_profile_golden() {
                 "golden は --release で記録する (release を正典とする既存の digest golden と合わせる)"
             );
         }
-        let text: String = now.iter().fold(String::new(), |mut s, (name, n, d)| {
-            let _ = writeln!(s, "{name}|{n}|{d}");
-            s
-        });
-        std::fs::write(golden_path(), text).unwrap();
+        std::fs::write(golden_path(), golden::render(&now)).unwrap();
         return;
     }
 
     let golden_text = std::fs::read_to_string(golden_path()).expect(
         "golden 未記録 (先に `LOL_DIGEST_RECORD=1 cargo test --release --test laser_pattern_digest_golden` を実行する)",
     );
-    let want = parse_golden(&golden_text);
-    assert_eq!(now.len(), want.len(), "ケース数が golden と違う");
-
-    let mut compared = 0;
-    for ((name, n, digest), (w_name, w_n, w_digest)) in now.iter().zip(want.iter()) {
-        assert_eq!(name, w_name, "ケース順が golden と違う");
-        assert_eq!(n, w_n, "{name}: 要素数が golden と違う");
-        assert_eq!(
-            digest, w_digest,
-            "{name}: digest が golden と違う (最初に違った形)"
-        );
-        compared += 1;
-    }
-
+    let want =
+        golden::parse(&golden_text).unwrap_or_else(|e| panic!("{}: {e}", golden_path().display()));
+    let compared =
+        golden::compare(&now, &want).unwrap_or_else(|e| panic!("golden と違う (最初の違い): {e}"));
     assert_eq!(compared, CASES.len());
 }

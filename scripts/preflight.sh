@@ -339,6 +339,7 @@ python3 scripts/test_build_config_guard.py
 python3 scripts/build_config_guard.py
 python3 scripts/test_build_flags_check.py
 python3 scripts/test_run_tests.py
+python3 scripts/test_cargo_test_nonzero.py
 
 step "ci.yml / wiring-guard: Effective rustc flags (G14)"
 python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol
@@ -363,6 +364,7 @@ if [[ $quick -eq 1 ]]; then
   echo "  - cargo test (default + llm-bridge/glsl,wgsl,hlsl/physics/roblox features)"
   echo "  - law oracles (default + physics)"
   echo "  - release-profile.yml: law oracles under --release (default + physics)"
+  echo "  - geometry-digest: identifier and digest oracles (debug + release)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
   echo "  - doc-programs (export of every lol print program in the documents, release)"
   echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
@@ -395,6 +397,16 @@ step "ci.yml / test: Law oracles (physics, each target ran at least one test)"
 
 step "release-profile.yml / release: Law tests (release, default + physics)"
 ( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default --release && scripts/law_tests.sh physics --release )
+
+for prof in "" "--release"; do
+  step "ci.yml / geometry-digest: Geometry identifier and digest oracles ${prof:-(debug)}"
+  scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib geometry_id
+  scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib quat_from_euler_xyz_is_bit_identical_across_architectures
+  scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib y_component_cancellation_preserves_a_negative_zero_input
+  scripts/run_tests.sh geometry_id_oracle,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare -- \
+    cargo test -p alice-lol $prof --test geometry_id_oracle --test stdlib_profile_determinism_oracle \
+    --test laser_pattern_digest_golden --test golden_compare
+done
 
 step "ci.yml / test: Test [features=--features roblox]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features roblox )

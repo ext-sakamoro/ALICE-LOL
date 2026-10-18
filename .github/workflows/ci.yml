@@ -169,20 +169,16 @@ jobs:
       - name: Geometry identifier and digest oracles
         working-directory: ALICE-LOL
         shell: bash
+        # each selection fails when it ran no test (scripts/cargo_test_nonzero.sh for a --lib filter,
+        # scripts/run_tests.sh naming each integration test binary); both are tested in the wiring-guard job
         run: |
           set -euo pipefail
-          run() {
-            out=$(cargo test -p alice-lol${{ matrix.profile }} "$@" 2>&1) || { printf '%s\n' "$out"; exit 1; }
-            printf '%s\n' "$out" | grep -E '^test result'
-            n=$(printf '%s\n' "$out" | sed -nE 's/^test result: ok\. ([0-9]+) passed.*/\1/p' | awk '{s+=$1} END {print s+0}')
-            [ "$n" -gt 0 ] || { echo "no test ran for: $*"; exit 1; }
-          }
-          run --lib geometry_id
-          run --lib quat_from_euler_xyz_is_bit_identical_across_architectures
-          run --lib y_component_cancellation_preserves_a_negative_zero_input
-          run --test geometry_id_oracle
-          run --test stdlib_profile_determinism_oracle
-          run --test laser_pattern_digest_golden
+          scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib geometry_id
+          scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib quat_from_euler_xyz_is_bit_identical_across_architectures
+          scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib y_component_cancellation_preserves_a_negative_zero_input
+          scripts/run_tests.sh geometry_id_oracle,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare -- \
+            cargo test -p alice-lol${{ matrix.profile }} --test geometry_id_oracle --test stdlib_profile_determinism_oracle \
+            --test laser_pattern_digest_golden --test golden_compare
       # ALICE-Law G14: round-to-nearest-even and no flush-to-zero, asserted at run
       # time in this leg's profile; scripts/run_tests.sh float_environment=2 fails
       # unless both tests passed (an ignored or cfg'd-out test is red, not an empty green run)
@@ -597,6 +593,7 @@ jobs:
           python scripts/build_config_guard.py
           python scripts/test_build_flags_check.py
           python scripts/test_run_tests.py
+          python scripts/test_cargo_test_nonzero.py
       # ALICE-Law G14, dynamic half: the flags cargo really passes to rustc for
       # alice-lol, read from `-v` in a fresh target directory, in the release profile,
       # for the default, all-features and no-default feature sets

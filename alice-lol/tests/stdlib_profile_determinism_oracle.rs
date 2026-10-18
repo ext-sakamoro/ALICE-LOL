@@ -14,7 +14,9 @@ use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::mesh::Mesh;
 use glam::Vec3;
 use sha2::{Digest, Sha256};
-use std::fmt::Write as _;
+
+#[path = "common/golden.rs"]
+mod golden;
 
 struct Case {
     lol: &'static str,
@@ -107,13 +109,6 @@ const CASES: &[Case] = &[
     },
 ];
 
-fn hex32(b: &[u8]) -> String {
-    b.iter().fold(String::new(), |mut s, x| {
-        let _ = write!(s, "{x:02x}");
-        s
-    })
-}
-
 /// 頂点の位置 (f32 の bits、little endian) と index の SHA-256
 fn mesh_digest(mesh: &Mesh) -> String {
     let mut h = Sha256::new();
@@ -125,30 +120,16 @@ fn mesh_digest(mesh: &Mesh) -> String {
     for i in &mesh.indices {
         h.update(i.to_le_bytes());
     }
-    hex32(&h.finalize())
+    golden::hex32(&h.finalize())
 }
 
 fn golden_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/stdlib_profile_digest_golden.txt")
 }
 
-/// `<lol>|<triangles>|<mesh_sha256>` を 1 行 1 ケース (JSON 依存を避ける、golden は人が読める形のまま)
-fn parse_golden(text: &str) -> Vec<(String, u64, String)> {
-    text.lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| {
-            let mut parts = l.splitn(3, '|');
-            let lol = parts.next().unwrap().to_string();
-            let tri: u64 = parts.next().unwrap().parse().unwrap();
-            let digest = parts.next().unwrap().to_string();
-            (lol, tri, digest)
-        })
-        .collect()
-}
-
 #[test]
 fn stdlib_mesh_digest_matches_release_profile_golden() {
-    let now: Vec<(String, u64, String)> = CASES
+    let now: Vec<golden::Row> = CASES
         .iter()
         .map(|c| {
             let node = parse_lol(c.lol).unwrap_or_else(|e| panic!("{}: parse failed: {e}", c.lol));
@@ -181,30 +162,16 @@ fn stdlib_mesh_digest_matches_release_profile_golden() {
                 "golden は --release で記録する (release を正典とする既存の device-parity golden と合わせる)"
             );
         }
-        let text: String = now.iter().fold(String::new(), |mut s, (lol, tri, d)| {
-            let _ = writeln!(s, "{lol}|{tri}|{d}");
-            s
-        });
-        std::fs::write(golden_path(), text).unwrap();
+        std::fs::write(golden_path(), golden::render(&now)).unwrap();
         return;
     }
 
     let golden_text = std::fs::read_to_string(golden_path()).expect(
         "golden 未記録 (先に `LOL_DIGEST_RECORD=1 cargo test --release --test stdlib_profile_determinism_oracle` を実行する)",
     );
-    let want = parse_golden(&golden_text);
-    assert_eq!(now.len(), want.len(), "ケース数が golden と違う");
-
-    let mut compared = 0;
-    for ((lol, tri, digest), (w_lol, w_tri, w_digest)) in now.iter().zip(want.iter()) {
-        assert_eq!(lol, w_lol, "ケース順が golden と違う");
-        assert_eq!(tri, w_tri, "{lol}: 三角形数が golden と違う");
-        assert_eq!(
-            digest, w_digest,
-            "{lol}: mesh digest が golden と違う (最初に違った形)"
-        );
-        compared += 1;
-    }
-
+    let want =
+        golden::parse(&golden_text).unwrap_or_else(|e| panic!("{}: {e}", golden_path().display()));
+    let compared =
+        golden::compare(&now, &want).unwrap_or_else(|e| panic!("golden と違う (最初の違い): {e}"));
     assert_eq!(compared, CASES.len());
 }
