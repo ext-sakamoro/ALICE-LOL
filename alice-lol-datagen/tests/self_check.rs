@@ -73,6 +73,38 @@ fn jsonl_has_expected_fields_and_escapes() {
     });
 }
 
+/// ALICE-Law G8: every record carries the identifiers of the meaning that produced it (the LOL text and
+/// the geometry its oracle was judged in), as the lower-case hex of the crate's constants
+#[test]
+fn every_record_carries_the_lol_identifiers() {
+    fn hex(id: &[u8; 32]) -> String {
+        // written out without fmt (the crate's own helper uses write!), so a shared formatting slip is not
+        // compared with itself
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        id.iter()
+            .flat_map(|b| [DIGITS[usize::from(b >> 4)], DIGITS[usize::from(b & 15)]])
+            .map(char::from)
+            .collect()
+    }
+    let head = format!(
+        "{{\"lol_semantics_id\":\"{}\",\"lol_geometry_semantics_id\":\"{}\",\"id\":",
+        hex(&alice_lol::law_id::LOL_SEMANTICS_ID),
+        hex(&alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID)
+    );
+    assert_ne!(
+        alice_lol::law_id::LOL_SEMANTICS_ID,
+        alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID
+    );
+    with_big_stack(move || {
+        let (samples, _) = generate(ALL_FAMILIES, 16, 7);
+        assert!(!samples.is_empty());
+        for s in &samples {
+            let j = s.to_jsonl();
+            assert!(j.starts_with(&head), "{j}");
+        }
+    });
+}
+
 #[test]
 fn intent_samples_carry_verbs_and_entities() {
     with_big_stack(|| {
