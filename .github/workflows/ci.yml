@@ -575,6 +575,10 @@ jobs:
         run: python scripts/test_entropy_deps_guard.py
       - name: entropy-deps (公開する crate の依存に乱数・UUID・時刻の crate が無い、ALICE-Law G10)
         run: python scripts/entropy_deps_guard.py
+      - name: release-leg oracle (検査器自身の試験)
+        run: python scripts/test_release_leg_check.py
+      - name: release-leg (release-profile.yml が aarch64 の release で Law の試験を走らせ、path filter が Law の試験の member を含む、ALICE-Law G5)
+        run: python scripts/release_leg_check.py
       - name: root-artifacts (検査器の試験 + ルート直下に mesh の書き出しを追跡していない)
         run: |
           python scripts/test_root_artifacts.py
