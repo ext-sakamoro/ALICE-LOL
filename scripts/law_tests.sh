@@ -9,7 +9,8 @@
 # law modules but is not listed below also fails the run, so a new oracle file
 # cannot be skipped silently. Used by ci.yml and scripts/preflight.sh.
 #
-# usage: scripts/law_tests.sh [default|physics|all|list]   (default: all)
+# usage: scripts/law_tests.sh [default|physics|all|list] [cargo test args...]   (default: all)
+#   extra arguments go to every `cargo test` (e.g. `--release` for the release-profile leg)
 #   list: only check that every law test file is listed (CI counts the runs from
 #         the log of its full `cargo test` with scripts/law_tests_from_log.py)
 set -euo pipefail
@@ -41,6 +42,7 @@ PHYSICS_TARGETS=(
 )
 
 mode="${1:-all}"
+extra=("${@:2}")
 case "$mode" in
   default) targets=("${DEFAULT_TARGETS[@]}") ;;
   physics) targets=("${PHYSICS_TARGETS[@]}") ;;
@@ -74,6 +76,6 @@ for t in "${targets[@]}"; do
   pkg="${t%%|*}"; rest="${t#*|}"; args="${rest%%|*}"; features="${rest#*|}"
   echo "== law tests: -p $pkg $args${features:+ --features $features}"
   # shellcheck disable=SC2086  # $args is a flag and its value
-  scripts/cargo_test_nonzero.sh -p "$pkg" $args ${features:+--features "$features"}
+  scripts/cargo_test_nonzero.sh -p "$pkg" $args ${features:+--features "$features"} ${extra[@]+"${extra[@]}"}
 done
 echo "law tests: ${#targets[@]} targets, each ran at least one test"

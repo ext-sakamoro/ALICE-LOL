@@ -1,0 +1,123 @@
+name: Release profile
+
+# ALICE-Law G5: the Law-bearing tests under the release profile, on the aarch64 runner (the one common
+# target whose default codegen uses a hardware fma instruction, so a value that differs between the
+# debug and release builds of the same code shows up here). The selection is scripts/law_tests.sh:
+# every Law oracle target, each required to run at least one test (a target compiled out by a
+# feature, renamed or filtered to nothing fails), default and physics. Measured 2026-10-18 on an
+# aarch64 machine: `scripts/law_tests.sh default --release` took 1 min 40 s including the release
+# build (18 targets, 29 tests), so the named selection runs here rather than the whole suite.
+# scripts/release_leg_check.py fails when this job loses the macOS runner, --release, either selection,
+# or a source directory of the paths filter.
+
+on:
+  push:
+    # no paths here: a branch created at a SHA another ref already has gets an empty
+    # diff from GitHub's filter and the run is skipped; the changes job below compares
+    # with merge-base(origin/main) instead (patterns: .github/paths/release-profile.txt)
+    branches: [main, 'ci/**']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'alice-lol/**'
+      - 'alice-lol-macro/**'
+      - 'alice-lol-robot/**'
+      - 'alice-lol-humanoid/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'scripts/law_tests.sh'
+      - 'scripts/cargo_test_nonzero.sh'
+      - 'scripts/release_leg_check.py'
+      - '.github/alice-siblings'
+      - '.github/actions/**'
+      - '.github/workflows/release-profile.yml'
+      - '.github/paths/release-profile.txt'
+  workflow_dispatch:
+
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (a cancelled main commit is unverified)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # which files changed: a new or force-pushed branch is compared with merge-base(origin/main),
+  # another push with before..after, a pull request with base...head; manual runs always run;
+  # any error runs (fail-closed) — scripts/changed_paths.py
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after || github.sha }}
+          CREATED: ${{ github.event.created }}
+          FORCED: ${{ github.event.forced }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/changed_paths.py decide --event "$EVENT"
+          --before "$BEFORE" --after "$AFTER" --created "$CREATED" --forced "$FORCED"
+          --base "$PR_BASE" --head "$PR_HEAD"
+          --patterns-file .github/paths/release-profile.txt
+
+  release:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    name: Law tests (release, aarch64)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
+        with:
+          repo-dir: ALICE-LOL
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+          key: release
+
+      - name: Law tests (release, default)
+        working-directory: ALICE-LOL
+        run: scripts/law_tests.sh default --release
+
+      - name: Law tests (release, physics)
+        working-directory: ALICE-LOL
+        run: scripts/law_tests.sh physics --release
+
+  # the required check: run=false (no source change) passes, run=true needs the release job to succeed
+  # (a skipped, cancelled or failed job after run=true is red)
+  gate:
+    name: Gate
+    if: always()
+    needs: [changes, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/changed_paths.py gate --needs-json "$NEEDS"

@@ -1,0 +1,18 @@
+# the paths that run .github/workflows/release-profile.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync); scripts/release_leg_check.py requires a pattern for every
+# workspace member the Law tests build (the packages of scripts/law_tests.sh and their path dependencies)
+alice-lol/**
+alice-lol-macro/**
+alice-lol-robot/**
+alice-lol-humanoid/**
+Cargo.toml
+Cargo.lock
+rust-toolchain.toml
+scripts/law_tests.sh
+scripts/cargo_test_nonzero.sh
+scripts/release_leg_check.py
+.github/alice-siblings
+.github/actions/**
+.github/workflows/release-profile.yml
+.github/paths/release-profile.txt
