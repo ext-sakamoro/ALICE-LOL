@@ -140,6 +140,11 @@ fn every_lol_writer_stores_the_lol_producer_and_it_reads_back() {
 fn the_stamp_is_the_sdf_primary_with_the_lol_producer() {
     assert_eq!(LOL_EXPORT_STAMP.primary, Provenance::sdf());
     assert_eq!(LOL_EXPORT_STAMP.producer, Some(lol_producer()));
+    // the constant id_move_check reads is the identifier the exports write
+    assert_eq!(
+        Provenance::new(alice_lol::print_export::LOL_EXPORT_PRIMARY_SEMANTICS_ID),
+        Provenance::sdf()
+    );
 }
 
 /// STL: header の byte を直接読む、主の識別子の後は版 2 の配置、producer を除けば alice-sdf の

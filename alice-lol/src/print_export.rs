@@ -39,15 +39,30 @@ pub use alice_sdf::mesh::{
 };
 use alice_sdf::provenance::{Provenance, Stamp};
 
+/// LOL の書き出し (STL / 3MF / FBX) が主の識別子として書く、alice-sdf の mesh の意味の識別子
+///
+/// `alice_sdf::SDF_SEMANTICS_ID` と同じ値 ([`Provenance::sdf`] が持つ値)
+///
+/// LOL が持つ定数として置くのは、LOL が書く bytes の意味の識別子を ALICE-Law G9 の検査
+/// (`scripts/id_move_check.py`、`scripts/id_move.toml`) に載せるため: 解決した alice-sdf / alice-det-math
+/// の版でこの値が動くと、LOL の書き出しの bytes の意味が変わるので、破壊的な版と CHANGELOG
+/// の両側の値が要る
+pub const LOL_EXPORT_PRIMARY_SEMANTICS_ID: [u8; 32] = alice_sdf::SDF_SEMANTICS_ID;
+
 /// LOL の書き出し (STL / 3MF / FBX) が持つ識別子: 主は alice-sdf の mesh の意味
-/// ([`Provenance::sdf`])、producer は形を作った LOL の幾何の意味
+/// ([`LOL_EXPORT_PRIMARY_SEMANTICS_ID`])、producer は形を作った LOL の幾何の意味
 /// ([`crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID`])
+///
+/// どちらも `scripts/id_move_check.py` の対象
 ///
 /// 読み戻しは `alice_sdf::provenance::read_with_producer` / `check_producer` LOL 自身は
 /// これらの file を読み込まない (読み手は書き出し先の slicer / DCC) ので、読む側の検査は無い
-pub const LOL_EXPORT_STAMP: Stamp = Stamp::sdf_with_producer(Provenance::new(
-    crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID,
-));
+pub const LOL_EXPORT_STAMP: Stamp = Stamp::new(
+    Provenance::new(LOL_EXPORT_PRIMARY_SEMANTICS_ID),
+    Some(Provenance::new(
+        crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID,
+    )),
+);
 
 /// 頂点マージ許容量を cell 幅の何倍にするか
 ///

@@ -14,3 +14,7 @@ path = "alice_lol::law_id::LOL_SEMANTICS_ID"
 
 [[id]]
 path = "alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID"
+
+# the primary identifier LOL's exports (STL / 3MF / FBX) write: alice-sdf's mesh meaning, the bytes LOL writes
+[[id]]
+path = "alice_lol::print_export::LOL_EXPORT_PRIMARY_SEMANTICS_ID"
