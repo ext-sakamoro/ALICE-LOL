@@ -11,7 +11,7 @@
 
 #![allow(clippy::cast_precision_loss)] // sample 点生成
 
-use alice_lol::emit::to_lol;
+use alice_lol::emit::{to_lol, to_lol_unstamped};
 use alice_lol::runtime_parser::parse_lol;
 use alice_lol::{eval, SdfNode, Vec3};
 
@@ -401,7 +401,7 @@ fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
     let texts: &[(&str, String)] = &[
         (
             "can_rack",
-            to_lol(&can_rack(&CanRackSpec {
+            to_lol_unstamped(&can_rack(&CanRackSpec {
                 rows: 3,
                 can_diameter: 66.0,
                 tilt_angle_deg: 3.0,
@@ -414,7 +414,7 @@ fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
         ),
         (
             "can_rack_neg_tilt",
-            to_lol(&can_rack(&CanRackSpec {
+            to_lol_unstamped(&can_rack(&CanRackSpec {
                 rows: 3,
                 can_diameter: 66.0,
                 tilt_angle_deg: -151.5,
@@ -427,7 +427,7 @@ fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
         ),
         (
             "phone_dock",
-            to_lol(&phone_dock(&PhoneDockSpec {
+            to_lol_unstamped(&phone_dock(&PhoneDockSpec {
                 width: 80.0,
                 upright_height: 100.0,
                 cable_diameter: 8.0,

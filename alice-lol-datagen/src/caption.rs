@@ -207,7 +207,7 @@ pub fn describe(node: &SdfNode) -> String {
         SdfNode::Mirror { child, .. } => format!("{} mirrored", describe(child)),
         other => {
             // 構文名だけは LOL text から取れる (先頭の識別子)
-            let text = alice_lol::emit::to_lol(other).unwrap_or_default();
+            let text = alice_lol::emit::to_lol_unstamped(other).unwrap_or_default();
             let name = text.split('(').next().unwrap_or("shape").replace('_', " ");
             format!("a {name} shape")
         }

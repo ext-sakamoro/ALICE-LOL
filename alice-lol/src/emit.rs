@@ -13,6 +13,14 @@
 //! - `llm_bench` 等の出力表示、JSONL への保存
 //! - `Program::to_lol` (`program(<sdf>, entities(...), <intent>)`)
 //!
+//! # 交換の形と正規形
+//!
+//! [`to_lol`] / `Program::to_lol` は別の process / 別の版に渡す text を書き、正規形を
+//! `semantics(<LOL_GEOMETRY_SEMANTICS_ID の 16 進>, ...)` で包む (ALICE-Law G7、読む側が
+//! 識別子を照合する) 正規形そのものは [`to_lol_unstamped`] / `Program::to_lol_unstamped`
+//! (包みを付ける前の `to_lol` と byte 単位で同じ) 人に見せる表示・識別子の入力・
+//! model の教師 data は正規形を使う
+//!
 //! # 書けないもの
 //!
 //! LOL text 構文を持たない variant は [`EmitError::Unsupported`]:
@@ -40,6 +48,7 @@ crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use std::fmt::Write as _;
 
+use crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use crate::intent::Program;
 use crate::SdfNode;
 use glam::{Vec2, Vec3};
@@ -121,7 +130,36 @@ fn u(v: u32) -> String {
     format!("{v}.0")
 }
 
-/// `SdfNode` tree を LOL text に変換する
+/// `SdfNode` tree を、交換に使う LOL text に変換する (`semantics(<id>, <正規形>)`)
+///
+/// 別の process / 別の版に渡す text は書いた側の識別子を運ぶ (ALICE-Law G7): 正規形
+/// ([`to_lol_unstamped`]) を `semantics(<LOL_GEOMETRY_SEMANTICS_ID の 16 進>, ...)` で包む
+/// 読む側は [`crate::runtime_parser::parse_lol_stamped`] (包み必須) か `parse_lol` (包み任意) で
+/// 識別子を照合する 人に見せる・識別子の入力にする・model の教師にする text は
+/// [`to_lol_unstamped`] を使う
+///
+/// ```
+/// use alice_lol::emit::{to_lol, to_lol_unstamped};
+/// use alice_lol::runtime_parser::{parse_lol, parse_lol_stamped};
+///
+/// let node = parse_lol("sphere(1.0)").unwrap();
+/// let text = to_lol(&node).unwrap();
+/// assert!(text.starts_with("semantics(") && text.ends_with(", sphere(1.0))"));
+/// assert_eq!(to_lol_unstamped(&node).unwrap(), "sphere(1.0)");
+/// assert_eq!(format!("{:?}", parse_lol_stamped(&text).unwrap()), format!("{node:?}"));
+/// ```
+///
+/// # Errors
+///
+/// [`to_lol_unstamped`] と同じ
+pub fn to_lol(node: &SdfNode) -> Result<String, EmitError> {
+    Ok(stamp(&to_lol_unstamped(node)?))
+}
+
+/// `SdfNode` tree を LOL text の正規形に変換する (識別子の包みなし)
+///
+/// `to_lol` が包みを付ける前に書いていた text と byte 単位で同じ
+/// (`tests/emit_unstamped_unchanged.rs`) 人に見せる表示・識別子の入力・model の教師に使う
 ///
 /// # Errors
 ///
@@ -129,10 +167,18 @@ fn u(v: u32) -> String {
 /// NaN か ±∞ の数があると [`EmitError::NonFinite`]、`Rotate` の quaternion が unit length
 /// でないと [`EmitError::NonUnitRotation`] (parser が受理する形でしか書かないので、
 /// 書いた text は必ず読み戻せる)
-pub fn to_lol(node: &SdfNode) -> Result<String, EmitError> {
+pub fn to_lol_unstamped(node: &SdfNode) -> Result<String, EmitError> {
     let mut out = String::new();
     write_node(node, &mut out)?;
     Ok(out)
+}
+
+/// 正規形を識別子の包みで包む
+fn stamp(canonical: &str) -> String {
+    format!(
+        "semantics({}, {canonical})",
+        crate::runtime_parser::semantics_hex(&LOL_GEOMETRY_SEMANTICS_ID)
+    )
 }
 
 /// 深い tree でも stack を使い切らないよう、再帰ごとに必要なら stack を伸ばす
@@ -782,17 +828,27 @@ fn write_variadic(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
 }
 
 impl Program {
-    /// `program(<sdf>, entities(...), <intent>)` 形式の LOL text
+    /// `program(<sdf>, entities(...), <intent>)` 形式の、交換に使う LOL text
     ///
-    /// registry も intent も空なら裸の `<sdf>` を返す (`parse_program` は
-    /// どちらも受理し、後者は `Program::sdf_only` に戻る)
+    /// registry も intent も空なら裸の `<sdf>` を書く (`parse_program` は
+    /// どちらも受理し、後者は `Program::sdf_only` に戻る) [`to_lol`] と同じく
+    /// `semantics(<id>, ...)` で包む (ALICE-Law G7)
     ///
     /// # Errors
     ///
     /// `sdf` / `sdf_registry` に LOL 構文のない variant があると [`EmitError::Unsupported`]
     pub fn to_lol(&self) -> Result<String, EmitError> {
+        Ok(stamp(&self.to_lol_unstamped()?))
+    }
+
+    /// [`Program::to_lol`] の正規形 (識別子の包みなし、包みを付ける前と同じ text)
+    ///
+    /// # Errors
+    ///
+    /// [`Program::to_lol`] と同じ
+    pub fn to_lol_unstamped(&self) -> Result<String, EmitError> {
         if self.sdf_registry.is_empty() && self.intent.is_none() {
-            return to_lol(&self.sdf);
+            return to_lol_unstamped(&self.sdf);
         }
         let mut out = String::from("program(");
         write_node(&self.sdf, &mut out)?;
@@ -841,7 +897,7 @@ mod tests {
             "translate(0.0, 1.5, 0.0, scale(2.0, sphere(0.5)))",
         ] {
             let node = parse_lol(src).unwrap();
-            assert_eq!(to_lol(&node).unwrap(), src);
+            assert_eq!(to_lol_unstamped(&node).unwrap(), src);
         }
     }
 
@@ -850,19 +906,19 @@ mod tests {
         // parser: union(a, b, c) → Union{Union{a,b},c} (fold_left) → emit は平坦化して戻す
         let node = parse_lol("union(sphere(1.0), sphere(2.0), sphere(3.0))").unwrap();
         assert_eq!(
-            to_lol(&node).unwrap(),
+            to_lol_unstamped(&node).unwrap(),
             "union(sphere(1.0), sphere(2.0), sphere(3.0))"
         );
         // 明示的に nested で書いた union も同じ正規形に落ちる (同じ tree なので)
         let nested = parse_lol("union(union(sphere(1.0), sphere(2.0)), sphere(3.0))").unwrap();
         assert_eq!(
-            to_lol(&nested).unwrap(),
+            to_lol_unstamped(&nested).unwrap(),
             "union(sphere(1.0), sphere(2.0), sphere(3.0))"
         );
         // 右側の nested は別 tree なので潰さない
         let right = parse_lol("union(sphere(1.0), union(sphere(2.0), sphere(3.0)))").unwrap();
         assert_eq!(
-            to_lol(&right).unwrap(),
+            to_lol_unstamped(&right).unwrap(),
             "union(sphere(1.0), union(sphere(2.0), sphere(3.0)))"
         );
         // k が違う smooth_union は別 op として残る
@@ -871,7 +927,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            to_lol(&mixed).unwrap(),
+            to_lol_unstamped(&mixed).unwrap(),
             "smooth_union(0.5, smooth_union(0.2, sphere(1.0), sphere(2.0)), sphere(3.0))"
         );
     }
@@ -887,7 +943,7 @@ mod tests {
             "smooth_union(0.5, smooth_union(0.5000001, sphere(1.0), sphere(2.0)), sphere(3.0))";
         let node = parse_lol(text).unwrap();
         assert_eq!(
-            to_lol(&node).unwrap(),
+            to_lol_unstamped(&node).unwrap(),
             text,
             "two different (if close) k values must not merge into one smooth_union call"
         );
@@ -902,7 +958,7 @@ mod tests {
         let text = "smooth_union(0.0, smooth_union(-0.0, sphere(1.0), sphere(2.0)), sphere(3.0))";
         let node = parse_lol(text).unwrap();
         assert_eq!(
-            to_lol(&node).unwrap(),
+            to_lol_unstamped(&node).unwrap(),
             text,
             "0.0 and -0.0 k values must not merge into one smooth_union call"
         );
@@ -915,10 +971,10 @@ mod tests {
         // exact quaternion rotate_q(x, y, z, w, child), which round-trips
         // bit-exact (not just eval-agreeing) from here on.
         let node = parse_lol("rotate(90.0, 0.0, 0.0, cylinder(1.0, 2.0))").unwrap();
-        let text = to_lol(&node).unwrap();
+        let text = to_lol_unstamped(&node).unwrap();
         assert!(text.starts_with("rotate_q("), "{text}");
         let back = parse_lol(&text).unwrap();
-        let text2 = to_lol(&back).unwrap();
+        let text2 = to_lol_unstamped(&back).unwrap();
         assert_eq!(
             text, text2,
             "rotate_q must round-trip bit-exact, not just eval-agree"
@@ -945,7 +1001,7 @@ mod tests {
             child: std::sync::Arc::new(SdfNode::Sphere { radius: 1.0 }),
             rotation: glam::Quat::from_xyzw(0.0, 0.0, 0.0, 2.0),
         };
-        let err = to_lol(&node).unwrap_err();
+        let err = to_lol_unstamped(&node).unwrap_err();
         assert!(
             matches!(err, EmitError::NonUnitRotation { .. }),
             "expected NonUnitRotation, got {err:?}"
@@ -958,7 +1014,7 @@ mod tests {
             child: std::sync::Arc::new(SdfNode::Sphere { radius: 1.0 }),
             rotation: glam::Quat::from_xyzw(0.0, 0.0, 0.0, 1.0),
         };
-        let text = to_lol(&node).unwrap();
+        let text = to_lol_unstamped(&node).unwrap();
         assert_eq!(text, "rotate_q(0.0, 0.0, 0.0, 1.0, sphere(1.0))");
         assert!(parse_lol(&text).is_ok());
     }
@@ -967,9 +1023,9 @@ mod tests {
     fn program_round_trip() {
         let src = "program(sphere(1.0), entities(box3d(0.1, 0.1, 0.1)), seq(grasp(0, right, 5.0), rest(500)))";
         let p = parse_program(src).unwrap();
-        assert_eq!(p.to_lol().unwrap(), src);
+        assert_eq!(p.to_lol_unstamped().unwrap(), src);
         let bare = parse_program("sphere(2.0)").unwrap();
-        assert_eq!(bare.to_lol().unwrap(), "sphere(2.0)");
+        assert_eq!(bare.to_lol_unstamped().unwrap(), "sphere(2.0)");
     }
 
     #[test]
@@ -980,12 +1036,12 @@ mod tests {
             radius: 0.5,
         };
         assert_eq!(
-            to_lol(&node).unwrap(),
+            to_lol_unstamped(&node).unwrap(),
             "capsule_ab(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5)"
         );
         let sym = parse_lol("capsule(0.5, 2.0)").unwrap();
-        assert_eq!(to_lol(&sym).unwrap(), "capsule(0.5, 2.0)");
-        let back = parse_lol(&to_lol(&node).unwrap()).unwrap();
+        assert_eq!(to_lol_unstamped(&sym).unwrap(), "capsule(0.5, 2.0)");
+        let back = parse_lol(&to_lol_unstamped(&node).unwrap()).unwrap();
         assert!(matches!(back, SdfNode::Capsule { radius, .. } if (radius - 0.5).abs() < 1e-6));
     }
 
@@ -1033,7 +1089,7 @@ mod tests {
                 point_b,
                 radius: 0.5,
             };
-            let text = to_lol(&node).unwrap();
+            let text = to_lol_unstamped(&node).unwrap();
             assert!(
                 text.starts_with("capsule_ab("),
                 "{name}: a 1e-7 coordinate must not be treated as symmetric: {text:?}"
@@ -1066,7 +1122,7 @@ mod tests {
             iterations: 1,
         };
         assert!(matches!(
-            to_lol(&node),
+            to_lol_unstamped(&node),
             Err(EmitError::Unsupported { variant: "IFS", .. })
         ));
     }

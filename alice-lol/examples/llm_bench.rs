@@ -526,7 +526,8 @@ fn main() {
                     let (ok, d) = judge(&case.oracle, p);
                     // grammar 経路は text を返さないので正規形 LOL (emit) で表示
                     let shown = if text.is_empty() {
-                        p.to_lol().unwrap_or_else(|e| format!("<unemittable: {e}>"))
+                        p.to_lol_unstamped()
+                            .unwrap_or_else(|e| format!("<unemittable: {e}>"))
                     } else {
                         text.clone()
                     };
