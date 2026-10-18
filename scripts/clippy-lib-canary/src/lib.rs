@@ -151,3 +151,65 @@ pub fn seeded_param(_seeded: std::collections::hash_map::RandomState) {}
 pub fn held_clock(later: std::time::Instant, earlier: std::time::Instant) -> std::time::Duration {
     later.duration_since(earlier)
 }
+
+// ALICE-Law G10: the iteration order of a HashMap / HashSet (one form per method of scripts/clippy_lib_gate.toml)
+type Hm = std::collections::HashMap<u8, u8>;
+type Hs = std::collections::HashSet<u8>;
+
+pub fn hash_iter(hm: &Hm) -> usize {
+    hm.iter().count()
+}
+
+pub fn hash_keys(hm: &Hm) -> usize {
+    hm.keys().count()
+}
+
+pub fn hash_values(hm: &Hm) -> usize {
+    hm.values().count()
+}
+
+pub fn hash_iter_mut(hm_mut: &mut Hm) -> usize {
+    hm_mut.iter_mut().count()
+}
+
+pub fn hash_values_mut(hm_mut: &mut Hm) -> usize {
+    hm_mut.values_mut().count()
+}
+
+pub fn hash_drain(hm_mut: &mut Hm) -> usize {
+    hm_mut.drain().count()
+}
+
+pub fn hash_into_keys(hm_k: Hm) -> usize {
+    hm_k.into_keys().count()
+}
+
+pub fn hash_into_values(hm_v: Hm) -> usize {
+    hm_v.into_values().count()
+}
+
+pub fn set_iter(hs: &Hs) -> usize {
+    hs.iter().count()
+}
+
+pub fn set_drain(hs_mut: &mut Hs) -> usize {
+    hs_mut.drain().count()
+}
+
+// ALICE-Law G10: a for loop over a hash type (scripts/hash_iter_canary.py: clippy::iter_over_hash_type)
+pub fn hash_for(hm: &Hm) -> u32 {
+    let mut n = 0;
+    for _ in hm { // for-over-hash
+        n += 1;
+    }
+    n
+}
+
+pub fn set_for(hs: Hs) -> u32 {
+    let mut n = 0;
+    for _ in hs { // for-over-hash
+        n += 1;
+    }
+    n
+}
+

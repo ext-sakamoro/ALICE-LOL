@@ -58,6 +58,17 @@ class Guard(unittest.TestCase):
         _, problems = g.denied_deps(meta(pkg("alice-lol", [dep("timely"), dep("operand"), dep("random-access")])))
         self.assertEqual(problems, [])
 
+    def test_transitive_reach_follows_normal_and_build_edges_only(self):
+        def node(i, *deps):
+            return {"id": i, "deps": [{"pkg": d, "dep_kinds": [{"kind": k}]} for d, k in deps]}
+        m = {"workspace_members": ["lol"], "packages": [
+            {"id": "lol", "name": "alice-lol", "publish": None},
+            {"id": "a", "name": "wgpu", "version": "1"}, {"id": "r", "name": "rand", "version": "0.8.5"},
+            {"id": "u", "name": "uuid", "version": "1.2"}, {"id": "t", "name": "time", "version": "0.3"}],
+            "resolve": {"nodes": [node("lol", ("a", None), ("t", "dev")), node("a", ("r", "build")),
+                                  node("r", ("u", None)), node("u"), node("t")]}}
+        self.assertEqual(g.transitive(m), ["rand 0.8.5", "uuid 1.2"])
+
     def test_no_published_member_is_compared_nothing(self):
         p = subprocess.run([sys.executable, str(HERE / "entropy_deps_guard.py"), "--manifest-path",
                             str(HERE / "clippy-lib-canary" / "Cargo.toml")], capture_output=True, text=True)

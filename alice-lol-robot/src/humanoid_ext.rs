@@ -105,10 +105,13 @@ fn translate_to_destination(
     let delta = destination - glam::Vec3::new(current_waist[0], current_waist[1], current_waist[2]);
 
     let mut new_template = template.clone();
-    for pos in new_template.joints.values_mut() {
-        pos[0] += delta.x;
-        pos[1] += delta.y;
-        pos[2] += delta.z;
+    // (in Joint::ALL's order, not the map's: a HashMap is visited in the order of its per-run seed)
+    for joint in Joint::ALL {
+        if let Some(pos) = new_template.joints.get_mut(&joint) {
+            pos[0] += delta.x;
+            pos[1] += delta.y;
+            pos[2] += delta.z;
+        }
     }
     Ok(new_template)
 }

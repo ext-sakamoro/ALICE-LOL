@@ -520,17 +520,19 @@ jobs:
         run: python scripts/test_clippy_lib_gate.py
       - name: clippy-lib (lib 専用 clippy 設定の生成物一致 + canary)
         run: python scripts/clippy_lib_gate.py
+      - name: hash-iter canary (clippy::iter_over_hash_type が for の hash 反復で出る、ALICE-Law G10)
+        run: python scripts/hash_iter_canary.py
       # `VAR=value command` is POSIX shell syntax; windows-latest's default shell
       # is pwsh, which does not accept it ("not recognized as a cmdlet") -- the
       # env: key sets the variable regardless of which shell runs the step
       - name: clippy-lib (alice-lol、lib のみ、examples/tests/benches は既存どおり std のまま許容)
         env:
           CLIPPY_CONF_DIR: .github/clippy-lib
-        run: cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros -D clippy::disallowed_types
+        run: cargo clippy --quiet -p alice-lol --lib --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros -D clippy::disallowed_types -D clippy::iter_over_hash_type
       - name: clippy-lib (alice-lol 以外の workspace 全体、lib+bins+examples)
         env:
           CLIPPY_CONF_DIR: .github/clippy-lib
-        run: cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros -D clippy::disallowed_types
+        run: cargo clippy --quiet --workspace --exclude alice-lol --lib --bins --examples --all-features -- -D clippy::disallowed_methods -D clippy::disallowed_macros -D clippy::disallowed_types -D clippy::iter_over_hash_type
       - name: det-math-minmax-blob-sync oracle (検査器自身の試験)
         run: python scripts/test_det_math_minmax_blob_sync.py
       - name: det-math-minmax-blob-sync (alice-lol の det_math max/min が alice-physics の実装と一致する)

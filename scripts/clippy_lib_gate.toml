@@ -271,3 +271,83 @@ path = "std::collections::hash_map::RandomState"
 
 [[clean]]
 text = "later.duration_since(earlier)"
+
+[[method]]
+path = "std::collections::HashMap::iter"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::iter_mut"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::keys"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::values"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::values_mut"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::into_keys"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::into_values"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashMap::drain"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashSet::iter"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[method]]
+path = "std::collections::HashSet::drain"
+reason = "ALICE-Law G10: the iteration order of a HashMap / HashSet comes from its RandomState seed, which differs per run; use a BTreeMap / BTreeSet, or collect and sort"
+
+[[form]]
+text = "hm.iter()"
+path = "std::collections::HashMap::iter"
+
+[[form]]
+text = "hm_mut.iter_mut()"
+path = "std::collections::HashMap::iter_mut"
+
+[[form]]
+text = "hm.keys()"
+path = "std::collections::HashMap::keys"
+
+[[form]]
+text = "hm.values()"
+path = "std::collections::HashMap::values"
+
+[[form]]
+text = "hm_mut.values_mut()"
+path = "std::collections::HashMap::values_mut"
+
+[[form]]
+text = "hm_k.into_keys()"
+path = "std::collections::HashMap::into_keys"
+
+[[form]]
+text = "hm_v.into_values()"
+path = "std::collections::HashMap::into_values"
+
+[[form]]
+text = "hm_mut.drain()"
+path = "std::collections::HashMap::drain"
+
+[[form]]
+text = "hs.iter()"
+path = "std::collections::HashSet::iter"
+
+[[form]]
+text = "hs_mut.drain()"
+path = "std::collections::HashSet::drain"

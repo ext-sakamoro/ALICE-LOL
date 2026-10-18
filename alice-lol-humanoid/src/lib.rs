@@ -508,7 +508,8 @@ impl HumanoidTemplate {
 
         // Step 1: bind pose local offsets
         let mut local_offsets: HashMap<Joint, Vec3> = HashMap::with_capacity(15);
-        for (&child, &parent) in &parent_map {
+        // (the table, not the map: a HashMap is visited in the order of its per-run seed)
+        for &(child, parent) in VRM_PARENT_TABLE {
             if let (Some(&c), Some(&p)) = (self.joints.get(&child), self.joints.get(&parent)) {
                 local_offsets.insert(child, Vec3::from(c) - Vec3::from(p));
             }
@@ -551,11 +552,13 @@ impl HumanoidTemplate {
         }
 
         // Step 4: extract world positions
-        let joints: HashMap<Joint, [f32; 3]> = world_transforms
+        // (in the topological order, not the map's: a HashMap is visited in the order of its per-run seed)
+        let joints: HashMap<Joint, [f32; 3]> = VRM_TOPO_ORDER
             .iter()
+            .filter_map(|j| world_transforms.get(j).map(|t| (*j, t)))
             .map(|(j, t)| {
                 let p = t.transform_point3(Vec3::ZERO);
-                (*j, [p.x, p.y, p.z])
+                (j, [p.x, p.y, p.z])
             })
             .collect();
 
