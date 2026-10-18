@@ -340,6 +340,15 @@ python3 scripts/build_config_guard.py
 python3 scripts/test_build_flags_check.py
 python3 scripts/test_run_tests.py
 python3 scripts/test_cargo_test_nonzero.py
+python3 scripts/test_reexport_guard.py
+
+step "ci.yml / reexport-guard: Public re-exports (G8)"
+nightly=$(python3 -c 'import tomllib; print(tomllib.load(open("scripts/reexport_guard.toml", "rb"))["nightly"])')
+if has_toolchain "$nightly"; then
+  python3 scripts/reexport_guard.py
+else
+  echo "skip: $nightly not installed (rustup toolchain install $nightly); CI runs it" >&2
+fi
 
 step "ci.yml / wiring-guard: Effective rustc flags (G14)"
 python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol
