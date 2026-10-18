@@ -343,6 +343,7 @@ mod tests {
     #[test]
     fn bridge_error_display_wraps_parse_error() {
         let inner = ParseError {
+            kind: crate::runtime_parser::ParseErrorKind::Syntax,
             message: "unexpected token".to_string(),
             position: 42,
         };
@@ -366,6 +367,7 @@ mod tests {
     #[test]
     fn bridge_error_from_parse_error() {
         let src = ParseError {
+            kind: crate::runtime_parser::ParseErrorKind::Syntax,
             message: "boom".to_string(),
             position: 3,
         };
