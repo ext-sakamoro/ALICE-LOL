@@ -1,0 +1,431 @@
+# Every public entry point of alice-lol that takes text, bytes or a reader (scripts/g7_boundaries.py, ALICE-Law G7)
+#
+# class: exchange (reads what another program or release wrote; the identifier is required and compared,
+#        `test` names the test that feeds another identifier), authoring (reads source a person or a model
+#        writes; the identifier wrapper is optional and compared when present), local (carries no
+#        Law-bearing value of another crate)
+# `python3 scripts/g7_boundaries.py --list` prints the entry points found
+
+[[macro]]
+crate = "alice-lol-macro"
+compared_in = "alice-lol/src/macro_id.rs"
+paired_by = "scripts/g7_macro_pairing.py"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_declared_stamped"
+class = "exchange"
+reason = "reads text another program or release wrote: the semantics wrapper is required and its identifier compared (SemanticsMissing / SemanticsMismatch)"
+test = "alice-lol/tests/semantics_wrapper.rs::another_identifier_is_a_mismatch_naming_both"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_law_stamped"
+class = "exchange"
+reason = "reads text another program or release wrote: the semantics wrapper is required and its identifier compared (SemanticsMissing / SemanticsMismatch)"
+test = "alice-lol/tests/semantics_wrapper.rs::another_identifier_is_a_mismatch_naming_both"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_lol_stamped"
+class = "exchange"
+reason = "reads text another program or release wrote: the semantics wrapper is required and its identifier compared (SemanticsMissing / SemanticsMismatch)"
+test = "alice-lol/tests/semantics_wrapper.rs::another_identifier_is_a_mismatch_naming_both"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_program_stamped"
+class = "exchange"
+reason = "reads text another program or release wrote: the semantics wrapper is required and its identifier compared (SemanticsMissing / SemanticsMismatch)"
+test = "alice-lol/tests/semantics_wrapper.rs::another_identifier_is_a_mismatch_naming_both"
+
+[[entry]]
+path = "alice_lol::law_input::InputType::parse"
+class = "authoring"
+reason = "reads the type of an x-input line of a law file (source)"
+
+[[entry]]
+path = "alice_lol::law_input::MetricExpr::parse"
+class = "authoring"
+reason = "reads the expression of an x-metric line of a law file (source)"
+
+[[entry]]
+path = "alice_lol::law_input::audit_law_from_file"
+class = "authoring"
+reason = "reads a law file a person or a model writes; its audit block goes through parse_law (a semantics first line is compared when present)"
+
+[[entry]]
+path = "alice_lol::print_export::lol_to_3mf"
+class = "authoring"
+reason = "reads LOL source a person or a model writes through parse_declared (a semantics wrapper is compared when present); the path is the destination of a written file (that file's identifier is G8's)"
+
+[[entry]]
+path = "alice_lol::print_export::lol_to_fbx"
+class = "authoring"
+reason = "reads LOL source a person or a model writes through parse_declared (a semantics wrapper is compared when present); the path is the destination of a written file (that file's identifier is G8's)"
+
+[[entry]]
+path = "alice_lol::print_export::lol_to_stl"
+class = "authoring"
+reason = "reads LOL source a person or a model writes through parse_declared (a semantics wrapper is compared when present); the path is the destination of a written file (that file's identifier is G8's)"
+
+[[entry]]
+path = "alice_lol::research_law::LawExpr::parse"
+class = "authoring"
+reason = "reads a research law expression a person or a model writes (source)"
+
+[[entry]]
+path = "alice_lol::research_law::Unit::parse"
+class = "authoring"
+reason = "reads a unit name of a law file (source)"
+
+[[entry]]
+path = "alice_lol::roblox_export::lol_to_fbx_roblox"
+class = "authoring"
+reason = "reads LOL source through parse_lol (a semantics wrapper is compared when present); the path is the destination of a written file (G8)"
+
+[[entry]]
+path = "alice_lol::roblox_export::lol_to_obj_roblox"
+class = "authoring"
+reason = "reads LOL source through parse_lol (a semantics wrapper is compared when present); the path is the destination of a written file (G8)"
+
+[[entry]]
+path = "alice_lol::runtime_parser::law_number"
+class = "authoring"
+reason = "reads one number token of a law file (source)"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_declared"
+class = "authoring"
+reason = "reads source a person or a model writes; a semantics wrapper is optional and compared when present (the exchange form is the _stamped entry point)"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_law"
+class = "authoring"
+reason = "reads source a person or a model writes; a semantics wrapper is optional and compared when present (the exchange form is the _stamped entry point)"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_lol"
+class = "authoring"
+reason = "reads source a person or a model writes; a semantics wrapper is optional and compared when present (the exchange form is the _stamped entry point)"
+
+[[entry]]
+path = "alice_lol::runtime_parser::parse_program"
+class = "authoring"
+reason = "reads source a person or a model writes; a semantics wrapper is optional and compared when present (the exchange form is the _stamped entry point)"
+
+[[entry]]
+path = "alice_lol::audit_law::AuditLaw::with_at_least"
+class = "local"
+reason = "a metric name given by the caller"
+
+[[entry]]
+path = "alice_lol::audit_law::AuditLaw::with_input"
+class = "local"
+reason = "an input name given by the caller"
+
+[[entry]]
+path = "alice_lol::audit_law::AuditLaw::with_metric"
+class = "local"
+reason = "a metric name given by the caller"
+
+[[entry]]
+path = "alice_lol::audit_law::Measurements::number"
+class = "local"
+reason = "a metric name to look up"
+
+[[entry]]
+path = "alice_lol::audit_law::Measurements::range"
+class = "local"
+reason = "a key to look up"
+
+[[entry]]
+path = "alice_lol::audit_law::Measurements::with_number"
+class = "local"
+reason = "a metric name given by the caller"
+
+[[entry]]
+path = "alice_lol::audit_law::Measurements::with_range"
+class = "local"
+reason = "a key and the names in its range, given by the caller"
+
+[[entry]]
+path = "alice_lol::bridge::generate_program_from_prompt"
+class = "local"
+reason = "the prompt is natural language for a model; the model's LOL text is read by parse_program (authoring)"
+
+[[entry]]
+path = "alice_lol::bridge::generate_program_thinking"
+class = "local"
+reason = "the prompt and the stop marker are text for a model; the model's LOL text is read by parse_program (authoring)"
+
+[[entry]]
+path = "alice_lol::bridge::generate_sdf_from_prompt"
+class = "local"
+reason = "the prompt is natural language for a model; the model's LOL text is read by parse_lol (authoring)"
+
+[[entry]]
+path = "alice_lol::geometry_id::fold_geometry_pins"
+class = "local"
+reason = "the labels of this crate's own pins, folded into its identifier"
+
+[[entry]]
+path = "alice_lol::intent::latent_intent_hinted"
+class = "local"
+reason = "a debug label (not part of the text form)"
+
+[[entry]]
+path = "alice_lol::laser_pattern::elements_to_svg"
+class = "local"
+reason = "an SVG stroke color written into the output"
+
+[[entry]]
+path = "alice_lol::law::Law::hard"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::Law::soft"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::contact"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::continuity"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::gradient_bound"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::hard"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::reachable"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::soft"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::stress"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::thermal"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::thermal_field"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law::LawSet::volume_conservation"
+class = "local"
+reason = "a law name given by the caller"
+
+[[entry]]
+path = "alice_lol::law_id::LawIdHasher::bytes"
+class = "local"
+reason = "bytes hashed into a law identifier (the hasher writes the identifier, it does not read one)"
+
+[[entry]]
+path = "alice_lol::law_id::LawIdHasher::new"
+class = "local"
+reason = "the kind tag of a law identifier"
+
+[[entry]]
+path = "alice_lol::law_id::LawIdHasher::str"
+class = "local"
+reason = "text hashed into a law identifier"
+
+[[entry]]
+path = "alice_lol::law_id::fold_semantics_pins"
+class = "local"
+reason = "the labels of this crate's own pins, folded into its identifier"
+
+[[entry]]
+path = "alice_lol::law_id::hex32"
+class = "local"
+reason = "a hex literal of this crate's own constants, decoded at compile time"
+
+[[entry]]
+path = "alice_lol::law_input::Json::get"
+class = "local"
+reason = "a key of an already parsed JSON object"
+
+[[entry]]
+path = "alice_lol::law_input::parse_json"
+class = "local"
+reason = "RFC 8259 JSON, a format a standard fixes and no Law-bearing crate's release defines; the values are measurements whose meaning this crate's audit law states (the law is named by its law_id)"
+
+[[entry]]
+path = "alice_lol::law_input::read"
+class = "local"
+reason = "an x-input name, looked up in an already parsed value"
+
+[[entry]]
+path = "alice_lol::limits::checked_bounded"
+class = "local"
+reason = "the name of the argument for the error message"
+
+[[entry]]
+path = "alice_lol::limits::checked_positive_finite"
+class = "local"
+reason = "the name of the argument for the error message"
+
+[[entry]]
+path = "alice_lol::limits::checked_product"
+class = "local"
+reason = "the name of the argument for the error message"
+
+[[entry]]
+path = "alice_lol::print_export::node_to_3mf"
+class = "local"
+reason = "the path is the destination of a written file, not an input; the file carries its producer identifier (G8)"
+
+[[entry]]
+path = "alice_lol::print_export::node_to_3mf_dual_contouring"
+class = "local"
+reason = "the path is the destination of a written file, not an input; the file carries its producer identifier (G8)"
+
+[[entry]]
+path = "alice_lol::print_export::node_to_fbx"
+class = "local"
+reason = "the path is the destination of a written file, not an input; the file carries its producer identifier (G8)"
+
+[[entry]]
+path = "alice_lol::print_export::node_to_stl"
+class = "local"
+reason = "the path is the destination of a written file, not an input; the file carries its producer identifier (G8)"
+
+[[entry]]
+path = "alice_lol::print_export::node_to_stl_dual_contouring"
+class = "local"
+reason = "the path is the destination of a written file, not an input; the file carries its producer identifier (G8)"
+
+[[entry]]
+path = "alice_lol::research_law::Bridge::new"
+class = "local"
+reason = "variable names paired by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::Observation::new"
+class = "local"
+reason = "condition names of a measured value given by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::Param::new"
+class = "local"
+reason = "a parameter name and unit given by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchLaw::evaluate"
+class = "local"
+reason = "condition names given by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchLaw::new"
+class = "local"
+reason = "a name, an expression and range names a person or a model writes (source)"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchLaw::param"
+class = "local"
+reason = "a parameter name to look up"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchLaw::validity"
+class = "local"
+reason = "a range name to look up"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchOracle::new"
+class = "local"
+reason = "condition names and a citation given by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::Var::new"
+class = "local"
+reason = "a variable name and unit given by the caller"
+
+[[entry]]
+path = "alice_lol::research_law::compare"
+class = "local"
+reason = "condition names given by the caller"
+
+[[entry]]
+path = "alice_lol::roblox_export::node_to_fbx_roblox"
+class = "local"
+reason = "the path is the destination of a written file, not an input (G8)"
+
+[[entry]]
+path = "alice_lol::roblox_export::node_to_obj_roblox"
+class = "local"
+reason = "the path is the destination of a written file, not an input (G8)"
+
+[[entry]]
+path = "alice_lol::stdlib::hardsurface::reinforcement::material_elastic_modulus_gpa"
+class = "local"
+reason = "a material name to look up in this crate's table"
+
+[[entry]]
+path = "alice_lol::stdlib::pattern::find_by_name"
+class = "local"
+reason = "a pattern name to look up in this crate's table"
+
+[[entry]]
+path = "alice_lol::units::Purpose::from_name"
+class = "local"
+reason = "a purpose name of the units declaration"
+
+[[entry]]
+path = "alice_lol::units::Unit::from_name"
+class = "local"
+reason = "a unit name of the units declaration"
+
+[[entry]]
+path = "alice_lol::audit_law::AuditLaw::law_id"
+class = "local"
+reason = "an arithmetic identifier hashed into the law's own identifier (written, not read from outside)"
+
+[[entry]]
+path = "alice_lol::research_law::ResearchLaw::law_id"
+class = "local"
+reason = "an arithmetic identifier hashed into the law's own identifier (written, not read from outside)"
+
+[[entry]]
+path = "alice_lol::law_id::semantics_id_for"
+class = "local"
+reason = "an alice-det-math identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
+
+[[entry]]
+path = "alice_lol::law_id::known_semantics_id"
+class = "local"
+reason = "an identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
+
+[[entry]]
+path = "alice_lol::geometry_id::geometry_semantics_id_for"
+class = "local"
+reason = "an alice-det-math identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
+
+[[entry]]
+path = "alice_lol::geometry_id::known_geometry_semantics_id"
+class = "local"
+reason = "an identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
+
+[[entry]]
+path = "alice_lol::intent::music_intent"
+class = "local"
+reason = "alice-synth's 8-byte MusicIntent packet, held opaquely and never decoded here; the receiver that decodes it compares the writer's identifier (alice-synth's G7, the stated residual of this crate's G7)"

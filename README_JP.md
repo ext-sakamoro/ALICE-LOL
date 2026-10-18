@@ -461,7 +461,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
 | G5 release-profile-test-leg | 適合 | The Law-bearing tests are the Law oracle targets of scripts/law_tests.sh (every file using law:: or research_law must be listed there, and each target must run … |
 | G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
-| G7 handshake-carries-id | 未確認 | no scan or test lists the crate's type-erasing boundaries or feeds a mismatched identifier, so the list below is a manual survey and not a checked fact: … |
+| G7 handshake-carries-id | 適合 | The boundaries where a published crate (alice-lol, alice-lol-macro) takes a value without its Rust type, and how each carries the writer's identifier. (a) The … |
 | G8 persisted-semantics-id | 適合 | the durable forms the workspace writes are the mesh files of print_export (STL, 3MF, FBX, and the dual-contouring STL / 3MF) and roblox_export (FBX), and the … |
 | G9 persisted-meaning-change-is-major | 未達 | the identifiers a stored form carries are all under the check: the law identifier, the geometry identifier (the export producer) and, since the G8 change, the … |
 | G10 no-run-varying-artifacts | 適合 | Law-bearing output is the library code of the published crates (alice-lol, alice-lol-macro). Two layers keep the wall clock and unseeded randomness out of it. … |
