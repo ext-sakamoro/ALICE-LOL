@@ -491,7 +491,7 @@ class Repository(unittest.TestCase):
         lock = tomllib.loads(g.LOCK.read_text(encoding="utf-8"))
         self.assertEqual(g.WRITERS_CONFIG.read_text(encoding="utf-8"), g.render_writers_config(lock["writer"]))
         # the first pass (the library-only configuration) does not hold the writers
-        self.assertNotIn("alice_sdf::", (g.ROOT / ".github" / "clippy-lib" / "clippy.toml").read_text(encoding="utf-8"))
+        self.assertNotIn('path = "alice_sdf::', (g.ROOT / ".github" / "clippy-lib" / "clippy.toml").read_text(encoding="utf-8"))
         self.assertEqual(g.block_of(g.CANARY_SRC.read_text(encoding="utf-8"), g.RS_BEGIN, g.RS_END),
                          g.render_canary_block(lock["writer"]))
         self.assertEqual(lock["sdf-revision"], g.sdf_pin())

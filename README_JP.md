@@ -463,7 +463,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G10 no-run-varying-artifacts | 適合 | Law-bearing output is the library code of the published crates (alice-lol, alice-lol-macro). Two layers keep the wall clock and unseeded randomness out of it. … |
 | G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
 | G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |
-| G13 no-unspecified-order | 未確認 | library source of alice-lol and alice-lol-macro names HashMap / HashSet only in alice-lol/src/print_export.rs (two locals, id and edges, only looked up or … |
+| G13 no-unspecified-order | 適合 | Law-bearing output here is the published crates' exports (STL / 3MF / FBX bytes). Hash order: the library code (every member's lib, binaries and examples) may … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers alice-lol's builds on ubuntu and macOS; the other workspace members' builds … |
 
 ### feature と保証の範囲

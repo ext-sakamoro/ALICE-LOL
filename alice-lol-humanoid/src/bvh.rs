@@ -40,7 +40,7 @@
 //! BVH parser + bone map converters は 参照実装の `src/bvh_import.rs` の code copy
 //! Phase H.5 で reconciliation 判断
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
@@ -448,11 +448,11 @@ impl BvhFile {
     /// `bone_map` は BVH joint name → target name (`Option`) の変換関数
     /// `None` を返す joint は結果に含まれない
     #[must_use]
-    pub fn frame_rotations_named<F>(&self, frame_idx: usize, bone_map: F) -> HashMap<String, Quat>
+    pub fn frame_rotations_named<F>(&self, frame_idx: usize, bone_map: F) -> BTreeMap<String, Quat>
     where
         F: Fn(&str) -> Option<String>,
     {
-        let mut out = HashMap::new();
+        let mut out = BTreeMap::new();
         let Some(frame) = self.frame_slice(frame_idx) else {
             return out;
         };
@@ -525,8 +525,8 @@ fn compose_rotation(channels: &[BvhChannel], channel_offset: usize, frame: &[f32
 /// Mixamo は `"mixamorig:<BoneName>"` 形式、prefix 除去して VRM naming にマップ
 /// prefix なし (Blender で prefix strip 済) も許容
 #[must_use]
-pub fn mixamo_to_vrm() -> HashMap<String, String> {
-    let mut m = HashMap::new();
+pub fn mixamo_to_vrm() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
     let pairs: &[(&str, &str)] = &[
         ("Hips", "hips"),
         ("Spine", "spine"),
@@ -562,8 +562,8 @@ pub fn mixamo_to_vrm() -> HashMap<String, String> {
 ///
 /// CMU の rig は Mixamo とほぼ同じ naming だが hip joint 名が異なる (`LHipJoint` 等)
 #[must_use]
-pub fn cmu_to_vrm() -> HashMap<String, String> {
-    let mut m = HashMap::new();
+pub fn cmu_to_vrm() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
     let pairs: &[(&str, &str)] = &[
         ("Hips", "hips"),
         ("LowerBack", "spine"),
