@@ -160,7 +160,7 @@ class Lock(unittest.TestCase):
         self.writers = [{"key": "k", "path": "alice_sdf::io::export_stl", "canonical": "alice_sdf::io::stl::export_stl",
                          "call": "alice_sdf::io::export_stl(x)"}]
         self.lock = tomllib.loads(g.render_lock("a" * 40, ["glsl"], COUNT, self.writers))
-        self.clippy = "x\n" + g.render_clippy_block(self.writers) + "\n"
+        self.clippy = g.render_writers_config(self.writers)
         self.canary = "fn a() {}\n" + g.render_canary_block(self.writers) + "\n"
 
     def check(self, lock=None, count=COUNT, pin="a" * 40, clippy=None, canary=None, feats=("glsl",)):
@@ -179,11 +179,142 @@ class Lock(unittest.TestCase):
     def test_other_features(self):
         self.assertTrue(any("features" in f for f in self.check(feats=("glsl", "hlsl"))))
 
-    def test_a_clippy_block_that_is_not_the_locks(self):
-        self.assertTrue(any("clippy_lib_gate.toml" in f for f in self.check(clippy=self.clippy.replace("export_stl", "export_ply", 1))))
+    def test_a_writers_config_missing_a_writer(self):
+        found = self.check(clippy=g.render_writers_config([]))
+        self.assertTrue(any("clippy-writers" in f and "missing ['alice_sdf::io::export_stl']" in f for f in found), found)
+
+    def test_a_writers_config_with_an_extra_entry(self):
+        extra = self.clippy.replace("]\n", '    { path = "alice_sdf::io::extra", reason = "x" },\n]\n')
+        self.assertTrue(any("extra ['alice_sdf::io::extra']" in f for f in self.check(clippy=extra)))
 
     def test_a_canary_that_is_not_the_locks(self):
         self.assertTrue(any("clippy-lib-canary" in f for f in self.check(canary=self.canary.replace("export_stl(x)", "export_stl(y)"))))
+
+
+SRC = (
+    "pub fn node_to_obj_roblox(a: u8) {\n"   # line 1
+    '    let s = "}";\n'                     # line 2: a brace in a string does not close the fn
+    "    export_obj(a);\n"                  # line 3
+    "}\n"                                   # line 4
+    "pub fn other() {\n"                    # line 5
+    "    export_obj(1);\n"                  # line 6
+    "}\n"
+)
+OPEN = [{"path": "alice_sdf::io::export_obj", "file": "alice-lol/src/roblox_export.rs", "function": "node_to_obj_roblox"}]
+
+
+def diag(file, line, path):
+    return {"reason": "compiler-message", "message": {"code": {"code": "clippy::disallowed_methods"},
+                                                     "message": f"use of a disallowed method `{path}`",
+                                                     "spans": [{"is_primary": True, "file_name": file, "line_start": line}]}}
+
+
+def artifact(name, fresh=False):
+    return {"reason": "compiler-artifact", "package_id": f"path+file:///x/{name}#0.1.0", "target": {"name": name.replace("-", "_")},
+            "fresh": fresh}
+
+
+class SecondPass(unittest.TestCase):
+    def judge(self, msgs):
+        return g.judge(msgs, {"alice-lol"}, OPEN, read=lambda p: SRC)
+
+    def test_the_open_call_once_and_a_fresh_crate(self):
+        self.assertEqual(self.judge([artifact("alice-lol"), diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj")]),
+                         ([], 1, 1))
+
+    def test_any_other_report_is_a_finding(self):
+        found, _, _ = self.judge([artifact("alice-lol"), diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj"),
+                                  diag("alice-lol/src/print_export.rs", 9, "alice_sdf::io::export_stl")])
+        self.assertTrue(any("print_export.rs:9" in f for f in found), found)
+
+    def test_the_open_call_outside_its_function_is_a_finding(self):
+        found, _, _ = self.judge([diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj"),
+                                  diag("alice-lol/src/roblox_export.rs", 6, "alice_sdf::io::export_obj")])
+        self.assertTrue(any("roblox_export.rs:6" in f for f in found), found)
+
+    def test_another_writer_inside_the_open_calls_function_is_a_finding(self):
+        found, _, _ = self.judge([diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj"),
+                                  diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_stl")])
+        self.assertTrue(any("export_stl" in f for f in found), found)
+
+    def test_the_open_call_twice_is_a_finding(self):
+        found, _, _ = self.judge([diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj")] * 2)
+        self.assertTrue(any("seen 2 time(s)" in f for f in found), found)
+
+    def test_the_open_call_missing_is_a_finding(self):
+        found, _, _ = self.judge([artifact("alice-lol")])
+        self.assertTrue(any("seen 0 time(s)" in f for f in found), found)
+
+    def test_a_cached_crate_does_not_count_as_linted(self):
+        self.assertEqual(self.judge([artifact("alice-lol", fresh=True)])[1], 0)
+
+    def test_another_lint_is_not_read(self):
+        m = diag("alice-lol/src/x.rs", 1, "x")
+        m["message"]["code"]["code"] = "clippy::max"
+        self.assertEqual(self.judge([m, diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj")])[0], [])
+
+    def test_fn_lines_skips_braces_in_strings(self):
+        self.assertEqual(g.fn_lines(SRC, "node_to_obj_roblox"), (1, 4))
+
+
+class SecondPassWiring(unittest.TestCase):
+    def test_the_check_runs_the_second_pass(self):
+        with mock.patch.object(g, "check_lock", return_value=[]), mock.patch.object(g, "sdf_count", return_value=COUNT), \
+                mock.patch.object(g, "sdf_pin", return_value="p"), \
+                mock.patch.object(g, "rustdoc", return_value=lol_doc(NODE)), \
+                mock.patch.object(g, "second_pass", return_value=["x: a writer call"]) as sp, \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            rc = g.main([])
+        sp.assert_called_once()
+        self.assertEqual(rc, 1)
+
+    def test_a_second_pass_that_linted_nothing_afresh_exits_2(self):
+        cached = [artifact("alice-lol", fresh=True)]
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol"}], "workspace_members": ["a"]})
+        with mock.patch.object(g, "clippy_json", return_value=cached), mock.patch.object(g, "clean"), \
+                mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
+            with self.assertRaises(ValueError) as e:
+                g.second_pass({"open": []}, {"writer": []})
+        self.assertIn("linted no workspace crate afresh", str(e.exception))
+
+    def test_the_second_pass_cleans_the_members_first(self):
+        meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol"}], "workspace_members": ["a"]})
+        with mock.patch.object(g, "clippy_json", return_value=[]), mock.patch.object(g, "clean") as cl, \
+                mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
+            with self.assertRaises(ValueError):
+                g.second_pass({"open": []}, {"writer": []})
+        self.assertEqual(cl.call_args_list[0].args[0], ["alice-lol"])
+
+    def test_the_second_pass_forces_the_lint_on(self):
+        with mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout="", returncode=0)) as run:
+            g.clippy_json(["-p", "x"], g.ROOT / "target")
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[-2:], ["--force-warn", "clippy::disallowed_methods"])
+        self.assertEqual(run.call_args.kwargs["env"]["CLIPPY_CONF_DIR"], str(g.WRITERS_CONF_DIR))
+
+
+class Canary(unittest.TestCase):
+    W = [{"path": "alice_sdf::io::export_stl", "call": "alice_sdf::io::export_stl(x)"},
+         {"path": "alice_sdf::io::save", "call": "alice_sdf::io::save(y)"}]
+    TEXT = "pub fn f() {\n    let _ = alice_sdf::io::export_stl(x);\n    let _ = alice_sdf::io::save(y);\n}\n"
+
+    def test_each_writer_reported_once_by_its_path(self):
+        self.assertEqual(g.canary_findings([diag("src/lib.rs", 2, "alice_sdf::io::export_stl"),
+                                            diag("src/lib.rs", 3, "alice_sdf::io::save")], self.W, self.TEXT), [])
+
+    def test_a_writer_not_reported(self):
+        out = g.canary_findings([diag("src/lib.rs", 2, "alice_sdf::io::export_stl")], self.W, self.TEXT)
+        self.assertEqual(out, ["canary line 3: alice_sdf::io::save not reported by the second pass"])
+
+    def test_a_report_by_another_path(self):
+        out = g.canary_findings([diag("src/lib.rs", 2, "alice_sdf::io::export_stl"), diag("src/lib.rs", 3, "alice_sdf::io::other")],
+                                self.W, self.TEXT)
+        self.assertTrue(any("line 3" in o for o in out), out)
+
+    def test_an_unexpected_report(self):
+        out = g.canary_findings([diag("src/lib.rs", 2, "alice_sdf::io::export_stl"), diag("src/lib.rs", 3, "alice_sdf::io::save"),
+                                 diag("src/lib.rs", 1, "alice_sdf::io::save")], self.W, self.TEXT)
+        self.assertTrue(any("unexpected" in o for o in out), out)
 
 
 class Rustdoc(unittest.TestCase):
@@ -250,10 +381,11 @@ class Repository(unittest.TestCase):
                                 lock["writer"])
         self.assertEqual(len(out), 1)
 
-    def test_the_generated_blocks_are_the_locks(self):
+    def test_the_generated_files_are_the_locks(self):
         lock = tomllib.loads(g.LOCK.read_text(encoding="utf-8"))
-        self.assertEqual(g.block_of(g.CLIPPY_DATA.read_text(encoding="utf-8"), g.BEGIN, g.END),
-                         g.render_clippy_block(lock["writer"]))
+        self.assertEqual(g.WRITERS_CONFIG.read_text(encoding="utf-8"), g.render_writers_config(lock["writer"]))
+        # the first pass (the library-only configuration) does not hold the writers
+        self.assertNotIn("alice_sdf::", (g.ROOT / ".github" / "clippy-lib" / "clippy.toml").read_text(encoding="utf-8"))
         self.assertEqual(g.block_of(g.CANARY_SRC.read_text(encoding="utf-8"), g.RS_BEGIN, g.RS_END),
                          g.render_canary_block(lock["writer"]))
         self.assertEqual(lock["sdf-revision"], g.sdf_pin())

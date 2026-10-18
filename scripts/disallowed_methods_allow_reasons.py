@@ -36,20 +36,11 @@ of prefixes, each naming the specific pattern that makes the exemption safe:
     `Instant::now` / `.elapsed()`, ALICE-Law G10), printed to the terminal and never written
     into what the binary produces — this prefix is only accepted in a file under a `src/bin/`
     directory, never in library code
-  * `unstamped-writer:` — the one call of an alice-sdf writer that cannot store LOL's producer
-    identifier yet (ALICE-Law G8: alice-sdf has no stamped OBJ writer, so `roblox_export` writes OBJ
-    with alice-sdf's own identifier only); every other alice-sdf writer is refused by the library
-    clippy (scripts/sdf_writers.py) — this prefix is only accepted in `UNSTAMPED_WRITER_FILE_REL`
 
 Only `allow` with one of these reasons may lower the lint. `#[expect(...)]` and `#[warn(...)]` on
 clippy::disallowed_methods, any of these inside `#[cfg_attr(...)]`, and an allow / expect / warn of a
 group that contains it (`clippy::all`, `clippy::style`) are refused: each turns the library clippy's
 `-D clippy::disallowed_methods` off without a reason this gate can read.
-
-The prefixes are bound to what they may cover: a statement under any prefix other than
-`unstamped-writer:` may not name an alice-sdf writer of scripts/sdf_writers.lock (ALICE-Law G8;
-otherwise `nonzero-const: x` on a wrapper would silence the writer ban), and a statement under
-`unstamped-writer:` must name one.
 
 A reason with none of these prefixes fails the gate (an exemption whose
 pattern cannot be named this way is not actually proven safe — fix the call
@@ -110,13 +101,11 @@ from __future__ import annotations
 import os
 import re
 import sys
-import tomllib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.dirname(HERE)
 
-PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "cli-report:",
-            "unstamped-writer:"]
+PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:", "raw-helper:", "cli-report:"]
 
 # the one file `raw-helper:` is accepted on; `test-probe-alternative:` is
 # additionally accepted inside a `#[cfg(test)] mod ... { }` block in any
@@ -124,7 +113,6 @@ PREFIXES = ["nonzero-const:", "both-abs:", "int-cast:", "test-probe-alternative:
 # this script today — only `src/` is — but checked the same way if that ever
 # changes, rather than silently accepting an unscoped claim)
 RAW_HELPER_FILE_REL = "alice-lol/src/raw_minmax.rs"
-UNSTAMPED_WRITER_FILE_REL = "alice-lol/src/roblox_export.rs"
 
 MEMBERS_RE = re.compile(r'members\s*=\s*\[(?P<body>[^\]]*)\]')
 MEMBER_NAME_RE = re.compile(r'"([^"]+)"')
@@ -158,7 +146,6 @@ REASON_RE = re.compile(r'reason\s*=\s*"(?P<text>(?:[^"\\]|\\.)*)"')
 ATTR_START_RE = re.compile(r"#\s*!?\s*\[")
 LEVEL_RE = re.compile(r"\b(?P<level>allow|expect|warn)\s*\(")
 GROUPS_RE = re.compile(r"\bclippy\s*::\s*(?:all|style)\b")
-LOCK_REL = "scripts/sdf_writers.lock"
 
 
 def attributes(text: str):
@@ -206,18 +193,6 @@ def level_findings(text: str, rel: str) -> list[str]:
     return out
 
 
-def writer_names(root: str) -> set[str] | None:
-    """the names of the alice-sdf writers in scripts/sdf_writers.lock (last path segment), None without the lock"""
-    path = os.path.join(root, LOCK_REL)
-    if not os.path.isfile(path):
-        return None
-    with open(path, "rb") as f:
-        lock = tomllib.load(f)
-    names = set()
-    for w in lock.get("writer", []):
-        for key in ("path", "canonical"):
-            names.add(w[key].split("::")[-1])
-    return names
 
 # `#[cfg(test)]` immediately followed by `mod <name> {` (whitespace/comments
 # between the two are not handled — rustfmt never inserts either there) —
@@ -317,12 +292,8 @@ def iter_rs_files(base: str):
                 yield os.path.join(dirpath, name)
 
 
-def check(root: str, require_lock: bool = False) -> tuple[list[str], dict[str, int]]:
+def check(root: str) -> tuple[list[str], dict[str, int]]:
     errors: list[str] = []
-    writers = writer_names(root)
-    if writers is None and require_lock:
-        return [f"error: {LOCK_REL}: 読めなかった (alice-sdf の書き出しの一覧)"], {p: 0 for p in PREFIXES}
-    writer_re = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, writers))) + r")\b") if writers else None
     counts = {p: 0 for p in PREFIXES}
     files = 0
     sites = 0
@@ -370,12 +341,6 @@ def check(root: str, require_lock: bool = False) -> tuple[list[str], dict[str, i
                         "名乗れない (caller 側が同じ prefix を自称しても検査は通さない)"
                     )
                     continue
-                if prefix == "unstamped-writer:" and rel != UNSTAMPED_WRITER_FILE_REL:
-                    errors.append(
-                        f"error: {rel}:{line}: unstamped-writer: は {UNSTAMPED_WRITER_FILE_REL} 以外の file で"
-                        "名乗れない (producer の識別子を書けない書き出しは OBJ の 1 箇所だけ)"
-                    )
-                    continue
                 if prefix == "cli-report:" and "/src/bin/" not in "/" + rel:
                     errors.append(
                         f"error: {rel}:{line}: cli-report: は src/bin/ 配下の file でしか名乗れない "
@@ -393,19 +358,6 @@ def check(root: str, require_lock: bool = False) -> tuple[list[str], dict[str, i
                     continue
 
                 counts[prefix] += 1
-                inner = m.group("inner") == "!"
-                stmt = text[m.end() :] if inner else statement_after(text, m.end())
-                if writer_re is not None:
-                    wm = writer_re.search(stmt)
-                    if prefix != "unstamped-writer:" and wm:
-                        errors.append(
-                            f"error: {rel}:{line}: {prefix} の allow が alice-sdf の書き出し ({wm.group(0)}) を隠す — "
-                            "書き出しを下げてよいのは unstamped-writer: だけ (ALICE-Law G8)"
-                        )
-                    if prefix == "unstamped-writer:" and not wm:
-                        errors.append(
-                            f"error: {rel}:{line}: unstamped-writer: の allow の下に alice-sdf の書き出しが無い"
-                        )
                 if prefix != "test-probe-alternative:":
                     inner = m.group("inner") == "!"
                     stmt = text[m.end() :] if inner else statement_after(text, m.end())
@@ -430,7 +382,7 @@ def main(argv: list[str]) -> int:
     root = DEFAULT_ROOT
     if "--root" in argv:
         root = argv[argv.index("--root") + 1]
-    errors, counts = check(root, require_lock=True)
+    errors, counts = check(root)
     for e in errors:
         print(e, file=sys.stderr)
     total = sum(counts.values())

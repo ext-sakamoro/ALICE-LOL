@@ -379,10 +379,6 @@ pub fn node_to_obj_roblox(
         export_materials: false,
         flip_uv_v: false,
     };
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "unstamped-writer: alice-sdf has no stamped OBJ writer; the file carries alice-sdf's identifier only, not LOL's producer (ALICE-Law G8 note)"
-    )]
     export_obj(&mesh, &path, &obj_config, None)?;
 
     Ok(build_stats(&mesh, &path, validation))

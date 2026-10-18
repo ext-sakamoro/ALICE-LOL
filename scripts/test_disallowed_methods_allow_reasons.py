@@ -44,7 +44,7 @@ class Check(unittest.TestCase):
         # the Scoping class below), so this writes each prefix to a location
         # where it is actually valid, not all into one plain function
         with tempfile.TemporaryDirectory() as root:
-            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "cli-report:", "unstamped-writer:")]
+            unscoped = [p for p in g.PREFIXES if p not in ("test-probe-alternative:", "raw-helper:", "cli-report:")]
             write(root, SRC, "\n".join(
                 f'#[allow(clippy::disallowed_methods, reason = "{p} x")]\nfn f{i}() {{}}\n'
                 for i, p in enumerate(unscoped)
@@ -63,10 +63,6 @@ class Check(unittest.TestCase):
             write(root, "alice-lol/src/bin/tool.rs", (
                 '#[allow(clippy::disallowed_methods, reason = "cli-report: x")]\n'
                 "fn timed() {}\n"
-            ))
-            write(root, g.UNSTAMPED_WRITER_FILE_REL, (
-                '#[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
-                "fn obj() {}\n"
             ))
             errors, counts = g.check(root)
             self.assertEqual(errors, [])
@@ -190,15 +186,6 @@ class Scoping(unittest.TestCase):
             ))
             errors, _ = g.check(root)
             self.assertTrue(any("raw-helper" in e and "名乗れない" in e for e in errors))
-
-    def test_unstamped_writer_outside_the_designated_file_fails(self):
-        with tempfile.TemporaryDirectory() as root:
-            write(root, SRC, (
-                '#[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
-                "fn w() {}\n"
-            ))
-            errors, _ = g.check(root)
-            self.assertTrue(any("unstamped-writer" in e and "名乗れない" in e for e in errors), errors)
 
     def test_raw_helper_on_the_designated_file_passes(self):
         with tempfile.TemporaryDirectory() as root:
@@ -325,53 +312,20 @@ class RealRepo(unittest.TestCase):
 
 
 
-LOCK = (
-    '[[writer]]\nkey = "src/io/stl.rs::export_stl"\npath = "alice_sdf::io::export_stl"\n'
-    'canonical = "alice_sdf::io::stl::export_stl"\ncall = "c"\n\n'
-    '[[writer]]\nkey = "src/io/obj.rs::export_obj"\npath = "alice_sdf::io::export_obj"\n'
-    'canonical = "alice_sdf::io::obj::export_obj"\ncall = "c"\n'
-)
 WRAPPER = "pub fn w(m: &Mesh, p: &Path) {\n    let _ = alice_sdf::io::export_stl(m, p);\n}\n"
 
 
 class LintLevel(unittest.TestCase):
-    """only a reasoned #[allow] lowers clippy::disallowed_methods, and only unstamped-writer: covers an
-    alice-sdf writer (ALICE-Law G8)"""
+    """only a reasoned #[allow] lowers clippy::disallowed_methods"""
 
-    def errors(self, rel, text, lock=True):
+    def errors(self, rel, text):
         with tempfile.TemporaryDirectory() as root:
             # one valid site, so a fixture is never "no allow found"
             write(root, "alice-lol/src/lib.rs", (
                 '#[allow(clippy::disallowed_methods, reason = "nonzero-const: 2.0")]\n'
                 "fn base(a: f32) -> f32 { a.max(2.0) }\n"))
-            if lock:
-                write(root, g.LOCK_REL, LOCK)
             write(root, rel, text)
-            return g.check(root, require_lock=True)[0]
-
-    def test_a_writer_under_another_prefix_is_refused(self):
-        errs = self.errors("alice-lol/src/w.rs",
-                           '#[allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n' + WRAPPER)
-        self.assertTrue(any("export_stl" in e and "unstamped-writer:" in e for e in errs), errs)
-
-    def test_a_writer_named_in_an_inner_allow_scope_is_refused(self):
-        errs = self.errors("alice-lol/src/w.rs",
-                           '#![allow(clippy::disallowed_methods, reason = "nonzero-const: x")]\n' + WRAPPER)
-        self.assertTrue(any("export_stl" in e for e in errs), errs)
-
-    def test_unstamped_writer_over_a_writer_in_its_file_passes(self):
-        errs = self.errors(g.UNSTAMPED_WRITER_FILE_REL, (
-            "fn f() {\n"
-            '    #[allow(clippy::disallowed_methods, reason = "unstamped-writer: no stamped OBJ")]\n'
-            "    export_obj(&mesh, &path, &cfg, None)?;\n}\n"))
-        self.assertEqual(errs, [])
-
-    def test_unstamped_writer_over_no_writer_is_refused(self):
-        errs = self.errors(g.UNSTAMPED_WRITER_FILE_REL, (
-            "fn f() {\n"
-            '    #[allow(clippy::disallowed_methods, reason = "unstamped-writer: x")]\n'
-            "    let y = a.max(b);\n}\n"))
-        self.assertTrue(any("書き出しが無い" in e for e in errs), errs)
+            return g.check(root)[0]
 
     def test_expect_is_refused(self):
         errs = self.errors("alice-lol/src/w.rs", "#[expect(clippy::disallowed_methods)]\n" + WRAPPER)
@@ -412,10 +366,6 @@ class LintLevel(unittest.TestCase):
         errs = self.errors("alice-lol/src/w.rs",
                            '#[cfg_attr(feature = "a\\"]", expect(clippy::disallowed_methods))]\n' + WRAPPER)
         self.assertTrue(any("cfg_attr" in e and "条件付き" in e for e in errs), errs)
-
-    def test_the_lock_is_required_when_asked(self):
-        errs = self.errors("alice-lol/src/w.rs", "fn f() {}\n", lock=False)
-        self.assertTrue(any(g.LOCK_REL in e for e in errs), errs)
 
 
 if __name__ == "__main__":
