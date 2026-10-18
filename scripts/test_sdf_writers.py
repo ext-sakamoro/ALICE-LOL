@@ -248,6 +248,13 @@ class SecondPass(unittest.TestCase):
     def test_a_cached_crate_does_not_count_as_linted(self):
         self.assertEqual(self.judge([artifact("alice-lol", fresh=True)])[1], 0)
 
+    def test_an_unexpected_cfg_is_a_finding(self):
+        m = diag("alice-lol/src/x.rs", 7, "x")
+        m["message"]["code"]["code"] = "unexpected_cfgs"
+        m["message"]["message"] = "unexpected `cfg` condition value: `nonexistent`"
+        found, _, _ = self.judge([m, diag("alice-lol/src/roblox_export.rs", 3, "alice_sdf::io::export_obj")])
+        self.assertTrue(any("x.rs:7" in f and "does not declare" in f for f in found), found)
+
     def test_another_lint_is_not_read(self):
         m = diag("alice-lol/src/x.rs", 1, "x")
         m["message"]["code"]["code"] = "clippy::max"
@@ -293,6 +300,36 @@ class CfgCoverage(unittest.TestCase):
         self.assertEqual(self.found('#[cfg(not(feature = "glsl"))]\nfn w() {}\n', rel="alice-lol-humanoid/src/x.rs")[0], [])
 
 
+class DepInfo(unittest.TestCase):
+    def test_the_files_rustc_read_including_include_and_path(self):
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            (t / "deps").mkdir()
+            rmeta = t / "deps" / "libalice_lol-abc.rmeta"
+            rmeta.write_text("")
+            src = g.ROOT / "alice-lol" / "src" / "lib.rs"
+            hidden = g.ROOT / "scripts" / "sdf_writers.py"   # any workspace file stands for one pulled in by include!
+            outside = g.ROOT.parent / "ALICE-SDF" / "src" / "lib.rs"
+            (t / "deps" / "alice_lol-abc.d").write_text(
+                f"{rmeta}: {src} {outside} {hidden}\n\n{src}:\n")
+            msgs = [{"reason": "compiler-artifact", "fresh": False, "package_id": "path+file:///x/alice-lol#0.5.0",
+                     "filenames": [str(rmeta)]}]
+            files, units = g.dep_info_files(msgs, {"alice-lol"})
+        self.assertEqual(units, 1)
+        self.assertEqual(sorted(files), ["alice-lol/src/lib.rs"], "only .rs files of the workspace")
+
+    def test_a_missing_dep_info_is_an_error(self):
+        msgs = [{"reason": "compiler-artifact", "fresh": False, "package_id": "path+file:///x/alice-lol#0.5.0",
+                 "filenames": [str(g.ROOT / "target" / "nowhere" / "libalice_lol-zzz.rmeta")]}]
+        with self.assertRaises(ValueError):
+            g.dep_info_files(msgs, {"alice-lol"})
+
+    def test_cached_and_foreign_units_are_not_read(self):
+        msgs = [{"reason": "compiler-artifact", "fresh": True, "package_id": "path+file:///x/alice-lol#0.5.0", "filenames": ["/x"]},
+                {"reason": "compiler-artifact", "fresh": False, "package_id": "registry+https://x#glam@0.29", "filenames": ["/y"]}]
+        self.assertEqual(g.dep_info_files(msgs, {"alice-lol"}), ({}, 0))
+
+
 class SecondPassWiring(unittest.TestCase):
     def test_the_check_runs_the_second_pass(self):
         with mock.patch.object(g, "check_lock", return_value=[]), mock.patch.object(g, "sdf_count", return_value=COUNT), \
@@ -309,7 +346,7 @@ class SecondPassWiring(unittest.TestCase):
         meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
                            "workspace_members": ["a"]})
         with mock.patch.object(g, "clippy_json", return_value=cached), mock.patch.object(g, "clean"), \
-                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
+                mock.patch.object(g, "dep_info_files", return_value=({"a.rs": "#[cfg(test)] mod t {}"}, 1)), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError) as e:
                 g.second_pass({"open": []}, {"writer": []})
@@ -322,32 +359,33 @@ class SecondPassWiring(unittest.TestCase):
 
         def cj(args, target, manifest=g.ROOT / "Cargo.toml"):
             calls.append(args)
-            return [artifact("alice-lol")] if len(calls) <= 2 else [artifact("alice-lol", fresh=True)]
+            return [artifact("alice-lol")] if len(calls) == 1 else [artifact("alice-lol", fresh=True)]
         with mock.patch.object(g, "clippy_json", side_effect=cj), mock.patch.object(g, "clean"), \
-                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
+                mock.patch.object(g, "dep_info_files", return_value=({"a.rs": "#[cfg(test)] mod t {}"}, 1)), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError) as e:
                 g.second_pass({"open": []}, {"writer": []})
         self.assertIn("default-feature leg", str(e.exception))
         self.assertIn("--all-features", calls[0])
-        self.assertNotIn("--all-features", calls[2])
-        self.assertNotIn("--no-default-features", calls[2])
+        self.assertIn("--examples", calls[0])
+        self.assertNotIn("--all-features", calls[1])
+        self.assertNotIn("--no-default-features", calls[1])
 
     def test_no_cfg_read_in_the_library_sources_is_compared_nothing(self):
         meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
                            "workspace_members": ["a"]})
         with mock.patch.object(g, "clippy_json", return_value=[artifact("alice-lol")]), mock.patch.object(g, "clean"), \
-                mock.patch.object(g, "library_sources", return_value={"a.rs": "fn f() {}"}), \
+                mock.patch.object(g, "dep_info_files", return_value=({"a.rs": "fn f() {}"}, 1)), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError) as e:
                 g.second_pass({"open": []}, {"writer": []})
-        self.assertIn("no cfg predicate read", str(e.exception))
+        self.assertIn("no cfg predicate or no dep-info read", str(e.exception))
 
     def test_the_second_pass_cleans_the_members_first(self):
         meta = json.dumps({"packages": [{"id": "a", "name": "alice-lol", "manifest_path": str(g.ROOT / "Cargo.toml")}],
                            "workspace_members": ["a"]})
         with mock.patch.object(g, "clippy_json", return_value=[]), mock.patch.object(g, "clean") as cl, \
-                mock.patch.object(g, "library_sources", return_value={"a.rs": "#[cfg(test)] mod t {}"}), \
+                mock.patch.object(g, "dep_info_files", return_value=({"a.rs": "#[cfg(test)] mod t {}"}, 1)), \
                 mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout=meta, returncode=0)):
             with self.assertRaises(ValueError):
                 g.second_pass({"open": []}, {"writer": []})
@@ -357,7 +395,7 @@ class SecondPassWiring(unittest.TestCase):
         with mock.patch.object(g.subprocess, "run", return_value=mock.Mock(stdout="", returncode=0)) as run:
             g.clippy_json(["-p", "x"], g.ROOT / "target")
         cmd = run.call_args.args[0]
-        self.assertEqual(cmd[-2:], ["--force-warn", "clippy::disallowed_methods"])
+        self.assertEqual(cmd[-4:], ["--force-warn", "clippy::disallowed_methods", "--force-warn", "unexpected_cfgs"])
         self.assertEqual(run.call_args.kwargs["env"]["CLIPPY_CONF_DIR"], str(g.WRITERS_CONF_DIR))
 
 
