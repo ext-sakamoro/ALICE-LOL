@@ -80,6 +80,21 @@ mutant = "measured 2026-10-18, reverted: LOL_EXPORT_STAMP without a producer (St
 since = ""
 note = "the durable forms the crate writes are the mesh files of print_export (STL, 3MF, FBX, and the dual-contouring STL / 3MF) and roblox_export (FBX); each carries alice-sdf's mesh identifier as the primary (Provenance::sdf, alice-sdf's G8 identifier of the stored bytes) and LOL_GEOMETRY_SEMANTICS_ID as the producer through alice-sdf's Stamp (STL header version 2 with the producer in bytes 48..80, a second 3MF model metadata entry alice:producer_semantics_id, an FBX ProducerSemanticsId string beside Creator). The test reads each one back through alice_sdf::provenance::read_with_producer and check_producer (another producer is ProducerMismatch naming both), reads the STL header bytes directly and with stl_io (and checks that only the version byte and the producer slot differ from alice-sdf's plain STL of the same mesh), walks the stored 3MF zip itself for both metadata entries, reads the FBX with fbxcel, and pins each writer's whole file by SHA-256 (STL / 3MF / FBX also in release). The producer is the crate's G6 geometry identifier rather than a separate stored-form identifier: the stored bytes are alice-sdf's mesh formats, whose meaning alice-sdf's primary identifier names, and the producer names the LOL meaning that generated the shape. Reader side n/a: the crate reads none of these files back (no importer for STL, 3MF or FBX in library src; the consumers are slicers and DCC tools), so it has no accept / refuse policy for unidentified data. The OBJ writer of roblox_export (node_to_obj_roblox / lol_to_obj_roblox) writes through alice-sdf's export_obj, which stores the primary identifier only (alice-sdf has no stamped OBJ writer yet, so no producer); it gets the producer once alice-sdf offers one"
 reference_repo = ""
+writers = [
+    "alice-lol/src/print_export.rs::node_to_stl",
+    "alice-lol/src/print_export.rs::node_to_3mf",
+    "alice-lol/src/print_export.rs::node_to_fbx",
+    "alice-lol/src/print_export.rs::lol_to_stl",
+    "alice-lol/src/print_export.rs::lol_to_3mf",
+    "alice-lol/src/print_export.rs::lol_to_fbx",
+    "alice-lol/src/print_export.rs::node_to_stl_dual_contouring",
+    "alice-lol/src/print_export.rs::node_to_3mf_dual_contouring",
+    "alice-lol/src/roblox_export.rs::node_to_obj_roblox",
+    "alice-lol/src/roblox_export.rs::node_to_fbx_roblox",
+    "alice-lol/src/roblox_export.rs::lol_to_obj_roblox",
+    "alice-lol/src/roblox_export.rs::lol_to_fbx_roblox",
+]
+legacy = "none"
 
 [G9]
 status = "fail-known"
