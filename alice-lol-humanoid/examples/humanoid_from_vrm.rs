@@ -2,19 +2,19 @@
 //!
 //! Usage:
 //! ```text
-//! VRM_PATH=path/to/character.vrm cargo run -p alice-lol-humanoid \
-//!     --features vrm --example humanoid_from_vrm
+//! cargo run -p alice-lol-humanoid --features vrm --example humanoid_from_vrm -- \
+//!     path/to/character.vrm
 //! ```
 
 use alice_lol::{eval, Vec3};
 use alice_lol_humanoid::{HumanoidTemplate, Joint};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Ok(path) = std::env::var("VRM_PATH") else {
-        eprintln!("VRM_PATH env var not set");
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("no VRM file given");
         eprintln!(
-            "Usage: VRM_PATH=path/to/character.vrm cargo run -p alice-lol-humanoid \
-             --features vrm --example humanoid_from_vrm"
+            "Usage: cargo run -p alice-lol-humanoid --features vrm --example humanoid_from_vrm -- \
+             path/to/character.vrm"
         );
         return Ok(());
     };

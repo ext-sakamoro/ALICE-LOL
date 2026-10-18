@@ -100,7 +100,8 @@ def main(argv: list[str] | None = None) -> int:
     full = subprocess.run(["cargo", "metadata", "--format-version", "1", "--locked", "--offline",
                            "--manifest-path", a.manifest_path], capture_output=True, text=True)
     if full.returncode != 0:
-        print("entropy-deps-guard: transitive (report only): the resolution could not be read offline from the lock")
+        print("entropy-deps-guard: transitive (informational, not a check): the resolution could not be read offline "
+              "from the lock here (no registry cache), so no count is reported")
     else:
         reach = transitive(json.loads(full.stdout))
         print(f"entropy-deps-guard: transitive (report only): {len(reach)} denied crate(s) reachable through "

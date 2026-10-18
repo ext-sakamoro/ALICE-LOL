@@ -351,3 +351,115 @@ path = "std::collections::HashSet::iter"
 [[form]]
 text = "hs_mut.drain()"
 path = "std::collections::HashSet::drain"
+
+[[method]]
+path = "std::collections::HashSet::union"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashSet::difference"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashSet::intersection"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashSet::symmetric_difference"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashSet::retain"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashSet::extract_if"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashMap::retain"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::collections::HashMap::extract_if"
+reason = "ALICE-Law G10: visits the entries of a HashMap / HashSet in the order of its per-run RandomState seed (an iterator, or a closure run per entry); use a BTreeMap / BTreeSet"
+
+[[method]]
+path = "std::process::id"
+reason = "ALICE-Law G10: an OS-assigned value that differs per run; take it as an explicit input"
+
+[[method]]
+path = "std::thread::Thread::id"
+reason = "ALICE-Law G10: an OS-assigned value that differs per run; take it as an explicit input"
+
+[[method]]
+path = "std::env::var"
+reason = "ALICE-Law G10: the ambient environment of the run; take the value as an explicit input"
+
+[[method]]
+path = "std::env::var_os"
+reason = "ALICE-Law G10: the ambient environment of the run; take the value as an explicit input"
+
+[[method]]
+path = "std::env::vars"
+reason = "ALICE-Law G10: the ambient environment of the run; take the value as an explicit input"
+
+[[method]]
+path = "std::env::vars_os"
+reason = "ALICE-Law G10: the ambient environment of the run; take the value as an explicit input"
+
+[[form]]
+text = "hs.union(&hs_o)"
+path = "std::collections::HashSet::union"
+
+[[form]]
+text = "hs.difference(&hs_o)"
+path = "std::collections::HashSet::difference"
+
+[[form]]
+text = "hs.intersection(&hs_o)"
+path = "std::collections::HashSet::intersection"
+
+[[form]]
+text = "hs.symmetric_difference(&hs_o)"
+path = "std::collections::HashSet::symmetric_difference"
+
+[[form]]
+text = "hs_mut.retain(|_| true)"
+path = "std::collections::HashSet::retain"
+
+[[form]]
+text = "hs_mut.extract_if(|_| false)"
+path = "std::collections::HashSet::extract_if"
+
+[[form]]
+text = "hm_mut.retain(|_, _| true)"
+path = "std::collections::HashMap::retain"
+
+[[form]]
+text = "hm_mut.extract_if(|_, _| false)"
+path = "std::collections::HashMap::extract_if"
+
+[[form]]
+text = "std::process::id()"
+path = "std::process::id"
+
+[[form]]
+text = "std::thread::current().id()"
+path = "std::thread::Thread::id"
+
+[[form]]
+text = "std::env::var(\"X\")"
+path = "std::env::var"
+
+[[form]]
+text = "std::env::var_os(\"X\")"
+path = "std::env::var_os"
+
+[[form]]
+text = "std::env::vars()"
+path = "std::env::vars"
+
+[[form]]
+text = "std::env::vars_os()"
+path = "std::env::vars_os"

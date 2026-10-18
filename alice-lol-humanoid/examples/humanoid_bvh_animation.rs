@@ -2,12 +2,12 @@
 //!
 //! Usage:
 //! ```text
-//! BVH_PATH=path/to/motion.bvh cargo run -p alice-lol-humanoid \
-//!     --example humanoid_bvh_animation
+//! cargo run -p alice-lol-humanoid --example humanoid_bvh_animation -- \
+//!     path/to/motion.bvh [path/to/bind-pose.vrm]
 //! ```
 //!
-//! Optional `VRM_PATH`: 設定すれば VRM bind pose を使用 (feature `vrm` 必要)、
-//! 未設定なら [`HumanoidTemplate::default`] を bind pose に使う
+//! 2 番目の引数 (VRM) を渡せば VRM bind pose を使用 (feature `vrm` 必要)、
+//! 無ければ [`HumanoidTemplate::default`] を bind pose に使う
 //!
 //! BVH の bone naming は Mixamo と CMU を試行、どちらかがヒットした mapping を採用
 
@@ -17,16 +17,16 @@ use alice_lol_humanoid::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Ok(bvh_path) = std::env::var("BVH_PATH") else {
-        eprintln!("BVH_PATH env var not set");
+    let Some(bvh_path) = std::env::args().nth(1) else {
+        eprintln!("no BVH file given");
         eprintln!(
-            "Usage: BVH_PATH=path/to/motion.bvh cargo run -p alice-lol-humanoid \
-             --example humanoid_bvh_animation"
+            "Usage: cargo run -p alice-lol-humanoid --example humanoid_bvh_animation -- \
+             path/to/motion.bvh [path/to/bind-pose.vrm]"
         );
         return Ok(());
     };
 
-    // bind pose 選択: VRM_PATH 有 (feature vrm 必要) → VRM、無 → default
+    // bind pose 選択: 2 番目の引数 (VRM) 有 (feature vrm 必要) → VRM、無 → default
     let bind_pose = load_bind_pose()?;
     println!("bind pose joints:  {}", bind_pose.joints.len());
     println!("bind pose bones:   {}", bind_pose.bones.len());
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(feature = "vrm")]
 fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
-    if let Ok(vrm_path) = std::env::var("VRM_PATH") {
+    if let Some(vrm_path) = std::env::args().nth(2) {
         println!("VRM bind pose from: {vrm_path}");
         match HumanoidTemplate::from_vrm(&vrm_path)? {
             Some(t) => return Ok(t),
@@ -94,15 +94,15 @@ fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
             }
         }
     }
-    println!("VRM_PATH 未設定 (or 抽出失敗) → default template 使用");
+    println!("VRM の引数なし (or 抽出失敗) → default template 使用");
     Ok(HumanoidTemplate::default())
 }
 
 #[cfg(not(feature = "vrm"))]
 #[allow(clippy::unnecessary_wraps)] // feature vrm 版と signature を揃える
 fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
-    if std::env::var("VRM_PATH").is_ok() {
-        eprintln!("VRM_PATH set だが feature vrm off → --features vrm 追加要");
+    if std::env::args().nth(2).is_some() {
+        eprintln!("VRM の引数があるが feature vrm off → --features vrm 追加要");
     }
     println!("default template を bind pose に使用");
     Ok(HumanoidTemplate::default())

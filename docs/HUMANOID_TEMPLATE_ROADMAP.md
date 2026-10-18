@@ -86,11 +86,11 @@ MVP = H.0 - H.4 (合計 26-44 h、~1 週間 sprint) H.5 は未決定、H.6 は M
 - 参照実装の `vrm_import.rs` の `VrmFile::extract_humanoid_bones()` 相当 logic を移植 or 抽出 (code copy first、H.5 で共通化検討)
 - `HumanoidTemplate::from_vrm(path)` method (VRM 15 bone → joint position 変換、`from_vrm_bones()` 相当)
 - 公開できる VRM の test asset を選んで integration test を置く
-- `examples/humanoid_from_vrm.rs` (env `VRM_PATH` で任意 VRM を読み込み PNG 出力)
+- `examples/humanoid_from_vrm.rs` (引数で渡した任意 VRM を読み込み PNG 出力)
 
 **成功基準**
 - 実 VRM から HumanoidTemplate 生成成功、`to_sdf()` で SdfNode 生成
-- integration test (VRM_PATH env 経由) で PNG 生成
+- integration test (VRM の path を引数で渡す) で PNG 生成
 - feature `vrm` off の場合ビルド green (optional dep 分離検証)
 
 **想定工数**: 4-8 h

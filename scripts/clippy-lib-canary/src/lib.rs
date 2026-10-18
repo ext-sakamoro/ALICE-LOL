@@ -213,3 +213,60 @@ pub fn set_for(hs: Hs) -> u32 {
     n
 }
 
+// ALICE-Law G10: more hash-order forms, OS-assigned values and the environment (scripts/clippy_lib_gate.toml)
+pub fn set_union(hs: &Hs, hs_o: &Hs) -> usize {
+    hs.union(&hs_o).count()
+}
+
+pub fn set_difference(hs: &Hs, hs_o: &Hs) -> usize {
+    hs.difference(&hs_o).count()
+}
+
+pub fn set_intersection(hs: &Hs, hs_o: &Hs) -> usize {
+    hs.intersection(&hs_o).count()
+}
+
+pub fn set_symmetric_difference(hs: &Hs, hs_o: &Hs) -> usize {
+    hs.symmetric_difference(&hs_o).count()
+}
+
+pub fn set_retain(hs_mut: &mut Hs) {
+    hs_mut.retain(|_| true);
+}
+
+pub fn set_extract_if(hs_mut: &mut Hs) -> usize {
+    hs_mut.extract_if(|_| false).count()
+}
+
+pub fn map_retain(hm_mut: &mut Hm) {
+    hm_mut.retain(|_, _| true);
+}
+
+pub fn map_extract_if(hm_mut: &mut Hm) -> usize {
+    hm_mut.extract_if(|_, _| false).count()
+}
+
+pub fn os_process_id() -> u32 {
+    std::process::id()
+}
+
+pub fn os_thread_id() -> std::thread::ThreadId {
+    std::thread::current().id()
+}
+
+pub fn env_var() -> bool {
+    std::env::var("X").is_ok()
+}
+
+pub fn env_var_os() -> bool {
+    std::env::var_os("X").is_some()
+}
+
+pub fn env_vars() -> usize {
+    std::env::vars().count()
+}
+
+pub fn env_vars_os() -> usize {
+    std::env::vars_os().count()
+}
+
