@@ -127,6 +127,7 @@ python3 scripts/test_license_check.py
 python3 scripts/test_fuzz_runs.py
 python3 scripts/license_check.py
 python3 scripts/test_published_source_check.py
+python3 scripts/test_package_integrity.py
 
 step "law-readme-block.yml: README ALICE-Law block (tests, then the check the job runs, at the block's ALICE-Law pin)"
 python3 scripts/test_law_readme_block_check.py
@@ -409,7 +410,10 @@ step "security-audit.yml / audit: Run cargo audit"
 step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
 python3 scripts/published_source_check.py
 python3 scripts/license_check.py --package
+python3 scripts/package_integrity.py --member alice-lol
 REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
+python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt
+diff -u target/patches-fresh.txt target/registry-consumer/patches.txt
 
 step "conformance.yml / corpus: score the reference implementation (corpus + probes) and the controls"
 ( export PYTHON="$conf_py" MIN_VECTORS="$(sed -n 's/^ *MIN_VECTORS: *//p' .github/workflows/conformance.yml)"

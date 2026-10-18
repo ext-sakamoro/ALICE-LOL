@@ -66,7 +66,10 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: release-tools
-          sparse-checkout: scripts/release_siblings.py
+          sparse-checkout: |
+            scripts/release_siblings.py
+            scripts/package_integrity.py
+            scripts/alice_siblings_check.py
           sparse-checkout-cone-mode: false
 
       - name: Install Rust toolchain
@@ -101,6 +104,11 @@ jobs:
       - name: Lock matches the siblings
         working-directory: ALICE-LOL
         run: cargo metadata --locked --format-version 1 > /dev/null
+
+      # nothing that builds only against an unpublished sibling version is released
+      # (scripts/package_integrity.py --publish-gate: fails while any dependency is blocked)
+      - name: Publish gate (no dependency satisfied only by an unpublished sibling)
+        run: python3 release-tools/scripts/package_integrity.py --root ALICE-LOL --member ${{ needs.detect-crate.outputs.crate }} --publish-gate
 
       - name: cargo publish --dry-run
         working-directory: ALICE-LOL/${{ needs.detect-crate.outputs.crate }}
