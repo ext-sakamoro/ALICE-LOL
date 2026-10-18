@@ -276,6 +276,8 @@ pub fn env_vars_os() -> usize {
 pub fn sdf_writers() {
     let _ = alice_sdf::io::save_abm(todo!(), "x");
     let _ = alice_sdf::io::save_abm_with_lods(todo!(), todo!(), "x");
+    let _ = alice_sdf::io::save_abm_with_lods_with_provenance(todo!(), todo!(), "x", todo!());
+    let _ = alice_sdf::io::save_abm_with_provenance(todo!(), "x", todo!());
     let _ = alice_sdf::io::AbmHeader::to_bytes(todo!());
     let _ = alice_sdf::io::export_alembic(todo!(), "x", todo!());
     let _ = alice_sdf::io::save_asdf(todo!(), "x");
@@ -292,6 +294,7 @@ pub fn sdf_writers() {
     let _ = alice_sdf::io::iges::export_iges("x", todo!(), todo!());
     let _ = alice_sdf::io::iges::export_iges_with_provenance("x", todo!(), todo!(), todo!());
     let _ = alice_sdf::io::save_asdf_json(todo!(), "x");
+    let _ = alice_sdf::io::save_asdf_json_with_provenance(todo!(), "x", todo!());
     let _ = alice_sdf::io::meshopt_gltf::export_glb_meshopt(todo!(), "x", todo!());
     let _ = alice_sdf::io::meshopt_gltf::export_glb_meshopt_bytes(todo!(), todo!());
     let _ = alice_sdf::io::meshopt_gltf::export_glb_meshopt_bytes_skinned(todo!(), todo!(), todo!());
@@ -326,6 +329,8 @@ pub fn sdf_writers() {
     let _ = alice_sdf::io::vox::save_vox("x", todo!());
     let _ = alice_sdf::mesh::save_lod_chain(todo!(), "x");
     let _ = alice_sdf::mesh::save_lod_chain_metadata(todo!(), "x");
+    let _ = alice_sdf::mesh::save_lod_chain_metadata_with_provenance(todo!(), "x", todo!());
+    let _ = alice_sdf::mesh::save_lod_chain_with_provenance(todo!(), "x", todo!());
     let _ = alice_sdf::neural::NeuralSdf::save(todo!(), &mut std::io::sink());
     let _ = alice_sdf::validity::export_step_validated("x", todo!(), todo!(), todo!());
     let _ = alice_sdf::validity::export_step_validated_with_provenance("x", todo!(), todo!(), todo!(), todo!());

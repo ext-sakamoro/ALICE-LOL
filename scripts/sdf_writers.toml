@@ -6,25 +6,13 @@ nightly = "nightly-2026-09-26"
 # a writer's name, as alice-sdf's scripts/provenance_writers.py names one
 name = '(?:export|save|write)\w*|to_bytes'
 
-# The calls of a writer library code may still make, each exactly once: the second pass fails on any other
-# report, and on one of these seen zero or twice times. Today one: alice-sdf has no stamped OBJ writer, so
-# roblox_export writes OBJ with alice-sdf's identifier only (no LOL producer); it leaves when alice-sdf
-# gains export_obj_with_stamp
-[[open]]
-path = "alice_sdf::io::export_obj"
-file = "alice-lol/src/roblox_export.rs"
-function = "node_to_obj_roblox"
-reason = "alice-sdf has no stamped OBJ writer yet"
+# The calls of a writer library code may still make, each exactly once ([[open]]: path, file, function, reason):
+# none; the second pass fails on any report
 
 # Where alice-sdf's own writer count and its public API (with the features alice-lol enables) disagree,
 # each entry says what the item is. kind: writer (treated as one), not-a-writer, not-built (counted by
 # alice-sdf but not compiled with alice-lol's features; when alice-lol starts building it, the entry is
 # stale and the run fails until the item is classified)
-
-[[outside]]
-key = "src/neural.rs::save"
-kind = "writer"
-reason = "NeuralSdf::save writes the network's weights to a stream; alice-sdf's count does not scan neural.rs"
 
 [[outside]]
 key = "src/compiled/glsl/transpiler.rs::export_unity_shader_graph"

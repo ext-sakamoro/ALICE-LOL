@@ -18,7 +18,9 @@
 
 use crate::print_export::{node_to_mesh, ExportError, Mesh, PrintConfig, LOL_EXPORT_STAMP};
 use crate::SdfNode;
-use alice_sdf::io::{export_fbx_with_stamp, export_obj, FbxConfig, FbxUpAxis, ObjConfig};
+use alice_sdf::io::{
+    export_fbx_with_stamp, export_obj_with_stamp, FbxConfig, FbxUpAxis, ObjConfig,
+};
 use glam::Vec3;
 use std::path::Path;
 
@@ -379,7 +381,7 @@ pub fn node_to_obj_roblox(
         export_materials: false,
         flip_uv_v: false,
     };
-    export_obj(&mesh, &path, &obj_config, None)?;
+    export_obj_with_stamp(&mesh, &path, &obj_config, None, &LOL_EXPORT_STAMP)?;
 
     Ok(build_stats(&mesh, &path, validation))
 }

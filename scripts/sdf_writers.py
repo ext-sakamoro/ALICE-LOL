@@ -17,8 +17,8 @@ writer out of alice-lol in two ways:
     cleaned first each time and at least one linted afresh. Code under a cfg neither run compiles is refused
     in library sources: a predicate may name only features (all on, or all under `not` and none a default)
     and `test`; `clippy`, a target, `debug_assertions` or any other cfg is a finding (this also covers a
-    `pub use` the host-only rustdoc check would not see). The
-    one call left is named in [[open]] (file, function, writer) and must occur exactly once. The canary
+    `pub use` the host-only rustdoc check would not see). A call
+    left would be named in [[open]] (file, function, writer) and must occur exactly once; there is none. The canary
     crate is linted the same way and must report each writer once by its own path. Not seen: a call inside
     the expansion of a macro defined in a dependency (clippy does not report those; no dependency of
     alice-lol exports one that writes), and test code (tests may write unstamped fixtures)

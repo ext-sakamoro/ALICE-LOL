@@ -81,6 +81,14 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
         };
         alice_lol::roblox_export::node_to_fbx_roblox(n, p, &rc).unwrap();
     }));
+    #[cfg(feature = "roblox")]
+    w.push(("node_to_obj_roblox", "obj", |n, p, c| {
+        let rc = alice_lol::roblox_export::RobloxConfig {
+            resolution: c.resolution,
+            ..Default::default()
+        };
+        alice_lol::roblox_export::node_to_obj_roblox(n, p, &rc).unwrap();
+    }));
     w
 }
 
@@ -109,6 +117,10 @@ const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_fbx_roblox",
         "faec2cb8129daa21375e9c5e438736983ab5bace9b1f79cdedc70f444dce512b",
+    ),
+    (
+        "node_to_obj_roblox",
+        "a2a6a5dd71c79de96d4772dfd065cb9b4041d7c0b6109db92709be3f329fef2a",
     ),
 ];
 
@@ -260,6 +272,35 @@ fn fbxcel_reads_the_producer_beside_the_creator() {
         format!("alice:producer_semantics_id={}", lol_producer().hex())
     );
     std::fs::remove_file(&path).ok();
+}
+
+/// The OBJ of `roblox_export` carries the producer in its header comment, read as text here (not through
+/// alice-sdf's reader): `alice:producer_semantics_id=<hex of LOL_GEOMETRY_SEMANTICS_ID>` beside the primary
+#[cfg(feature = "roblox")]
+#[test]
+fn the_obj_header_comment_carries_the_producer() {
+    let path = temp("header.obj");
+    let rc = alice_lol::roblox_export::RobloxConfig {
+        resolution: config().resolution,
+        ..Default::default()
+    };
+    alice_lol::roblox_export::node_to_obj_roblox(&node(), &path, &rc).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).ok();
+    let hex = LOL_GEOMETRY_SEMANTICS_ID
+        .iter()
+        .fold(String::new(), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        });
+    let header: Vec<&str> = text.lines().take_while(|l| l.starts_with('#')).collect();
+    assert!(
+        header.iter().any(
+            |l| l.contains(&format!("alice:producer_semantics_id={hex}"))
+                && l.contains("alice:semantics_id=")
+        ),
+        "{header:?}"
+    );
 }
 
 #[test]
