@@ -424,6 +424,12 @@ jobs:
         run: |
           python3 scripts/test_sdf_writers.py
           python3 scripts/sdf_writers.py
+      # ALICE-Law G7: every public entry point of alice-lol taking text, bytes or a reader is classified in
+      # scripts/g7_boundaries.toml (the same rustdoc JSON), and the published crates' sources hold no foreign form
+      - name: g7 boundaries (tests, then the check)
+        run: |
+          python3 scripts/test_g7_boundaries.py
+          python3 scripts/g7_boundaries.py
 
   degenerate-grid:
     name: Degenerate-parameter grid (ubuntu)

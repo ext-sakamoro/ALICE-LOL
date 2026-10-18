@@ -343,11 +343,13 @@ python3 scripts/test_build_flags_check.py
 python3 scripts/test_run_tests.py
 python3 scripts/test_cargo_test_nonzero.py
 python3 scripts/test_sdf_writers.py
+python3 scripts/test_g7_boundaries.py
 
-step "ci.yml / sdf-writers: alice-sdf writers (G8)"
+step "ci.yml / sdf-writers: alice-sdf writers (G8) and type-erasing boundaries (G7)"
 nightly=$(python3 -c 'import tomllib; print(tomllib.load(open("scripts/sdf_writers.toml", "rb"))["nightly"])')
 if has_toolchain "$nightly"; then
   python3 scripts/sdf_writers.py
+  python3 scripts/g7_boundaries.py
 else
   echo "skip: $nightly not installed (rustup toolchain install $nightly); CI runs it" >&2
 fi

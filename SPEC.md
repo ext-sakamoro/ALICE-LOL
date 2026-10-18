@@ -229,6 +229,8 @@ Rust の値として渡す限り、型が版と構成を運ぶので識別子は
   - `parse_*_stamped`: 包みが必須 別の process や別の版が書いた text を受け取る経路はこちらを使う 包みが無ければ `ParseErrorKind::SemanticsMissing`
   - 照合は等しいかだけを見る (一回のやり取りの中) 保存して後で別の版が読む形式は G8 の規則 (記録時の識別子と比べる) で、ここではない
   - `lol.gbnf` (model の生成の文法) は包みを含まない 包みは書き出しの側が付けるもの
+  - 書き出し: `emit::to_lol` / `Program::to_lol` は包みを付けた交換の形を書く 正規形 (包みなし、表示・学習用 data・識別子の入力) は `to_lol_unstamped`
+- **境界の一覧**: `scripts/g7_boundaries.py` が alice-lol の公開の入口のうち text・bytes・reader を取るものを `scripts/g7_boundaries.toml` で exchange / authoring / local に分類させ、foreign な形 (`extern` の ABI、`no_mangle`、wasm-bindgen、PyO3、`dyn Any`、build script) が無いことを見る
 
 ---
 
