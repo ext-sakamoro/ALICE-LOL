@@ -20,3 +20,7 @@ proc-macro = true
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+
+[dev-dependencies]
+# the identifier test hashes the probe expansions (not a dependency of the macro itself)
+sha2 = { version = "0.10", default-features = false }

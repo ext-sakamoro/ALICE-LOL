@@ -579,6 +579,8 @@ jobs:
         run: python scripts/libm_hidden_check.py
       - name: macro kinds (macro の全 keyword を試験 file が持つ)
         run: python scripts/macro_kinds.py --check
+      - name: g7 macro pairing (別の識別子の alice-lol-macro で展開した lol! は両方の識別子を名指して compile できない、ALICE-Law G7)
+        run: python scripts/g7_macro_pairing.py
       - name: fuzz-runs oracle (fuzz の log の検査器自身の試験)
         run: python scripts/test_fuzz_runs.py
       - name: release-roster oracle (検査器自身の試験)
