@@ -31,7 +31,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 // ── re-export ──
-pub use alice_sdf::io::{export_3mf, export_fbx, export_stl, export_stl_ascii, FbxConfig};
+// alice-sdf's export_stl / export_stl_ascii / export_3mf / export_fbx are not re-exported: they write
+// without the LOL producer identifier (ALICE-Law G8); node_to_stl / node_to_3mf / node_to_fbx write it
+pub use alice_sdf::io::FbxConfig;
 use alice_sdf::io::{export_3mf_with_stamp, export_fbx_with_stamp, export_stl_with_stamp};
 pub use alice_sdf::mesh::{
     dual_contouring, sdf_to_mesh, validate_mesh, DualContouringConfig, MarchingCubesConfig, Mesh,
