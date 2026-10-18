@@ -8,12 +8,13 @@
 //! own order, so the map's internal bucket order (which a `HashMap`'s
 //! per-instance random hash seed makes different from run to run) cannot
 //! reach the output. A separate process gives each run its own seed, so
-//! this test would catch a mutant that iterated the map instead (`for (k,
-//! v) in id.iter() { ... }` in place of the `.entry()` lookup) -- verified
-//! by hand, not by CI, since planting that mutant on purpose in a committed
-//! test would defeat the point of a closed static check
-//! (`scripts/print_export_no_hashmap_iteration.py`) existing alongside this
-//! one; see that script's own module doc for why both are needed together.
+//! this test catches a mutant that puts the kept vertices in the map's
+//! iteration order (`id.values()`, indices remapped): measured, the two
+//! processes' outputs then differ. Statically, the library
+//! clippy forbids every `HashMap` / `HashSet` iteration in the library code
+//! (`scripts/clippy_lib_gate.toml` methods, `clippy::iter_over_hash_type`
+//! for loops, each shown to fire by a canary), so the same mutant also
+//! fails the clippy step; this test is the dynamic side of the gate.
 //!
 //! Varying `RAYON_NUM_THREADS` additionally exercises alice-sdf's own
 //! parallel stages (marching cubes / mesh repair use `rayon::par_iter` in
