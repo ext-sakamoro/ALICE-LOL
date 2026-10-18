@@ -407,7 +407,7 @@ for prof in "" "--release"; do
   scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib geometry_id
   scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib quat_from_euler_xyz_is_bit_identical_across_architectures
   scripts/cargo_test_nonzero.sh -p alice-lol $prof --lib y_component_cancellation_preserves_a_negative_zero_input
-  scripts/run_tests.sh geometry_id_oracle,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare -- \
+  scripts/run_tests.sh geometry_id_oracle=4,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare=9 -- \
     cargo test -p alice-lol $prof --test geometry_id_oracle --test stdlib_profile_determinism_oracle \
     --test laser_pattern_digest_golden --test golden_compare
 done
