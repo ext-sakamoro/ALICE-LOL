@@ -33,7 +33,7 @@
 //! VRM bone name → [`Joint`] mapping は 参照実装の `src/vrm_import.rs` から抜粋
 //! Phase H.5 で Manga / LOL 間の reconciliation 判断
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -90,7 +90,7 @@ impl From<std::io::Error> for VrmError {
 #[derive(Debug, Clone, Default)]
 pub struct VrmBoneMap {
     /// bone name → world position
-    pub bones: HashMap<String, Vec3>,
+    pub bones: BTreeMap<String, Vec3>,
 }
 
 impl VrmBoneMap {
@@ -112,7 +112,7 @@ impl VrmBoneMap {
         self.bones.is_empty()
     }
 
-    /// 全 bone name list (順不同、debug 用途)
+    /// 全 bone name list (名前順、debug 用途)
     #[must_use]
     pub fn bone_names(&self) -> Vec<&str> {
         self.bones.keys().map(String::as_str).collect()
@@ -147,7 +147,7 @@ pub fn extract_humanoid_bones<P: AsRef<Path>>(path: P) -> Result<Option<VrmBoneM
         return Ok(None);
     };
     let node_world_translations = compute_node_world_translations(&json)?;
-    let mut map: HashMap<String, Vec3> = HashMap::new();
+    let mut map: BTreeMap<String, Vec3> = BTreeMap::new();
     for entry in human_bones {
         let Some(name) = entry.get("bone").and_then(|b| b.as_str()) else {
             continue;
@@ -447,7 +447,7 @@ mod tests {
     }
 
     fn t_pose_bones() -> VrmBoneMap {
-        let mut bones = HashMap::new();
+        let mut bones = BTreeMap::new();
         for (name, pos) in [
             ("head", [0.0_f32, 1.5, 0.0]),
             ("neck", [0.0, 1.4, 0.0]),
@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn from_vrm_bones_missing_head_returns_none() {
-        let mut bones = HashMap::new();
+        let mut bones = BTreeMap::new();
         bones.insert("hips".to_string(), Vec3::new(0.0, 0.85, 0.0));
         let map = VrmBoneMap { bones };
         assert!(HumanoidTemplate::from_vrm_bones(&map).is_none());
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn from_vrm_bones_missing_hips_returns_none() {
-        let mut bones = HashMap::new();
+        let mut bones = BTreeMap::new();
         bones.insert("head".to_string(), Vec3::new(0.0, 1.5, 0.0));
         let map = VrmBoneMap { bones };
         assert!(HumanoidTemplate::from_vrm_bones(&map).is_none());
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn from_vrm_bones_upperchest_fallback_for_chest() {
-        let mut bones = HashMap::new();
+        let mut bones = BTreeMap::new();
         bones.insert("head".to_string(), Vec3::new(0.0, 1.5, 0.0));
         bones.insert("hips".to_string(), Vec3::new(0.0, 0.85, 0.0));
         bones.insert("upperChest".to_string(), Vec3::new(0.0, 1.3, 0.0));

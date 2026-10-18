@@ -13,6 +13,13 @@ target or feature. Dev-dependencies are the tests' and do not reach the publishe
 It reads `cargo metadata --no-deps` (no resolution, no network). It fails when a published member
 lists a denied crate, and when no published member is read (compared nothing).
 
+It also reports, without failing, the denied crates reachable from the published members through
+normal and build dependencies with the default features (`cargo metadata --locked --offline`, the
+resolution of the lock): a library the crate uses may draw entropy or read the clock inside, which
+the direct-dependency rule cannot see. That line is a count to read, not a verdict: a crate in the
+graph is not necessarily called on a path that feeds a Law-bearing value. When the resolution cannot
+be read (no lock, a cache miss offline) the line says so.
+
     python3 scripts/entropy_deps_guard.py [--manifest-path Cargo.toml]
 """
 from __future__ import annotations
@@ -49,6 +56,30 @@ def denied_deps(metadata: dict) -> tuple[list[str], list[str]]:
     return read, problems
 
 
+def transitive(metadata: dict) -> list[str]:
+    """the denied crates reachable from the published members through normal and build dependencies"""
+    members = set(metadata.get("workspace_members", []))
+    pkgs = {p["id"]: p for p in metadata.get("packages", [])}
+    nodes = {n["id"]: n for n in (metadata.get("resolve") or {}).get("nodes", [])}
+    todo = [i for i in members if pkgs.get(i, {}).get("publish") != []]
+    seen, found = set(todo), set()
+    while todo:
+        node = nodes.get(todo.pop())
+        if node is None:
+            continue
+        for d in node.get("deps", []):
+            if all(k.get("kind") == "dev" for k in d.get("dep_kinds", [])):
+                continue
+            if d["pkg"] in seen:
+                continue
+            seen.add(d["pkg"])
+            name = pkgs.get(d["pkg"], {}).get("name", "")
+            if DENIED.fullmatch(name):
+                found.add(f"{name} {pkgs[d['pkg']].get('version', '')}")
+            todo.append(d["pkg"])
+    return sorted(found)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--manifest-path", default="Cargo.toml")
@@ -66,6 +97,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(f"entropy-deps-guard: {len(read)} published member(s) ({', '.join(sorted(read))}), "
           f"{len(problems)} denied dependenc{'y' if len(problems) == 1 else 'ies'}")
+    full = subprocess.run(["cargo", "metadata", "--format-version", "1", "--locked", "--offline",
+                           "--manifest-path", a.manifest_path], capture_output=True, text=True)
+    if full.returncode != 0:
+        print("entropy-deps-guard: transitive (report only): the resolution could not be read offline from the lock")
+    else:
+        reach = transitive(json.loads(full.stdout))
+        print(f"entropy-deps-guard: transitive (report only): {len(reach)} denied crate(s) reachable through "
+              f"normal / build dependencies with the default features{': ' + ', '.join(reach) if reach else ''}")
     return 1 if problems else 0
 
 
