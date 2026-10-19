@@ -7,6 +7,7 @@ src\\lib.rs on Windows)
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,19 @@ class Diag(unittest.TestCase):
 
     def test_another_file_is_not_read(self):
         self.assertEqual(h.DIAG.findall("   --> src/other.rs:3:1\n"), [])
+
+
+class CompareNothing(unittest.TestCase):
+    def test_a_canary_without_a_marked_line_exits_2(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "src").mkdir()
+            (Path(tmp) / "src" / "lib.rs").write_text("pub fn f() {}\n", encoding="utf-8")
+            saved = h.CANARY
+            h.CANARY = Path(tmp)
+            try:
+                self.assertEqual(h.main(), 2)
+            finally:
+                h.CANARY = saved
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import importlib.util
 import re
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -218,6 +219,24 @@ class Targets(unittest.TestCase):
             self.assertEqual(len(out), 2)
 
 
+class CompareNothing(unittest.TestCase):
+    def test_no_entry_point_read_exits_2(self):
+        sw = load("sdf_writers")
+        empty = {"root": 0, "paths": {}, "index": {
+            "0": {"crate_id": 0, "name": "c", "visibility": "public", "inner": {"module": {"items": []}}}}}
+        stub = types.SimpleNamespace(load_config=lambda: {"nightly": "n"}, rustdoc=lambda *a: empty,
+                                     reachable_paths=sw.reachable_paths)
+        def no_cargo(*a, **k):
+            raise AssertionError(f"ran {a[0]} after reading no entry point")
+
+        saved = g7.sdf_writers, g7.subprocess.run
+        g7.sdf_writers, g7.subprocess.run = (lambda: stub), no_cargo
+        try:
+            self.assertEqual(g7.main([]), 2)
+        finally:
+            g7.sdf_writers, g7.subprocess.run = saved
+
+
 class Pairing(unittest.TestCase):
     def test_the_identifier_patterns_read_the_sources(self):
         root = HERE.parent
@@ -233,6 +252,14 @@ class Pairing(unittest.TestCase):
 
     def test_extra_arguments_exit_2(self):
         self.assertEqual(pairing.main(["--x"]), 2)
+
+    def test_identifiers_that_cannot_be_read_exit_2(self):
+        saved = pairing.MACRO_ID
+        pairing.MACRO_ID = HERE / "no-such-expansion-id.rs"
+        try:
+            self.assertEqual(pairing.main([]), 2)
+        finally:
+            pairing.MACRO_ID = saved
 
 
 if __name__ == "__main__":

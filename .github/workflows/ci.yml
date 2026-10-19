@@ -637,6 +637,13 @@ jobs:
         run: |
           python3 scripts/test_shared_files.py
           scripts/shared_files.sh
+      # ALICE-Law G11: every gate alice-law-conformance.toml declares pass has a row in
+      # conformance/g11.toml (checker, canary, the test that fails on nothing compared, shared
+      # rows), checked by ALICE-Law's checker fetched at .github/g11-table-pin (SHA-256 pinned);
+      # a missing row, an unresolved reference or nothing compared fails
+      - name: G11 table matches the declared gates
+        shell: bash
+        run: scripts/g11_table.sh
       # ALICE-Law G14, dynamic half: the flags cargo really passes to rustc for
       # alice-lol, read from `-v` in a fresh target directory, in the release profile,
       # for the default, all-features and no-default feature sets

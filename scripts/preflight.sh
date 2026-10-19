@@ -358,6 +358,9 @@ step "ci.yml / wiring-guard: Shared files equal ALICE-Law's table (G11 (c))"
 python3 scripts/test_shared_files.py
 scripts/shared_files.sh
 
+step "ci.yml / wiring-guard: G11 table matches the declared gates (G11)"
+scripts/g11_table.sh
+
 step "ci.yml / wiring-guard: Effective rustc flags (G14)"
 python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol
 python3 scripts/build_flags_check.py --crate alice_lol -- cargo check --release --lib -p alice-lol --all-features
