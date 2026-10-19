@@ -477,7 +477,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | `glsl` | 未申告 |  |
 | `hlsl` | 未申告 |  |
 | `llm-bridge` | 未申告 |  |
-| `physics` | 範囲外 | adds the ThermalField constraint (alice-lol/src/law.rs:321) computed by alice-physics, whose own arithmetic identifier is not folded into LOL_SEMANTICS_ID … |
+| `physics` | 範囲外 | adds the ThermalField constraint (`alice-lol/src/law.rs#pub enum Constraint>ThermalField {`) computed by alice-physics, whose own arithmetic identifier is not … |
 | `roblox` | 未申告 |  |
 | `wgsl` | 未申告 |  |
 <!-- law-integration:end -->
