@@ -359,6 +359,7 @@ python3 scripts/test_shared_files.py
 scripts/shared_files.sh
 
 step "ci.yml / wiring-guard: G11 table matches the declared gates (G11)"
+python3 scripts/test_g11_table.py
 scripts/g11_table.sh
 
 step "ci.yml / wiring-guard: Effective rustc flags (G14)"
