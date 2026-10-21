@@ -96,6 +96,13 @@ class Siblings(unittest.TestCase):
             with self.assertRaises(rs.SiblingError):
                 rs.sibling_deps(root)
 
+    def test_package_inside_a_sibling_is_that_sibling(self):
+        facade = '[dependencies]\nalice-sdf = { path = "../../ALICE-SDF/crates/alice-sdf", version = "6" }\n'
+        with tempfile.TemporaryDirectory() as d:
+            root = tree(Path(d), facade, KIN)
+            self.assertEqual(rs.sibling_deps(root), {"ALICE-SDF": "alice-sdf", "ALICE-Kinematics": "alice-kinematics"})
+            self.assertEqual(rs.plan(root, lambda _d: {"v6.0.0", "v0.2.0"})[1], ("ALICE-SDF", "alice-sdf", "6.0.0", "v6.0.0"))
+
     def test_path_outside_the_parent_fails(self):
         with tempfile.TemporaryDirectory() as d:
             root = tree(Path(d), '[dependencies]\nx = { path = "../../../elsewhere/X" }\n')
