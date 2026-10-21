@@ -377,6 +377,12 @@ step "public-text.yml / public-text: Public text (ALICE-Law checker at the pin; 
 python3 scripts/test_public_text.py
 scripts/public_text.sh
 
+# the classification half of the registry-consumer job (every path dependency is a listed
+# sibling, a package inside one, or a workspace member; no packaging or build), so a quick
+# run sees a dependency path the job would refuse
+step "ci.yml / registry-consumer: path dependencies classify (package_integrity --patches, no build)"
+python3 scripts/package_integrity.py --member alice-lol --patches > /dev/null
+
 if [[ $quick -eq 1 ]]; then
   echo
   echo "preflight --quick OK -- the following CI steps were NOT run (full preflight,"
@@ -387,6 +393,7 @@ if [[ $quick -eq 1 ]]; then
   echo "  - geometry-digest: identifier and digest oracles (debug + release)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
   echo "  - doc-programs (export of every lol print program in the documents, release)"
+  echo "  - registry-consumer: cargo audit, package + build of the .crate, patch set diff"
   echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
   echo "    a count/assertion here that is wrong locally still shows green)"
   echo "A push that changes the grammar (SDF_SYNTAX / the macro parser / the gbnf)"

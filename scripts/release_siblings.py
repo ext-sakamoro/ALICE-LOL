@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The sibling checkouts a tagged build needs, each at the tag of the version in Cargo.lock.
 
-Members of this workspace depend on other repositories through paths (`../../ALICE-SDF`).
+Members of this workspace depend on other repositories through paths (`../../ALICE-SDF`, or a package inside
+one, `../../ALICE-Physics/crates/alice-physics`).
 cargo reads every member's manifest before it does anything, `cargo publish --dry-run`
 included, so a build of the workspace needs each of those directories next to this
 repository. A release builds a tag, so the siblings it uses must be the versions the tag's
@@ -71,12 +72,15 @@ def sibling_deps(root: Path) -> dict[str, str]:
                 target = Path(os.path.normpath(member / spec["path"]))
                 if target == root or root in target.parents:
                     continue  # a member of this workspace
-                if target.parent != root.parent:
+                if root.parent not in target.parents:
                     raise SiblingError(f"{member.name or 'workspace'}: path {spec['path']} is not a sibling of the repository")
+                # the sibling repository is the first directory under the parent; the package
+                # may sit deeper in it (a workspace member such as crates/alice-physics)
+                directory = target.relative_to(root.parent).parts[0]
                 package = spec.get("package", key)
-                if found.get(target.name, package) != package:
-                    raise SiblingError(f"{target.name}: named as {found[target.name]} and {package}")
-                found[target.name] = package
+                if found.get(directory, package) != package:
+                    raise SiblingError(f"{directory}: named as {found[directory]} and {package}")
+                found[directory] = package
     return found
 
 
