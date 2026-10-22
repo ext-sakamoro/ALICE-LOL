@@ -192,9 +192,21 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip().split("\n")[-1], file=sys.stderr)
         return 2
     n = 0
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import law_rules  # noqa: E402
     for f in sorted(Path(argv[0]).glob("*.law")):
+        text = f.read_text(encoding="utf-8")
+        if law_rules.rule_kind(text):
+            # a rule law types its inputs with the types of TASK.md "Rule laws"
+            try:
+                law = law_rules.parse(text)
+            except law_rules.RuleError as e:
+                print(f"{f.name}: {e}", file=sys.stderr)
+                return 1
+            n += len(law.get("inputs", []))
+            continue
         try:
-            n += len(x_input_types(f.read_text(encoding="utf-8")))
+            n += len(x_input_types(text))
         except SchemaError as e:
             print(f"{f.name}: {e}", file=sys.stderr)
             return 1

@@ -367,6 +367,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `physics` | 無効 | `Constraint::ThermalField` と `alice-physics` の材料データ (AGPL-3.0-or-later、有効にすると下流に及ぶ) |
 | `roblox` | 無効 | Roblox のメッシュ上限に収めた OBJ / FBX 出力 (`roblox_export`) |
 | `llm-bridge` | 無効 | `alice-llm` による文法制約つき生成 (`bridge`、AGPL-3.0-or-later、下流に及ぶ) |
+| `crypto-calls` | 無効 | 述語の規則の Law (`rule_law`) で `alice-sign` の `hmac_sha256` を呼ぶ 無効でもその Law は読めて、答えは `Unsupported` |
 
 ## Example
 
@@ -380,6 +381,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
 | [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | `SdfNode` 評価の識別子が何から決まり、`law_id` とどう別か |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
+| [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | 同じ mesh を STL / 3MF / FBX に書き、解像度 preset を並べる |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | 区間演算による格子セルごとの枝刈り |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | 勾配、曲率、ヘッセ行列 |
@@ -474,6 +476,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 
 | feature | 保証 | 注記 |
 |---|---|---|
+| `crypto-calls` | 未申告 |  |
 | `glsl` | 未申告 |  |
 | `hlsl` | 未申告 |  |
 | `llm-bridge` | 未申告 |  |

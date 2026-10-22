@@ -193,6 +193,12 @@ def check_kepler(cmd, v, outs, timeout):
         raise Fail("wrong value", f"mean(k)/mean(2k) = {ratio:.4f} not in [{lo}, {hi}] (k = {k})")
 
 
+def _same(a, b):
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    return type(a) is type(b) and a == b
+
+
 def run_vector(cmd, v, timeout):
     if v["kind"] == "request_error":
         # an error of the request: exit status 2 and nothing on standard output
@@ -211,6 +217,14 @@ def run_vector(cmd, v, timeout):
         check_values(v, outs)
     elif v["kind"] == "invariant":
         check_kepler(cmd, v, outs, timeout)
+    elif v["kind"] == "exact":
+        # a rule law: every output is text, a boolean, null or an object of them, compared
+        # exactly (a boolean is not the number 1)
+        for name, want in v["expected"].items():
+            if name not in outs:
+                raise Fail("crash", f"output `{name}` missing")
+            if not _same(outs[name], want):
+                raise Fail("wrong verdict", f"{name}: got {outs[name]!r}, expected {want!r}")
     elif v["kind"] == "verdict":
         got = (outs.get("verdict"), outs.get("subject"))
         want = (v["expected"]["verdict"], v["expected"]["subject"])
@@ -224,6 +238,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--law")
+    ap.add_argument("--only-rule-laws", action="store_true",
+                    help="score only the vectors of rule laws (kind machine / predicate); 0 such vectors exits 2")
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--show", type=int, default=3, help="failure details shown per law")
     ap.add_argument("--law-dir", help="directory of the law files, given to the implementation as LOL_LAW_DIR")
@@ -238,6 +254,11 @@ def main():
     corpus = json.loads(Path(a.corpus).read_text())
     if a.law:
         corpus = [v for v in corpus if v["law"] == a.law]
+    if a.only_rule_laws:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import law_rules
+        rule = {f.stem for f in Path(LAW_DIR).glob("*.law") if law_rules.rule_kind(f.read_text(encoding="utf-8"))}
+        corpus = [v for v in corpus if v["law"] in rule]
     stats = OrderedDict()
     details = defaultdict(list)
     for v in corpus:

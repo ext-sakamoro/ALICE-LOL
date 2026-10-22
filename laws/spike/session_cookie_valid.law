@@ -1,0 +1,31 @@
+# A session cookie "<uid>.<version>.<expiry>:<tag>" holds while its tag, its expiry and its version hold
+law session_cookie_valid
+kind predicate
+claim the cookie is "<uid>.<version>.<expiry>:<tag>" with decimal integers and a hex tag
+claim the tag is the first 16 bytes of HMAC-SHA256 under the key, over the purpose "session", one zero byte and the text before the colon
+claim the cookie holds strictly before its expiry, and only while its version is the current session version of the user
+source a signed session cookie (the rule is stated here; nothing outside this file defines it)
+
+use alice-sign hmac_sha256
+const purpose text = "session"
+const tag_bytes integer = 16
+
+x-input cookie text
+x-input now time
+x-input key bytes
+x-input user record(session_version: integer)
+
+x-split cookie ":" head tag_hex
+x-split head "." uid_text version_text expiry_text
+x-bind uid uid_text integer
+x-bind version version_text integer
+x-bind expiry expiry_text time
+x-bind tag tag_hex hex
+
+require tag: tag == prefix(hmac_sha256(key, utf8(purpose) ++ 0x00 ++ utf8(head)), tag_bytes)
+require fresh: now < expiry
+require current: version == user.session_version
+
+example {"cookie": "42.7.1893456000:b13155066f4d53246b4b26c896d79b7f", "now": 1893455000, "key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", "user": {"session_version": 7}}
+
+verdict whether the cookie holds, and the first condition that does not

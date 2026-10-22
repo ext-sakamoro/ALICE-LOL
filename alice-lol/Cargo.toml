@@ -30,6 +30,8 @@ sha2 = { version = "0.10", default-features = false }
 # parse_expr の大 frame × 再帰で 8 MB stack が尽きる → 再帰時に heap 上で
 # stack を伸ばす (rustc と同じ手法) MIT OR Apache-2.0
 stacker = "0.1"
+# HMAC-SHA256 for rule laws (feature `crypto-calls`, off by default)
+alice-sign = { path = "../../ALICE-Sign", version = "0.1", default-features = false, optional = true }
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
 # grammar-constrained decoding without depending on alice-llm directly.
@@ -76,9 +78,17 @@ roblox = []
 # LLM decoding against the LOL DSL. Off by default so pure geometry
 # users don't pay for the alice-llm dep.
 llm-bridge = ["dep:alice-llm"]
+# `hmac_sha256` of rule laws (conformance/TASK.md "Rule laws"): alice-sign's HMAC-SHA256 and
+# constant-time comparison. Off by default, so the default build and the repositories that
+# take this one as a sibling need no ALICE-Sign checkout; a rule law that calls it reads in
+# every build and answers `Unsupported` without the feature.
+crypto-calls = ["dep:alice-sign"]
 
 [[example]]
 name = "basic"
+
+[[example]]
+name = "rule_conformance"
 
 [[example]]
 name = "showcase"

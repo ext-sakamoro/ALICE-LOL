@@ -16,6 +16,10 @@ What comes from the law files (read with law_corners.py):
   acceleration (x-ode) are integrated with mpmath at 30 digits to give the
   state after step 1 and after the last step.
 - audit laws: the verdict follows the clauses of the audit block.
+- rule laws (kind machine / predicate): scripts/law_rules.py reads the law and gives
+  every vector and its exact answer (every step of a machine; the example of a predicate,
+  the boundaries of its comparisons, changed bytes and parts, broken shapes, wrong types
+  and missing inputs).
 
 What the generator holds itself (it cannot be read from a law file):
 - the interior points it chooses (the "designed" cases below), a base point
@@ -533,11 +537,12 @@ def request_vectors(law):
 
 
 def load_tools(tools):
-    global lc, ls
+    global lc, ls, lr
     sys.path.insert(0, tools)
     import law_corners
     import law_schema
-    lc, ls = law_corners, law_schema
+    import law_rules
+    lc, ls, lr = law_corners, law_schema, law_rules
 
 
 def main():
@@ -556,6 +561,11 @@ def main():
         raise SystemExit("no law files")
     V = []
     for f in files:
+        text = f.read_text(encoding="utf-8")
+        if lr.rule_kind(text):
+            # a rule law: the vectors and their exact answers come from the law itself
+            V += lr.vectors(lr.parse(text), f.stem)
+            continue
         law = lc.load(f)
         law["_file"] = str(f)
         for line in f.read_text().splitlines():

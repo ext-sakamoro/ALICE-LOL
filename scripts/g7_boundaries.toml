@@ -51,6 +51,16 @@ class = "authoring"
 reason = "reads a law file a person or a model writes; its audit block goes through parse_law (a semantics first line is compared when present)"
 
 [[entry]]
+path = "alice_lol::rule_law::rule_law_from_file"
+class = "authoring"
+reason = "reads a rule law file a person or a model writes (conformance/TASK.md Rule laws); the law-file layout has no identifier wrapper, so a semantics line is refused as an unknown line, and the rule's identifier is law_id under RULE_SEMANTICS_ID"
+
+[[entry]]
+path = "alice_lol::rule_law::rule_kind"
+class = "local"
+reason = "only tells which kind a law file is from its kind lines; it carries no Law-bearing value of another crate"
+
+[[entry]]
 path = "alice_lol::print_export::lol_to_3mf"
 class = "authoring"
 reason = "reads LOL source a person or a model writes through parse_declared (a semantics wrapper is compared when present); the path is the destination of a written file (that file's identifier is G8's)"

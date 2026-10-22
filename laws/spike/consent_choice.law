@@ -1,0 +1,22 @@
+# A visitor's consent choice: undecided, accepted or declined, under a strict or a relaxed mode
+law consent_choice
+kind machine
+claim a visitor starts undecided and may accept or decline; an accepted choice is withdrawn only with a proof that the request comes from the same device
+claim analytics is allowed in the relaxed mode, and in the strict mode only after the visitor accepted
+source a consent banner with a strict and a relaxed mode (the rule is stated here; nothing outside this file defines it)
+
+mode strict relaxed
+state undecided initial
+state accepted
+state declined
+event accept
+event decline
+event withdraw guard device_proof
+
+on accept from undecided declined to accepted
+on decline from undecided to declined
+on withdraw from accepted to declined when device_proof
+
+allow analytics when mode == relaxed or state == accepted
+
+verdict the new state, whether the transition was taken, and the allowance after the step, for every mode, state, event and guard

@@ -113,6 +113,10 @@ pub mod audit_law;
 // 型に合わない値は入力全体が合わない: 監査は測られていない、量の法則は拒否
 pub mod law_input;
 
+// ── 規則の Law (状態機械 / 型つき入力の述語、conformance/TASK.md "Rule laws") ──
+// 上の 3 つとも別物: 答えは厳密な値 (text / bool / null)、識別子は種類ごとの意味論 pin で既存の Law に触れない
+pub mod rule_law;
+
 // ── 構文名の一覧 (parser の dispatch と README の構文表を突き合わせる test 専用) ──
 #[cfg(test)]
 mod syntax_table;

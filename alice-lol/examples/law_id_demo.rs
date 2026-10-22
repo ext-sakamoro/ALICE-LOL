@@ -37,6 +37,36 @@ fn short(id: &[u8; 32]) -> String {
     hex(id)[..16].to_owned()
 }
 
+/// 規則の Law (kind machine / predicate) の pin、測り直した指紋、fold と宣言
+fn rule_semantics() {
+    println!("\n=== 規則の Law (kind machine / predicate) の意味論 ===");
+    let measured = alice_lol::rule_law::rule_semantics_fingerprints();
+    for (name, id) in alice_lol::rule_law::RULE_SEMANTICS_PINS {
+        let now = measured
+            .iter()
+            .find(|(n, _)| n == name)
+            .map_or_else(|| "(この build では測れない)".to_owned(), |(_, m)| hex(m));
+        println!("  pin {name}");
+        println!("      {}  測り直し {now}", hex(id));
+    }
+    println!(
+        "  fold = {}",
+        hex(&fold_semantics_pins(
+            alice_lol::rule_law::RULE_SEMANTICS_PINS
+        ))
+    );
+    println!("  宣言 = {}", hex(&alice_lol::rule_law::RULE_SEMANTICS_ID));
+    let machine = alice_lol::rule_law::rule_law_from_file(
+        "kind machine\nstate a initial\nstate b\nevent go\non go from a to b\n",
+    )
+    .expect("the demo machine reads");
+    println!(
+        "  {:?} の識別子 {}",
+        machine.kind(),
+        short(&machine.law_id())
+    );
+}
+
 fn main() -> Result<(), ParseError> {
     println!("=== 算術と判定の意味論 ===");
     for (name, id) in LOL_SEMANTICS_PINS {
@@ -75,6 +105,8 @@ fn main() -> Result<(), ParseError> {
         hex(&alice_lol::law_input::derivation_fingerprint())
     );
     println!("  ⚠️ 上の pin と測り直した指紋が揃わなければ、識別子が振る舞いを名乗れていない");
+
+    rule_semantics();
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;

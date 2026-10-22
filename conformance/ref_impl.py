@@ -18,6 +18,14 @@ REF_BUG=13: a request without the inputs key is a request error (exit 2) instead
 REF_BUG=14: inputs that is null or not an object is passed to the law unchecked
 REF_BUG=15: a list input of the wrong shape is read element by element (still counted) instead of as a whole
 REF_BUG=16: audit `includes` read as set equality (a measured superset breaks)
+REF_BUG=17: machine: the last matching `on` line is taken, not the first
+REF_BUG=18: machine: the allowances are evaluated on the state before the step
+REF_BUG=19: predicate: the `require` lines are evaluated from the last to the first
+REF_BUG=20: predicate: `<` read as `<=`
+
+Rule laws (`kind machine` / `kind predicate`) are answered by scripts/law_rules.py, the
+evaluator the corpus generator uses; the Rust reader (alice-lol `rule_law`) is the
+independent implementation scored on them.
 
 An unknown law, a missing input, inputs that is not an object (null is read as {}) or a
 request that is not a JSON object exits with status 2 and writes nothing on stdout.
@@ -25,6 +33,10 @@ request that is not a JSON object exits with status 2 and writes nothing on stdo
 import json, math, os, re, sys
 
 BUG = os.environ.get("REF_BUG", "")
+RULE_BUG = {"17": "machine_last_match", "18": "machine_allow_before_step",
+            "19": "predicate_reverse_order", "20": "predicate_lt_inclusive"}.get(BUG)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import law_rules  # noqa: E402
 
 
 class Reject(Exception):
@@ -309,6 +321,22 @@ def audit(clauses, nums, ranges, raw=None):
             if not holds:
                 return "breaks", c[1]
     return "supports", None
+
+
+def read_rule_law(name):
+    """The rule law of `<LOL_LAW_DIR>/<name>.law`, or None when there is no such file or it is
+    not a rule law; a rule law file that does not read is an error of the request"""
+    path = os.path.join(law_dir(), f"{name}.law")
+    if not re.fullmatch(r"[a-z0-9_]+", name) or not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8", newline="") as fh:
+        text = fh.read()
+    if not law_rules.rule_kind(text):
+        return None
+    try:
+        return law_rules.parse(text)
+    except (law_rules.RuleError, ValueError) as e:
+        request_error(f"law file `{name}` does not read: {e}")
 
 
 def law_dir():
@@ -664,6 +692,20 @@ def main():
         except (ValueError, IndexError) as e:
             request_error(f"law file `{name}` does not read: {e}")
         law = generic_audit(audit_law) if audit_law else None
+    # a file without the line `kind audit` may be a rule law (TASK.md "Rule laws"): the audit
+    # reading above decides first, as the contract says
+    rule = read_rule_law(name) if law is None and isinstance(name, str) else None
+    if rule is not None:
+        inputs = req.get("inputs")
+        if inputs is None:
+            inputs = {}
+        elif not isinstance(inputs, dict):
+            request_error(f"inputs is not a JSON object: {type(inputs).__name__}")
+        kind, val = law_rules.respond(rule, inputs, RULE_BUG)
+        if kind == "request_error":
+            request_error(val)
+        json.dump({"outputs": val} if kind == "outputs" else {"rejected": val}, sys.stdout)
+        return
     if law is None:
         request_error(f"unknown law: {req.get('law')!r}")
     # no inputs key and inputs null are the same as inputs {}: an audit measures

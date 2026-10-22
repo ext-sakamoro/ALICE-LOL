@@ -216,6 +216,7 @@ python3 scripts/history_free_tests.py
 python3 scripts/test_law_ambiguity_lint.py
 python3 scripts/law_ambiguity_lint.py laws/spike
 step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
+python3 scripts/test_law_rules.py
 python3 scripts/test_law_schema.py
 python3 scripts/law_schema.py laws/spike
 # the reference implementation needs mpmath (correctly rounded elementary functions):
@@ -232,6 +233,8 @@ python3 conformance/test_run_conformance.py
 cargo build -q -p alice-lol --example audit_conformance
 python3 conformance/check_probes.py --kind reader --laws gate_compares_nonzero,identifier_feature_independent,lint_bans_include,no_such_law,decl_probe,floor_probe -- target/debug/examples/audit_conformance
 python3 conformance/law_line_fuzz.py --pairs 150 -- python3 conformance/ref_impl.py -- target/debug/examples/audit_conformance
+cargo build -q -p alice-lol --example rule_conformance --features crypto-calls
+PYTHON="$conf_py" conformance/score_rules.sh target/debug/examples/rule_conformance
 
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )
@@ -409,6 +412,9 @@ step "ci.yml / test: Test"
 
 step "ci.yml / test: Law oracles (each target ran at least one test)"
 ( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default )
+
+step "ci.yml / test: Law oracles (crypto-calls, rule laws with the call)"
+( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh crypto )
 
 step "ci.yml / test: Test [features=--features llm-bridge]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features llm-bridge )

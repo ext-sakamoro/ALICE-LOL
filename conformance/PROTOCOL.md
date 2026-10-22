@@ -11,6 +11,7 @@ This directory holds the tools that check an independent implementation of the l
 | `run_conformance.py` | runs one implementation against a corpus |
 | `ref_impl.py` | reference implementation; `REF_BUG=1..10` selects a defective variant |
 | `score.sh` | generate, check corner coverage, score, delete |
+| `score_rules.sh` | generate, check rule-law coverage, score an implementation on the rule-law vectors only, delete (CI: the Rust reader `alice-lol/examples/rule_conformance.rs`) |
 | `controls.sh` | must-red controls for the generator and the runner |
 | `kepler_sweep.c`, `kepler_sweep.py` | measurement of the Kepler valid ranges |
 | `kepler_divergence.py` | 1 ulp separation of two Kepler trajectories |
@@ -72,6 +73,7 @@ From the law files:
   - Closed-form laws: the `output` / `x-piece` / `x-expr` and `tolerance` expressions, evaluated with mpmath at 40 digits.
   - Kepler laws: the start, the acceleration and the method (`x-initial`, `x-ode`, `x-method`), integrated with mpmath at 30 digits, to give the states after step 1 and after the last step.
   - Audit laws: the clauses of the audit block.
+  - Rule laws (`kind machine` / `kind predicate`): `scripts/law_rules.py` reads the law and answers every vector exactly: every step of a machine (each mode, state, event and guard value), and for a predicate its `example`, the boundaries of its comparisons, changed bytes and parts, broken shapes, inputs of another type and missing inputs. `scripts/law_corpus_cover.py` fails when a machine step is missing, or when no vector fails a condition of a predicate on its own.
 
 Held in `gen_corpus.py` itself, because a law file does not state them:
 

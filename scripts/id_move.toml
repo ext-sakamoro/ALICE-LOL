@@ -23,3 +23,8 @@ path = "alice_lol::print_export::LOL_EXPORT_PRIMARY_SEMANTICS_ID"
 # expansion can change what a program written with lol! means, so it moves only with a breaking version
 [[id]]
 path = "alice_lol::macro_id::EXPECTED_MACRO_EXPANSION_ID"
+
+# the semantics of the rule laws (kind machine / predicate): the fold of RULE_SEMANTICS_PINS, measured from
+# the behaviour of rule_law; it is in every rule-law identifier, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::rule_law::RULE_SEMANTICS_ID"

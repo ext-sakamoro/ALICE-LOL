@@ -64,6 +64,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 |------|---------|
 | `law <name>` | the law name |
 | `kind research` / `kind audit` | a quantitative law, or an audit of measurements |
+| `kind machine` / `kind predicate` | a state machine, or a predicate over typed inputs (see "Rule laws" below) |
 | `claim <text>` | what the law states, in words |
 | `input <name> <unit> [range <lo> <hi>]` | an input. With `range`, the law applies only for `lo <= value <= hi`. Any other value is rejected. |
 | `param <name> <value> <uncertainty> <unit>` | a named constant |
@@ -76,7 +77,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 How the lines are read:
 
 - **The `law` line is not read.** It names the law for people. The law name is the file name: a law file without a `law` line, with another name on it, or with a second `law` line is read the same.
-- **An audit law has the line `kind audit`.** A law file is an audit law when one of its lines, with its comment removed and the spaces at its two ends trimmed, is exactly `kind audit` (one ASCII space between the two words). `kind  audit`, `kind` and `audit` separated by a tab, `kind Audit`, `kind audits` and `kind audit x` are not that line. A law file of your own (a `reader` is given some, see "What to build") without the line `kind audit` is an unknown law: exit with status 2.
+- **An audit law has the line `kind audit`.** A law file is an audit law when one of its lines, with its comment removed and the spaces at its two ends trimmed, is exactly `kind audit` (one ASCII space between the two words). `kind  audit`, `kind` and `audit` separated by a tab, `kind Audit`, `kind audits` and `kind audit x` are not that line. A law file without the line `kind audit` that has the line `kind machine` or `kind predicate` (exact in the same way) is a rule law, read as "Rule laws" below says; a law file with the line `kind audit` is an audit law whatever its other lines. A law file of your own (a `reader` is given some, see "What to build") that is none of these is an unknown law: exit with status 2.
 - **A line whose keyword is not in the table above is not read** outside the audit block. Some law files carry such lines for people (`source <where the law was taken from>`, `oracle <a worked example>`). Inside the audit block every line must be a clause (see "Audit block").
 - **Tokens are separated by spaces or tabs.** Outside the `x-` declarations (below), the words of a line may be separated by one or more spaces or tabs, and spaces at the two ends of a line do not count. `begin audit` and `end audit` are exact: two words separated by one ASCII space. `begin  audit`, `begin` and `audit` separated by a tab, and the same forms of `end audit` open or close no audit block, and the law file then does not read: a request to it is an error of the request.
 
@@ -203,6 +204,97 @@ The verdict is found by checking in this fixed order, whatever the order of the 
 
 Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" or null}}`. Audits never reject, and every measurement is optional, so a missing measurement is not a request error. A request to an audit law without the `inputs` key, or with `"inputs": null`, is the same as `"inputs": {}`: nothing is measured.
 
+## Rule laws
+
+A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`) or a **predicate** over typed inputs (`kind predicate`). Its answer is exact: every output is text, `true` / `false` or `null`, and it is compared exactly.
+
+### Reading a rule law file
+
+The characters, the comments, the line ends and the tokens are read as for every law file (above). In addition:
+
+- **Every line must be read.** A line of a rule law file is empty (after its comment is removed), a line for people (`law`, `claim`, `source`, `verdict`, `oracle`, which are not read), the `kind` line, or one of the lines of its kind below. Any other line makes the law file unreadable, and a request to it is an error of the request. A rule law file has exactly one `kind` line.
+- **Names** (of constants, inputs, bound parts, states, events, mode values, guards and allowances) are ASCII: a lower-case letter followed by lower-case letters, digits and `_`. A name is declared once in a file, whatever it names. The words `true`, `false`, `and`, `or`, `not`, `state`, `mode`, `shape` and the function names below are not names.
+- **`const <name> <type> = <literal>`** declares a named constant. The type is `integer`, `time`, `text`, `bytes` or `bool`, and the literal is one of that type (below). A constant is used by its name in an expression.
+- **Literals.** An integer is ASCII digits (`0` or a digit 1-9 followed by digits), at most 2^53 - 1 (9007199254740991). A time literal is written as an integer. A text is `"` followed by characters other than `"` and `\` and then `"`; it has no escapes. A byte string is `0x` followed by an even number of lower-case hex digits (`0x` alone is the empty byte string). `true` and `false` are the two booleans.
+- **Types of values.**
+  - `integer`: a JSON number that is finite, has an integer value and is at most 2^53 - 1 (9007199254740991) in magnitude (`3` and `3.0` are the same integer).
+  - `time`: a number of seconds since 1970-01-01 00:00:00 UTC, read like `integer`. A time is compared only with a time.
+  - `text`: a JSON string.
+  - `bytes`: a JSON string of lower-case hex digits, of even length (`""` is the empty byte string).
+  - `bool`: `true` or `false`.
+  - `record(<field>: <type>, ...)`: a JSON object that has every field, each of its type. Other keys are ignored. A field is used as `<input>.<field>`.
+  - A value of another JSON type, or text that is not of the form, does not have the type.
+- **Every expression is typed when the file is read.** A name that is not declared (in a predicate law: on an earlier line; in a machine law: anywhere in the file), a function or operator applied to values of other types, or a `require` / `when` that is not a boolean makes the law file unreadable.
+
+### State machine (`kind machine`)
+
+| line | meaning |
+|------|---------|
+| `mode <value> <value>...` | at most one line: the request input `mode` is one of these values; it does not change |
+| `state <name>` / `state <name> initial` | a state; exactly one state is `initial` |
+| `event <name>` / `event <name> guard <guard> <guard>...` | an event, and the booleans the request gives with it |
+| `on <event> from <state> <state>... to <state>` / `... when <expression>` | a transition: the event, taken in one of the `from` states when the expression holds, leads to the `to` state |
+| `allow <name> when <expression>` | an allowance, evaluated after the step |
+| `const ...` | a named constant (above) |
+
+A machine law has at least one state, one event and one `on` line, and every name on an `on` line is a declared state or event.
+
+**Expressions** of a machine law: `state == <state>`, `state != <state>`, `mode == <value>`, `mode != <value>`, the guards of the event of the `on` line (only in its `when`), boolean constants, `true` and `false`, combined with `not`, `and`, `or` and parentheses (`not` binds tighter than `and`, and `and` tighter than `or`). In an `allow` line `state` is the state after the step, and a guard is not available.
+
+**A request** gives one step:
+
+```json
+{"law": "<name>", "inputs": {"mode": "<value>", "state": "<state>", "event": "<event>", "guards": {"<guard>": true}}}
+```
+
+- `state` and `event` (and `mode` when the law has a `mode` line) are required: a request without one of them is an error of the request (exit with status 2).
+- A `state`, `event` or `mode` that is not text, or not a declared state, event or mode value, is rejected.
+- `guards` is an object. Each guard of the requested event must be in it as `true` or `false`; other keys are ignored. A `guards` value that is not an object, a missing guard of the event and a guard that is not a boolean are rejected. A request without `guards` is the same as `"guards": {}`.
+
+**The step.** The `on` lines are tried in file order. The first one whose event is the requested event, whose `from` states contain the requested state and whose `when` holds (or has none) is taken: the new state is its `to` state. When none is taken the event is refused and the state does not change.
+
+**Output:** `{"outputs": {"state": "<new state>", "transition": "taken" or "refused", "allow": {"<name>": true or false, ...}}}` with one entry per `allow` line (`{}` when there is none).
+
+### Predicate (`kind predicate`)
+
+| line | meaning |
+|------|---------|
+| `x-input <name> <type>` | an input of the request, with its type (above; a record's fields are of the other types) |
+| `x-split <source> "<separator>" <name> <name>...` | the text `<source>` (an input or a part bound earlier) split on every occurrence of the separator (a text literal, not empty) into exactly as many parts as names |
+| `x-bind <name> <part> integer` / `time` / `hex` | the part read as an integer or a time (`0`, or an optional `-` followed by a digit 1-9 and digits, at most 2^53 - 1 (9007199254740991) in magnitude: no `+`, no leading zero, no space) or as hex (lower-case hex digits of even length, giving bytes) |
+| `use alice-sign hmac_sha256` | the law calls `hmac_sha256` (below) |
+| `require <label>: <expression>` | a condition, named by its label |
+| `const ...` | a named constant (above) |
+| `example <JSON object>` | request inputs for which the predicate holds, written on one line. It is not read by an implementation; the checks start from it, and a law file whose example does not hold, or is not a JSON object, does not read |
+
+A predicate law has at least one `require` line and one `example` line. Each `x-` line here is the keyword, exactly one ASCII space, and the rest, as for the other `x-` lines.
+
+**Expressions** of a predicate law (from the loosest binding to the tightest):
+
+| form | types | value |
+|------|-------|-------|
+| `a or b`, `a and b`, `not a` | bool | as usual |
+| `a == b`, `a != b` | two values of one type (not a record) | equality; bytes and text are equal when they are the same sequence |
+| `a < b`, `a <= b`, `a > b`, `a >= b` | two integers, or two times | the order of the numbers |
+| `a ++ b` | bytes | the concatenation |
+| `len(x)` | text or bytes | the number of bytes (of the UTF-8 form of a text): an integer |
+| `prefix(b, n)` | bytes, integer | the first `n` bytes of `b`; all of `b` when `n` is at least its length; empty when `n` is 0 or less |
+| `utf8(t)` | text | the UTF-8 bytes of `t` |
+| `hmac_sha256(key, message)` | bytes, bytes | HMAC-SHA256 (RFC 2104 with SHA-256): 32 bytes. Only in a law with the `use` line |
+
+Comparisons do not chain (`a < b < c` makes the law file unreadable); parentheses group.
+
+**A request** gives the `x-input` values:
+
+- A request without one of the `x-input` keys is an error of the request (exit with status 2). A missing input is decided before any other check.
+- An input value that does not have its type is rejected.
+
+**The answer.** First the `x-split` and `x-bind` lines are applied in file order. When a split does not give exactly its number of parts, or a part does not read as its type, the predicate does not hold and `failed` is `shape`. Then the `require` lines are evaluated in file order; the first that does not hold gives its label as `failed`.
+
+**Output:** `{"outputs": {"valid": true, "failed": null}}` when every line holds, otherwise `{"outputs": {"valid": false, "failed": "<label or shape>"}}`. A predicate never rejects a request whose inputs have their types.
+
+The time an implementation takes to compare two byte strings should not depend on where they first differ (compare a secret, such as a tag, in constant time). The checks cannot observe this, and nothing is scored on it.
+
 ## Not specified (do not rely on it)
 
 The checks do not decide these points, and no rule is given for them yet. A program may answer them in any way, and nothing here is scored on them; a program that reads law files when it runs (`reader`) should not depend on any particular answer.
@@ -212,4 +304,4 @@ The checks do not decide these points, and no rule is given for them yet. A prog
 - **How the reported output of a simulation is linked to its states.** Which `x-state`, at which times (each step of `x-step fixed`, or the times of a list input), forms the `x-output`, when the law does not say it in words, is open.
 - **A rate of change that depends on time.** An `x-ode` expression that uses the time itself (not only the states and inputs) is not used by any law, and its meaning is open.
 - **Whether the closed form of a simulated law must be finite.** The program reports its simulation, and the closed form is the reference it is judged against. Whether a request is rejected when the closed form is not finite there but the simulation is, is open.
-- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.
+- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit`, `kind machine` or `kind predicate` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit and rule law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.

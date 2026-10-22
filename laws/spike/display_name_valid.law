@@ -1,0 +1,19 @@
+# A display name: not empty, at most 32 bytes of UTF-8, and not the reserved name
+law display_name_valid
+kind predicate
+claim a display name has at least one byte and at most 32 bytes in its UTF-8 form (bytes, not characters)
+claim the name "admin" is reserved
+source a display-name rule of a sign-up form (the rule is stated here; nothing outside this file defines it)
+
+const max_bytes integer = 32
+x-input name text
+x-input age integer
+
+require present: len(name) > 0
+require short: len(name) <= max_bytes
+require free: name != "admin"
+require adult: age >= 18
+
+example {"name": "río", "age": 30}
+
+verdict whether the name holds, and the first condition that does not

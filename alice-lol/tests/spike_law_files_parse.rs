@@ -7,6 +7,7 @@
 //! |---------|---------|------------|
 //! | `law <name>` | law name | — |
 //! | `kind research\|audit` | — | — |
+//! | `kind machine\|predicate` | a rule law: the whole file is read by `rule_law::rule_law_from_file` | — |
 //! | `claim <text>` / `verdict <text>` / `source <text>` | prose | — |
 //! | `input <name> <unit> [range <lo> <hi>]` | input with unit and valid range | `Unit::parse`, `ValidRange` |
 //! | `param <name> <value> <uncertainty> <unit>` | constant | `Param`, `Unit::parse` |
@@ -32,6 +33,7 @@ use alice_lol::research_law::{
     LawExpr, Param, Provenance, ResearchLaw, ResearchLawError, ResearchOracle, Unit, ValidRange,
     Var,
 };
+use alice_lol::rule_law::{rule_kind, rule_law_from_file};
 use alice_lol::runtime_parser::parse_law;
 
 fn law_dir() -> PathBuf {
@@ -503,9 +505,21 @@ fn every_spike_law_file_parses_with_the_existing_parsers() {
     files.sort();
     assert!(!files.is_empty(), "no .law files found (compared nothing)");
     let mut counts = Counts::default();
+    let mut rule_laws = 0;
     for f in &files {
+        // a rule law (kind machine / predicate) has a reader of its own (conformance/TASK.md
+        // "Rule laws"): it must read with it, and its lines are not those of this table
+        let text = std::fs::read_to_string(f).expect("law file");
+        if rule_kind(&text).is_some() {
+            if let Err(e) = rule_law_from_file(&text) {
+                panic!("{}: {e}", f.display());
+            }
+            rule_laws += 1;
+            continue;
+        }
         check_file(f, &mut counts);
     }
+    eprintln!("{rule_laws} rule laws read with rule_law_from_file");
     eprintln!(
         "{} files: {} expressions, {} units, {} oracles, {} audit blocks, {} x-expr rejected",
         files.len(),

@@ -9,7 +9,7 @@
 # law modules but is not listed below also fails the run, so a new oracle file
 # cannot be skipped silently. Used by ci.yml and scripts/preflight.sh.
 #
-# usage: scripts/law_tests.sh [default|physics|all|list] [cargo test args...]   (default: all)
+# usage: scripts/law_tests.sh [default|physics|crypto|all|list] [cargo test args...]   (default: all)
 #   extra arguments go to every `cargo test` (e.g. `--release` for the release-profile leg)
 #   list: only check that every law test file is listed (CI counts the runs from
 #         the log of its full `cargo test` with scripts/law_tests_from_log.py)
@@ -35,10 +35,15 @@ DEFAULT_TARGETS=(
   "alice-lol|--test print_tests|"
   "alice-lol|--test spike_law_files_parse|"
   "alice-lol|--test finite_evaluation_rule|"
+  "alice-lol|--test rule_law_oracle|"
   "alice-lol-robot|--test analytic_robot_law|"
 )
 PHYSICS_TARGETS=(
   "alice-lol|--test analytic_thermal|physics"
+)
+# the rule-law call (`hmac_sha256`) is built only with crypto-calls; run with `crypto` / `all`
+CRYPTO_TARGETS=(
+  "alice-lol|--test rule_law_oracle|crypto-calls"
 )
 
 mode="${1:-all}"
@@ -46,8 +51,9 @@ extra=("${@:2}")
 case "$mode" in
   default) targets=("${DEFAULT_TARGETS[@]}") ;;
   physics) targets=("${PHYSICS_TARGETS[@]}") ;;
-  all|list) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}") ;;
-  *) echo "usage: $0 [default|physics|all|list]" >&2; exit 2 ;;
+  crypto) targets=("${CRYPTO_TARGETS[@]}") ;;
+  all|list) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}" "${CRYPTO_TARGETS[@]}") ;;
+  *) echo "usage: $0 [default|physics|crypto|all|list]" >&2; exit 2 ;;
 esac
 
 # Every integration test file that uses `law::` or `research_law` must be listed

@@ -1,0 +1,21 @@
+# A turnstile with an attendant override: the first matching transition is taken
+law turnstile_override
+kind machine
+claim a coin unlocks a locked turnstile; a push locks it again
+claim an attendant's push on a locked turnstile lets the person through and leaves it unlocked; the transition listed first is the one taken
+claim the light is green exactly when the turnstile is unlocked and not in maintenance
+source the textbook turnstile machine with an override (the rule is stated here; nothing outside this file defines it)
+
+const maintenance bool = false
+state locked initial
+state unlocked
+event coin
+event push guard attendant
+
+on coin from locked to unlocked
+on push from locked to unlocked when attendant
+on push from locked unlocked to locked
+
+allow green when state == unlocked and not maintenance
+
+verdict the new state, whether the transition was taken, and the light after the step, for every state, event and guard

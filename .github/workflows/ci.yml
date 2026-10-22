@@ -100,6 +100,14 @@ jobs:
           scripts/law_tests.sh list
           python3 scripts/law_tests_from_log.py default "$RUNNER_TEMP/cargo-test.log"
 
+      # rule laws that call `hmac_sha256` (alice-sign, feature `crypto-calls`, off by default):
+      # the oracle with the call built, run by name (0 tests run is a failure)
+      - name: Law oracles (crypto-calls, rule laws with the call)
+        if: matrix.label == ''
+        working-directory: ALICE-LOL
+        shell: bash
+        run: scripts/law_tests.sh crypto
+
       - name: Law oracles (physics, each target ran at least one test)
         if: matrix.label == ' physics'
         working-directory: ALICE-LOL
@@ -723,6 +731,8 @@ jobs:
         run: python scripts/test_law_ambiguity_lint.py
       - name: law_ambiguity_lint (method scope / range provenance / 言語中立性、0 件は fail)
         run: python scripts/law_ambiguity_lint.py laws/spike
+      - name: law_rules oracle (規則の Law の読み・答え・corpus・被覆の試験)
+        run: python scripts/test_law_rules.py
       - name: law_schema oracle (x-input の型の構文と照合の試験)
         run: python scripts/test_law_schema.py
       - name: law_schema (laws/spike の全 x-input の型を読む、0 件は fail)

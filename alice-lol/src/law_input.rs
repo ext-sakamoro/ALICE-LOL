@@ -1037,7 +1037,7 @@ const DASH_LIKE: &[char] = &['-', '\u{FE63}', '\u{FF0D}'];
 /// Whether a character may appear in a law file: TAB and every non-control character,
 /// except the format characters and the line / paragraph separators (LF and the CR of a
 /// CR LF are taken out before this check)
-fn allowed_char(c: char) -> bool {
+pub(crate) fn allowed_char(c: char) -> bool {
     let cp = u32::from(c);
     c == '\t'
         || !(c.is_control()

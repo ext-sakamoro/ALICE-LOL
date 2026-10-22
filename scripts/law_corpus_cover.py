@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import law_corners as lc  # noqa: E402
+import law_rules as lr  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,12 +57,25 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--law", action="append", help="check only this law (repeatable)")
     a = ap.parse_args(argv)
     files = sorted(Path(a.laws).glob("*.law"))
-    laws = [lc.load(f) for f in files]
+    texts = {f: f.read_text(encoding="utf-8") for f in files}
+    rule_files = [f for f in files if lr.rule_kind(texts[f])]
+    laws = [lc.load(f) for f in files if f not in rule_files]
     if a.law:
         laws = [x for x in laws if x["name"] in a.law]
+        rule_files = [f for f in rule_files if f.stem in a.law]
     corpus = json.loads(Path(a.corpus).read_text(encoding="utf-8"))
     report, n_laws, n_corners = cover(laws, corpus)
     bad = 0
+    # a rule law has no range corners: its corpus must hold every step of a machine, and
+    # a vector failing each condition of a predicate (scripts/law_rules.py coverage)
+    for f in rule_files:
+        vecs = [v for v in corpus if v["law"] == f.stem]
+        missing = lr.coverage(lr.parse(texts[f]), vecs) if vecs else ["any vector"]
+        n_laws += 1
+        print(f"{f.stem}: rule law, {len(vecs)} vectors  {'ok' if not missing else 'MISSING'}")
+        for m in missing:
+            print(f"  missing: {m}")
+        bad += len(missing)
     for name, (covered, missing, nvec) in report.items():
         total = len(covered) + len(missing)
         status = "ok" if not missing and nvec else "MISSING"
