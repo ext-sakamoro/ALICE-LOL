@@ -34,3 +34,8 @@ path = "alice_lol::rule_law::RULE_SEMANTICS_ID"
 # only with a breaking version
 [[id]]
 path = "alice_lol::layout::LAYOUT_SEMANTICS_ID"
+
+# the semantics of the motion laws (kind motion): the fold of MOTION_SEMANTICS_PINS, measured from the
+# behaviour of motion_law; it is in every motion-law identifier, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::motion_law::MOTION_SEMANTICS_ID"

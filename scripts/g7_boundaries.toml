@@ -567,3 +567,13 @@ reason = "the names and values of this crate's own behaviour pins, folded into L
 path = "alice_lol::layout::hex32"
 class = "local"
 reason = "a hex literal of this crate's own constants, read at compile time"
+
+[[entry]]
+path = "alice_lol::motion_law::MotionLaw::from_file"
+class = "authoring"
+reason = "reads motion law text a person or a model writes; the law's identifier (kind tag, MOTION_SEMANTICS_ID, the declaration as a tree) names what was read, and a law received from another program arrives with its identifier to compare"
+
+[[entry]]
+path = "alice_lol::motion_law::MotionLaw::bind"
+class = "local"
+reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error); the values are Rust f64, range-checked against the declaration"

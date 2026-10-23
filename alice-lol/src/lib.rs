@@ -117,6 +117,10 @@ pub mod law_input;
 // 上の 3 つとも別物: 答えは厳密な値 (text / bool / null)、識別子は種類ごとの意味論 pin で既存の Law に触れない
 pub mod rule_law;
 
+// ── 動きの Law (kind motion): 文字の並びが時刻とともにどう動くか ──
+// 時刻は整数 ms、周期の位置は整数から、式は research と同じ評価器、channel は最後に 1 回だけ f32 へ
+pub mod motion_law;
+
 /// Byte layout laws (`kind layout`): a binary format declared once, bytes read and checked
 /// against the declaration (the crate `alice-lol-layout`, re-exported)
 pub use alice_lol_layout as layout;

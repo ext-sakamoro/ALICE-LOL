@@ -749,6 +749,30 @@ impl LawExpr {
     }
 }
 
+impl LawExpr {
+    /// The expression with its identifiers resolved to slots of `names` (for the other law
+    /// kinds that evaluate the same expressions, such as motion laws)
+    pub(crate) fn compile_named(&self, names: &[&str]) -> Result<CompiledExpr> {
+        compile(&self.root, names, &[]).map(CompiledExpr)
+    }
+
+    /// The expression tree hashed as research laws hash it (spelling does not count)
+    pub(crate) fn hash_into(&self, h: crate::law_id::LawIdHasher) -> crate::law_id::LawIdHasher {
+        hash_node(h, &self.root)
+    }
+}
+
+/// An expression whose identifiers are slots, evaluated as research laws evaluate theirs
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CompiledExpr(Code);
+
+impl CompiledExpr {
+    /// The value for the slot values `values` (in the order of the names it was compiled with)
+    pub(crate) fn eval(&self, values: &[f64]) -> Result<f64> {
+        eval(&self.0, values, &[])
+    }
+}
+
 /// The fixed expressions behind [`expression_functions_fingerprint`]: every function, the
 /// quadrants and axes of `atan2`, the first-of-equal rule of `min` / `max` (the sign of
 /// zero shows which argument was taken) and the argument counts that do not parse
