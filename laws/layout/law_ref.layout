@@ -1,0 +1,28 @@
+# A reference to a law with its parameter values (alice_lol::law_ref)
+law alice_law_ref_v1
+kind layout
+claim a law reference is a 72-byte header naming the law and the semantics it was written under, then one 40-byte row per parameter of the law, in the law's declared order, and nothing after
+claim a row's name is the parameter's name followed by zero bytes up to 32 bytes; its value is the bits of an IEEE binary64 number
+source alice-lol/src/law_ref.rs (module documentation)
+
+endian le
+
+const MAGIC bytes = 0x4c4f4c52
+const VERSION integer = 1
+const MAX_PARAMS integer = 64
+
+block header size 72
+field magic bytes 4 = MAGIC refuse bad_magic
+field version u16 = VERSION refuse version
+field count u16 in 0 MAX_PARAMS refuse count
+field semantics_id bytes 32
+field law_id bytes 32
+end block
+
+block param size 40
+field name bytes 32
+field value u64
+end block
+
+segment header block header refuse too_short
+segment params table param count header.count refuse layout
