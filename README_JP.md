@@ -382,6 +382,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
 | [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | `SdfNode` 評価の識別子が何から決まり、`law_id` とどう別か |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
+| [`motion_check`](alice-lol/examples/motion_check.rs) | 動きの Law (`kind motion`) を読み、識別子・timing・指定した時刻の glyph ごとの channel を数値と bit で出す `--semantics` は動きの意味論の pin を計測する |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | 同じ mesh を STL / 3MF / FBX に書き、解像度 preset を並べる |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | 区間演算による格子セルごとの枝刈り |

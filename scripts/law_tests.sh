@@ -36,6 +36,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test spike_law_files_parse|"
   "alice-lol|--test finite_evaluation_rule|"
   "alice-lol|--test rule_law_oracle|"
+  "alice-lol|--test motion_law_oracle|"
   "alice-lol-robot|--test analytic_robot_law|"
 )
 PHYSICS_TARGETS=(

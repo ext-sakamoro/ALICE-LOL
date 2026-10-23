@@ -1,0 +1,132 @@
+//! Read a motion law and print what it sets on each glyph at the given instants
+//!
+//! ```text
+//! motion_check <law file> <glyphs> <t_ms>... [--param name=value]...   # the channels, as numbers and bits
+//! motion_check --semantics                                           # the measured pins against the built-in ones
+//! ```
+//!
+//! Exit status: 0 read / matched, 1 refused / differs, 2 usage or I/O error.
+
+use std::process::ExitCode;
+
+use alice_lol::motion_law::{
+    measured_motion_semantics_id, motion_semantics_fingerprints, MotionLaw, CHANNELS,
+    MOTION_SEMANTICS_ID, MOTION_SEMANTICS_PINS,
+};
+
+fn hex(b: &[u8]) -> String {
+    use std::fmt::Write as _;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
+}
+
+fn semantics() -> ExitCode {
+    let mut same = true;
+    for ((name, pinned), (_, measured)) in MOTION_SEMANTICS_PINS
+        .iter()
+        .zip(motion_semantics_fingerprints())
+    {
+        println!("{name}: measured {}", hex(&measured));
+        same &= *pinned == measured;
+    }
+    let id = measured_motion_semantics_id();
+    println!("MOTION_SEMANTICS_ID measured {}", hex(&id));
+    if same && id == MOTION_SEMANTICS_ID {
+        println!("matches the pinned semantics");
+        ExitCode::SUCCESS
+    } else {
+        println!(
+            "differs from the pinned semantics {}",
+            hex(&MOTION_SEMANTICS_ID)
+        );
+        ExitCode::from(1)
+    }
+}
+
+fn usage() -> ExitCode {
+    eprintln!(
+        "usage: motion_check <law file> <glyphs> <t_ms>... [--param name=value]... | --semantics"
+    );
+    ExitCode::from(2)
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.len() == 1 && args[0] == "--semantics" {
+        return semantics();
+    }
+    let [path, glyphs, rest @ ..] = args.as_slice() else {
+        return usage();
+    };
+    let Ok(n) = glyphs.parse::<u32>() else {
+        return usage();
+    };
+    let mut times = Vec::new();
+    let mut params: Vec<(String, f64)> = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--param" {
+            let Some((k, v)) = it.next().and_then(|p| p.split_once('=')) else {
+                return usage();
+            };
+            let Ok(v) = v.parse::<f64>() else {
+                return usage();
+            };
+            params.push((k.to_owned(), v));
+        } else if let Ok(t) = a.parse::<u64>() {
+            times.push(t);
+        } else {
+            return usage();
+        }
+    }
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let law = match MotionLaw::from_file(&text) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{path}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    println!("law {} id {}", law.name(), hex(&law.law_id()));
+    for p in law.params() {
+        println!("param {} = {} in {}..={}", p.name, p.default, p.lo, p.hi);
+    }
+    let given: Vec<(&str, f64)> = params.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    let bound = match law.bind(&given) {
+        Ok(b) => b,
+        Err(e) => {
+            println!("refused: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let timing = bound.timing();
+    println!(
+        "period {} ms, stagger {} ms",
+        timing.period_ms, timing.stagger_ms
+    );
+    for t in times {
+        for i in 0..n {
+            match bound.sample(t, i, n) {
+                Ok(c) => {
+                    let bits = c.to_bits();
+                    let shown: Vec<String> = CHANNELS
+                        .iter()
+                        .zip(bits)
+                        .map(|(name, b)| format!("{name}={} ({b:08x})", f32::from_bits(b)))
+                        .collect();
+                    println!("t={t} glyph {i}: {}", shown.join(" "));
+                }
+                Err(e) => println!("t={t} glyph {i}: refused: {e}"),
+            }
+        }
+    }
+    ExitCode::SUCCESS
+}
