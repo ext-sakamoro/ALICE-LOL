@@ -14,7 +14,6 @@ unwired alice-lol-ui/src/primitives.rs::square
 unwired alice-lol-ui/src/primitives.rs::triangle
 unwired alice-lol-ui/src/primitives.rs::vertical
 unwired alice-lol-ui/src/theme.rs::golden_ratio_step
-unwired alice-lol/src/det_math.rs::min64
 unwired alice-lol/src/intent.rs::align
 unwired alice-lol/src/intent.rs::as_sdf
 unwired alice-lol/src/intent.rs::avoid
