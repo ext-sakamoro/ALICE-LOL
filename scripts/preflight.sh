@@ -43,6 +43,11 @@ has_toolchain() { rustup toolchain list | grep -q "^$1"; }
 #   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_lol_emit_parity] (no cargo / grep)
 #   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_lol_emit_parity] (continue-on-error)
 #   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_lol_emit_parity] (no cargo / grep)
+#   - fuzz.yml:fuzz:Create SDF dependency stubs [target=fuzz_layout_decode] (no cargo / grep)
+#   - fuzz.yml:fuzz:Install cargo-fuzz [target=fuzz_layout_decode] (needs network / runner-only)
+#   - fuzz.yml:fuzz:Set fuzz duration [target=fuzz_layout_decode] (no cargo / grep)
+#   - fuzz.yml:fuzz:Run fuzz target (time-boxed) [target=fuzz_layout_decode] (continue-on-error)
+#   - fuzz.yml:fuzz:Report crash (informational) [target=fuzz_layout_decode] (no cargo / grep)
 
 need actionlint "brew install actionlint"
 need cargo-audit "cargo install cargo-audit --locked"
@@ -333,6 +338,17 @@ if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
     export CARGO_TERM_COLOR="always"
     cd fuzz
     cargo +nightly fuzz build "fuzz_lol_emit_parity"
+  )
+else
+  echo "skip: nightly / cargo-fuzz not installed" >&2
+fi
+
+step "fuzz.yml / fuzz: Build fuzz target [target=fuzz_layout_decode]"
+if has_toolchain nightly && cargo +nightly fuzz --version >/dev/null 2>&1; then
+  (
+    export CARGO_TERM_COLOR="always"
+    cd fuzz
+    cargo +nightly fuzz build "fuzz_layout_decode"
   )
 else
   echo "skip: nightly / cargo-fuzz not installed" >&2

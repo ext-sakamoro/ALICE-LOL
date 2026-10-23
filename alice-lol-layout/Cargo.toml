@@ -1,0 +1,25 @@
+[package]
+name = "alice-lol-layout"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "Byte layout laws for ALICE-LOL: declare the fields, lengths, order and checks of a binary format once, and decode or check bytes against that declaration"
+license = "Apache-2.0"
+authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
+repository = "https://github.com/ext-sakamoro/ALICE-LOL"
+homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
+documentation = "https://docs.rs/alice-lol-layout"
+readme = "README.md"
+keywords = ["binary-format", "layout", "parser", "law", "dsl"]
+categories = ["parser-implementations", "encoding", "no-std"]
+
+[dependencies]
+# the digests a layout declares and the identifier of a layout law
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+# the tests recompute digests with the same crate, std for formatting
+sha2 = { version = "0.10" }
+
+[features]
+default = []
