@@ -124,7 +124,13 @@ fn the_0_4_1_identifier_is_verified_previous() {
         check_lol_semantics(&LOL_UNDER_0_5_0),
         SemanticsCheck::VerifiedPrevious(LOL_UNDER_0_5_0)
     );
-    assert_eq!(check_lol_semantics(&LOL_SEMANTICS_ID), SemanticsCheck::Verified);
+    assert_eq!(
+        check_lol_semantics(&LOL_SEMANTICS_ID),
+        SemanticsCheck::Verified
+    );
     assert_eq!(check_lol_semantics(&[0_u8; 32]), SemanticsCheck::Mismatch);
-    assert_eq!(check_lol_semantics(&DET_MATH_0_5_0), SemanticsCheck::Mismatch);
+    assert_eq!(
+        check_lol_semantics(&DET_MATH_0_5_0),
+        SemanticsCheck::Mismatch
+    );
 }

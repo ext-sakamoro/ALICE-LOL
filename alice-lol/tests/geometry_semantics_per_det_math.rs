@@ -115,6 +115,12 @@ fn the_0_4_1_geometry_identifier_is_verified_previous() {
         check_lol_geometry_semantics(&LOL_GEOMETRY_SEMANTICS_ID),
         SemanticsCheck::Verified
     );
-    assert_eq!(check_lol_geometry_semantics(&[0_u8; 32]), SemanticsCheck::Mismatch);
-    assert_eq!(check_lol_geometry_semantics(&DET_MATH_0_5_0), SemanticsCheck::Mismatch);
+    assert_eq!(
+        check_lol_geometry_semantics(&[0_u8; 32]),
+        SemanticsCheck::Mismatch
+    );
+    assert_eq!(
+        check_lol_geometry_semantics(&DET_MATH_0_5_0),
+        SemanticsCheck::Mismatch
+    );
 }
