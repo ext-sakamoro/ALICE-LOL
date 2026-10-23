@@ -11,9 +11,13 @@ LAW_ID_DOMAIN = "alice-zip's domain-separation tag for law identifiers, re-expor
 
 [[id]]
 path = "alice_lol::law_id::LOL_SEMANTICS_ID"
+previous = "alice_lol::law_id::PREVIOUS_LOL_SEMANTICS_IDS"
+previous-tests = ["tests/semantics_id_per_det_math.rs::the_previous_list_is_the_rows_det_math_verifies_as_the_same_bits", "tests/semantics_id_per_det_math.rs::the_0_4_1_identifier_is_verified_previous"]
 
 [[id]]
 path = "alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID"
+previous = "alice_lol::geometry_id::PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS"
+previous-tests = ["tests/geometry_semantics_per_det_math.rs::the_previous_list_is_the_rows_det_math_verifies_as_the_same_bits", "tests/geometry_semantics_per_det_math.rs::the_0_4_1_geometry_identifier_is_verified_previous"]
 
 # the primary identifier LOL's exports (STL / 3MF / FBX) write: alice-sdf's mesh meaning, the bytes LOL writes
 [[id]]

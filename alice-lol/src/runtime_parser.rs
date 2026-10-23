@@ -18,9 +18,9 @@
 crate::raw_minmax::raw_minmax_here!(max_f32);
 
 use crate::audit_law::{sorted_values, AuditLaw, Clause};
-use crate::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
+use crate::geometry_id::{check_lol_geometry_semantics, LOL_GEOMETRY_SEMANTICS_ID};
 use crate::intent::{HandSide, IntentNode, NodeId, Program, ProgramBuilder};
-use crate::law_id::LOL_SEMANTICS_ID;
+use crate::law_id::{check_lol_semantics, LOL_SEMANTICS_ID};
 use crate::units::{Declared, Purpose, Unit, UnitsDecl};
 use crate::SdfNode;
 use glam::{Vec2, Vec3};
@@ -78,7 +78,9 @@ pub struct ParseError {
 pub enum ParseErrorKind {
     /// 構文の誤り (未知の構文・引数の数・数値の範囲・末尾ゴミ など)
     Syntax,
-    /// 包みの識別子 (`theirs`、書いた側) がこの版の識別子 (`ours`) と違う
+    /// 包みの識別子 (`theirs`、書いた側) がこの版の識別子 (`ours`) と違う 同じ bit を再現する以前の
+    /// 版の識別子 ([`crate::law_id::PREVIOUS_LOL_SEMANTICS_IDS`] /
+    /// [`crate::geometry_id::PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS`]) は違いとしない
     SemanticsMismatch {
         /// この版の識別子
         ours: [u8; 32],
@@ -3252,19 +3254,24 @@ impl Parser<'_> {
     }
 }
 
-/// 包みを読み (任意 / 必須)、識別子を照合してから中身を読み、末尾を確かめる
+/// 包みを読み (任意 / 必須)、識別子を `check` で照合してから中身を読み、末尾を確かめる
+/// (`Mismatch` だけを断り、以前の版の同じ bit の識別子 `VerifiedPrevious` は読む)
 ///
 /// 識別子の照合は中身より先: 別の版の文法で書かれた中身の構文エラーより、識別子の不一致を返す
 fn read_wrapped<'a, T>(
     input: &'a str,
     ours: &[u8; 32],
+    check: fn(&[u8; 32]) -> alice_det_math::SemanticsCheck,
     stamp: Stamp,
     body: impl FnOnce(&mut Parser<'a>) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
     let mut parser = Parser::new(input);
     let wrapped = parser.read_semantics_open()?;
     match wrapped {
-        Some((theirs, at)) if theirs != *ours => return Err(semantics_mismatch(ours, theirs, at)),
+        // an identifier of an earlier release that reproduces the same bits reads as ours
+        Some((theirs, at)) if check(&theirs) == alice_det_math::SemanticsCheck::Mismatch => {
+            return Err(semantics_mismatch(ours, theirs, at));
+        }
         None if stamp == Stamp::Required => return Err(semantics_missing(ours)),
         _ => {}
     }
@@ -3322,6 +3329,7 @@ pub fn parse_lol(input: &str) -> Result<SdfNode, ParseError> {
     read_wrapped(
         input,
         &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
         Stamp::Optional,
         Parser::read_lol,
     )
@@ -3351,6 +3359,7 @@ pub fn parse_lol_stamped(input: &str) -> Result<SdfNode, ParseError> {
     read_wrapped(
         input,
         &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
         Stamp::Required,
         Parser::read_lol,
     )
@@ -3775,10 +3784,16 @@ impl Parser<'_> {
 /// 構文エラー / 未知の verb / entity id 範囲外 / 整数が要る箇所に小数 / 末尾ゴミ
 /// ([`ParseErrorKind::Syntax`]) / 包みの識別子がこの版と違う ([`ParseErrorKind::SemanticsMismatch`])
 pub fn parse_program(input: &str) -> Result<Program, ParseError> {
-    read_wrapped(input, &LOL_GEOMETRY_SEMANTICS_ID, Stamp::Optional, |p| {
-        p.refuse_units_declaration()?;
-        p.read_program()
-    })
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
+        Stamp::Optional,
+        |p| {
+            p.refuse_units_declaration()?;
+            p.read_program()
+        },
+    )
 }
 
 /// [`parse_program`] の交換用: `semantics(<id>, ...)` の包みを必須にする ([`parse_lol_stamped`] と同じ規則)
@@ -3788,10 +3803,16 @@ pub fn parse_program(input: &str) -> Result<Program, ParseError> {
 /// 包みが無い / 識別子が違う / 中身の構文エラー ([`parse_program`] と同じ)
 // ALLOW-UNWIRED: exchange reader for text another program or release wrote; its callers are outside this workspace (scripts/g7_boundaries.toml class exchange)
 pub fn parse_program_stamped(input: &str) -> Result<Program, ParseError> {
-    read_wrapped(input, &LOL_GEOMETRY_SEMANTICS_ID, Stamp::Required, |p| {
-        p.refuse_units_declaration()?;
-        p.read_program()
-    })
+    read_wrapped(
+        input,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
+        Stamp::Required,
+        |p| {
+            p.refuse_units_declaration()?;
+            p.read_program()
+        },
+    )
 }
 
 /// 単位の宣言があれば読み、program を読む
@@ -3833,6 +3854,7 @@ pub fn parse_declared(input: &str) -> Result<Declared, ParseError> {
     read_wrapped(
         input,
         &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
         Stamp::Optional,
         Parser::read_declared,
     )
@@ -3848,6 +3870,7 @@ pub fn parse_declared_stamped(input: &str) -> Result<Declared, ParseError> {
     read_wrapped(
         input,
         &LOL_GEOMETRY_SEMANTICS_ID,
+        check_lol_geometry_semantics,
         Stamp::Required,
         Parser::read_declared,
     )
@@ -4001,7 +4024,8 @@ fn read_law(input: &str, stamp: Stamp) -> Result<AuditLaw, ParseError> {
                         at,
                     ));
                 };
-                if theirs != LOL_SEMANTICS_ID {
+                // an identifier of an earlier release that reproduces the same bits reads as ours
+                if check_lol_semantics(&theirs) == alice_det_math::SemanticsCheck::Mismatch {
                     return Err(semantics_mismatch(&LOL_SEMANTICS_ID, theirs, at));
                 }
             }
