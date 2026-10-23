@@ -588,3 +588,13 @@ reason = "reads a law reference another program wrote; it carries the semantics 
 path = "alice_lol::law_ref::LawRef::motion"
 class = "local"
 reason = "the text is a parameter name, looked up among the names the motion law declares (MotionLaw::bind); the values are Rust f64, range-checked against the declaration"
+
+[[entry]]
+path = "alice_lol::law_input::SeriesExpr::parse"
+class = "authoring"
+reason = "reads the expression of an x-series line of a law file (source); the law's identifier hashes its canonical form with AUDIT_SERIES_SEMANTICS_ID"
+
+[[entry]]
+path = "alice_lol::audit_law::AuditLaw::with_series"
+class = "local"
+reason = "a series name given by the caller"

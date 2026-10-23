@@ -4,6 +4,7 @@
 //! motion_check <law file> <glyphs> <t_ms>... [--param name=value]...   # the channels, as numbers and bits
 //! motion_check <law file> --ref [--param name=value]...                # the law reference as bytes, read back and resolved
 //! motion_check <law file> --frame <t_ms>... [--param name=value]...    # the frame hash of the probe word at each instant
+//! motion_check <law file> --flash <audit law> [--param name=value]...  # the audit law on 2 s of the probe word at 60 Hz
 //! motion_check --semantics                                           # the measured pins against the built-in ones
 //! ```
 //!
@@ -11,9 +12,13 @@
 
 use std::process::ExitCode;
 
+use alice_lol::law_input::{
+    audit_law_from_file, audit_series_fingerprints, measurements, Json, AUDIT_SERIES_SEMANTICS_PINS,
+};
 use alice_lol::law_ref::LawRef;
 use alice_lol::motion_frame::{
-    frame_hash, measured_frame_semantics_id, probe_word, render_frame, FRAME_SEMANTICS_ID,
+    frame_hash, luminance_series, measured_frame_semantics_id, probe_word, render_frame,
+    FRAME_SEMANTICS_ID,
 };
 use alice_lol::motion_law::{
     measured_motion_semantics_id, motion_semantics_fingerprints, MotionLaw, CHANNELS,
@@ -33,6 +38,13 @@ fn semantics() -> ExitCode {
     for ((name, pinned), (_, measured)) in MOTION_SEMANTICS_PINS
         .iter()
         .zip(motion_semantics_fingerprints())
+    {
+        println!("{name}: measured {}", hex(&measured));
+        same &= *pinned == measured;
+    }
+    for ((name, pinned), (_, measured)) in AUDIT_SERIES_SEMANTICS_PINS
+        .iter()
+        .zip(audit_series_fingerprints())
     {
         println!("{name}: measured {}", hex(&measured));
         same &= *pinned == measured;
@@ -72,6 +84,9 @@ fn main() -> ExitCode {
         }
         if flag == "--frame" {
             return frames(path, rest);
+        }
+        if flag == "--flash" {
+            return flash(path, rest);
         }
     }
     let [path, glyphs, rest @ ..] = args.as_slice() else {
@@ -254,4 +269,65 @@ fn frames(path: &str, rest: &[String]) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+/// `--flash`: the luminance of the probe word under the law, 120 frames at 60 Hz, judged by
+/// the audit law
+fn flash(path: &str, rest: &[String]) -> ExitCode {
+    let [audit, params @ ..] = rest else {
+        return usage();
+    };
+    let mut given: Vec<(String, f64)> = Vec::new();
+    let mut it = params.iter();
+    while let Some(a) = it.next() {
+        let Some((k, v)) = (a == "--param")
+            .then(|| it.next())
+            .flatten()
+            .and_then(|p| p.split_once('='))
+        else {
+            return usage();
+        };
+        let Ok(v) = v.parse::<f64>() else {
+            return usage();
+        };
+        given.extend([(k.to_owned(), v)]);
+    }
+    let read = |p: &str| std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"));
+    let law = match read(path).and_then(|t| MotionLaw::from_file(&t).map_err(|e| e.to_string())) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let judge =
+        match read(audit).and_then(|t| audit_law_from_file(&t).map_err(|e| format!("{e:?}"))) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::from(2);
+            }
+        };
+    let values: Vec<(&str, f64)> = given.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    let series =
+        match law.bind(&values).map_err(|e| e.to_string()).and_then(|b| {
+            luminance_series(&probe_word(), &b, 0, 120, 60).map_err(|e| e.to_string())
+        }) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("refused: {e}");
+                return ExitCode::from(1);
+            }
+        };
+    let inputs = Json::Object(vec![(
+        "luminance".to_owned(),
+        Json::Array(series.into_iter().map(Json::Number).collect()),
+    )]);
+    let verdict = judge.evaluate(&measurements(&judge, &inputs));
+    println!("{verdict}");
+    if verdict == alice_lol::audit_law::Verdict::Supports {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
