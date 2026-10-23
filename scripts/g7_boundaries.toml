@@ -439,3 +439,131 @@ reason = "an identifier looked up in this crate's table of generations (an ident
 path = "alice_lol::intent::music_intent"
 class = "local"
 reason = "alice-synth's 8-byte MusicIntent packet, held opaquely and never decoded here; the receiver that decodes it compares the writer's identifier (alice-synth's G7, the stated residual of this crate's G7)"
+
+# alice-lol-layout, re-exported as alice_lol::layout (followed by scripts/g7_boundaries.py)
+
+[[entry]]
+path = "alice_lol::layout::parse"
+class = "authoring"
+reason = "reads a layout law a person or a model writes; an optional first line `semantics <hex>` names the layout semantics it was written for and is compared when present (ErrorKind::SemanticsMismatch names both)"
+
+[[entry]]
+path = "alice_lol::layout::parse_stamped"
+class = "exchange"
+reason = "reads a layout law another program or release wrote: the `semantics` line is required (SemanticsMissing) and compared (SemanticsMismatch naming both identifiers)"
+test = "alice-lol-layout/tests/layout_law.rs::a_stamped_law_is_read_only_under_the_same_layout_semantics"
+
+[[entry]]
+path = "alice_lol::layout::decode"
+class = "local"
+reason = "the decoded values are framing only: integers, byte ranges and SHA-256 digests computed with integer and hash operations that no arithmetic changes (alice-lol-layout has no float and no libm); the payload bytes pass through uninterpreted, so a Law-bearing value inside them is checked by the format's own reader against the file's own identifier (alice-zip's check_semantics on the container's semantics id); the input is a stored file read back later, and the reading itself is pinned by LAYOUT_SEMANTICS_ID in the law's identifier"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::constant"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::data_run"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::derived"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::row_value"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::rows"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::runs"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::segment_bytes"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Decoded::value"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Layout::block"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Layout::constant"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Layout::derive_static"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::Layout::segment"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::data"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::derive"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::field"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::row_field"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::rows"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "<alice_lol::layout::Decoded as Scope>::segment"
+class = "local"
+reason = "the name of a segment, field, constant or derive declared in the law, looked up (not decoded and not Law-bearing)"
+
+[[entry]]
+path = "alice_lol::layout::cond::holds"
+class = "local"
+reason = "the name of the table whose row a bare field names, looked up in the law"
+
+[[entry]]
+path = "alice_lol::layout::decl::tag_text"
+class = "local"
+reason = "the 4 bytes of a declared tag, rendered as ASCII for a document"
+
+[[entry]]
+path = "alice_lol::layout::fold_pins"
+class = "local"
+reason = "the names and values of this crate's own behaviour pins, folded into LAYOUT_SEMANTICS_ID"
+
+[[entry]]
+path = "alice_lol::layout::hex32"
+class = "local"
+reason = "a hex literal of this crate's own constants, read at compile time"

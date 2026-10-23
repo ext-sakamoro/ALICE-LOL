@@ -87,6 +87,7 @@ jobs:
           - fuzz_lol_to_wgsl
           - fuzz_lol_eval
           - fuzz_lol_emit_parity
+          - fuzz_layout_decode
     steps:
       # ci.yml と同じ checkout 構成: alice-lol lib は実 alice-sdf が必須
       # (2026-09-16 に security-audit.yml も real checkout に統一、stub action 廃止)

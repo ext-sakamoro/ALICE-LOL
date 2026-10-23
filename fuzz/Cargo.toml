@@ -41,5 +41,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_layout_decode"
+path = "fuzz_targets/fuzz_layout_decode.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]

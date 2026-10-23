@@ -33,7 +33,7 @@ without a warm cache still fits. Durations are from `gh run view --json jobs`
 | ci.yml | Docs gates (3 OS) | 15 | 0.9 | 15 |
 | ci.yml | Wiring guard (3 OS) | 15 | 0.6 | 15 |
 | ci.yml | actionlint | 15 | 0.2 | 10 |
-| fuzz.yml | Fuzz (<!-- num: fuzz.targets -->4 targets) | 7 | 3.4 | 20 |
+| fuzz.yml | Fuzz (<!-- num: fuzz.targets -->5 targets) | 7 | 3.4 | 20 |
 | security-audit.yml | cargo audit | 7 | 0.6 | 15 |
 | security-audit.yml | cargo-deny | 7 | 0.5 | 15 |
 | security-audit.yml | cargo-machete | 7 | 0.5 | 15 |

@@ -52,6 +52,7 @@ version = "0.5.0"
 dependencies = [
  "alice-det-math",
  "alice-llm",
+ "alice-lol-layout",
  "alice-lol-macro",
  "alice-physics",
  "alice-sdf",
@@ -81,6 +82,13 @@ dependencies = [
  "alice-lol",
  "glam",
  "serde_json",
+]
+
+[[package]]
+name = "alice-lol-layout"
+version = "0.1.0"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]

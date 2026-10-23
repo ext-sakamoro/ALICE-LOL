@@ -11,7 +11,9 @@ complete for the published crates (the release roster: alice-lol and alice-lol-m
     crate root, inherent methods and trait-impl methods of reachable types) with a parameter of a
     text, bytes or reader type (str, String, [u8], [u8; N], Vec<u8>, an iterator of char or u8, Read,
     BufRead, Path, PathBuf, OsStr, OsString, also behind a reference, a generic bound or `impl Trait`)
-    must be in scripts/g7_boundaries.toml under
+    must be in scripts/g7_boundaries.toml (a `pub use` of another workspace member, a whole crate or one
+    item under any name, is followed: that member's public entry points are found the same way from its own
+    rustdoc JSON and listed under the path this crate gives them, e.g. `alice_lol::layout::decode`) under
     [[entry]] with a class and a reason:
       exchange   reads a value another program or release wrote; names the test that feeds it another
                  identifier (`test = "<file>::<fn>"`, the function must exist in that file)
@@ -175,6 +177,61 @@ def entry_points(doc: dict, reachable: dict[str, list[str]]) -> dict[str, str]:
     return out
 
 
+def member_reexports(doc: dict, members: set[str]) -> list[tuple[str, list[str], list[str]]]:
+    """`(crate, path in that crate, path here)` for every public `use` reachable from this crate's root whose
+    target is an item of another workspace member (`members`: crate names); the path in that crate is empty
+    for the whole crate. rustdoc does not put an item of another crate in `index`, only in `paths`"""
+    out = []
+    root = str(doc["root"])
+    seen = set()
+    todo = [(root, [doc["index"][root]["name"]])]
+    while todo:
+        mid, prefix = todo.pop(0)
+        if mid in seen:
+            continue
+        seen.add(mid)
+        for child in doc["index"][mid]["inner"]["module"]["items"]:
+            item = doc["index"].get(str(child))
+            if item is None or item.get("visibility") != "public":
+                continue
+            inner = item["inner"]
+            if "module" in inner:
+                todo.append((str(child), prefix + [item["name"]]))
+                continue
+            use = inner.get("use")
+            if not use or str(use.get("id")) in doc["index"]:
+                continue
+            target = doc.get("paths", {}).get(str(use.get("id")))
+            if not target:
+                continue
+            crate = doc.get("external_crates", {}).get(str(target.get("crate_id")), {}).get("name")
+            if crate not in members:
+                continue
+            path = list(target.get("path", []))
+            inside = path[1:] if path and path[0] == crate else path
+            if use.get("is_glob"):
+                out.append((crate, inside, prefix))
+            else:
+                out.append((crate, inside, prefix + [use["name"]]))
+    return out
+
+
+def follow_reexports(found_in: dict[str, dict[str, str]],
+                     reexports: list[tuple[str, list[str], list[str]]]) -> dict[str, str]:
+    """the entry points of the re-exported members (`found_in`: crate -> its entry points) under the paths
+    this crate gives them; a re-export of one item brings that item and the methods of a type"""
+    out: dict[str, str] = {}
+    for crate, inside, here in reexports:
+        there = "::".join([crate, *inside])
+        alias = "::".join(here)
+        for path, params in found_in.get(crate, {}).items():
+            inner = path[1:] if path.startswith("<") else path
+            if inner == there or inner.startswith(there + "::") or inner.startswith(there + " as "):
+                renamed = alias + inner[len(there):]
+                out["<" + renamed if path.startswith("<") else renamed] = params
+    return out
+
+
 def judge_entries(found: dict[str, str], table: list[dict], root: Path = ROOT) -> list[str]:
     findings = []
     listed = {}
@@ -279,6 +336,30 @@ def main(argv: list[str] | None = None) -> int:
         print("error: no public entry point taking text, bytes or a reader was read (compared nothing)",
               file=sys.stderr)
         return 2
+    meta = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=ROOT,
+                                     capture_output=True, text=True, check=True).stdout)
+    # library members only: a proc-macro member has no function a caller can pass text to (its
+    # expansion is compared through [[macro]])
+    packages = {p["name"].replace("-", "_"): p["name"] for p in meta["packages"]
+                if not any("proc-macro" in t.get("kind", []) for t in p.get("targets", []))}
+    reexports = member_reexports(doc, set(packages) - {"alice_lol"})
+    found_in = {}
+    try:
+        for crate in sorted({c for c, _, _ in reexports}):
+            member = sw.rustdoc(packages[crate], nightly, ["--all-features"])
+            if not any(i.get("crate_id") == 0 for i in member.get("index", {}).values()):
+                print(f"error: {packages[crate]} is re-exported but its rustdoc holds no item (read nothing)",
+                      file=sys.stderr)
+                return 2
+            found_in[crate] = entry_points(member, sw.reachable_paths(member))
+    except (ValueError, OSError, subprocess.CalledProcessError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    followed = follow_reexports(found_in, reexports)
+    if any(found_in.values()) and not followed:
+        print("error: re-exported members have entry points but none of them maps here", file=sys.stderr)
+        return 2
+    found.update(followed)
     if args.list:
         for path, params in sorted(found.items()):
             print(f'[[entry]]\npath = "{path}"\nclass = ""\nreason = ""  # {params}\n')
@@ -290,8 +371,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     findings = judge_entries(found, table.get("entry", []))
 
-    meta = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"], cwd=ROOT,
-                                     capture_output=True, text=True, check=True).stdout)
     targets, seen = target_findings(meta, table)
     findings += targets
     if seen != len(PUBLISHED):
@@ -320,6 +399,7 @@ def main(argv: list[str] | None = None) -> int:
     for f in findings:
         print(f"finding: {f}", file=sys.stderr)
     classes = {c: sum(1 for e in table.get("entry", []) if e.get("class") == c) for c in CLASSES}
+    print(f"g7-boundaries: {len(followed)} of them through re-exports of {len(found_in)} member(s)")
     print(f"g7-boundaries: {len(found)} entry point(s) taking text, bytes or a reader "
           f"({', '.join(f'{v} {k}' for k, v in classes.items())}), {len(files)} source file(s) of "
           f"{units} unit(s) scanned for {len(FORMS) + 1} foreign forms, {len(findings)} finding(s)")

@@ -117,6 +117,10 @@ pub mod law_input;
 // 上の 3 つとも別物: 答えは厳密な値 (text / bool / null)、識別子は種類ごとの意味論 pin で既存の Law に触れない
 pub mod rule_law;
 
+/// Byte layout laws (`kind layout`): a binary format declared once, bytes read and checked
+/// against the declaration (the crate `alice-lol-layout`, re-exported)
+pub use alice_lol_layout as layout;
+
 // ── 構文名の一覧 (parser の dispatch と README の構文表を突き合わせる test 専用) ──
 #[cfg(test)]
 mod syntax_table;

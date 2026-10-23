@@ -120,6 +120,75 @@ class EntryPoints(unittest.TestCase):
         self.assertFalse(g7.ERASED.search(g7.type_text(nums, {})))
 
 
+class Reexports(unittest.TestCase):
+    """a `pub use` of another workspace member is followed (the member's entry points appear here under
+    the path this crate gives them)"""
+
+    MEMBER = {"lay::read": "b: &[u8]", "lay::Thing::name": "n: &str",
+              "<lay::Thing as FromStr>::from_str": "s: &str", "lay::deep::other": "s: &str"}
+
+    def doc(self):
+        d = doc()
+        # c::layout = the whole member crate, c::m::read_bytes = one of its functions renamed,
+        # c::m::Vec3 = an item of a crate that is not a workspace member
+        d["index"]["0"]["inner"]["module"]["items"].append(20)
+        d["index"]["1"]["inner"]["module"]["items"].extend([21, 22])
+        d["index"]["20"] = {"crate_id": 0, "name": "layout", "visibility": "public",
+                            "inner": {"use": {"source": "lay", "name": "layout", "id": 50, "is_glob": False}}}
+        d["index"]["21"] = {"crate_id": 0, "name": "read_bytes", "visibility": "public",
+                            "inner": {"use": {"source": "lay::read", "name": "read_bytes", "id": 51,
+                                              "is_glob": False}}}
+        d["index"]["22"] = {"crate_id": 0, "name": "Vec3", "visibility": "public",
+                            "inner": {"use": {"source": "glam::Vec3", "name": "Vec3", "id": 52, "is_glob": False}}}
+        d["paths"] = {"50": {"crate_id": 1, "path": ["lay"], "kind": "module"},
+                      "51": {"crate_id": 1, "path": ["lay", "read"], "kind": "function"},
+                      "52": {"crate_id": 2, "path": ["glam", "Vec3"], "kind": "struct"}}
+        d["external_crates"] = {"1": {"name": "lay"}, "2": {"name": "glam"}}
+        return d
+
+    def followed(self):
+        re_ = g7.member_reexports(self.doc(), {"lay"})
+        return re_, g7.follow_reexports({"lay": self.MEMBER}, re_)
+
+    def test_a_reexported_member_crate_and_a_renamed_item_are_followed(self):
+        re_, out = self.followed()
+        self.assertEqual(sorted(re_), [("lay", [], ["c", "layout"]), ("lay", ["read"], ["c", "m", "read_bytes"])])
+        self.assertEqual(out, {
+            "c::layout::read": "b: &[u8]",
+            "c::layout::Thing::name": "n: &str",
+            "<c::layout::Thing as FromStr>::from_str": "s: &str",
+            "c::layout::deep::other": "s: &str",
+            "c::m::read_bytes": "b: &[u8]",
+        })
+
+    def test_a_crate_that_is_not_a_member_is_not_followed(self):
+        re_ = g7.member_reexports(self.doc(), {"lay"})
+        self.assertNotIn("glam", {c for c, _, _ in re_})
+        self.assertEqual(g7.member_reexports(self.doc(), set()), [])
+
+    def test_an_undecided_byte_reader_in_the_member_is_a_finding(self):
+        # mutant: the member gains `pub fn parse_bytes(&[u8])` that nobody classified
+        member = dict(self.MEMBER, **{"lay::parse_bytes": "b: &[u8]"})
+        re_ = g7.member_reexports(self.doc(), {"lay"})
+        found = g7.follow_reexports({"lay": member}, re_)
+        rows = [{"path": p, "class": "local", "reason": "a name of a declared item"} for p in self.followed()[1]]
+        out = g7.judge_entries(found, rows)
+        self.assertEqual(len(out), 1)
+        self.assertIn("c::layout::parse_bytes", out[0])
+
+    def test_a_reader_reexported_under_another_name_is_a_finding(self):
+        # mutant: the table classifies the whole-crate path, a new `pub use lay::read as load` is not
+        d = self.doc()
+        d["index"]["1"]["inner"]["module"]["items"].append(23)
+        d["index"]["23"] = {"crate_id": 0, "name": "load", "visibility": "public",
+                            "inner": {"use": {"source": "lay::read", "name": "load", "id": 51, "is_glob": False}}}
+        found = g7.follow_reexports({"lay": self.MEMBER}, g7.member_reexports(d, {"lay"}))
+        rows = [{"path": p, "class": "local", "reason": "a name of a declared item"} for p in self.followed()[1]]
+        out = g7.judge_entries(found, rows)
+        self.assertEqual(len(out), 1)
+        self.assertIn("c::m::load", out[0])
+
+
 class Table(unittest.TestCase):
     FOUND = {"c::a": "s: &str", "c::b": "s: &str"}
 
