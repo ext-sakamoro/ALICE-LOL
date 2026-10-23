@@ -79,6 +79,24 @@ fn flashes_are_pairs_of_transitions_in_the_busiest_window() {
 }
 
 #[test]
+fn a_reversal_smaller_than_delta_does_not_split_a_change() {
+    // WCAG 2.3.1: a flash is a pair of opposing changes of at least 10%. 0 -> 0.5 -> 0.45 ->
+    // 0.95 is one rise (the 0.05 dip is below delta), not two, so no flash
+    assert_eq!(max_flashes(&[0.0, 0.5, 0.45, 0.95], 60, 0.1, 0.8), 0);
+    // rise, small dip, rise, fall, twice: one rise and one fall per cycle, 4 changes, 2 flashes
+    let cycles = [0.0, 0.5, 0.45, 0.95, 0.0, 0.5, 0.45, 0.95, 0.0];
+    assert_eq!(max_flashes(&cycles, 60, 0.1, 0.8), 2);
+    // the same inside a window: samples 4..9 hold the second cycle's rise and fall
+    assert_eq!(max_flashes(&cycles, 5, 0.1, 0.8), 1);
+    // a dip of exactly delta does turn the direction (binary fractions): rise, fall, rise
+    assert_eq!(max_flashes(&[0.0, 0.5, 0.25, 0.75, 0.0], 60, 0.25, 0.8), 2);
+    // a fall that does not reach below darker_below is left out, and the rise after it with it:
+    // up 0 -> 0.9, down 0.9 -> 0.85 (both ends at or above 0.8), up 0.85 -> 0.95, down 0.95 -> 0
+    // keeps the first rise and the last fall, one flash
+    assert_eq!(max_flashes(&[0.0, 0.9, 0.85, 0.95, 0.0], 60, 0.05, 0.8), 1);
+}
+
+#[test]
 fn a_series_expression_reads_and_says_its_value_above_the_limit() {
     let e = SeriesExpr::parse("flashes_above(l, 60, 0.1, 0.8, 3)").unwrap();
     assert_eq!(e.canonical(), "flashes_above(l,60,0.1,0.8,3)");
