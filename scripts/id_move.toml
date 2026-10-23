@@ -48,3 +48,8 @@ path = "alice_lol::motion_law::MOTION_SEMANTICS_ID"
 # the raster; it is the first thing every frame hash hashes, so it moves only with a breaking version
 [[id]]
 path = "alice_lol::motion_frame::FRAME_SEMANTICS_ID"
+
+# the series quantities of audit laws (x-series): the fold of AUDIT_SERIES_SEMANTICS_PINS, in the
+# identifier of every audit law that declares a series, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::law_input::AUDIT_SERIES_SEMANTICS_ID"

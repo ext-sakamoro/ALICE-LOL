@@ -459,6 +459,20 @@ impl AuditLaw {
         for (name, n) in floors {
             e = e.u32(5).str(name).f64(*n);
         }
+        // x-series: written only when the law declares one, so every other law keeps its
+        // identifier; the series semantics is in it because the series quantity is
+        // computed by this crate
+        if !self.series().is_empty() {
+            e = e
+                .u32(6)
+                .bytes(&crate::law_input::AUDIT_SERIES_SEMANTICS_ID)
+                .u64(self.series().len() as u64);
+            let mut series: Vec<_> = self.series().iter().collect();
+            series.sort_by(|a, b| a.0.cmp(&b.0));
+            for (name, expr) in series {
+                e = e.u32(7).str(name).str(&expr.canonical());
+            }
+        }
         e.finish()
     }
 }
