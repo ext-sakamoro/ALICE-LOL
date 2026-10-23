@@ -464,6 +464,25 @@ pub fn known_geometry_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
         .map(|(det_math, _)| *det_math)
 }
 
+/// 以前の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
+///
+/// [`crate::law_id::PREVIOUS_LOL_SEMANTICS_IDS`] と同じ規則・同じ理由で literal にする
+/// [`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`] からの導出との一致は
+/// `tests/geometry_semantics_per_det_math.rs` が両方向で検査する
+pub const PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS: &[[u8; 32]] = &[
+    // alice-det-math 0.5.0 の世代 (alice-lol 0.4.1 まで)
+    hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d"),
+];
+
+/// 保存された幾何の識別子を分類する ([`crate::law_id::check_lol_semantics`] と同じ形)
+pub fn check_lol_geometry_semantics(id: &[u8; 32]) -> alice_det_math::SemanticsCheck {
+    crate::law_id::classify(
+        id,
+        &LOL_GEOMETRY_SEMANTICS_ID,
+        PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     //! The Euler pin must move for every arithmetic change that alters a

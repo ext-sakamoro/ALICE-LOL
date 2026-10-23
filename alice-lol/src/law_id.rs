@@ -160,6 +160,38 @@ pub fn known_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
         .map(|(det_math, _)| *det_math)
 }
 
+/// 以前の世代の [`LOL_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
+///
+/// 行は [`LOL_SEMANTICS_BY_DET_MATH`] の、alice-det-math の識別子が
+/// `alice_det_math::PREVIOUS_SEMANTICS_IDS` にある行 (alice-det-math が同じ bit を再現すると
+/// 確かめた世代) の LOL 側の識別子 ⚠️ 導出でなく literal で書くのは、識別子の移動の検査
+/// (`scripts/id_move_check.py`) が literal を抜いて `previous-tests` が落ちることを確かめるため
+/// 導出との一致は `tests/semantics_id_per_det_math.rs` が両方向で検査する
+pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[
+    // alice-det-math 0.5.0 の世代 (alice-lol 0.4.1 まで)
+    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421"),
+];
+
+/// 保存された LOL の識別子を分類する ([`LOL_SEMANTICS_ID`] なら `Verified`、
+/// [`PREVIOUS_LOL_SEMANTICS_IDS`] にあれば `VerifiedPrevious`、それ以外は `Mismatch`)
+pub fn check_lol_semantics(id: &[u8; 32]) -> alice_det_math::SemanticsCheck {
+    classify(id, &LOL_SEMANTICS_ID, PREVIOUS_LOL_SEMANTICS_IDS)
+}
+
+pub(crate) fn classify(
+    id: &[u8; 32],
+    current: &[u8; 32],
+    previous: &[[u8; 32]],
+) -> alice_det_math::SemanticsCheck {
+    if id == current {
+        alice_det_math::SemanticsCheck::Verified
+    } else if let Some(p) = previous.iter().find(|p| *p == id) {
+        alice_det_math::SemanticsCheck::VerifiedPrevious(*p)
+    } else {
+        alice_det_math::SemanticsCheck::Mismatch
+    }
+}
+
 pub(crate) const fn same32(a: &[u8; 32], b: &[u8; 32]) -> bool {
     let mut i = 0;
     while i < 32 {

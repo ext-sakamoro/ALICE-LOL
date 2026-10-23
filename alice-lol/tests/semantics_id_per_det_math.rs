@@ -93,3 +93,38 @@ fn an_identifier_of_a_known_generation_is_recognised() {
         "a det-math id is not a LOL id"
     );
 }
+
+/// the previous list is exactly the rows whose alice-det-math identifier alice-det-math itself
+/// lists as reproducing the same bits (both directions: a row missing from the list or an
+/// entry with no such row is red)
+#[test]
+fn the_previous_list_is_the_rows_det_math_verifies_as_the_same_bits() {
+    use alice_lol::law_id::PREVIOUS_LOL_SEMANTICS_IDS;
+    let derived: Vec<[u8; 32]> = LOL_SEMANTICS_BY_DET_MATH
+        .iter()
+        .filter(|(d, _)| alice_det_math::PREVIOUS_SEMANTICS_IDS.contains(d))
+        .map(|(_, lol)| *lol)
+        .collect();
+    assert!(!derived.is_empty(), "the derivation compares nothing");
+    let mut listed = PREVIOUS_LOL_SEMANTICS_IDS.to_vec();
+    let mut want = derived;
+    listed.sort_unstable();
+    want.sort_unstable();
+    assert_eq!(listed, want);
+    assert!(!PREVIOUS_LOL_SEMANTICS_IDS.contains(&LOL_SEMANTICS_ID));
+}
+
+/// an identifier alice-lol 0.4.1 stamped (alice-det-math 0.5.0) reads as an earlier release with
+/// the same bits, not as the current one and not as a mismatch
+#[test]
+fn the_0_4_1_identifier_is_verified_previous() {
+    use alice_det_math::SemanticsCheck;
+    use alice_lol::law_id::check_lol_semantics;
+    assert_eq!(
+        check_lol_semantics(&LOL_UNDER_0_5_0),
+        SemanticsCheck::VerifiedPrevious(LOL_UNDER_0_5_0)
+    );
+    assert_eq!(check_lol_semantics(&LOL_SEMANTICS_ID), SemanticsCheck::Verified);
+    assert_eq!(check_lol_semantics(&[0_u8; 32]), SemanticsCheck::Mismatch);
+    assert_eq!(check_lol_semantics(&DET_MATH_0_5_0), SemanticsCheck::Mismatch);
+}
