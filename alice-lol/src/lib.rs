@@ -124,6 +124,9 @@ pub mod motion_law;
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;
 
+// 動く単語の参照 frame (glyph の形 + 動きの Law → 決定論の pixel と hash) 規則は FRAME_SEMANTICS_ID
+pub mod motion_frame;
+
 /// Byte layout laws (`kind layout`): a binary format declared once, bytes read and checked
 /// against the declaration (the crate `alice-lol-layout`, re-exported)
 pub use alice_lol_layout as layout;
