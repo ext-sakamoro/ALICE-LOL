@@ -349,6 +349,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 |-------|------|
 | `alice-lol-macro` | `lol!` proc-macro |
 | `alice-lol` | ランタイムパーサ、逆変換、シェーダ変換と出力の関数、法則の検査、intent IR、stdlib の形状 |
+| `alice-lol-layout` | byte layout の法則: binary 形式を 1 度宣言し、bytes をその宣言で読む・検査する (`no_std`、`alice_lol::layout` として再公開) |
 | `alice-lol-humanoid` | パラメトリックな人型テンプレート (関節 FK、VRM / BVH 読み込み) |
 | `alice-lol-robot` | intent の動詞から人型 FK と 8 byte の kinematics packet へ、安全法則つき |
 | `alice-lol-ui` | UI 形状 (button、card、panel など)、flex / grid / stack レイアウト、コントラストの法則 |
@@ -463,10 +464,10 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
 | G5 release-profile-test-leg | 適合 | The Law-bearing tests are the Law oracle targets of scripts/law_tests.sh (every file using law:: or research_law must be listed there, and each target must run … |
 | G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
-| G7 handshake-carries-id | 適合 | The boundaries where a published crate (alice-lol, alice-lol-macro) takes a value without its Rust type, and how each carries the writer's identifier. (a) The … |
+| G7 handshake-carries-id | 適合 | The boundaries where a published crate (alice-lol, alice-lol-layout, alice-lol-macro) takes a value without its Rust type, and how each carries the writer's … |
 | G8 persisted-semantics-id | 適合 | the durable forms the workspace writes are the mesh files of print_export (STL, 3MF, FBX, and the dual-contouring STL / 3MF) and roblox_export (FBX), and the … |
 | G9 persisted-meaning-change-is-major | 未達 | the identifiers a stored form carries are all under the check: the law identifier, the geometry identifier (the export producer) and, since the G8 change, the … |
-| G10 no-run-varying-artifacts | 適合 | Law-bearing output is the library code of the published crates (alice-lol, alice-lol-macro). Two layers keep the wall clock and unseeded randomness out of it. … |
+| G10 no-run-varying-artifacts | 適合 | Law-bearing output is the library code of the published crates (alice-lol, alice-lol-layout, alice-lol-macro). Two layers keep the wall clock and unseeded … |
 | G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
 | G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |
 | G13 no-unspecified-order | 適合 | Law-bearing output here is the published crates' exports (STL / 3MF / FBX bytes). Hash order: the library code (every member's lib, binaries and examples) may … |

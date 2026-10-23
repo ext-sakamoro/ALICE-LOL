@@ -4,6 +4,7 @@
 # workspace member the Law tests build (the packages of scripts/law_tests.sh and their path dependencies)
 alice-lol/**
 alice-lol-macro/**
+alice-lol-layout/**
 alice-lol-robot/**
 alice-lol-humanoid/**
 Cargo.toml

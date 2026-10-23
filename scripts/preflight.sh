@@ -482,6 +482,8 @@ step "ci.yml / registry-consumer: published source + every macro keyword against
 python3 scripts/published_source_check.py
 python3 scripts/license_check.py --package
 python3 scripts/package_integrity.py --member alice-lol
+python3 scripts/package_integrity.py --member alice-lol-macro
+python3 scripts/package_integrity.py --member alice-lol-layout
 REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
 python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt
 diff -u target/patches-fresh.txt target/registry-consumer/patches.txt

@@ -20,6 +20,10 @@ the direct-dependency rule cannot see. That line is a count to read, not a verdi
 graph is not necessarily called on a path that feeds a Law-bearing value. When the resolution cannot
 be read (no lock, a cache miss offline) the line says so.
 
+For this workspace (the default manifest) the published members read must also be the release
+roster of scripts/release_roster.py, so a crate added to the release is checked here by
+construction and a mismatch between `publish` and the roster fails.
+
     python3 scripts/entropy_deps_guard.py [--manifest-path Cargo.toml]
 """
 from __future__ import annotations
@@ -29,6 +33,11 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from release_roster import ROSTER  # noqa: E402
 
 # a crate whose name matches is a source of entropy or of the wall clock
 DENIED = re.compile(r"(?:rand(?:_[a-z0-9]+)?|getrandom|uuid|fastrand|chrono|time|oorandom|nanorand)")
@@ -54,6 +63,13 @@ def denied_deps(metadata: dict) -> tuple[list[str], list[str]]:
                 problems.append(f"{pkg['name']}: {kind} dependency `{name}` ({dep['name']}){where} is a source of "
                                 "entropy or wall-clock time (ALICE-Law G10): take the randomness / time as an input")
     return read, problems
+
+
+def roster_differs(read: list[str]) -> list[str]:
+    """one problem per difference between the published members read and the release roster"""
+    have = set(read)
+    return ([f"{n} is in the release roster but was not read as a published member" for n in sorted(ROSTER - have)]
+            + [f"{n} was read as a published member but is not in the release roster" for n in sorted(have - ROSTER)])
 
 
 def transitive(metadata: dict) -> list[str]:
@@ -90,6 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"entropy-deps-guard: cargo metadata failed:\n{p.stderr}", file=sys.stderr)
         return 2
     read, problems = denied_deps(json.loads(p.stdout))
+    if Path(a.manifest_path).resolve() == HERE.parent / "Cargo.toml":
+        problems += roster_differs(read)
     for e in problems:
         print(f"error: {e}", file=sys.stderr)
     if not read:

@@ -5,10 +5,11 @@ on:
     tags:
       - 'alice-lol-v*.*.*'
       - 'alice-lol-macro-v*.*.*'
+      - 'alice-lol-layout-v*.*.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. alice-lol-v0.4.0 or alice-lol-macro-v0.3.0)'
+        description: 'Tag to build (e.g. alice-lol-v0.4.0, alice-lol-macro-v0.3.0 or alice-lol-layout-v0.1.0)'
         required: true
         type: string
       ref:
@@ -42,6 +43,9 @@ jobs:
           if [[ "$TAG" == alice-lol-macro-v* ]]; then
             echo "crate=alice-lol-macro" >> "$GITHUB_OUTPUT"
             echo "version=${TAG#alice-lol-macro-v}" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG" == alice-lol-layout-v* ]]; then
+            echo "crate=alice-lol-layout" >> "$GITHUB_OUTPUT"
+            echo "version=${TAG#alice-lol-layout-v}" >> "$GITHUB_OUTPUT"
           elif [[ "$TAG" == alice-lol-v* ]]; then
             echo "crate=alice-lol" >> "$GITHUB_OUTPUT"
             echo "version=${TAG#alice-lol-v}" >> "$GITHUB_OUTPUT"

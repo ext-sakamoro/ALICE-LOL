@@ -161,6 +161,19 @@ class Reexports(unittest.TestCase):
             "c::m::read_bytes": "b: &[u8]",
         })
 
+    def test_the_published_set_is_the_release_roster(self):
+        import release_roster
+        self.assertEqual(set(g7.PUBLISHED), release_roster.ROSTER)
+
+    def test_a_published_member_not_reexported_whole_is_named(self):
+        re_ = g7.member_reexports(self.doc(), {"lay"})
+        self.assertEqual(g7.unread_published({"lay"}, re_), [])
+        # mutant: alice-lol re-exports only one function of the published member
+        only_item = [r for r in re_ if r[1]]
+        self.assertEqual(g7.unread_published({"lay"}, only_item), ["lay"])
+        # mutant: the re-export is removed
+        self.assertEqual(g7.unread_published({"lay"}, []), ["lay"])
+
     def test_a_crate_that_is_not_a_member_is_not_followed(self):
         re_ = g7.member_reexports(self.doc(), {"lay"})
         self.assertNotIn("glam", {c for c, _, _ in re_})

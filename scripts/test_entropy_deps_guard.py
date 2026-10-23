@@ -75,11 +75,19 @@ class Guard(unittest.TestCase):
         self.assertEqual(p.returncode, 2, p.stderr)
         self.assertIn("compared nothing", p.stderr)
 
+    def test_the_published_members_must_be_the_release_roster(self):
+        self.assertEqual(g.roster_differs(["alice-lol", "alice-lol-layout", "alice-lol-macro"]), [])
+        # mutant: a roster crate is not read (it gained publish = false), another one is
+        out = g.roster_differs(["alice-lol", "alice-lol-macro", "alice-lol-ui"])
+        self.assertEqual(len(out), 2, out)
+        self.assertIn("alice-lol-layout", out[0])
+        self.assertIn("alice-lol-ui", out[1])
+
     def test_this_workspace_passes(self):
         p = subprocess.run([sys.executable, str(HERE / "entropy_deps_guard.py"), "--manifest-path",
                             str(HERE.parent / "Cargo.toml")], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("alice-lol", p.stdout)
+        self.assertIn("alice-lol, alice-lol-layout, alice-lol-macro", p.stdout)
 
 
 if __name__ == "__main__":

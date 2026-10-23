@@ -286,10 +286,13 @@ jobs:
       - name: package-integrity oracle (検査器自身の試験)
         working-directory: ALICE-LOL
         run: python3 scripts/test_package_integrity.py
-      # 公開する alice-lol の .crate が単独で build する、または crates.io に無い隣の版 (blocked) を名指しする
-      - name: package integrity (alice-lol の .crate、blocked は .github/alice-siblings の commit で patch)
+      # 公開する crate (scripts/release_roster.py の ROSTER) の .crate が単独で build する、または crates.io に無い隣の版 (blocked) を名指しする
+      - name: package integrity (公開する 3 crate の .crate、blocked は .github/alice-siblings の commit で patch)
         working-directory: ALICE-LOL
-        run: python3 scripts/package_integrity.py --member alice-lol
+        run: |
+          python3 scripts/package_integrity.py --member alice-lol
+          python3 scripts/package_integrity.py --member alice-lol-macro
+          python3 scripts/package_integrity.py --member alice-lol-layout
 
       - name: registry consumer (macro の全 keyword を crates.io の依存で compile)
         working-directory: ALICE-LOL

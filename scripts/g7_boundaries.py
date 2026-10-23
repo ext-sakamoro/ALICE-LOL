@@ -4,7 +4,7 @@
 A value passed as a Rust type carries its crate version and features with it; text, bytes, a file, a
 foreign call, `dyn Any` and a value computed at build time do not, so there the writer's identifier has
 to travel with the value and the reader has to compare it. This check keeps the list of those places
-complete for the published crates (the release roster: alice-lol and alice-lol-macro), in two parts:
+complete for the published crates (the release roster, `ROSTER` of scripts/release_roster.py), in two parts:
 
   * entry points: every public function or method of alice-lol (rustdoc JSON with every feature, hidden
     and private items, the dated nightly of scripts/sdf_writers.toml; free functions reachable from the
@@ -46,7 +46,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TABLE = ROOT / "scripts" / "g7_boundaries.toml"
-PUBLISHED = ("alice-lol", "alice-lol-macro")
+sys.path.insert(0, str(ROOT / "scripts"))
+from release_roster import ROSTER  # noqa: E402  (the one place the published set is written)
+
+PUBLISHED = tuple(sorted(ROSTER))
 CLASSES = ("exchange", "authoring", "local")
 
 
@@ -216,6 +219,13 @@ def member_reexports(doc: dict, members: set[str]) -> list[tuple[str, list[str],
     return out
 
 
+def unread_published(published_libs: set[str], reexports: list[tuple[str, list[str], list[str]]]) -> list[str]:
+    """the published library crates (other than alice-lol, crate names) whose entry points this check does not
+    read: only a whole-crate re-export from alice-lol brings all of a member's entry points here"""
+    whole = {c for c, inside, _ in reexports if not inside}
+    return sorted(published_libs - whole)
+
+
 def follow_reexports(found_in: dict[str, dict[str, str]],
                      reexports: list[tuple[str, list[str], list[str]]]) -> dict[str, str]:
     """the entry points of the re-exported members (`found_in`: crate -> its entry points) under the paths
@@ -343,6 +353,11 @@ def main(argv: list[str] | None = None) -> int:
     packages = {p["name"].replace("-", "_"): p["name"] for p in meta["packages"]
                 if not any("proc-macro" in t.get("kind", []) for t in p.get("targets", []))}
     reexports = member_reexports(doc, set(packages) - {"alice_lol"})
+    unread = unread_published({c for c, n in packages.items() if n in PUBLISHED} - {"alice_lol"}, reexports)
+    if unread:
+        print(f"error: the published crate(s) {', '.join(packages[c] for c in unread)} are not re-exported whole "
+              "by alice-lol, so their entry points are not read here", file=sys.stderr)
+        return 2
     found_in = {}
     try:
         for crate in sorted({c for c, _, _ in reexports}):
