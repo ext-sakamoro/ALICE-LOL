@@ -147,6 +147,9 @@ fn the_heartbeat_frames_are_the_recorded_ones() {
         .iter()
         .map(|&t| hex(&frame_hash(&render_frame(&word, &b, t).unwrap())))
         .collect();
+    // printed so a run on another target shows the values it computed (scripts/frame_targets.sh
+    // runs this test with --nocapture and checks the line)
+    println!("heartbeat frame hashes: {}", got.join(" "));
     assert_eq!(got, GOLDEN_HEARTBEAT, "{got:#?}");
     // the swell is visible: the frames at the two swells differ from the rest frame, and the
     // rest frames at the start and between beats are the same

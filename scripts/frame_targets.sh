@@ -20,7 +20,12 @@ require_all_passed() { # <label> <test output file>
     tail -20 "$2" >&2
     exit 1
   fi
-  echo "frame-targets: $1: ${want} passed"
+  # the hashes this target computed, as the test printed them (they passed the golden check)
+  local hashes
+  # (with --nocapture the line can follow the test's name on the same line)
+  hashes="$(grep -oE "heartbeat frame hashes:( [0-9a-f]{64}){4}" "$2" || true)"
+  [ -n "$hashes" ] || { echo "frame-targets: $1 printed no frame hashes" >&2; exit 1; }
+  echo "frame-targets: $1: ${want} passed, ${hashes}"
 }
 
 wasm() {
@@ -29,7 +34,7 @@ wasm() {
   out="$(mktemp)"
   # the test reads laws/ by its absolute path, so the repository is mapped at the same path
   CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime --dir=${root}::${root}" \
-    cargo test -p alice-lol --target wasm32-wasip1 --test motion_frame_oracle -- --test-threads=1 2>&1 | tee "$out"
+    cargo test -p alice-lol --target wasm32-wasip1 --test motion_frame_oracle -- --test-threads=1 --nocapture 2>&1 | tee "$out"
   require_all_passed wasm32-wasip1 "$out"
 }
 
@@ -54,7 +59,7 @@ print(next((x["udid"] for k, v in d.items() if "iOS" in k for x in v if "iPhone"
   xcrun simctl boot "$udid" 2>/dev/null || true
   out="$(mktemp)"
   local status=0
-  xcrun simctl spawn "$udid" "$bin" --test-threads=1 >"$out" 2>&1 || status=$?
+  xcrun simctl spawn "$udid" "$bin" --test-threads=1 --nocapture >"$out" 2>&1 || status=$?
   xcrun simctl shutdown "$udid" 2>/dev/null || true
   cat "$out"
   [ "$status" -eq 0 ] || { echo "frame-targets: the iOS simulator run exited $status" >&2; exit 1; }

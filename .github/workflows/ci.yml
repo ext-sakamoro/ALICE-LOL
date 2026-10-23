@@ -214,8 +214,11 @@ jobs:
           repo-dir: ALICE-LOL
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip1,aarch64-apple-ios-sim
+      # the targets go to the toolchain rust-toolchain.toml pins (the one cargo runs here),
+      # not to the stable one installed above
+      - name: Add the wasm32 and iOS simulator targets
+        working-directory: ALICE-LOL
+        run: rustup target add wasm32-wasip1 aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ALICE-LOL
