@@ -134,6 +134,46 @@ fn the_budget_is_checked_before_rows_are_allocated() {
     assert!(decode(&law, &b, Budget::for_input(b.len())).is_ok());
 }
 
+/// The default budget caps decoded values at 64 MiB: a table whose values would take more is
+/// refused before its rows are allocated, though every row is in the input
+#[test]
+fn the_default_budget_caps_decoded_values_at_64_mib() {
+    let law = parse(
+        "law many
+kind layout
+endian le
+block head size 4
+field count u32
+end block
+block row size 1
+field k u8
+end block
+segment head block head
+segment rows table row count head.count refuse layout
+",
+    )
+    .unwrap();
+    // one value per row and at least 8 bytes per decoded value: this many rows need more
+    // than 64 MiB
+    let rows: u32 = (64 << 20) / 8 + 1;
+    let mut b = rows.to_le_bytes().to_vec();
+    b.resize(4 + rows as usize, 7);
+    let budget = Budget::for_input(b.len());
+    assert_eq!(budget.max_bytes, 64 << 20);
+    assert!(budget.max_rows >= u64::from(rows));
+    match decode(&law, &b, budget).unwrap_err() {
+        DecodeError::BudgetExceeded { what, need, limit } => {
+            assert_eq!((what, limit), ("bytes", 64 << 20));
+            assert!(need > limit);
+        }
+        e => panic!("{e:?}"),
+    }
+    // the same law reads a table that fits
+    let mut small = 3u32.to_le_bytes().to_vec();
+    small.extend([1, 2, 3]);
+    assert!(decode(&law, &small, Budget::for_input(small.len())).is_ok());
+}
+
 #[test]
 fn lengths_and_offsets_near_the_integer_limit_are_refused_not_wrapped() {
     let law = parse(
@@ -279,6 +319,16 @@ fn the_identifier_names_the_declaration_not_its_spelling() {
     assert_ne!(parse(&changed).unwrap().law_id(), a);
     let relabelled = RECORD.replace("refuse kind", "refuse kinds");
     assert_ne!(parse(&relabelled).unwrap().law_id(), a);
+}
+
+/// The identifier of a fixed declaration, as a literal: dropping the layout semantics, the kind
+/// tag or a line from the hash, or changing how lines are normalised, changes it
+#[test]
+fn the_identifier_of_a_fixed_declaration_is_pinned() {
+    assert_eq!(
+        hex(&parse(RECORD).unwrap().law_id()),
+        "87074f60f1e416d92aa24471956c539de8dc070191d159cf47848c205b5fbaa3"
+    );
 }
 
 #[test]

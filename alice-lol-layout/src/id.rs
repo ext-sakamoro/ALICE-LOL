@@ -88,12 +88,34 @@ impl Layout {
     /// `verdict`) are not part of it
     #[must_use]
     pub fn law_id(&self) -> [u8; 32] {
+        self.law_id_under(&LAYOUT_SEMANTICS_ID)
+    }
+
+    /// The identifier this declaration would have under another reading of layouts
+    fn law_id_under(&self, semantics: &[u8; 32]) -> [u8; 32] {
         let mut h = Sha256::new();
         lenprefix(&mut h, LAYOUT_LAW_KIND);
-        lenprefix(&mut h, &LAYOUT_SEMANTICS_ID);
+        lenprefix(&mut h, semantics);
         for l in &self.id_lines {
             lenprefix(&mut h, l.as_bytes());
         }
         h.finalize().into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The identifier is the semantics of layouts and the declaration together: another
+    /// `LAYOUT_SEMANTICS_ID` gives every law another identifier
+    #[test]
+    fn the_identifier_moves_with_the_layout_semantics() {
+        let law = crate::parse(crate::PROBE_LAW).unwrap();
+        assert_eq!(law.law_id(), law.law_id_under(&LAYOUT_SEMANTICS_ID));
+        let mut other = LAYOUT_SEMANTICS_ID;
+        other[0] ^= 1;
+        assert_ne!(law.law_id_under(&other), law.law_id());
+        assert_ne!(law.law_id_under(&[0; 32]), law.law_id());
     }
 }
