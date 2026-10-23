@@ -648,12 +648,15 @@ impl MetricExpr {
 /// rate chosen by whoever measures it) and gives how many flashes the busiest stretch of
 /// `window` consecutive samples has above `limit` (0 when none has more):
 ///
-/// - the samples are reduced to their turning points (a run in one direction keeps its last
-///   sample; equal neighbours are one sample)
-/// - a transition is a step between consecutive turning points whose size is at least
-///   `delta` and whose darker end is below `darker_below`; it happens at the later point
-/// - a flash is a pair of transitions: the flashes of a stretch are half its transitions,
-///   rounded down; with fewer than `window` samples the whole list is the one stretch
+/// - the samples are reduced to their extremes with a hysteresis of `delta`: the direction
+///   turns only when the series has moved at least `delta` back from the running extreme, so
+///   a smaller reversal inside a rise or a fall does not split it (consecutive extremes then
+///   alternate in direction and differ by at least `delta`)
+/// - a transition is a change between consecutive extremes whose darker end is below
+///   `darker_below`; it happens at the later extreme
+/// - a flash is a pair of opposing changes (WCAG 2.3.1); the transitions alternate in
+///   direction, so the flashes of a stretch are half its transitions, rounded down; with fewer
+///   than `window` samples the whole list is the one stretch
 ///
 /// The value is therefore `max(0, max_flashes - limit)`, so a law states a limit as
 /// `expect <name> == 0`. A list with a sample that is not a finite number is not measured.
@@ -769,40 +772,11 @@ impl SeriesExpr {
 /// The most flashes any stretch of `window` consecutive samples has (see [`SeriesExpr`])
 #[must_use]
 pub fn max_flashes(samples: &[f64], window: u32, delta: f64, darker_below: f64) -> u32 {
-    let Some(&first) = samples.first() else {
-        return 0;
-    };
-    // turning points: (index, value), consecutive ones alternate in direction
-    let mut turns: Vec<(usize, f64)> = vec![(0, first)];
-    let mut dir = 0_i8;
-    for (i, &v) in samples.iter().enumerate().skip(1) {
-        let last = turns[turns.len() - 1].1;
-        let d = if v > last {
-            1
-        } else if v < last {
-            -1
-        } else {
-            0
-        };
-        if d == 0 {
-            continue;
-        }
-        if d == dir {
-            let k = turns.len() - 1;
-            turns[k] = (i, v);
-        } else {
-            turns.push((i, v));
-            dir = d;
-        }
-    }
-    let at: Vec<usize> = turns
-        .windows(2)
-        .filter(|w| {
-            (w[1].1 - w[0].1).abs() >= delta
-                && crate::det_math::min64(w[0].1, w[1].1) < darker_below
-        })
-        .map(|w| w[1].0)
-        .collect();
+    // the transitions alternate in direction, so `k` of them hold `k / 2` opposing pairs: the
+    // changes between extremes alternate, and a change left out (both ends at or above
+    // darker_below) is followed by a rise that is left out too (it starts at or above it) and
+    // preceded by a change that ends at or above it, so the ones kept still alternate
+    let at = flash_transitions(samples, delta, darker_below);
     let window = usize::try_from(window).unwrap_or(usize::MAX);
     if samples.len() <= window {
         return u32::try_from(at.len() / 2).unwrap_or(u32::MAX);
@@ -822,17 +796,66 @@ pub fn max_flashes(samples: &[f64], window: u32, delta: f64, darker_below: f64) 
     u32::try_from(most / 2).unwrap_or(u32::MAX)
 }
 
+/// A sample of a series: (index, value)
+type Extreme = (usize, f64);
+
+/// The transitions of `samples` (see [`SeriesExpr`]): the index of each one's later extreme
+fn flash_transitions(samples: &[f64], delta: f64, darker_below: f64) -> Vec<usize> {
+    let Some(&first) = samples.first() else {
+        return Vec::new();
+    };
+    // the extremes with a hysteresis of `delta`: before a direction is known, the lowest and
+    // highest samples so far; then the extreme the leg started from and its running extreme
+    let (mut low, mut high) = ((0, first), (0, first));
+    let mut leg: Option<(Extreme, Extreme, bool)> = None;
+    let mut legs: Vec<(Extreme, Extreme)> = Vec::new();
+    for (i, &v) in samples.iter().enumerate().skip(1) {
+        match leg {
+            None => {
+                if v < low.1 {
+                    low = (i, v);
+                }
+                if v > high.1 {
+                    high = (i, v);
+                }
+                if high.1 - low.1 >= delta {
+                    leg = Some(if high.0 > low.0 {
+                        (low, high, true)
+                    } else {
+                        (high, low, false)
+                    });
+                }
+            }
+            Some((from, to, up)) => {
+                if (up && v > to.1) || (!up && v < to.1) {
+                    leg = Some((from, (i, v), up));
+                } else if (to.1 - v).abs() >= delta {
+                    legs.push((from, to));
+                    leg = Some((to, (i, v), !up));
+                }
+            }
+        }
+    }
+    if let Some((from, to, _)) = leg {
+        legs.push((from, to));
+    }
+    legs.into_iter()
+        .filter(|(a, b)| crate::det_math::min64(a.1, b.1) < darker_below)
+        .map(|(_, b)| b.0)
+        .collect()
+}
+
 /// What a series quantity means, as pins measured from [`max_flashes`] and
 /// [`SeriesExpr::evaluate`] ([`audit_series_fingerprints`]; the oracle recomputes every one)
 pub const AUDIT_SERIES_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[(
-    "audit series: turning points, transitions of at least delta below darker_below, flashes per window",
-    crate::law_id::hex32("6e8bf6c7bf2e8bc3d8fd7fde59306ea2448d5d0c475392643944f838b314a15d"),
+    "audit series: extremes with a hysteresis of delta, transitions below darker_below, flashes as opposing pairs per window",
+    crate::law_id::hex32("456c81297b8e28b243aecffb6283af3decda219c4cee18fa8962ceda94e3f125"),
 )];
 
 /// The fold of [`AUDIT_SERIES_SEMANTICS_PINS`], in the identifier of every audit law that
 /// declares an `x-series` (and of no other, so the identifiers of existing laws do not move)
 pub const AUDIT_SERIES_SEMANTICS_ID: [u8; 32] =
-    crate::law_id::hex32("583c13c9546e43bd05ca245680ed52057aab7c112d631621229d4cbdf844964c");
+    crate::law_id::hex32("778b519f113313cfdba2cc938c68611949c07658372e41b29956874b4db06b1b");
 
 /// The measured value of every pin of [`AUDIT_SERIES_SEMANTICS_PINS`]
 ///
@@ -867,6 +890,14 @@ pub fn audit_series_fingerprints() -> Vec<(&'static str, [u8; 32])> {
         ),
         (vec![0.0, 1.0, 1.0, 0.5, 0.0, 0.0, 1.0], 60, 0.1, 0.8),
         (vec![0.0, 0.5, 1.0, 0.5, 0.0], 3, 0.1, 0.8),
+        (vec![0.0, 0.5, 0.45, 0.95], 60, 0.1, 0.8),
+        (
+            vec![0.0, 0.5, 0.45, 0.95, 0.0, 0.5, 0.45, 0.95, 0.0],
+            60,
+            0.1,
+            0.8,
+        ),
+        (vec![0.0, 0.9, 0.85, 0.0, 0.9, 0.85], 60, 0.1, 0.8),
         (vec![], 60, 0.1, 0.8),
         (vec![0.5], 2, 0.1, 0.8),
     ];
