@@ -20,6 +20,9 @@ one that disagrees fails with its file named:
     `--exclude` of it);
   * alice-law-conformance.toml, README.md, README_JP.md: every "published crate(s) (...)"
     names exactly the roster; the crate table of each README lists exactly the members;
+  * .github/paths/semver-checks.txt: `<crate>/src/**` and `<crate>/Cargo.toml` for each roster
+    crate (alice-lol's public API includes what it re-exports, so a change there must run the
+    semver check);
   * each roster manifest: license, edition, rust-version, authors, repository and homepage
     equal alice-lol's, documentation is its docs.rs page, a description and a readme file.
 
@@ -154,6 +157,19 @@ def ci_commands(root: Path, members: set[str]) -> tuple[int, list[str]]:
     return compared, out
 
 
+SEMVER_PATHS = ".github/paths/semver-checks.txt"
+
+
+def semver_paths(text: str) -> tuple[int, list[str]]:
+    lines = {x.strip() for x in text.splitlines() if x.strip() and not x.lstrip().startswith("#")}
+    crates = {x.split("/", 1)[0] for x in lines if x.endswith(("/src/**", "/Cargo.toml"))}
+    if not crates:
+        raise RosterError(f"{SEMVER_PATHS}: no `<crate>/src/**` or `<crate>/Cargo.toml` read (compared nothing)")
+    out = [f"{SEMVER_PATHS}: lacks {c}/{tail}" for c in sorted(ROSTER) for tail in ("src/**", "Cargo.toml")
+           if f"{c}/{tail}" not in lines]
+    return 2 * len(ROSTER), out
+
+
 def crate_table(text: str) -> set[str]:
     """the crates of the README table that holds the `alice-lol` row"""
     lines = text.splitlines()
@@ -213,6 +229,7 @@ def copies(root: Path, members: dict[str, Path]) -> tuple[int, list[str]]:
     """(comparisons made, one problem per copy of the roster that disagrees with it)"""
     total, out = 0, []
     for n, problems in (release_workflow(_read(root, ".github/workflows/release.yml")),
+                        semver_paths(_read(root, SEMVER_PATHS)),
                         ci_commands(root, set(members)), documents(root, set(members)),
                         manifests(root, members)):
         total += n

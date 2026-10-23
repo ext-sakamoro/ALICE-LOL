@@ -369,20 +369,27 @@ enum Tok {
 
 const OPS: &[&str] = &["==", "!=", "<=", ">=", "++", "<", ">", "(", ")", ",", "."];
 
+/// The bytes from `at` on that `keep` accepts, as a count
+fn run_len(b: &[u8], at: usize, keep: impl Fn(u8) -> bool) -> usize {
+    b[at..].iter().take_while(|&&c| keep(c)).count()
+}
+
 fn tokens(src: &str) -> Result<Vec<Tok>, String> {
     let sb = src.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
-    while i < sb.len() {
+    // every step reads at least one byte, so `sb.len()` steps reach the end; a step that read
+    // none would stop here instead of looping
+    for _ in 0..sb.len() {
+        if i >= sb.len() {
+            break;
+        }
         let ch = sb[i];
         if ch == b' ' || ch == b'\t' {
             i += 1;
         } else if sb[i..].starts_with(b"0x") {
             let start = i + 2;
-            let mut j = start;
-            while j < sb.len() && matches!(sb[j], b'0'..=b'9' | b'a'..=b'f') {
-                j += 1;
-            }
+            let j = start + run_len(sb, start, |c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
             let bytes = hex_bytes(&src[start..j]).ok_or_else(|| {
                 format!(
                     "byte literal `{}` has an odd number of hex digits",
@@ -392,10 +399,7 @@ fn tokens(src: &str) -> Result<Vec<Tok>, String> {
             out.push(Tok::Bytes(bytes));
             i = j;
         } else if ch.is_ascii_digit() {
-            let mut j = i;
-            while j < sb.len() && sb[j].is_ascii_digit() {
-                j += 1;
-            }
+            let j = i + run_len(sb, i, |c| c.is_ascii_digit());
             let digits = &src[i..j];
             let value = if digits.len() > 1 && digits.starts_with('0') {
                 None
@@ -418,17 +422,20 @@ fn tokens(src: &str) -> Result<Vec<Tok>, String> {
             out.push(Tok::Op(op));
             i += op.len();
         } else if ch.is_ascii_lowercase() {
-            let mut j = i;
-            while j < sb.len()
-                && (sb[j].is_ascii_lowercase() || sb[j].is_ascii_digit() || sb[j] == b'_')
-            {
-                j += 1;
-            }
+            let j = i + run_len(sb, i, |c| {
+                c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_'
+            });
             out.push(Tok::Name(src[i..j].to_owned()));
             i = j;
         } else {
             return Err(format!("`{src}`: unexpected `{}`", &src[i..]));
         }
+    }
+    if i < sb.len() {
+        return Err(format!(
+            "`{src}`: the reading stopped at byte {i} of {}",
+            sb.len()
+        ));
     }
     Ok(out)
 }
@@ -1736,4 +1743,37 @@ pub fn rule_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
         out.push((RULE_SEMANTICS_PINS[3].0, h.finalize().into()));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every token reads at least one byte, so a text of n bytes gives at most n tokens; a
+    /// reading that stops advancing ends as an error after n steps instead of looping or
+    /// growing its output
+    #[test]
+    fn tokens_are_bounded_by_the_input_length() {
+        let cases = [
+            ("a", 1),
+            ("  a  ", 1),
+            ("(a or b) and c", 7),
+            ("0x0102 ++ k == k", 5),
+            ("n >= 10", 3),
+            ("\"t\" == x", 3),
+            ("f(a, b).c", 8),
+            ("((()))", 6),
+            ("   \t ", 0),
+        ];
+        for (src, count) in cases {
+            let t = tokens(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+            assert_eq!(t.len(), count, "{src}: {t:?}");
+            assert!(t.len() <= src.len(), "{src}");
+        }
+        let long = "(a or b) ".repeat(4096);
+        assert_eq!(tokens(&long).map(|t| t.len()), Ok(5 * 4096));
+        for src in ["0x0", "01", "\"open", "a $ b", "A", "a\\b"] {
+            assert!(tokens(src).is_err(), "{src}");
+        }
+    }
 }

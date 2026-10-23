@@ -372,6 +372,70 @@ fn files_that_do_not_read() {
     assert!(rule_law_from_file(p).is_ok());
 }
 
+/// Each operator refuses an operand of the wrong type on either side, by its own message (an
+/// error from a later check, such as the example failing, would hide a missing type check)
+#[test]
+fn operators_refuse_an_operand_of_another_type_on_either_side() {
+    let cases = [
+        ("n or true", "`or` needs booleans"),
+        ("true or n", "`or` needs booleans"),
+        ("n and true", "`and` needs booleans"),
+        ("true and n", "`and` needs booleans"),
+        ("not n", "`not` needs booleans"),
+        ("0x01 ++ \"a\" == k", "`++` joins bytes"),
+        ("\"a\" ++ 0x01 == k", "`++` joins bytes"),
+        ("n ++ 0x01 == k", "`++` joins bytes"),
+    ];
+    for (expr, message) in cases {
+        let text = format!(
+            "kind predicate\nx-input n integer\nx-input k bytes\nrequire r: {expr}\n\
+             example {{\"n\": 1, \"k\": \"01\"}}\n"
+        );
+        let e = rule_law_from_file(&text).expect_err(expr).to_string();
+        assert!(e.contains(message), "{expr}: {e}");
+    }
+    // the same operands of the right type read
+    for expr in ["n > 0 or true", "true and not false", "0x01 ++ 0x02 == k"] {
+        let text = format!(
+            "kind predicate\nx-input n integer\nx-input k bytes\nrequire r: {expr}\n\
+             example {{\"n\": 1, \"k\": \"0102\"}}\n"
+        );
+        assert!(rule_law_from_file(&text).is_ok(), "{expr}");
+    }
+}
+
+/// A parenthesized group overrides the binding of `and` over `or`: `(true or n > 0) and n > 5`
+/// fails for n = 1, where the ungrouped `true or (n > 0 and n > 5)` would hold
+#[test]
+fn a_parenthesized_group_binds_first() {
+    let law = |require: &str| {
+        rule_law_from_file(&format!(
+            "kind predicate\nx-input n integer\nrequire r: {require}\nexample {{\"n\": 6}}\n"
+        ))
+        .unwrap_or_else(|e| panic!("{require}: {e}"))
+    };
+    let failed = |l: &alice_lol::rule_law::RuleLaw, n: i64| {
+        outputs(&l.respond(&json(&format!("{{\"n\": {n}}}"))))
+            .get("failed")
+            .cloned()
+    };
+    let grouped = law("(true or n > 0) and n > 5");
+    assert_eq!(failed(&grouped, 1), Some(Json::Text("r".to_owned())));
+    assert_eq!(failed(&grouped, 6), Some(Json::Null));
+    let ungrouped = law("true or n > 0 and n > 5");
+    assert_eq!(failed(&ungrouped, 1), Some(Json::Null));
+    // nested and unbalanced groups
+    assert_eq!(
+        failed(&law("((n > 5))"), 1),
+        Some(Json::Text("r".to_owned()))
+    );
+    for bad in ["(n > 5", "n > 5)", "()"] {
+        let text =
+            format!("kind predicate\nx-input n integer\nrequire r: {bad}\nexample {{\"n\": 6}}\n");
+        assert!(rule_law_from_file(&text).is_err(), "{bad}");
+    }
+}
+
 #[test]
 fn bound_integers_reach_the_largest_and_no_further() {
     let p = "kind predicate\nx-input s text\nx-bind n s integer\nrequire pos: n > 0\nexample {\"s\": \"1\"}\n";

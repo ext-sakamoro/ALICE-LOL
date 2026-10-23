@@ -19,7 +19,8 @@ import release_roster as rr  # noqa: E402
 NOT_PUBLISHED = ["alice-lol-humanoid", "alice-lol-ui", "alice-lol-robot", "alice-lol-datagen",
                  "alice-world-auditor", "alice-world-auditor-types"]
 # the files that hold a copy of the roster, and the readme each roster manifest names
-COPIES = [".github/workflows/release.yml", ".github/workflows/ci.yml", "scripts/preflight.sh", *rr.NOTES]
+COPIES = [".github/workflows/release.yml", ".github/workflows/ci.yml", "scripts/preflight.sh", rr.SEMVER_PATHS,
+          *rr.NOTES]
 
 
 class Roster(unittest.TestCase):
@@ -97,6 +98,9 @@ class Roster(unittest.TestCase):
              "published crates (alice-lol, alice-lol-macro)", "lacks alice-lol-layout"),
             ("README.md", "published crate (alice-lol, alice-lol-layout, alice-lol-macro)",
              "published crate (alice-lol, alice-lol-layout, alice-lol-macro, alice-lol-ui)", "alice-lol-ui"),
+            (".github/paths/semver-checks.txt", "alice-lol-layout/src/**\n", "", "lacks alice-lol-layout/src/**"),
+            (".github/paths/semver-checks.txt", "alice-lol-macro/Cargo.toml\n", "",
+             "lacks alice-lol-macro/Cargo.toml"),
             ("README_JP.md", "| `alice-lol-layout` |", "| `alice-lol-layouts` |", "crate table"),
             ("README.md", "| `alice-lol-layout` |", "| `alice-lol-layouts` |", "crate table"),
         ]
