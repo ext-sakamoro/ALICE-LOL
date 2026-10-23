@@ -181,6 +181,44 @@ pub fn render_frame(word: &Word, motion: &BoundMotion<'_>, t_ms: u64) -> Result<
     })
 }
 
+/// The mean of a frame's stored values, scaled to `[0, 1]` (the sum is exact: an integer)
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // the sum and the count are below 2^53
+pub fn frame_luminance(frame: &Frame) -> f64 {
+    let sum: u64 = frame.pixels.iter().map(|&p| u64::from(p)).sum();
+    let n = frame.pixels.len() as f64;
+    if n == 0.0 {
+        0.0
+    } else {
+        sum as f64 / (n * 255.0)
+    }
+}
+
+/// The luminance of `count` frames sampled `hz` times a second from `from_ms` (frame `k` at
+/// `from_ms + floor(k * 1000 / hz)` milliseconds): the series a flash audit law reads
+///
+/// # Errors
+///
+/// [`FrameError`] of the first frame that cannot be drawn, or [`FrameError::Size`] when `hz`
+/// is 0
+pub fn luminance_series(
+    word: &Word,
+    motion: &BoundMotion<'_>,
+    from_ms: u64,
+    count: u32,
+    hz: u32,
+) -> Result<Vec<f64>, FrameError> {
+    if hz == 0 {
+        return Err(FrameError::Size);
+    }
+    (0..count)
+        .map(|k| {
+            let t = from_ms + u64::from(k) * 1000 / u64::from(hz);
+            render_frame(word, motion, t).map(|f| frame_luminance(&f))
+        })
+        .collect()
+}
+
 /// The name of a frame: SHA-256 of [`FRAME_SEMANTICS_ID`], the width and height
 /// (little-endian `u32`) and the pixels
 #[must_use]

@@ -1,0 +1,19 @@
+# Flashing: at most three flashes in any one second (WCAG 2.2 success criterion 2.3.1, general flash)
+law flash-three-per-second
+kind audit
+claim the luminance series is sampled 60 times a second, so a window of 60 samples is one second
+claim a flash is a pair of opposing luminance changes of at least 0.1 (10% of the maximum) where the darker end is below 0.8
+claim the series is the mean luminance of the reference frame, a measure of the whole frame and not of a 25% area of the visual field
+source https://www.w3.org/TR/WCAG22/#three-flashes-or-below-threshold
+
+x-input luminance list of number
+x-metric samples = count(luminance)
+x-series excess = flashes_above(luminance, 60, 0.1, 0.8, 3)
+
+begin audit
+audit flash-three-per-second
+evidence samples
+expect excess == 0
+end audit
+
+verdict the verdict of the audit block for the given measurements
