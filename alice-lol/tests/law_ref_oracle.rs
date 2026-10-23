@@ -216,6 +216,25 @@ fn a_reference_from_another_build_or_law_is_refused_naming_both() {
         swapped.resolve_motion(&law).unwrap_err(),
         LawRefError::ParamNames { .. }
     ));
+    // a parameter renamed in the reference (same count, same order, other name), also after a
+    // round trip through the bytes: the names are compared, not only their number
+    let mut renamed = r.clone();
+    renamed.params[1].0 = "deep".to_owned();
+    let e = LawRef::from_bytes(&renamed.to_bytes().unwrap())
+        .unwrap()
+        .resolve_motion(&law)
+        .unwrap_err();
+    assert_eq!(
+        e,
+        LawRefError::ParamNames {
+            law: vec!["bpm".to_owned(), "depth".to_owned()],
+            reference: vec!["bpm".to_owned(), "deep".to_owned()],
+        }
+    );
+    assert!(
+        e.to_string().contains("deep") && e.to_string().contains("depth"),
+        "{e}"
+    );
     let mut missing = r.clone();
     missing.params.pop();
     assert!(matches!(
