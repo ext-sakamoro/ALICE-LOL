@@ -372,6 +372,38 @@ fn files_that_do_not_read() {
     assert!(rule_law_from_file(p).is_ok());
 }
 
+/// Each operator refuses an operand of the wrong type on either side, by its own message (an
+/// error from a later check, such as the example failing, would hide a missing type check)
+#[test]
+fn operators_refuse_an_operand_of_another_type_on_either_side() {
+    let cases = [
+        ("n or true", "`or` needs booleans"),
+        ("true or n", "`or` needs booleans"),
+        ("n and true", "`and` needs booleans"),
+        ("true and n", "`and` needs booleans"),
+        ("not n", "`not` needs booleans"),
+        ("0x01 ++ \"a\" == k", "`++` joins bytes"),
+        ("\"a\" ++ 0x01 == k", "`++` joins bytes"),
+        ("n ++ 0x01 == k", "`++` joins bytes"),
+    ];
+    for (expr, message) in cases {
+        let text = format!(
+            "kind predicate\nx-input n integer\nx-input k bytes\nrequire r: {expr}\n\
+             example {{\"n\": 1, \"k\": \"01\"}}\n"
+        );
+        let e = rule_law_from_file(&text).expect_err(expr).to_string();
+        assert!(e.contains(message), "{expr}: {e}");
+    }
+    // the same operands of the right type read
+    for expr in ["n > 0 or true", "true and not false", "0x01 ++ 0x02 == k"] {
+        let text = format!(
+            "kind predicate\nx-input n integer\nx-input k bytes\nrequire r: {expr}\n\
+             example {{\"n\": 1, \"k\": \"0102\"}}\n"
+        );
+        assert!(rule_law_from_file(&text).is_ok(), "{expr}");
+    }
+}
+
 #[test]
 fn bound_integers_reach_the_largest_and_no_further() {
     let p = "kind predicate\nx-input s text\nx-bind n s integer\nrequire pos: n > 0\nexample {\"s\": \"1\"}\n";

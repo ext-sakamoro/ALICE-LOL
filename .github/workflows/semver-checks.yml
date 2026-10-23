@@ -35,6 +35,8 @@ on:
       - 'alice-lol/Cargo.toml'
       - 'alice-lol-macro/src/**'
       - 'alice-lol-macro/Cargo.toml'
+      - 'alice-lol-layout/src/**'
+      - 'alice-lol-layout/Cargo.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'

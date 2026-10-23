@@ -369,20 +369,27 @@ enum Tok {
 
 const OPS: &[&str] = &["==", "!=", "<=", ">=", "++", "<", ">", "(", ")", ",", "."];
 
+/// The bytes from `at` on that `keep` accepts, as a count
+fn run_len(b: &[u8], at: usize, keep: impl Fn(u8) -> bool) -> usize {
+    b[at..].iter().take_while(|&&c| keep(c)).count()
+}
+
 fn tokens(src: &str) -> Result<Vec<Tok>, String> {
     let sb = src.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
-    while i < sb.len() {
+    // every step reads at least one byte, so `sb.len()` steps reach the end; a step that read
+    // none would stop here instead of looping
+    for _ in 0..sb.len() {
+        if i >= sb.len() {
+            break;
+        }
         let ch = sb[i];
         if ch == b' ' || ch == b'\t' {
             i += 1;
         } else if sb[i..].starts_with(b"0x") {
             let start = i + 2;
-            let mut j = start;
-            while j < sb.len() && matches!(sb[j], b'0'..=b'9' | b'a'..=b'f') {
-                j += 1;
-            }
+            let j = start + run_len(sb, start, |c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
             let bytes = hex_bytes(&src[start..j]).ok_or_else(|| {
                 format!(
                     "byte literal `{}` has an odd number of hex digits",
@@ -392,10 +399,7 @@ fn tokens(src: &str) -> Result<Vec<Tok>, String> {
             out.push(Tok::Bytes(bytes));
             i = j;
         } else if ch.is_ascii_digit() {
-            let mut j = i;
-            while j < sb.len() && sb[j].is_ascii_digit() {
-                j += 1;
-            }
+            let j = i + run_len(sb, i, |c| c.is_ascii_digit());
             let digits = &src[i..j];
             let value = if digits.len() > 1 && digits.starts_with('0') {
                 None
@@ -418,17 +422,20 @@ fn tokens(src: &str) -> Result<Vec<Tok>, String> {
             out.push(Tok::Op(op));
             i += op.len();
         } else if ch.is_ascii_lowercase() {
-            let mut j = i;
-            while j < sb.len()
-                && (sb[j].is_ascii_lowercase() || sb[j].is_ascii_digit() || sb[j] == b'_')
-            {
-                j += 1;
-            }
+            let j = i + run_len(sb, i, |c| {
+                c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_'
+            });
             out.push(Tok::Name(src[i..j].to_owned()));
             i = j;
         } else {
             return Err(format!("`{src}`: unexpected `{}`", &src[i..]));
         }
+    }
+    if i < sb.len() {
+        return Err(format!(
+            "`{src}`: the reading stopped at byte {i} of {}",
+            sb.len()
+        ));
     }
     Ok(out)
 }

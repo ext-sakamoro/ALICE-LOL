@@ -3,11 +3,14 @@
 # (scripts/changed_paths.py sync)
 # every file a job of the workflow executes or reads is listed: a missing one skips the
 # check on a change that alters it
-# the public API of alice-lol, the macros it re-exports, and the version the step is measured to
+# the public API of alice-lol, the macros and the layout crate it re-exports, and the version the
+# step is measured to (every release roster crate: scripts/release_roster.py checks it)
 alice-lol/src/**
 alice-lol/Cargo.toml
 alice-lol-macro/src/**
 alice-lol-macro/Cargo.toml
+alice-lol-layout/src/**
+alice-lol-layout/Cargo.toml
 Cargo.toml
 Cargo.lock
 # cargo semver-checks runs at the repository root, where this file picks the toolchain
