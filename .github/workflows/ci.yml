@@ -184,9 +184,9 @@ jobs:
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib geometry_id
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib quat_from_euler_xyz_is_bit_identical_across_architectures
           scripts/cargo_test_nonzero.sh -p alice-lol${{ matrix.profile }} --lib y_component_cancellation_preserves_a_negative_zero_input
-          scripts/run_tests.sh geometry_id_oracle=4,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare=9 -- \
+          scripts/run_tests.sh geometry_id_oracle=4,stdlib_profile_determinism_oracle,laser_pattern_digest_golden,golden_compare=9,motion_frame_oracle=6 -- \
             cargo test -p alice-lol${{ matrix.profile }} --test geometry_id_oracle --test stdlib_profile_determinism_oracle \
-            --test laser_pattern_digest_golden --test golden_compare
+            --test laser_pattern_digest_golden --test golden_compare --test motion_frame_oracle
       # ALICE-Law G14: round-to-nearest-even and no flush-to-zero, asserted at run
       # time in this leg's profile; scripts/run_tests.sh float_environment=2 fails
       # unless both tests passed (an ignored or cfg'd-out test is red, not an empty green run)
@@ -194,6 +194,36 @@ jobs:
         working-directory: ALICE-LOL
         shell: bash
         run: scripts/run_tests.sh float_environment=2 -- cargo test -p alice-lol${{ matrix.profile }} --test float_environment
+
+  # The frame oracle on the targets the geometry-digest legs do not cover: wasm32-wasip1 under
+  # wasmtime and the iOS simulator. They compare against the same recorded frame hashes as the
+  # native legs, so the reference frames are the same bits on every one of them;
+  # scripts/frame_targets.sh fails unless all of the oracle's tests passed on each target.
+  frame-targets:
+    name: Frame hashes (wasm32 and iOS simulator)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: ALICE-LOL
+      - uses: ./ALICE-LOL/.github/actions/alice-siblings
+        with:
+          repo-dir: ALICE-LOL
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ALICE-LOL
+      - name: Install wasmtime
+        run: brew install wasmtime
+      - name: Frame oracle on wasm32-wasip1 and the iOS simulator
+        working-directory: ALICE-LOL
+        run: scripts/frame_targets.sh all
 
   clippy:
     name: Clippy

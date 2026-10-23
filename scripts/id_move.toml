@@ -39,3 +39,8 @@ path = "alice_lol::layout::LAYOUT_SEMANTICS_ID"
 # behaviour of motion_law; it is in every motion-law identifier, so it moves only with a breaking version
 [[id]]
 path = "alice_lol::motion_law::MOTION_SEMANTICS_ID"
+
+# the reference raster of a moving word (motion_frame): the fold of FRAME_SEMANTICS_PINS, measured from
+# the raster; it is the first thing every frame hash hashes, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::motion_frame::FRAME_SEMANTICS_ID"
