@@ -638,6 +638,262 @@ impl MetricExpr {
     }
 }
 
+/// A quantity derived from a series of samples (law file `x-series <name> = <expression>`)
+///
+/// ```text
+/// series := flashes_above(<input>, <window>, <delta>, <darker_below>, <limit>)
+/// ```
+///
+/// `flashes_above` reads a list of numbers (a luminance series sampled at a fixed rate, the
+/// rate chosen by whoever measures it) and gives how many flashes the busiest stretch of
+/// `window` consecutive samples has above `limit` (0 when none has more):
+///
+/// - the samples are reduced to their turning points (a run in one direction keeps its last
+///   sample; equal neighbours are one sample)
+/// - a transition is a step between consecutive turning points whose size is at least
+///   `delta` and whose darker end is below `darker_below`; it happens at the later point
+/// - a flash is a pair of transitions: the flashes of a stretch are half its transitions,
+///   rounded down; with fewer than `window` samples the whole list is the one stretch
+///
+/// The value is therefore `max(0, max_flashes - limit)`, so a law states a limit as
+/// `expect <name> == 0`. A list with a sample that is not a finite number is not measured.
+/// [`AUDIT_SERIES_SEMANTICS_ID`] pins this behaviour and is in the identifier of every audit
+/// law that declares a series (and of no other).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SeriesExpr {
+    /// the input the samples come from (a `list number`)
+    pub input: String,
+    /// samples per stretch, at least 2
+    pub window: u32,
+    /// the smallest step that is a transition, in `(0, 1]`
+    pub delta: f64,
+    /// a step is a transition only when its darker end is below this, in `(0, 1]`
+    pub darker_below: f64,
+    /// how many flashes a stretch may have
+    pub limit: u32,
+}
+
+/// The most samples a series is read with
+pub const MAX_SERIES_SAMPLES: usize = 1 << 20;
+
+impl SeriesExpr {
+    /// Reads a series expression
+    ///
+    /// # Errors
+    ///
+    /// When it is not `flashes_above(<input>, <window>, <delta>, <darker_below>, <limit>)`
+    /// with an input name, a window of at least 2, `delta` and `darker_below` in `(0, 1]` and
+    /// a whole-number limit
+    pub fn parse(text: &str) -> Result<Self, TypeError> {
+        let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let bad = || {
+            TypeError(format!(
+                "series expression `flashes_above(<input>, <window>, <delta>, <darker_below>, <limit>)` expected, got `{}`",
+                text.trim()
+            ))
+        };
+        let inner = compact
+            .strip_prefix("flashes_above(")
+            .and_then(|r| r.strip_suffix(')'))
+            .ok_or_else(bad)?;
+        let parts: Vec<&str> = inner.split(',').collect();
+        let [input, window, delta, below, limit] = parts[..] else {
+            return Err(bad());
+        };
+        let name_ok = !input.is_empty()
+            && input
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            && !input.starts_with(|c: char| c.is_ascii_digit());
+        let whole = |s: &str| -> Option<u32> {
+            (s.bytes().all(|b| b.is_ascii_digit())
+                && !s.is_empty()
+                && (s == "0" || !s.starts_with('0')))
+            .then(|| s.parse().ok())
+            .flatten()
+        };
+        let unit = |s: &str| -> Option<f64> {
+            crate::runtime_parser::law_number(s).filter(|v| *v > 0.0 && *v <= 1.0)
+        };
+        match (
+            name_ok,
+            whole(window),
+            unit(delta),
+            unit(below),
+            whole(limit),
+        ) {
+            (true, Some(samples), Some(step), Some(darker), Some(most)) if samples >= 2 => {
+                Ok(Self {
+                    input: input.to_owned(),
+                    window: samples,
+                    delta: step,
+                    darker_below: darker,
+                    limit: most,
+                })
+            }
+            _ => Err(bad()),
+        }
+    }
+
+    /// The canonical text (the identifier hashes it): numbers in their shortest round-trip form
+    #[must_use]
+    pub fn canonical(&self) -> String {
+        format!(
+            "flashes_above({},{},{:?},{:?},{})",
+            self.input, self.window, self.delta, self.darker_below, self.limit
+        )
+    }
+
+    /// The value for the input `value` (`None` when it is not measured: missing, not a list,
+    /// a sample that is not a finite number, or more than [`MAX_SERIES_SAMPLES`] samples)
+    #[must_use]
+    pub fn evaluate(&self, value: Option<&Json>) -> Option<f64> {
+        let Some(Json::Array(items)) = value else {
+            return None;
+        };
+        if items.len() > MAX_SERIES_SAMPLES {
+            return None;
+        }
+        let samples: Vec<f64> = items
+            .iter()
+            .map(|v| match v {
+                Json::Number(x) if x.is_finite() => Some(*x),
+                _ => None,
+            })
+            .collect::<Option<_>>()?;
+        let most = max_flashes(&samples, self.window, self.delta, self.darker_below);
+        Some(f64::from(most.saturating_sub(self.limit)))
+    }
+}
+
+/// The most flashes any stretch of `window` consecutive samples has (see [`SeriesExpr`])
+#[must_use]
+pub fn max_flashes(samples: &[f64], window: u32, delta: f64, darker_below: f64) -> u32 {
+    let Some(&first) = samples.first() else {
+        return 0;
+    };
+    // turning points: (index, value), consecutive ones alternate in direction
+    let mut turns: Vec<(usize, f64)> = vec![(0, first)];
+    let mut dir = 0_i8;
+    for (i, &v) in samples.iter().enumerate().skip(1) {
+        let last = turns[turns.len() - 1].1;
+        let d = if v > last {
+            1
+        } else if v < last {
+            -1
+        } else {
+            0
+        };
+        if d == 0 {
+            continue;
+        }
+        if d == dir {
+            let k = turns.len() - 1;
+            turns[k] = (i, v);
+        } else {
+            turns.push((i, v));
+            dir = d;
+        }
+    }
+    let at: Vec<usize> = turns
+        .windows(2)
+        .filter(|w| (w[1].1 - w[0].1).abs() >= delta && w[0].1.min(w[1].1) < darker_below)
+        .map(|w| w[1].0)
+        .collect();
+    let window = usize::try_from(window).unwrap_or(usize::MAX);
+    if samples.len() <= window {
+        return u32::try_from(at.len() / 2).unwrap_or(u32::MAX);
+    }
+    // the stretch [start, start + window): the transitions whose index is inside it
+    let mut most = 0;
+    let (mut lo, mut hi) = (0, 0);
+    for start in 0..=samples.len() - window {
+        while lo < at.len() && at[lo] < start {
+            lo += 1;
+        }
+        while hi < at.len() && at[hi] < start + window {
+            hi += 1;
+        }
+        most = most.max(hi - lo);
+    }
+    u32::try_from(most / 2).unwrap_or(u32::MAX)
+}
+
+/// What a series quantity means, as pins measured from [`max_flashes`] and
+/// [`SeriesExpr::evaluate`] ([`audit_series_fingerprints`]; the oracle recomputes every one)
+pub const AUDIT_SERIES_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[(
+    "audit series: turning points, transitions of at least delta below darker_below, flashes per window",
+    crate::law_id::hex32("6e8bf6c7bf2e8bc3d8fd7fde59306ea2448d5d0c475392643944f838b314a15d"),
+)];
+
+/// The fold of [`AUDIT_SERIES_SEMANTICS_PINS`], in the identifier of every audit law that
+/// declares an `x-series` (and of no other, so the identifiers of existing laws do not move)
+pub const AUDIT_SERIES_SEMANTICS_ID: [u8; 32] =
+    crate::law_id::hex32("583c13c9546e43bd05ca245680ed52057aab7c112d631621229d4cbdf844964c");
+
+/// The measured value of every pin of [`AUDIT_SERIES_SEMANTICS_PINS`]
+///
+/// # Panics
+///
+/// If the probe expression does not parse (the oracle parses it first)
+#[must_use]
+pub fn audit_series_fingerprints() -> Vec<(&'static str, [u8; 32])> {
+    let mut h = Sha256::new();
+    let square = |period: usize, n: usize, hi: f64, lo: f64| -> Vec<f64> {
+        (0..n)
+            .map(|i| {
+                if (i / period).is_multiple_of(2) {
+                    hi
+                } else {
+                    lo
+                }
+            })
+            .collect()
+    };
+    let cases: Vec<(Vec<f64>, u32, f64, f64)> = vec![
+        (square(5, 120, 1.0, 0.0), 60, 0.1, 0.8),
+        (square(10, 120, 1.0, 0.0), 60, 0.1, 0.8),
+        (square(5, 120, 0.95, 0.85), 60, 0.1, 0.8),
+        (square(5, 120, 0.3, 0.2), 60, 0.1, 0.8),
+        (square(5, 120, 0.3, 0.19), 60, 0.1, 0.8),
+        (
+            (0..120).map(|i| f64::from(i) / 119.0).collect(),
+            60,
+            0.1,
+            0.8,
+        ),
+        (vec![0.0, 1.0, 1.0, 0.5, 0.0, 0.0, 1.0], 60, 0.1, 0.8),
+        (vec![0.0, 0.5, 1.0, 0.5, 0.0], 3, 0.1, 0.8),
+        (vec![], 60, 0.1, 0.8),
+        (vec![0.5], 2, 0.1, 0.8),
+    ];
+    for (s, w, d, b) in &cases {
+        h.update(max_flashes(s, *w, *d, *b).to_le_bytes());
+    }
+    let e = SeriesExpr::parse("flashes_above(l, 60, 0.1, 0.8, 3)").expect("the probe parses");
+    for v in [
+        Json::Array(
+            square(5, 120, 1.0, 0.0)
+                .into_iter()
+                .map(Json::Number)
+                .collect(),
+        ),
+        Json::Array(vec![Json::Number(0.0), Json::Number(f64::NAN)]),
+        Json::Array(vec![Json::Number(0.0), Json::Text("1".into())]),
+        Json::Number(1.0),
+    ] {
+        match e.evaluate(Some(&v)) {
+            Some(x) => {
+                h.update([1]);
+                h.update(x.to_bits().to_le_bytes());
+            }
+            None => h.update([0]),
+        }
+    }
+    h.update(e.canonical().as_bytes());
+    vec![(AUDIT_SERIES_SEMANTICS_PINS[0].0, h.finalize().into())]
+}
+
 /// 値を比べるための key (型の tag と中身、数は `+0.0` を足した bit = 0 の符号を読まない)
 ///
 /// 型の tag は今の型の文法では区別に効かない (union 型が無く、1 つの field の値はすべて同じ型)
@@ -720,7 +976,10 @@ pub fn measurements(
         for k in keys {
             // a typed input is read through its type, and a name defined by x-metric is
             // never read from the request
-            if typed(k).is_some() || law.metrics().iter().any(|(n, _)| n == k) {
+            if typed(k).is_some()
+                || law.metrics().iter().any(|(n, _)| n == k)
+                || law.series().iter().any(|(n, _)| n == k)
+            {
                 continue;
             }
             if let Some(Json::Number(x)) = inputs.get(k) {
@@ -749,6 +1008,11 @@ pub fn measurements(
     }
     for (name, expr) in law.metrics() {
         if let Some(v) = expr.evaluate(read_typed(expr.input())) {
+            m = m.with_number(name, v);
+        }
+    }
+    for (name, expr) in law.series() {
+        if let Some(v) = expr.evaluate(read_typed(&expr.input)) {
             m = m.with_number(name, v);
         }
     }
@@ -944,7 +1208,7 @@ fn check_declaration(line_no: usize, raw: &str, line: &str) -> Result<(), LawFil
     }
     let kw_end = line.find(char::is_whitespace).unwrap_or(line.len());
     let kw = &line[..kw_end];
-    if !matches!(kw, "x-input" | "x-metric" | "x-at-least") {
+    if !matches!(kw, "x-input" | "x-metric" | "x-series" | "x-at-least") {
         return Err(LawFileError::Declaration {
             line: line_no,
             reason: format!("unknown declaration `{kw}`"),
@@ -1084,6 +1348,18 @@ fn metric_line(line: usize, rest: &str) -> Result<(String, MetricExpr), LawFileE
     Ok((name.trim().to_owned(), expr))
 }
 
+/// `x-series <name> = <expression>` (the text after the keyword)
+fn series_line(line: usize, rest: &str) -> Result<(String, SeriesExpr), LawFileError> {
+    let (name, expr) = rest
+        .split_once('=')
+        .ok_or_else(|| LawFileError::InputType {
+            line,
+            error: TypeError("`x-series <name> = <expression>` expected".to_owned()),
+        })?;
+    let expr = SeriesExpr::parse(expr).map_err(|error| LawFileError::InputType { line, error })?;
+    Ok((name.trim().to_owned(), expr))
+}
+
 /// `x-at-least <metric> <number>` (the text after the keyword): exactly a metric and a
 /// number of a law file ([`law_number`](crate::runtime_parser::law_number))
 fn floor_line(line: usize, rest: &str) -> Result<(String, f64), LawFileError> {
@@ -1114,6 +1390,7 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     let mut done: Option<String> = None;
     let mut inputs = Vec::new();
     let mut metrics = Vec::new();
+    let mut series: Vec<(String, SeriesExpr)> = Vec::new();
     let mut at_least = Vec::new();
     let mut at_least_lines: Vec<(usize, String)> = Vec::new();
     check_text(text)?;
@@ -1148,10 +1425,21 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
             if metrics
                 .iter()
                 .any(|(m, _): &(String, MetricExpr)| *m == name)
+                || series.iter().any(|(m, _)| *m == name)
             {
                 return Err(LawFileError::Duplicate { line: n + 1, name });
             }
             metrics.push((name, expr));
+        } else if let Some(rest) = line.strip_prefix("x-series ") {
+            let (name, expr) = series_line(n + 1, rest)?;
+            if series.iter().any(|(m, _)| *m == name)
+                || metrics
+                    .iter()
+                    .any(|(m, _): &(String, MetricExpr)| *m == name)
+            {
+                return Err(LawFileError::Duplicate { line: n + 1, name });
+            }
+            series.extend([(name, expr)]);
         } else if let Some(rest) = line.strip_prefix("x-at-least ") {
             let (name, v) = floor_line(n + 1, rest)?;
             if at_least.iter().any(|(m, _): &(String, f64)| *m == name) {
@@ -1178,10 +1466,11 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
         !metrics
             .iter()
             .any(|(m, _): &(String, MetricExpr)| m == name)
+            && !series.iter().any(|(m, _)| m == name)
     }) {
         return Err(LawFileError::Declaration {
             line: *line,
-            reason: format!("`x-at-least {name}` names no x-metric"),
+            reason: format!("`x-at-least {name}` names no x-metric or x-series"),
         });
     }
     let body = done.ok_or(LawFileError::NoAuditBlock)?;
@@ -1192,6 +1481,9 @@ pub fn audit_law_from_file(text: &str) -> Result<crate::audit_law::AuditLaw, Law
     }
     for (name, expr) in metrics {
         law = law.with_metric(&name, expr);
+    }
+    for (name, expr) in series {
+        law = law.with_series(&name, expr);
     }
     for (name, v) in at_least {
         law = law.with_at_least(&name, v);

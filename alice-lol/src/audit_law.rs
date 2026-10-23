@@ -179,6 +179,8 @@ pub struct AuditLaw {
     metrics: Vec<(String, MetricExpr)>,
     /// 下限 (`x-at-least <量> <n>`) 下限は識別子に入る
     at_least: Vec<(String, f64)>,
+    /// 系列から導く量 (`x-series <名前> = <式>`) 式と `AUDIT_SERIES_SEMANTICS_ID` が識別子に入る
+    series: Vec<(String, crate::law_input::SeriesExpr)>,
 }
 
 impl AuditLaw {
@@ -191,6 +193,7 @@ impl AuditLaw {
             inputs: Vec::new(),
             metrics: Vec::new(),
             at_least: Vec::new(),
+            series: Vec::new(),
         }
     }
 
@@ -212,6 +215,19 @@ impl AuditLaw {
     pub fn with_at_least(mut self, name: &str, n: f64) -> Self {
         self.at_least.push((name.to_owned(), n));
         self
+    }
+
+    /// 系列から導く量を足す (law file の `x-series <名前> = <式>` 行)
+    #[must_use]
+    pub fn with_series(mut self, name: &str, expr: crate::law_input::SeriesExpr) -> Self {
+        self.series.extend([(name.to_owned(), expr)]);
+        self
+    }
+
+    /// 系列から導く量 (足した順)
+    #[must_use]
+    pub fn series(&self) -> &[(String, crate::law_input::SeriesExpr)] {
+        &self.series
     }
 
     /// 量の下限 (足した順)
