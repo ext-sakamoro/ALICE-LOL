@@ -81,6 +81,14 @@ canary = "alice-lol/tests/export_producer_stamp.rs::every_lol_writer_stores_the_
 zero = "alice-lol/tests/export_producer_stamp.rs#assert!(seen >= 5"
 shared = "n/a: this crate's writers"
 
+# G9: an identifier move is a breaking version or a same-bit move kept and tested in the previous list
+[[row]]
+gate = "G9"
+checker = "scripts/id_move_check.py"
+canary = "scripts/test_id_move_check.py::Rules.test_the_old_value_kept_but_not_shown_to_matter_fails"
+zero = "scripts/test_id_move_check.py::Rules.test_a_config_without_identifiers_fails_as_comparing_nothing"
+shared = ["scripts/id_move_check.py", "scripts/test_id_move_check.py"]
+
 # G10: no wall clock, entropy or per-run order in the library
 [[row]]
 gate = "G10"

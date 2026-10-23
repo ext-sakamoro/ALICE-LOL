@@ -452,7 +452,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | | |
 |---|---|
 | release train | alice-lol 0.4.2 (prepared)、Law への依存: あり |
-| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.5"` |
+| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.5.1"` |
 | end to end 検査 | 対象 (`alice-lol = "0.4"`)、digest `9f7cf676708a272e3817ebbf0727c610f391e1547747af4307ee44d5523267c2`、aarch64 と x86_64 で同じ |
 
 ### 適合 (G1-G14)
@@ -467,7 +467,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
 | G7 handshake-carries-id | 適合 | The boundaries where a published crate (alice-lol, alice-lol-layout, alice-lol-macro) takes a value without its Rust type, and how each carries the writer's … |
 | G8 persisted-semantics-id | 適合 | the durable forms the workspace writes are the law references of law_ref (LawRef::to_bytes: the motion semantics identifier and the law identifier in every … |
-| G9 persisted-meaning-change-is-major | 未達 | the identifiers a stored form carries are all under the check: the law identifier, the geometry identifier (the export producer) and, since the G8 change, the … |
+| G9 persisted-meaning-change-is-major | 適合 | the identifiers a stored form carries are all under the check: the law identifier, the geometry identifier (the export producer) and, since the G8 change, the … |
 | G10 no-run-varying-artifacts | 適合 | Law-bearing output is the library code of the published crates (alice-lol, alice-lol-layout, alice-lol-macro). Two layers keep the wall clock and unseeded … |
 | G11 gate-self-tests | 未確認 | the per-gate table of canary, zero-compared failure and copy check was not completed. Found: canaries for the clippy-lib ban (scripts/clippy_lib_gate.py flags … |
 | G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |

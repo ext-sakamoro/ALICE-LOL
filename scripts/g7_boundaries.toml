@@ -416,6 +416,16 @@ class = "local"
 reason = "an arithmetic identifier hashed into the law's own identifier (written, not read from outside)"
 
 [[entry]]
+path = "alice_lol::law_id::check_lol_semantics"
+class = "local"
+reason = "a stored law identifier classified against this crate's own identifier and its literal list of earlier ones (an identifier compared, no value decoded); the readers that take the text call it"
+
+[[entry]]
+path = "alice_lol::geometry_id::check_lol_geometry_semantics"
+class = "local"
+reason = "a stored geometry identifier classified against this crate's own identifier and its literal list of earlier ones (an identifier compared, no value decoded); the readers that take the text call it"
+
+[[entry]]
 path = "alice_lol::law_id::semantics_id_for"
 class = "local"
 reason = "an alice-det-math identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
