@@ -121,6 +121,9 @@ pub mod rule_law;
 // 時刻は整数 ms、周期の位置は整数から、式は research と同じ評価器、channel は最後に 1 回だけ f32 へ
 pub mod motion_law;
 
+// 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
+pub mod law_ref;
+
 /// Byte layout laws (`kind layout`): a binary format declared once, bytes read and checked
 /// against the declaration (the crate `alice-lol-layout`, re-exported)
 pub use alice_lol_layout as layout;

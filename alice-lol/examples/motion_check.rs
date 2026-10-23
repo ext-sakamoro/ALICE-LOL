@@ -2,6 +2,7 @@
 //!
 //! ```text
 //! motion_check <law file> <glyphs> <t_ms>... [--param name=value]...   # the channels, as numbers and bits
+//! motion_check <law file> --ref [--param name=value]...                # the law reference as bytes, read back and resolved
 //! motion_check --semantics                                           # the measured pins against the built-in ones
 //! ```
 //!
@@ -9,6 +10,7 @@
 
 use std::process::ExitCode;
 
+use alice_lol::law_ref::LawRef;
 use alice_lol::motion_law::{
     measured_motion_semantics_id, motion_semantics_fingerprints, MotionLaw, CHANNELS,
     MOTION_SEMANTICS_ID, MOTION_SEMANTICS_PINS,
@@ -56,6 +58,11 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() == 1 && args[0] == "--semantics" {
         return semantics();
+    }
+    if let [path, flag, rest @ ..] = args.as_slice() {
+        if flag == "--ref" {
+            return reference(path, rest);
+        }
     }
     let [path, glyphs, rest @ ..] = args.as_slice() else {
         return usage();
@@ -129,4 +136,56 @@ fn main() -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+/// `--ref`: the reference for the law and the values, its bytes, and the same bytes read back
+/// and resolved against the law
+fn reference(path: &str, rest: &[String]) -> ExitCode {
+    let mut params: Vec<(String, f64)> = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        let Some((k, v)) = (a == "--param")
+            .then(|| it.next())
+            .flatten()
+            .and_then(|p| p.split_once('='))
+        else {
+            return usage();
+        };
+        let Ok(v) = v.parse::<f64>() else {
+            return usage();
+        };
+        params.push((k.to_owned(), v));
+    }
+    let law = match std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| MotionLaw::from_file(&t).map_err(|e| e.to_string()))
+    {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("{path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let given: Vec<(&str, f64)> = params.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    let bytes = match LawRef::motion(&law, &given).and_then(|r| r.to_bytes()) {
+        Ok(b) => b,
+        Err(e) => {
+            println!("refused: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    println!("reference {} bytes {}", bytes.len(), hex(&bytes));
+    match LawRef::from_bytes(&bytes).and_then(|r| r.resolve_motion(&law).map(|b| b.timing())) {
+        Ok(t) => {
+            println!(
+                "resolved: period {} ms, stagger {} ms",
+                t.period_ms, t.stagger_ms
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("refused: {e}");
+            ExitCode::from(1)
+        }
+    }
 }

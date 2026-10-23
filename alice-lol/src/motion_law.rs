@@ -604,6 +604,12 @@ impl BoundMotion<'_> {
         self.timing
     }
 
+    /// The value of every parameter, in the law's declared order
+    #[must_use]
+    pub fn values(&self) -> &[f64] {
+        &self.values
+    }
+
     /// The channels of glyph `i` of `n` at `t_ms` milliseconds
     ///
     /// # Errors

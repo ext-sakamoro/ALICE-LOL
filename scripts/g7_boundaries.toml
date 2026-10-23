@@ -577,3 +577,14 @@ reason = "reads motion law text a person or a model writes; the law's identifier
 path = "alice_lol::motion_law::MotionLaw::bind"
 class = "local"
 reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error); the values are Rust f64, range-checked against the declaration"
+
+[[entry]]
+path = "alice_lol::law_ref::LawRef::from_bytes"
+class = "exchange"
+test = "alice-lol/tests/law_ref_oracle.rs::a_reference_from_another_build_or_law_is_refused_naming_both"
+reason = "reads a law reference another program wrote; it carries the semantics identifier it was written under and the law's identifier, and resolve_motion refuses either when it is not this build's semantics or the law text given (SemanticsMismatch / LawMismatch, naming both identifiers)"
+
+[[entry]]
+path = "alice_lol::law_ref::LawRef::motion"
+class = "local"
+reason = "the text is a parameter name, looked up among the names the motion law declares (MotionLaw::bind); the values are Rust f64, range-checked against the declaration"
