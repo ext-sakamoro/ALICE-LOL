@@ -3,8 +3,8 @@
 # the nightly that builds rustdoc's JSON (a dated one, so the JSON layout does not move under the check)
 nightly = "nightly-2026-09-26"
 
-# a writer's name, as alice-sdf's scripts/provenance_writers.py names one
-name = '(?:export|save|write)\w*|to_bytes'
+# a writer's name is alice-sdf's own (WRITER_NAME in its scripts/provenance_writers.py, read from the pinned
+# source): it is not copied here
 
 # The calls of a writer library code may still make, each exactly once ([[open]]: path, file, function, reason):
 # none; the second pass fails on any report
@@ -13,21 +13,8 @@ name = '(?:export|save|write)\w*|to_bytes'
 # each entry says what the item is. kind: writer (treated as one), not-a-writer, not-built (counted by
 # alice-sdf but not compiled with alice-lol's features; when alice-lol starts building it, the entry is
 # stale and the run fails until the item is classified)
-
-[[outside]]
-key = "src/compiled/glsl/transpiler.rs::export_unity_shader_graph"
-kind = "not-a-writer"
-reason = "returns shader source text for a material; it writes no file and stores no SDF value"
-
-[[outside]]
-key = "src/compiled/hlsl/transpiler.rs::export_unity_shader_graph"
-kind = "not-a-writer"
-reason = "returns shader source text for a material; it writes no file and stores no SDF value"
-
-[[outside]]
-key = "src/compiled/hlsl/transpiler.rs::export_ue5_material_function"
-kind = "not-a-writer"
-reason = "returns shader source text for a material function; it writes no file and stores no SDF value"
+# An item alice-sdf itself lists as not a writer (its scripts/provenance-not-writers.txt, with the reason) and a
+# writer of alice-sdf's examples/ need no entry: the run reads them from alice-sdf, and an entry copying one fails
 
 [[outside]]
 key = "src/svo/streaming.rs::to_bytes"
@@ -73,3 +60,58 @@ reason = "the volume module is behind alice-sdf's volume feature, which alice-lo
 key = "src/volume/export.rs::export_raw_with_provenance"
 kind = "not-built"
 reason = "the volume module is behind alice-sdf's volume feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/asp_bridge.rs::create_sdf_i_packet"
+kind = "not-built"
+reason = "the asp_bridge module is behind alice-sdf's asp feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/asp_bridge.rs::create_sdf_i_packet_with_provenance"
+kind = "not-built"
+reason = "the asp_bridge module is behind alice-sdf's asp feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/codec_bridge.rs::encode_sdf_volume"
+kind = "not-built"
+reason = "the codec_bridge module is behind alice-sdf's codec feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/codec_bridge.rs::encode_sdf_volume_with_provenance"
+kind = "not-built"
+reason = "the codec_bridge module is behind alice-sdf's codec feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/io/vdb.rs::bake_to_vdb"
+kind = "not-built"
+reason = "the io::vdb module is behind alice-sdf's openvdb feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/io/vdb.rs::bake_to_vdb_with_provenance"
+kind = "not-built"
+reason = "the io::vdb module is behind alice-sdf's openvdb feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/svo/streaming.rs::to_bytes_with_provenance"
+kind = "not-built"
+reason = "the svo module is behind alice-sdf's svo feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/terrain/heightmap.rs::to_png"
+kind = "not-built"
+reason = "the terrain module is behind alice-sdf's terrain feature and to_png behind its image feature, neither of which alice-lol enables"
+
+[[outside]]
+key = "src/terrain/heightmap.rs::to_png_with_provenance"
+kind = "not-built"
+reason = "the terrain module is behind alice-sdf's terrain feature and to_png behind its image feature, neither of which alice-lol enables"
+
+[[outside]]
+key = "src/texture/mod.rs::save_texture_fit"
+kind = "not-built"
+reason = "the texture module is behind alice-sdf's texture-fit feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/texture/mod.rs::save_texture_fit_with_provenance"
+kind = "not-built"
+reason = "the texture module is behind alice-sdf's texture-fit feature, which alice-lol does not enable"

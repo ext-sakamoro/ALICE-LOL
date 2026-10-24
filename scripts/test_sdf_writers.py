@@ -154,6 +154,17 @@ class Candidates(unittest.TestCase):
                           "call": "alice_sdf::Net::save(todo!(), &mut std::io::sink())"})
         self.assertNotIn("src/io/stl.rs::export_hidden", cands, "public in a private module and not re-exported")
 
+    def test_a_writer_alice_sdf_counts_is_a_candidate_under_any_name(self):
+        doc = sdf_doc()
+        doc["index"]["30"]["span"] = {"filename": "/x/ALICE-SDF/src/lib.rs"}
+        name = re.compile(r"(?:export|save|write)\w*|to_bytes")
+        self.assertNotIn("src/lib.rs::helper", g.candidates(doc, name))
+        cands = g.candidates(doc, name, frozenset({"src/lib.rs::helper"}))
+        self.assertEqual(cands["src/lib.rs::helper"]["path"], "alice_sdf::helper")
+        # counted but unreachable stays out
+        self.assertNotIn("src/io/stl.rs::export_hidden",
+                         g.candidates(doc, name, frozenset({"src/io/stl.rs::export_hidden"})))
+
 
 class Lock(unittest.TestCase):
     def setUp(self):
@@ -467,6 +478,132 @@ class Main(unittest.TestCase):
 
     def test_no_public_use_is_compared_nothing(self):
         self.assertEqual(self.run_main(lol_doc())[0], 2)
+
+
+REV = "3c7367f09ec50881cd698545aae56700458fc15b"
+
+
+def manifest(t: str, dep: str) -> Path:
+    p = Path(t) / "Cargo.toml"
+    p.write_text(f'[package]\nname = "x"\n\n[dependencies]\nalice-sdf = {dep}\n', encoding="utf-8")
+    return p
+
+
+def metadata(*sources: str) -> mock.Mock:
+    pkgs = [{"name": "alice-sdf", "source": src, "manifest_path": f"/cargo/git/checkouts/alice-sdf/{i}/Cargo.toml"}
+            for i, src in enumerate(sources)]
+    pkgs.append({"name": "other", "source": None, "manifest_path": "/x/Cargo.toml"})
+    return mock.Mock(stdout=json.dumps({"packages": pkgs}))
+
+
+class Pin(unittest.TestCase):
+    """alice-sdf comes by git at one full commit of ALICE-SDF, and the source read is that commit"""
+
+    def test_the_pin_is_the_manifest_rev(self):
+        with tempfile.TemporaryDirectory() as t:
+            m = manifest(t, f'{{ git = "{g.SDF_GIT}", rev = "{REV}", version = ">=7.0.0, <8" }}')
+            self.assertEqual(g.sdf_pin(m), REV)
+
+    def test_a_path_a_short_rev_or_another_repository_is_not_a_pin(self):
+        for dep in ('{ path = "../../ALICE-SDF", version = "7" }',
+                    f'{{ git = "{g.SDF_GIT}", rev = "{REV[:12]}" }}',
+                    f'{{ git = "{g.SDF_GIT}", branch = "main" }}',
+                    f'{{ git = "https://github.com/someone/ALICE-SDF", rev = "{REV}" }}',
+                    '"7.0.0"'):
+            with self.subTest(dep=dep), tempfile.TemporaryDirectory() as t:
+                with self.assertRaises(ValueError):
+                    g.sdf_pin(manifest(t, dep))
+
+    def test_the_source_read_is_the_pinned_commit_cargo_resolved(self):
+        want = f"git+{g.SDF_GIT}?rev={REV}#{REV}"
+        with mock.patch.object(g.subprocess, "run", return_value=metadata(want)):
+            self.assertEqual(g.sdf_dir(REV), Path("/cargo/git/checkouts/alice-sdf/0"))
+
+    def test_another_resolved_commit_or_two_copies_are_refused(self):
+        other = "0" * 40
+        for sources in ([f"git+{g.SDF_GIT}?rev={other}#{other}"], ["registry+https://github.com/rust-lang/crates.io-index"],
+                        [None], [f"git+{g.SDF_GIT}?rev={REV}#{REV}"] * 2, []):
+            with self.subTest(sources=sources), \
+                    mock.patch.object(g.subprocess, "run", return_value=metadata(*sources)):
+                with self.assertRaises(ValueError):
+                    g.sdf_dir(REV)
+
+
+class WriterName(unittest.TestCase):
+    """the writer name is alice-sdf's WRITER_NAME, read from its source, never a copy in this repository"""
+
+    def sdf(self, t: str, body: str) -> Path:
+        (Path(t) / "scripts").mkdir()
+        (Path(t) / "scripts" / "provenance_writers.py").write_text(body, encoding="utf-8")
+        return Path(t)
+
+    def test_the_name_is_read_from_alice_sdf(self):
+        with tempfile.TemporaryDirectory() as t:
+            src = self.sdf(t, 'import re\nWRITER_NAME = re.compile(r"^(?:emit)\\w*$")\n')
+            self.assertEqual(g.sdf_writer_name(src).pattern, r"^(?:emit)\w*$")
+
+    def test_no_pattern_or_no_name_is_an_error(self):
+        for body in ("", 'WRITER_NAME = "export"\n'):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as t:
+                with self.assertRaises(ValueError):
+                    g.sdf_writer_name(self.sdf(t, body))
+
+    def test_a_copied_name_in_the_config_is_refused(self):
+        with tempfile.TemporaryDirectory() as t:
+            p = Path(t) / "c.toml"
+            p.write_text('nightly = "n"\nname = "export\\\\w*"\n', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                g.load_config(p)
+        self.assertNotIn("name", g.load_config(), "scripts/sdf_writers.toml copies the writer name")
+
+    def test_generate_matches_candidates_with_alice_sdf_name(self):
+        theirs = re.compile(r"^(?:emit)\w*$")
+        seen = {}
+
+        def cands(doc, name, counted):
+            seen["name"] = name
+            raise RuntimeError("stop after the candidates")
+
+        with mock.patch.object(g, "sdf_pin", return_value="p"), mock.patch.object(g, "sdf_dir", return_value=Path("/s")), \
+                mock.patch.object(g, "sdf_count", return_value=COUNT), mock.patch.object(g, "sdf_writer_name", return_value=theirs), mock.patch.object(g, "sdf_version", return_value="7.0.0"), mock.patch.object(g, "sdf_not_writers", return_value=frozenset()), \
+                mock.patch.object(g, "sdf_features", return_value=[]), mock.patch.object(g, "rustdoc", return_value={}), \
+                mock.patch.object(g, "candidates", side_effect=cands), \
+                mock.patch.object(g, "CANARY_TOML", mock.Mock(read_text=mock.Mock(return_value=""), write_text=mock.Mock())):
+            with self.assertRaises(RuntimeError):
+                g.generate({"nightly": "n"})
+        self.assertIs(seen["name"], theirs)
+
+
+class AliceSdfLists(unittest.TestCase):
+    """what alice-sdf's own lists decide is not copied into [[outside]]"""
+    CANDS = {"src/io/mod.rs::save": {"path": "alice_sdf::io::save", "call": "c"}}
+
+    def test_an_item_alice_sdf_lists_as_not_a_writer_needs_no_entry(self):
+        writers, found = g.classify(self.CANDS, [], [], frozenset({"src/io/mod.rs::save"}))
+        self.assertEqual((writers, found), ([], []))
+        _, found = g.classify(self.CANDS, [], [])
+        self.assertEqual(len(found), 1, "without alice-sdf's list it is a finding")
+
+    def test_a_counted_example_needs_no_entry(self):
+        self.assertEqual(g.classify({}, ["examples/bake/x.rs::write_bytecode"], []), ([], []))
+        _, found = g.classify({}, ["src/x.rs::write_bytecode"], [])
+        self.assertEqual(len(found), 1, "a counted library writer missing from the API is still a finding")
+
+    def test_an_entry_copying_alice_sdf_lists_is_stale(self):
+        copy = [{"key": "src/io/mod.rs::save", "kind": "not-a-writer", "reason": "r"},
+                {"key": "examples/bake/x.rs::write_bytecode", "kind": "not-built", "reason": "r"}]
+        _, found = g.classify(self.CANDS, ["examples/bake/x.rs::write_bytecode"], copy,
+                              frozenset({"src/io/mod.rs::save"}))
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all("stale copy" in f for f in found))
+
+    def test_alice_sdf_not_writers_are_read_from_its_source(self):
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "scripts").mkdir()
+            (Path(t) / "scripts" / "provenance_writers.py").write_text(
+                "def not_writers(root):\n    return [('src/a.rs::save', 'delegates to b'), ('src/c.rs::to_vec', 'in memory')]\n",
+                encoding="utf-8")
+            self.assertEqual(g.sdf_not_writers(Path(t)), frozenset({"src/a.rs::save", "src/c.rs::to_vec"}))
 
 
 class Repository(unittest.TestCase):

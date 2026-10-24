@@ -475,16 +475,15 @@ the whole workspace with that toolchain.
 
 ## Building and testing
 
-The crates depend on sibling repositories by path, so clone them next to this
-one:
+alice-sdf and alice-zip come by git at a fixed commit. The optional features
+depend on sibling repositories by path, so clone those next to this one:
 
 ```bash
 git clone https://github.com/ext-sakamoro/ALICE-LOL
-git clone https://github.com/ext-sakamoro/ALICE-SDF
-git clone https://github.com/ext-sakamoro/ALICE-Zip
 git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
 git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
 git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
+git clone https://github.com/ext-sakamoro/ALICE-Sign        # feature `crypto-calls`
 cd ALICE-LOL
 cargo test
 scripts/law_tests.sh            # the law oracles, failing if any of them ran zero tests
