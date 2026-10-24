@@ -9,9 +9,11 @@ without `--patches`).
 
 The library crates are `alice-lol-macro`, `alice-lol` and `alice-lol-layout` (`LIBRARY`
 below, the one place the set is written; `alice-lol` re-exports the other two). They carry the
-Law-bearing output (ALICE-Law G7 / G10 / G13): g7_boundaries.py imports `LIBRARY`,
-entropy_deps_guard.py compares the members it reads with it. The places that cannot import it
-are compared with it, and any one that disagrees fails with its file named:
+Law-bearing output (ALICE-Law G7 / G10 / G13): g7_boundaries.py imports `LIBRARY`. The places
+that cannot import it are compared with it, and any one that disagrees fails with its file named:
+
+  * .github/entropy-deps.toml: `members` (the members entropy_deps_guard.py checks) is exactly
+    the library set;
 
   * ci.yml and preflight.sh: every library crate linted by a library clippy command
     (`CLIPPY_CONF_DIR` .github/clippy-lib, by `-p` or by `--workspace` without `--exclude` of
@@ -166,6 +168,17 @@ def ci_commands(root: Path, members: set[str]) -> tuple[int, list[str]]:
 
 
 SEMVER_PATHS = ".github/paths/semver-checks.txt"
+ENTROPY_CONFIG = ".github/entropy-deps.toml"
+
+
+def entropy_members(text: str) -> tuple[int, list[str]]:
+    try:
+        members = tomllib.loads(text).get("members")
+    except tomllib.TOMLDecodeError as e:
+        raise RosterError(f"{ENTROPY_CONFIG}: {e}") from e
+    if not isinstance(members, list) or not members:
+        raise RosterError(f"{ENTROPY_CONFIG}: no `members` read (compared nothing)")
+    return 1, _differs(ENTROPY_CONFIG, "members", set(members), LIBRARY)
 
 
 def semver_paths(text: str) -> tuple[int, list[str]]:
@@ -239,7 +252,7 @@ def manifests(root: Path, paths: dict[str, Path]) -> tuple[int, list[str]]:
 def copies(root: Path, members: dict[str, Path]) -> tuple[int, list[str]]:
     """(comparisons made, one problem per copy of the library set that disagrees with it)"""
     total, out = 0, []
-    for n, problems in (workflows(root),
+    for n, problems in (workflows(root), entropy_members(_read(root, ENTROPY_CONFIG)),
                         semver_paths(_read(root, SEMVER_PATHS)),
                         ci_commands(root, set(members)), documents(root, set(members)),
                         manifests(root, members)):
