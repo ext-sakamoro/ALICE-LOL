@@ -32,4 +32,5 @@ segment body bytes head.len refuse length
 - Untrusted input: every count and length is checked against the remaining bytes with
   checked arithmetic before use, and allocation stays within a `Budget`.
 
-`no_std` + `alloc`; the only dependency is `sha2`. Licensed under Apache-2.0.
+`no_std` + `alloc`; the only dependency is `sha2`. Licensed under `LicenseRef-Proprietary` (see the
+repository's [LICENSE-Proprietary](LICENSE-Proprietary)).

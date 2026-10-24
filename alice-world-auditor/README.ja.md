@@ -44,11 +44,13 @@ IDA\* (`k = 1`、1 frame に 1 行動) で探索し、得た行動列を呼び�
 
 ## Features
 
-| Feature | Default | 依存 | License |
+| Feature | Default | 依存 | 依存の License |
 |---|---|---|---|
 | (なし) | — | `alice-world-auditor-types`, `glam` | — |
-| `physics` | off | `alice-physics` | `alice-physics` は本 crate と同じ `AGPL-3.0-or-later OR LicenseRef-Commercial` |
+| `physics` | off | `alice-physics` | pin の版の `alice-physics` は `AGPL-3.0-or-later OR LicenseRef-Commercial` |
 
 ## License
 
-`AGPL-3.0-or-later OR LicenseRef-Commercial` のデュアルライセンス 詳細は [README.md](README.md) を参照
+`LicenseRef-Proprietary` 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
+
+Enquiries: https://extoria.co.jp/
