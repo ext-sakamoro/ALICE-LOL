@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """Every workspace crate carries the license it states, and its package ships the texts.
 
-From 0.4.0 the crates of this repo are Apache-2.0 (`alice-world-auditor` is
-AGPL-3.0-or-later OR LicenseRef-Commercial). Apache-2.0 section 4 asks that a copy of the
-license and the NOTICE file go with every distribution, and a crate package contains only
-the files under the crate's own directory, so each published Apache-2.0 crate keeps its own
-copies of `LICENSE-APACHE`, `NOTICE` and `TRADEMARK_NOTICE`, byte for byte the root ones.
+Every crate of this repo is `LicenseRef-Proprietary` (with `publish = false`). A crate
+package contains only the files under the crate's own directory, so each crate keeps its
+own copies of `LICENSE-Proprietary` and `TRADEMARK_NOTICE`, byte for byte the root ones.
 
 The permissive licence the crates were dual-licensed under up to 0.3.x is named `OLD` below
 (spelled from fragments, so that this file and its test never hold the word themselves).
 
 Checks:
-- the `license` field of every workspace member is the expected expression;
-- no `LICENSE-<OLD>` file at the root or in a crate;
-- each published Apache-2.0 crate has the three files, equal to the root copies;
-- with `--package`: `cargo package --list` of each published crate lists them;
+- the `license` field of every workspace member is `LicenseRef-Proprietary`;
+- no file of an earlier licence (`LICENSE-<OLD>`, `LICENSE-APACHE`, `LICENSE-AGPL`,
+  `LICENSE-COMMERCIAL.md`, `NOTICE`) at the root or in a crate;
+- each crate has the two files, equal to the root copies;
+- with `--package`: `cargo package --list` of each crate lists them;
 - no line of any tracked file holds the word `OLD` in any case (as a word: a letter or a
   digit next to it makes another word, `-` and `_` do not, so `LICENSE-<OLD>`,
   `<OLD>-licensed` and `license = "<old>"` all count), unless `ALLOWED` names that exact
@@ -41,10 +40,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-APACHE = "Apache-2.0"
-EXPECTED = {"alice-world-auditor": "AGPL-3.0-or-later OR LicenseRef-Commercial"}
-TEXTS = ["LICENSE-APACHE", "NOTICE", "TRADEMARK_NOTICE"]
+LICENSE = "LicenseRef-Proprietary"
+TEXTS = ["LICENSE-Proprietary", "TRADEMARK_NOTICE"]
 OLD = "M" "I" "T"
+# the files of the licences the crates were published under before
+OLD_FILES = [f"LICENSE-{OLD}", "LICENSE-APACHE", "LICENSE-AGPL", "LICENSE-COMMERCIAL.md", "NOTICE"]
 # the word in any case; a letter or a digit next to it makes another word (`submit`, `limit`)
 WORD = re.compile(rf"(?<![A-Za-z0-9]){OLD}(?![A-Za-z0-9])", re.IGNORECASE)
 # the grant sentence that opens the old licence's text (its body need not hold the name)
@@ -56,9 +56,6 @@ ALLOWED: list[tuple[str, str, int, str]] = [
     ("CHANGELOG.md", "05ed21a6fcf69466d5c3cf663edb2523dc6bc7bed5a293392c353934f63547cc", 1, "0.4.0 records removing the old licence file"),
     ("CHANGELOG.md", "b69f8af757a91d7930c94f9ca0d5c32d32cf7f443525c2b639976ff8583be218", 1, "0.4.0 records replacing the copied licence text of lol-sdf"),
     ("CHANGELOG.md", "b979a59120edda4899cd66ee123dc4dc2a181463a065811a7ab527e93651812c", 1, "the licence of the dependency stacker"),
-    ("README.md", "54776439734207219626c3388a1634ad5f0c5a723657aaed80e26d09aeba5521", 1, "the terms of the versions published before 0.4.0"),
-    ("README_JP.md", "ff8cf7c40374b409b9595889243fac7752319481c18f2800218e421759798ce0", 1, "the terms of the versions published before 0.4.0"),
-    ("alice-lol-macro/README.md", "64280fe10dc3192dd90c0439e83e7115b13f4d9d6e2011bd24ab6b6c8555c583", 1, "the terms of macro 0.2.0 and earlier"),
     ("alice-lol/Cargo.toml", "4c153f064b25aa89cd8a9f7bafdf563b65347f8bfec9ec95025fbe1cf2e690a2", 1, "the licence of the dependency stacker"),
     ("deny.toml", "1f357a16a4708e089d0ef8a455a36aa8c2a2dd73ffc127d5b826dd013d0d2c2a", 1, "states that the allow list is for dependencies"),
     ("deny.toml", "f776c7c98bcbd52f8a6cede872b0ca38f9fd04516b954a5a1379cd00d0f8b2ad", 1, "a licence allowed for dependencies"),
@@ -66,8 +63,6 @@ ALLOWED: list[tuple[str, str, int, str]] = [
     ("docs/HUMANOID_TEMPLATE_DESIGN.md", "1a1bf2065efc9506e455999b982f6a666c1c96f0df44cb0f37b83ab47e4b4f2e", 1, "the licence of the dependency glam"),
     ("docs/HUMANOID_TEMPLATE_DESIGN.md", "c0948e26f4509eb964e6c151bbf55604995546adb847a9d6ba36e1b76ce0436b", 1, "the licence of the dependency gltf"),
     ("docs/HUMANOID_TEMPLATE_DESIGN.md", "cd0e344fc6c99e3e83d85739efa4d53b161a7b870d3415b6ab63766d3d98ee61", 1, "the licence of the dependency serde_json"),
-    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", "9d808dd29288008ace2e0b477020fc2360273ee01632b5f643cd854cd648f28d", 1, "the licence of the dependency gltf"),
-    ("docs/HUMANOID_TEMPLATE_ROADMAP.md", "5e7c19a2ae48c91177b7f3984c16830e240803d9041b23b5a2300c915f11c669", 1, "the licence of the dependency serde_json"),
 ]
 
 
@@ -80,15 +75,14 @@ def tracked() -> list[str]:
     return [p for p in out.decode("utf-8").split("\0") if p]
 
 
-def members() -> list[tuple[str, Path, str, bool]]:
+def members() -> list[tuple[str, Path, str]]:
     text = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
     out = []
     for d in re.findall(r'"([^"]+)"', re.search(r"members\s*=\s*\[([^\]]*)\]", text).group(1)):
         manifest = (ROOT / d / "Cargo.toml").read_text(encoding="utf-8")
         name = re.search(r'^name\s*=\s*"([^"]+)"', manifest, re.M).group(1)
         lic = re.search(r'^license\s*=\s*"([^"]+)"', manifest, re.M)
-        published = not re.search(r"^publish\s*=\s*false", manifest, re.M)
-        out.append((name, ROOT / d, lic.group(1) if lic else "", published))
+        out.append((name, ROOT / d, lic.group(1) if lic else ""))
     return out
 
 
@@ -145,20 +139,18 @@ def main(argv: list[str]) -> int:
     for f in TEXTS:
         if not (ROOT / f).is_file():
             bad.append(f"{f} is missing at the root")
-    for p in [ROOT / f"LICENSE-{OLD}", *(d / f"LICENSE-{OLD}" for _, d, _, _ in crates)]:
-        if p.exists():
-            bad.append(f"{p.relative_to(ROOT)} exists (the crates are Apache-2.0 from 0.4.0)")
+    for d in [ROOT, *(d for _, d, _ in crates)]:
+        for f in OLD_FILES:
+            if (d / f).exists():
+                bad.append(f"{(d / f).relative_to(ROOT)} exists (the crates are {LICENSE})")
     lines, found = scan(tracked())
     if lines == 0:
         print("error: read 0 lines of tracked files", file=sys.stderr)
         return 2
     bad += found
-    for name, d, lic, published in crates:
-        want = EXPECTED.get(name, APACHE)
-        if lic != want:
-            bad.append(f"{name}: license = {lic!r}, expected {want!r}")
-        if not (published and want == APACHE):
-            continue
+    for name, d, lic in crates:
+        if lic != LICENSE:
+            bad.append(f"{name}: license = {lic!r}, expected {LICENSE!r}")
         for f in TEXTS:
             files += 1
             copy = d / f

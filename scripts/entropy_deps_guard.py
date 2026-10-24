@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
-"""The published crates depend on no source of entropy or wall-clock time (ALICE-Law G10).
+"""The library crates depend on no source of entropy or wall-clock time (ALICE-Law G10).
 
 A Law-bearing value must not depend on an unseeded RNG, a freshly generated UUID or an ambient
 wall-clock read. The std forms (`Instant::now`, `SystemTime::now`, `.elapsed()`, `RandomState`)
 are forbidden in the library code by `.github/clippy-lib/clippy.toml` (scripts/clippy_lib_gate.py
 shows each entry fires). The other forms come from crates — `rand` and its family, `getrandom`,
 `uuid`, `fastrand`, `chrono`, `time` — and Rust code can only call a crate its manifest depends on
-directly, so this checks the manifests instead of scanning text: no workspace member that is
-published (`publish` not false) may list one of them as a normal or build dependency, under any
-target or feature. Dev-dependencies are the tests' and do not reach the published crate.
+directly, so this checks the manifests instead of scanning text: no library crate (`LIBRARY` of
+scripts/release_roster.py: alice-lol and the crates it re-exports, which carry the Law-bearing
+output; whether a crate is published does not matter, none is) may list one of them as a normal
+or build dependency, under any target or feature. Dev-dependencies are the tests' and do not
+reach the library crate.
 
-It reads `cargo metadata --no-deps` (no resolution, no network). It fails when a published member
-lists a denied crate, and when no published member is read (compared nothing).
+It reads `cargo metadata --no-deps` (no resolution, no network). It fails when a library member
+lists a denied crate, and when no library member is read (compared nothing).
 
-It also reports, without failing, the denied crates reachable from the published members through
+It also reports, without failing, the denied crates reachable from the library members through
 normal and build dependencies with the default features (`cargo metadata --locked --offline`, the
 resolution of the lock): a library the crate uses may draw entropy or read the clock inside, which
 the direct-dependency rule cannot see. That line is a count to read, not a verdict: a crate in the
 graph is not necessarily called on a path that feeds a Law-bearing value. When the resolution cannot
 be read (no lock, a cache miss offline) the line says so.
 
-For this workspace (the default manifest) the published members read must also be the release
-roster of scripts/release_roster.py, so a crate added to the release is checked here by
-construction and a mismatch between `publish` and the roster fails.
+For this workspace (the default manifest) the library members read must be the whole library
+set, so a library crate that is renamed or dropped from the workspace fails instead of passing
+unchecked.
 
     python3 scripts/entropy_deps_guard.py [--manifest-path Cargo.toml]
 """
@@ -37,21 +39,21 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from release_roster import ROSTER  # noqa: E402
+from release_roster import LIBRARY  # noqa: E402
 
 # a crate whose name matches is a source of entropy or of the wall clock
 DENIED = re.compile(r"(?:rand(?:_[a-z0-9]+)?|getrandom|uuid|fastrand|chrono|time|oorandom|nanorand)")
 
 
 def denied_deps(metadata: dict) -> tuple[list[str], list[str]]:
-    """(the published members read, one problem per denied dependency)"""
+    """(the library members read, one problem per denied dependency)"""
     members = set(metadata.get("workspace_members", []))
     read, problems = [], []
     for pkg in metadata.get("packages", []):
         if pkg.get("id") not in members:
             continue
-        if pkg.get("publish") == []:
-            continue  # (publish = false: not a published crate)
+        if pkg.get("name") not in LIBRARY:
+            continue  # (not a library crate: its output bears no Law)
         read.append(pkg["name"])
         for dep in pkg.get("dependencies", []):
             if dep.get("kind") == "dev":
@@ -65,19 +67,17 @@ def denied_deps(metadata: dict) -> tuple[list[str], list[str]]:
     return read, problems
 
 
-def roster_differs(read: list[str]) -> list[str]:
-    """one problem per difference between the published members read and the release roster"""
-    have = set(read)
-    return ([f"{n} is in the release roster but was not read as a published member" for n in sorted(ROSTER - have)]
-            + [f"{n} was read as a published member but is not in the release roster" for n in sorted(have - ROSTER)])
+def library_differs(read: list[str]) -> list[str]:
+    """one problem per library crate that was not read as a member of this workspace"""
+    return [f"{n} is in the library set but was not read as a workspace member" for n in sorted(LIBRARY - set(read))]
 
 
 def transitive(metadata: dict) -> list[str]:
-    """the denied crates reachable from the published members through normal and build dependencies"""
+    """the denied crates reachable from the library members through normal and build dependencies"""
     members = set(metadata.get("workspace_members", []))
     pkgs = {p["id"]: p for p in metadata.get("packages", [])}
     nodes = {n["id"]: n for n in (metadata.get("resolve") or {}).get("nodes", [])}
-    todo = [i for i in members if pkgs.get(i, {}).get("publish") != []]
+    todo = [i for i in members if pkgs.get(i, {}).get("name") in LIBRARY]
     seen, found = set(todo), set()
     while todo:
         node = nodes.get(todo.pop())
@@ -107,13 +107,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     read, problems = denied_deps(json.loads(p.stdout))
     if Path(a.manifest_path).resolve() == HERE.parent / "Cargo.toml":
-        problems += roster_differs(read)
+        problems += library_differs(read)
     for e in problems:
         print(f"error: {e}", file=sys.stderr)
     if not read:
-        print("entropy-deps-guard: no published workspace member read (compared nothing)", file=sys.stderr)
+        print("entropy-deps-guard: no library workspace member read (compared nothing)", file=sys.stderr)
         return 2
-    print(f"entropy-deps-guard: {len(read)} published member(s) ({', '.join(sorted(read))}), "
+    print(f"entropy-deps-guard: {len(read)} library member(s) ({', '.join(sorted(read))}), "
           f"{len(problems)} denied dependenc{'y' if len(problems) == 1 else 'ies'}")
     full = subprocess.run(["cargo", "metadata", "--format-version", "1", "--locked", "--offline",
                            "--manifest-path", a.manifest_path], capture_output=True, text=True)
