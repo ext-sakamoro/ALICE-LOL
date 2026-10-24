@@ -10,22 +10,6 @@ on:
   push:
     # no paths here (see fuzz.yml): the changes job compares with merge-base(origin/main)
     branches: [main, 'ci/**']
-  pull_request:
-    branches: [main]
-    paths:
-      - '**/src/**'
-      - '**/Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - 'tools/no-outer-fneg-of-fma/**'
-      - 'tools/fneg-fma-ir-probes/**'
-      - 'scripts/fneg_fma_ir_check.py'
-      - 'scripts/test_fneg_fma_ir_check.py'
-      - 'scripts/no-outer-fneg-of-fma-allowlist.toml'
-      - '.github/actions/alice-siblings/**'
-      - '.github/alice-siblings'
-      - '.github/workflows/g3-ir.yml'
-      - '.github/paths/g3-ir.txt'
   schedule:
     - cron: '41 4 * * 1'
   workflow_dispatch:

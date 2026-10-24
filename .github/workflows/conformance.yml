@@ -12,17 +12,6 @@ on:
     # diff from GitHub's filter and the run is skipped; the changes job below compares
     # with merge-base(origin/main) instead (patterns: .github/paths/conformance.txt)
     branches: [main, 'ci/**']
-  pull_request:
-    branches: [main]
-    paths:
-      - 'conformance/**'
-      - 'laws/**'
-      - 'scripts/law_*.py'
-      - 'alice-lol/src/rule_law.rs'
-      - 'alice-lol/examples/rule_conformance.rs'
-      - '.github/workflows/conformance.yml'
-      - '.github/workflows/ci.yml'
-      - '.github/paths/conformance.txt'
   workflow_dispatch:
 
 # the job reads the repository only

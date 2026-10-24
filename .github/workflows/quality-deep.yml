@@ -61,20 +61,6 @@ on:
       - 'alice-lol/tests/law_id_oracle.rs'
       - '.cargo/mutants.toml'
       - '.github/workflows/quality-deep.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'alice-lol/src/law.rs'
-      - 'alice-lol/src/audit_law.rs'
-      - 'alice-lol/src/law_id.rs'
-      - 'alice-lol/tests/analytic_law.rs'
-      - 'alice-lol/tests/law_tests.rs'
-      - 'alice-lol/tests/law_corpus_oracle.rs'
-      - 'alice-lol/tests/audit_law_parity.rs'
-      - 'alice-lol/tests/audit_law_semantics.rs'
-      - 'alice-lol/tests/law_id_oracle.rs'
-      - '.cargo/mutants.toml'
-      - '.github/workflows/quality-deep.yml'
 
 # a superseded run on a branch is cancelled; on main each commit has a group of its own
 # and is never cancelled (a cancelled main commit is unverified)

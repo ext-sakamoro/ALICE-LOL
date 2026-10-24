@@ -4,8 +4,6 @@ on:
   push:
     # ci/**: 取り込み前の branch の CI を main と同じ job で走らせる
     branches: [main, 'ci/**']
-  pull_request:
-    branches: [main]
   # starts the dormant registry-consumer job (and every other job) by hand
   workflow_dispatch:
 

@@ -10,15 +10,6 @@ on:
     # with merge-base(origin/main) instead (patterns: .github/paths/fuzz.txt)
     # ci/** too, so that a branch runs the fuzz gate before it lands (the same paths filter)
     branches: [main, 'ci/**']
-  pull_request:
-    branches: [main]
-    paths:
-      - '**/src/**'
-      - 'fuzz/**'
-      - '.github/alice-siblings'
-      - '.github/workflows/fuzz.yml'
-      - '.github/actions/**'
-      - '.github/paths/fuzz.txt'
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
