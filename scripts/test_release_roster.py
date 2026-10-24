@@ -109,7 +109,7 @@ class Roster(unittest.TestCase):
                 self.assert_drift(rel, old, new, named)
 
     def test_a_roster_manifest_whose_metadata_drifts_fails_and_is_named(self):
-        for old, new, named in [('license = "Apache-2.0"', 'license = "AGPL-3.0-or-later"', "license"),
+        for old, new, named in [('license = "LicenseRef-Proprietary"', 'license = "Apache-2.0"', "license"),
                                 ('rust-version = "1.90"', 'rust-version = "1.91"', "rust-version"),
                                 ('documentation = "https://docs.rs/alice-lol-layout"',
                                  'documentation = "https://docs.rs/alice-lol"', "documentation"),

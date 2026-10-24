@@ -4,7 +4,7 @@
 [![docs.rs](https://img.shields.io/docsrs/alice-lol)](https://docs.rs/alice-lol)
 [![MSRV](https://img.shields.io/crates/msrv/alice-lol)](#msrv)
 [![CI](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml/badge.svg)](https://github.com/ext-sakamoro/ALICE-LOL/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/crates/l/alice-lol.svg)](#ライセンス)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](LICENSE-Proprietary)
 
 [English](README.md) | 日本語
 
@@ -355,7 +355,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `alice-lol-ui` | UI 形状 (button、card、panel など)、flex / grid / stack レイアウト、コントラストの法則 |
 | `alice-lol-datagen` | 自己検査つきの合成 (caption, LOL) ペア生成 (非公開 crate) |
 | `alice-world-auditor-types` | 法則の検査器とプランナが共有する goal と判定の型 |
-| `alice-world-auditor` | `alice-physics` の world 上のプランナ、3 値判定 (AGPL-3.0-or-later または商用) |
+| `alice-world-auditor` | `alice-physics` の world 上のプランナ、3 値判定 |
 
 ## Feature
 
@@ -365,9 +365,9 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `glsl` | 有効 | GLSL への変換 (`to_glsl`、`to_glsl_dynamic`、`to_glsl_full`) |
 | `wgsl` | 無効 | WGSL への変換 |
 | `hlsl` | 無効 | HLSL への変換 |
-| `physics` | 無効 | `Constraint::ThermalField` と `alice-physics` の材料データ (AGPL-3.0-or-later、有効にすると下流に及ぶ) |
+| `physics` | 無効 | `Constraint::ThermalField` と `alice-physics` の材料データ |
 | `roblox` | 無効 | Roblox のメッシュ上限に収めた OBJ / FBX 出力 (`roblox_export`) |
-| `llm-bridge` | 無効 | `alice-llm` による文法制約つき生成 (`bridge`、AGPL-3.0-or-later、下流に及ぶ) |
+| `llm-bridge` | 無効 | `alice-llm` による文法制約つき生成 (`bridge`) |
 | `crypto-calls` | 無効 | 述語の規則の Law (`rule_law`) で `alice-sign` の `hmac_sha256` を呼ぶ 無効でもその Law は読めて、答えは `Unsupported` |
 
 ## Example
@@ -489,13 +489,10 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 
 ## ライセンス
 
-0.4.0 から Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)、[NOTICE](NOTICE)、[TRADEMARK_NOTICE](TRADEMARK_NOTICE))
-0.3.x 以前は MIT OR Apache-2.0 で公開しており、その版の条件はそのまま
-ただし `alice-world-auditor` は AGPL-3.0-or-later または商用 feature `physics` と
-`llm-bridge` は AGPL-3.0-or-later の依存を引き込む
+この版から `LicenseRef-Proprietary`: ソースは閲覧用に公開しており、利用・複製・改変・配布には
+著作権者との書面での合意が必要 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
+それより前に公開した版は、公開時のライセンスのまま
 
-再配布 (source でも binary でも) には [LICENSE-APACHE](LICENSE-APACHE) と [NOTICE](NOTICE) を含める
-NOTICE は他の license の text と同じ場所に置けばよく、画面に表示する必要はない
 「ALICE」と「ALICE-*」の名前は商標で、license に依らず [TRADEMARK_NOTICE](TRADEMARK_NOTICE) に従う
 
 DSL は ALICE-SDF のプリミティブ一式を公開しているので、その crate の帰属表示を引き継ぐ
@@ -503,3 +500,5 @@ DSL は ALICE-SDF のプリミティブ一式を公開しているので、そ�
 Mercury の hg_sdf に、ノイズの勾配表は Ken Perlin に倣っている 実装は ALICE-SDF 自身の
 Rust コードで、一覧は
 [ALICE-SDF/THIRD-PARTY-NOTICES.md](https://github.com/ext-sakamoro/ALICE-SDF/blob/main/THIRD-PARTY-NOTICES.md) にある
+
+ライセンスの問い合わせ: <contact@extoria.co.jp>

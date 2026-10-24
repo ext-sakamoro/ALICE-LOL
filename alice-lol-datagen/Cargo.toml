@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 description = "Synthetic (caption, LOL) pair generator for ALICE-LOL — template families emit LOL text, bilingual captions and oracle points from the same parameters (Track C1)."
-license = "Apache-2.0"
+license = "LicenseRef-Proprietary"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 repository = "https://github.com/ext-sakamoro/ALICE-LOL"
 homepage = "https://github.com/ext-sakamoro/ALICE-LOL"
@@ -19,7 +19,7 @@ glam = "0.29"
 
 [features]
 default = []
-# `Fsm::accepts_str` で LLM grammar 受理を self-check に含める (alice-llm を引く、AGPL 伝播注意)
+# `Fsm::accepts_str` で LLM grammar 受理を self-check に含める (alice-llm を引く)
 grammar-check = ["alice-lol/llm-bridge"]
 
 [[bin]]

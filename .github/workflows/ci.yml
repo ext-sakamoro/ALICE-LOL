@@ -312,7 +312,7 @@ jobs:
         working-directory: ALICE-LOL
         run: python3 scripts/published_source_check.py
 
-      - name: license-check (package の一覧に LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+      - name: license-check (各 crate の package の一覧に LICENSE-Proprietary / TRADEMARK_NOTICE)
         working-directory: ALICE-LOL
         run: python3 scripts/license_check.py --package
 
@@ -659,7 +659,7 @@ jobs:
           python scripts/root_artifacts.py
       - name: license-check oracle (検査器自身の試験)
         run: python scripts/test_license_check.py
-      - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+      - name: license-check (各 crate の license が LicenseRef-Proprietary で、各 crate が LICENSE-Proprietary / TRADEMARK_NOTICE を持つ)
         run: python scripts/license_check.py
       # ALICE-Law G14, static half: no fast-math-style flag, target-cpu=native or flag
       # value the guard cannot resolve in any file a flag can come from; nothing read
