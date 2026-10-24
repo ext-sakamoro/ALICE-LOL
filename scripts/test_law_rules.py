@@ -191,6 +191,7 @@ BAD = [
     TB.replace("row pos: a", "row pos: c"), TB.replace("otherwise b", "otherwise c"),
     TB.replace("value a b", "value a b c"), TB.replace("otherwise b", "row pos: b when n < 0\notherwise b"),
     TB.replace("n > 0", "n"), TB.replace("n > 0", "m > 0"), TB + "use alice-sign hmac_sha256\n",
+    "kind table\nx-input k bytes\nvalue a b\nrow mac: a when hmac_sha256(k, k) == k\notherwise b\n",
     TB.replace("x-input n integer", "x-input n integer\nx-input s text\nx-split s \".\" p q"),
     TB.replace("row pos:", "row:"), TB.replace("row pos:", "row true:"), TB.replace("value a b", "value a n"),
     TB.replace("row pos: a when", "row pos: a if"), TB + 'example {"n": 1}\n',
