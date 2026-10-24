@@ -183,6 +183,7 @@ dependencies = [
 [[package]]
 name = "alice-zip"
 version = "0.11.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?rev=fec22a06eab879153a140b057f53f081876a2ff7#fec22a06eab879153a140b057f53f081876a2ff7"
 dependencies = [
  "alice-det-math",
  "libm",

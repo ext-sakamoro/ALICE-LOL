@@ -396,11 +396,17 @@ step "public-text.yml / public-text: Public text (ALICE-Law checker at the pin; 
 python3 scripts/test_public_text.py
 scripts/public_text.sh
 
-# the classification half of the registry-consumer job (every path dependency is a listed
-# sibling, a package inside one, or a workspace member; no packaging or build), so a quick
-# run sees a dependency path the job would refuse
-step "ci.yml / registry-consumer: path dependencies classify (package_integrity --patches, no build)"
-python3 scripts/package_integrity.py --member alice-lol --patches > /dev/null
+# dormant: ci.yml / registry-consumer runs only when dispatched (not published to
+# crates.io); PREFLIGHT_DORMANT=1 runs its steps here as a dispatch would
+if [[ "${PREFLIGHT_DORMANT:-0}" == 1 ]]; then
+  # the classification half of the registry-consumer job (every path dependency is a listed
+  # sibling, a package inside one, or a workspace member; no packaging or build), so a quick
+  # run sees a dependency path the job would refuse
+  step "ci.yml / registry-consumer: path dependencies classify (package_integrity --patches, no build)"
+  python3 scripts/package_integrity.py --member alice-lol --patches > /dev/null
+else
+  echo 'PREFLIGHT-SKIP: ci.yml / registry-consumer: dormant, dispatch only (PREFLIGHT_DORMANT=1 runs it)' >&2
+fi
 
 if [[ $quick -eq 1 ]]; then
   echo
@@ -412,7 +418,6 @@ if [[ $quick -eq 1 ]]; then
   echo "  - geometry-digest: identifier and digest oracles (debug + release)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
   echo "  - doc-programs (export of every lol print program in the documents, release)"
-  echo "  - registry-consumer: cargo audit, package + build of the .crate, patch set diff"
   echo "  - degenerate-grid (~35,000-case parameter sweep, ubuntu CI job only --"
   echo "    a count/assertion here that is wrong locally still shows green)"
   echo "A push that changes the grammar (SDF_SYNTAX / the macro parser / the gbnf)"
@@ -481,15 +486,21 @@ step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-s
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )
 
-step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
-python3 scripts/published_source_check.py
-python3 scripts/license_check.py --package
-python3 scripts/package_integrity.py --member alice-lol
-python3 scripts/package_integrity.py --member alice-lol-macro
-python3 scripts/package_integrity.py --member alice-lol-layout
-REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
-python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt
-diff -u target/patches-fresh.txt target/registry-consumer/patches.txt
+# dormant: ci.yml / registry-consumer runs only when dispatched (not published to
+# crates.io); PREFLIGHT_DORMANT=1 runs its steps here as a dispatch would
+if [[ "${PREFLIGHT_DORMANT:-0}" == 1 ]]; then
+  step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
+  python3 scripts/published_source_check.py
+  python3 scripts/license_check.py --package
+  python3 scripts/package_integrity.py --member alice-lol
+  python3 scripts/package_integrity.py --member alice-lol-macro
+  python3 scripts/package_integrity.py --member alice-lol-layout
+  REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
+  python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt
+  diff -u target/patches-fresh.txt target/registry-consumer/patches.txt
+else
+  echo 'PREFLIGHT-SKIP: ci.yml / registry-consumer: dormant, dispatch only (PREFLIGHT_DORMANT=1 runs it)' >&2
+fi
 
 step "conformance.yml / corpus: score the reference implementation (corpus + probes) and the controls"
 ( export PYTHON="$conf_py" MIN_VECTORS="$(sed -n 's/^ *MIN_VECTORS: *//p' .github/workflows/conformance.yml)"
