@@ -1,7 +1,6 @@
 //! `ThermalField` (実温度場) の法則レベル oracle
 //!
-//! `physics` feature 専用 (`alice-physics` は AGPL-3.0-or-later、有効化すると
-//! 下流に伝播する)
+//! `physics` feature 専用
 //!
 //! solver 自体の物理 (エネルギー保存 / 境界条件の単調性と飽和 / 決定性) は
 //! `law.rs` の `evidence_gate_tests` 側で白箱に固定している こちらは

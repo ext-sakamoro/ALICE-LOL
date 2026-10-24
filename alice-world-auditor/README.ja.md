@@ -44,11 +44,13 @@ IDA\* (`k = 1`、1 frame に 1 行動) で探索し、得た行動列を呼び�
 
 ## Features
 
-| Feature | Default | 依存 | License |
-|---|---|---|---|
-| (なし) | — | `alice-world-auditor-types`, `glam` | — |
-| `physics` | off | `alice-physics` | `alice-physics` は本 crate と同じ `AGPL-3.0-or-later OR LicenseRef-Commercial` |
+| Feature | Default | 依存 |
+|---|---|---|
+| (なし) | — | `alice-world-auditor-types`, `glam` |
+| `physics` | off | `alice-physics` |
 
 ## License
 
-`AGPL-3.0-or-later OR LicenseRef-Commercial` のデュアルライセンス 詳細は [README.md](README.md) を参照
+この版から `LicenseRef-Proprietary`: ソースは閲覧用に公開しており、利用・複製・改変・配布には
+著作権者との書面での合意が必要 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
+それより前に公開した版は、公開時のライセンスのまま

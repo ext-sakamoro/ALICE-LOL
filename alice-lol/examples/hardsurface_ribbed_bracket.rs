@@ -84,7 +84,7 @@ fn main() {
         use alice_lol::stdlib::hardsurface::reinforcement::{
             fillet_kt_shaft_shoulder, material_elastic_modulus_gpa, recommended_fillet_radius_mm,
         };
-        println!("\n--- Physics diagnostics (feature=\"physics\", alice-physics AGPL-3.0) ---");
+        println!("\n--- Physics diagnostics (feature=\"physics\", alice-physics) ---");
         if let Some(e) = material_elastic_modulus_gpa("pla") {
             println!("  PLA elastic modulus (FilamentDb): {e:.2} GPa");
         }

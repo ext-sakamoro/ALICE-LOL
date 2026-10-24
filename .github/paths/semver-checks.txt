@@ -4,7 +4,7 @@
 # every file a job of the workflow executes or reads is listed: a missing one skips the
 # check on a change that alters it
 # the public API of alice-lol, the macros and the layout crate it re-exports, and the version the
-# step is measured to (every release roster crate: scripts/release_roster.py checks it)
+# step is measured to (every library crate: scripts/release_roster.py checks it)
 alice-lol/src/**
 alice-lol/Cargo.toml
 alice-lol-macro/src/**

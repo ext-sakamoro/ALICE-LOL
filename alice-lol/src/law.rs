@@ -315,8 +315,7 @@ pub enum Constraint {
     /// で明示する。mm で設計した形状にそのまま SI を当てると拡散率の効き方が
     /// 10⁶ ずれる。
     ///
-    /// `physics` feature が要る (`alice-physics` は **AGPL-3.0-or-later** なので
-    /// 有効化すると下流にも伝播する)。
+    /// `physics` feature が要る。
     #[cfg(feature = "physics")]
     ThermalField {
         /// 対象ノード
@@ -2076,7 +2075,7 @@ fn material_fraction(node: &SdfNode, p: Vec3, r: f32) -> f32 {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ThermalField — 実温度場 (`physics` feature、AGPL 伝播あり)
+// ThermalField — 実温度場 (`physics` feature)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// 陽解法の step 数上限 (超えたら解かずに未定を返す)

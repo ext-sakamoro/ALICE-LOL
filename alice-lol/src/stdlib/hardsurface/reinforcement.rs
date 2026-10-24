@@ -11,7 +11,7 @@
 //! | [`honeycomb_infill`] | 6 角形 infill 壁パターン | `RepeatFinite` + `HexPrism` を container から `Subtraction` |
 //! | [`gyroid_infill`] | Gyroid TPMS infill | 既存 `SdfNode::Gyroid` + container との `Intersection` |
 //!
-//! ## alice-physics 連携 (`physics` feature、opt-in、AGPL-3.0 汚染注意)
+//! ## alice-physics 連携 (`physics` feature、opt-in)
 //!
 //! `--features physics` で有効化すると以下 API が使える
 //!
