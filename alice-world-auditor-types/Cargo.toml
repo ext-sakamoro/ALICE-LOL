@@ -1,7 +1,6 @@
 [package]
 name = "alice-world-auditor-types"
 version = "0.1.0"
-# not published: the release of this workspace is alice-lol-macro and alice-lol only
 publish = false
 edition = "2021"
 rust-version = "1.90"
