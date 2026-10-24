@@ -18,7 +18,7 @@ import release_roster as rr  # noqa: E402
 
 MEMBERS = tomllib.loads((rr.ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["members"]
 # the files that hold a copy of the library set (the workflows are copied as a whole directory)
-COPIES = [".github/workflows/ci.yml", "scripts/preflight.sh", rr.SEMVER_PATHS, *rr.NOTES]
+COPIES = [".github/workflows/ci.yml", "scripts/preflight.sh", rr.SEMVER_PATHS, rr.ENTROPY_CONFIG, *rr.NOTES]
 
 
 class Roster(unittest.TestCase):
@@ -104,6 +104,8 @@ class Roster(unittest.TestCase):
             ("README_JP.md", "library crate (alice-lol, alice-lol-layout, alice-lol-macro)",
              "published crate (alice-lol, alice-lol-layout, alice-lol-macro)", "nothing is published"),
             (".github/paths/semver-checks.txt", "alice-lol-layout/src/**\n", "", "lacks alice-lol-layout/src/**"),
+            (rr.ENTROPY_CONFIG, '"alice-lol-layout", ', "", "members lacks alice-lol-layout"),
+            (rr.ENTROPY_CONFIG, '"alice-lol-macro"]', '"alice-lol-macro", "alice-lol-ui"]', "alice-lol-ui"),
             (".github/paths/semver-checks.txt", "alice-lol-macro/Cargo.toml\n", "",
              "lacks alice-lol-macro/Cargo.toml"),
             ("README_JP.md", "| `alice-lol-layout` |", "| `alice-lol-layouts` |", "crate table"),
