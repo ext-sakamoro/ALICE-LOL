@@ -300,7 +300,7 @@ The time an implementation takes to compare two byte strings should not depend o
 | line | meaning |
 |------|---------|
 | `x-input <name> <type>` | an input of the request, with its type (as in a predicate law) |
-| `value <name> <name>...` | exactly one line: the values the table gives, two or more names |
+| `value <name> <name>...` | exactly one line: the values the table gives (more than one) |
 | `row <label>: <value> when <expression>` | a row: its label, the value it gives, and when it holds |
 | `otherwise <value>` | exactly one line, after every `row` line: the value when no row holds |
 | `const ...` | a named constant (above) |
