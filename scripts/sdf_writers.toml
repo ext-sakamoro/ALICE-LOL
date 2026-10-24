@@ -3,8 +3,8 @@
 # the nightly that builds rustdoc's JSON (a dated one, so the JSON layout does not move under the check)
 nightly = "nightly-2026-09-26"
 
-# a writer's name, as alice-sdf's scripts/provenance_writers.py names one
-name = '(?:export|save|write)\w*|to_bytes'
+# a writer's name is alice-sdf's own (WRITER_NAME in its scripts/provenance_writers.py, read from the pinned
+# source): it is not copied here
 
 # The calls of a writer library code may still make, each exactly once ([[open]]: path, file, function, reason):
 # none; the second pass fails on any report

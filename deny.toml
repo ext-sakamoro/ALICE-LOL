@@ -74,7 +74,7 @@ skip-tree = []
 unknown-registry = "warn"
 unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = ["https://github.com/ext-sakamoro/ALICE-Zip"]
+allow-git = ["https://github.com/ext-sakamoro/ALICE-SDF", "https://github.com/ext-sakamoro/ALICE-Zip"]
 
 [sources.allow-org]
 
