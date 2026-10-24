@@ -53,8 +53,7 @@ GRANT = re.compile("Permission is hereby " "granted, free of " "charge", re.IGNO
 ALLOWED: list[tuple[str, str, int, str]] = [
     ("alice-lol-macro/CHANGELOG.md", "4859808644fe2d0ae08cbcf2ad4d7e196607799b0b79506ef3fddc8b29c5b92a", 1, "the terms of macro 0.2.0 and earlier"),
     ("CHANGELOG.md", "3dd8a9efad371865471e35336598a1da475c143ef4889731f2b7aab29c59607b", 1, "0.4.0 notes the terms of the versions published before it"),
-    ("CHANGELOG.md", "05ed21a6fcf69466d5c3cf663edb2523dc6bc7bed5a293392c353934f63547cc", 1, "0.4.0 records removing the old licence file"),
-    ("CHANGELOG.md", "b69f8af757a91d7930c94f9ca0d5c32d32cf7f443525c2b639976ff8583be218", 1, "0.4.0 records replacing the copied licence text of lol-sdf"),
+    ("CHANGELOG.md", "2685e44c3384aac00441cb5000fb6c97bea47c226030622c1a85c3d6e534851e", 1, "0.4.0 records removing the old licence file"),
     ("CHANGELOG.md", "b979a59120edda4899cd66ee123dc4dc2a181463a065811a7ab527e93651812c", 1, "the licence of the dependency stacker"),
     ("alice-lol/Cargo.toml", "4c153f064b25aa89cd8a9f7bafdf563b65347f8bfec9ec95025fbe1cf2e690a2", 1, "the licence of the dependency stacker"),
     ("deny.toml", "1f357a16a4708e089d0ef8a455a36aa8c2a2dd73ffc127d5b826dd013d0d2c2a", 1, "states that the allow list is for dependencies"),

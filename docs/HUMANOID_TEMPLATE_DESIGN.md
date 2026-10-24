@@ -143,7 +143,7 @@ let intent = IntentNode::Verb(Verb::RaiseArm { side: Side::Left, angle: 90.0 });
 template.apply_intent(&intent);
 ```
 
-## 4. 依存戦略
+## 4. 依存
 
 | dep | version | 種別 | feature gate | license |
 |--|--|--|--|--|
@@ -155,7 +155,7 @@ template.apply_intent(&intent);
 
 default features: なし (`vrm` は opt-in、pure な static + BVH のみで動く最小構成を default に)
 
-## 5. Test 戦略
+## 5. Test
 
 ### 5.1 unit test
 
