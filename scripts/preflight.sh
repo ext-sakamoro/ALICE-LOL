@@ -396,8 +396,8 @@ step "public-text.yml / public-text: Public text (ALICE-Law checker at the pin; 
 python3 scripts/test_public_text.py
 scripts/public_text.sh
 
-# dormant: ci.yml / registry-consumer runs only when dispatched (not published to
-# crates.io); PREFLIGHT_DORMANT=1 runs its steps here as a dispatch would
+# dormant: ci.yml / registry-consumer runs only when dispatched; PREFLIGHT_DORMANT=1 runs its steps here as a
+# dispatch would
 if [[ "${PREFLIGHT_DORMANT:-0}" == 1 ]]; then
   # the classification half of the registry-consumer job (every path dependency is a listed
   # sibling, a package inside one, or a workspace member; no packaging or build), so a quick
@@ -486,8 +486,8 @@ step "ci.yml / degenerate-grid: Degenerate-parameter grid (one-at-a-time / all-s
 step "security-audit.yml / audit: Run cargo audit"
 ( export CARGO_TERM_COLOR="always" CARGO_NET_RETRY="5" CARGO_HTTP_MULTIPLEXING="false"; cargo audit --db "${CARGO_TARGET_DIR:-target}/advisory-db" --deny yanked --ignore RUSTSEC-2025-0141 --ignore RUSTSEC-2024-0436 )
 
-# dormant: ci.yml / registry-consumer runs only when dispatched (not published to
-# crates.io); PREFLIGHT_DORMANT=1 runs its steps here as a dispatch would
+# dormant: ci.yml / registry-consumer runs only when dispatched; PREFLIGHT_DORMANT=1 runs its steps here as a
+# dispatch would
 if [[ "${PREFLIGHT_DORMANT:-0}" == 1 ]]; then
   step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
   python3 scripts/published_source_check.py
