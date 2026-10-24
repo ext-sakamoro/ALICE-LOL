@@ -125,8 +125,47 @@ class Predicate(unittest.TestCase):
                          ("outputs", {"valid": True, "failed": None}))
 
 
+# (battery_pct, thermal, frame_drops, value, row), from the rule of power_mode in words
+POWER = [
+    (50, "nominal", 0, "full", None),
+    (50, "serious", 0, "minimal", "hot"),
+    (50, "critical", 0, "minimal", "hot"),
+    # hot and empty both hold: the row listed first decides
+    (10, "critical", 20, "minimal", "hot"),
+    (14, "nominal", 0, "minimal", "empty"),
+    (15, "nominal", 0, "standard", "low"),
+    # low and warm both hold
+    (29, "fair", 0, "standard", "low"),
+    (30, "fair", 0, "standard", "warm"),
+    (30, "nominal", 10, "standard", "dropping"),
+    (30, "nominal", 9, "full", None),
+    (100, "Fair", 0, "full", None),
+    (-5, "", 0, "minimal", "empty"),
+]
+
+
+class Table(unittest.TestCase):
+    def test_the_power_rows_in_order(self):
+        lw = law("power_mode")
+        for b, t, d, value, row in POWER:
+            self.assertEqual(R.respond(lw, {"battery_pct": b, "thermal": t, "frame_drops": d}),
+                             ("outputs", {"value": value, "row": row}), (b, t, d))
+
+    def test_rejections_and_errors(self):
+        lw = law("power_mode")
+        ok = {"battery_pct": 50, "thermal": "nominal", "frame_drops": 0}
+        self.assertEqual(R.respond(lw, {**ok, "battery_pct": 1.5})[0], "rejected")
+        self.assertEqual(R.respond(lw, {**ok, "thermal": 3})[0], "rejected")
+        self.assertEqual(R.respond(lw, {**ok, "frame_drops": None})[0], "rejected")
+        # a missing input is decided before a value of another type
+        self.assertEqual(R.respond(lw, {"battery_pct": "x", "thermal": "nominal"})[0], "request_error")
+        # 3.0 is the integer 3
+        self.assertEqual(R.respond(lw, {**ok, "battery_pct": 3.0}), ("outputs", {"value": "minimal", "row": "empty"}))
+
+
 M = "kind machine\nstate a initial\nevent go\non go from a to a\n"
 P = 'kind predicate\nx-input n integer\nrequire pos: n > 0\nexample {"n": 1}\n'
+TB = "kind table\nx-input n integer\nvalue a b\nrow pos: a when n > 0\notherwise b\n"
 
 BAD = [
     M + "colour red\n", M + "kind predicate\n", M + "state a\n", M + "state mode\n", M + "state b initial\n",
@@ -144,6 +183,18 @@ BAD = [
     P.replace('{"n": 1}', '{"n": 0}'), P.replace("x-input n", "x-input  n"), P + "x-metric c = count(n)\n",
     P.replace("x-input n", " x-input n"), P + 'const c integer = "1"\n', P + "const c integer = 9007199254740993\n",
     P + "const c bytes = 0x0\n", P + "claim a\u0007b\n",
+    # table laws
+    TB.replace("value a b\n", ""), TB + "value c d\n", TB.replace("value a b", "value a"),
+    TB.replace("otherwise b\n", ""), TB + "otherwise a\n",
+    "kind table\nx-input n integer\nvalue a b\notherwise b\nrow pos: a when n > 0\n",
+    "kind table\nx-input n integer\nvalue a b\notherwise b\n",
+    TB.replace("row pos: a", "row pos: c"), TB.replace("otherwise b", "otherwise c"),
+    TB.replace("value a b", "value a b c"), TB.replace("otherwise b", "row pos: b when n < 0\notherwise b"),
+    TB.replace("n > 0", "n"), TB.replace("n > 0", "m > 0"), TB + "use alice-sign hmac_sha256\n",
+    TB.replace("x-input n integer", "x-input n integer\nx-input s text\nx-split s \".\" p q"),
+    TB.replace("row pos:", "row:"), TB.replace("row pos:", "row true:"), TB.replace("value a b", "value a n"),
+    TB.replace("row pos: a when", "row pos: a if"), TB + 'example {"n": 1}\n',
+    TB.replace("x-input n", "x-input  n"), TB.replace("x-input n integer", "x-input n integer\nconst n integer = 1"),
 ]
 
 
@@ -154,11 +205,14 @@ class Reading(unittest.TestCase):
                 R.parse(text)
         R.parse(M)
         R.parse(P)
+        R.parse(TB)
 
     def test_kind(self):
         self.assertEqual(R.rule_kind("kind audit\nkind machine\n"), None)
         self.assertEqual(R.rule_kind((SPIKE / "gate_compares_nonzero.law").read_text()), None)
         self.assertEqual(R.rule_kind((SPIKE / "consent_choice.law").read_text()), "machine")
+        self.assertEqual(R.rule_kind((SPIKE / "power_mode.law").read_text()), "table")
+        self.assertEqual(R.rule_kind("kind audit\nkind table\n"), None)
 
 
 class Corpus(unittest.TestCase):
@@ -178,6 +232,52 @@ class Corpus(unittest.TestCase):
             self.assertNotEqual(R.coverage(lw, cut), [], name)
             self.assertNotEqual(R.coverage(lw, []), [], name)
             json.dumps(v)  # the corpus is JSON
+
+    def test_table_vectors_reach_every_row_and_coverage_has_teeth(self):
+        lw = law("power_mode")
+        v = R.vectors(lw, "power_mode")
+        self.assertEqual(R.coverage(lw, v), [])
+        rows = {x["expected"]["row"] for x in v if x["kind"] == "exact"}
+        self.assertEqual(rows, {"hot", "empty", "low", "warm", "dropping", None})
+        # every answer is the hand-written rule: the first holding row
+        def first(i):
+            b, t, d = i["battery_pct"], i["thermal"], i["frame_drops"]
+            for label, val, holds in (("hot", "minimal", t in ("serious", "critical")),
+                                      ("empty", "minimal", b < 15), ("low", "standard", b < 30),
+                                      ("warm", "standard", t == "fair"), ("dropping", "standard", d >= 10)):
+                if holds:
+                    return {"value": val, "row": label}
+            return {"value": "full", "row": None}
+        exact = [x for x in v if x["kind"] == "exact"]
+        self.assertGreater(len(exact), 20)
+        for x in exact:
+            self.assertEqual(x["expected"], first(x["inputs"]), x["inputs"])
+        # the corpus has a vector where two rows hold and the order decides
+        self.assertTrue(any(x["inputs"]["battery_pct"] < 15 and x["inputs"]["thermal"] == "serious" for x in exact))
+        # the boundaries of every comparison are in it
+        for b in (14, 15, 16, 29, 30, 31):
+            self.assertTrue(any(x["inputs"]["battery_pct"] == b for x in exact), b)
+        for d in (9, 10, 11):
+            self.assertTrue(any(x["inputs"]["frame_drops"] == d for x in exact), d)
+        # coverage catches a corpus without a row, without a rejection or without a request error
+        self.assertNotEqual(R.coverage(lw, [x for x in v if x["kind"] != "exact" or x["expected"]["row"] != "warm"]), [])
+        self.assertNotEqual(R.coverage(lw, [x for x in v if x["kind"] != "exact" or x["expected"]["row"] is not None]), [])
+        self.assertNotEqual(R.coverage(lw, [x for x in v if x["kind"] != "reject"]), [])
+        self.assertNotEqual(R.coverage(lw, [x for x in v if x["kind"] != "request_error"]), [])
+        json.dumps(v)
+
+    def test_a_row_that_no_vector_reaches_does_not_make_a_corpus(self):
+        # `late` never holds before `early` decides every n > 5, so no input reaches it
+        lw = R.parse("kind table\nx-input n integer\nvalue a b\nrow early: a when n > 5\n"
+                     "row late: b when n > 7\notherwise b\n")
+        with self.assertRaises(R.RuleError):
+            R.vectors(lw, "x")
+
+    def test_the_last_match_bug_is_seen(self):
+        lw = law("power_mode")
+        v = [x for x in R.vectors(lw, "p") if x["kind"] == "exact"]
+        self.assertTrue(any(R.respond(lw, x["inputs"], bug="table_last_match") != ("outputs", x["expected"]) for x in v))
+        self.assertTrue(any(R.respond(lw, x["inputs"], bug="predicate_lt_inclusive") != ("outputs", x["expected"]) for x in v))
 
     def test_every_require_fails_alone_somewhere(self):
         lw = law("session_cookie_valid")
