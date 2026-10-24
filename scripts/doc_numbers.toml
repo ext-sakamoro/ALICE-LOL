@@ -258,11 +258,6 @@ text = "evaluates two laws written in different units"
 reason = "the two operands of compare, not a count of the language"
 
 [[allow]]
-file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
-text = "「掴む」= Grasp 等 14 verb"
-reason = "the planned verbs of the humanoid template (StandUp, RaiseArm, ...), not the variants of IntentNode"
-
-[[allow]]
 file = "docs/PIPELINE_COMPLETE.md"
 text = "**実装対象 (5 primitive)**"
 reason = "the five shortcuts the Phase 5.1 plan was to add, listed right below"
