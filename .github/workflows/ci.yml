@@ -593,6 +593,10 @@ jobs:
         run: python scripts/test_lock_single_version.py
       - name: lock-single-version (alice-* が 2 版以上 lock に入っていない)
         run: python scripts/lock_single_version.py
+      - name: alice-dup-check oracle (検査器自身の試験)
+        run: python scripts/alice_dup_check.py --self-test
+      - name: alice-dup-check (alice-* が 1 つの build に 2 つ link されない、版と取得元の両方、fuzz/ を含む)
+        run: python scripts/alice_dup_check.py . fuzz
       - name: det-math-guard oracle (検査器自身の試験)
         run: python scripts/test_det_math_guard.py
       - name: det-math-guard (判定経路に platform 依存の超越関数が無い)

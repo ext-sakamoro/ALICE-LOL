@@ -123,6 +123,8 @@ python3 scripts/gen_units_doc.py --check
 step "ci.yml / wiring-guard: oracle + alice-* が 2 版以上 lock に入っていない"
 python3 scripts/test_lock_single_version.py
 python3 scripts/lock_single_version.py
+python3 scripts/alice_dup_check.py --self-test
+python3 scripts/alice_dup_check.py . fuzz
 python3 scripts/macro_kinds.py --check
 python3 scripts/g7_macro_pairing.py
 python3 scripts/test_release_roster.py
