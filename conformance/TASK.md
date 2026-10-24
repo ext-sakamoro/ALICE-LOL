@@ -64,7 +64,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 |------|---------|
 | `law <name>` | the law name |
 | `kind research` / `kind audit` | a quantitative law, or an audit of measurements |
-| `kind machine` / `kind predicate` | a state machine, or a predicate over typed inputs (see "Rule laws" below) |
+| `kind machine` / `kind predicate` / `kind table` | a state machine, a predicate over typed inputs, or a table of rows tried in order (see "Rule laws" below) |
 | `claim <text>` | what the law states, in words |
 | `input <name> <unit> [range <lo> <hi>]` | an input. With `range`, the law applies only for `lo <= value <= hi`. Any other value is rejected. |
 | `param <name> <value> <uncertainty> <unit>` | a named constant |
@@ -77,7 +77,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 How the lines are read:
 
 - **The `law` line is not read.** It names the law for people. The law name is the file name: a law file without a `law` line, with another name on it, or with a second `law` line is read the same.
-- **An audit law has the line `kind audit`.** A law file is an audit law when one of its lines, with its comment removed and the spaces at its two ends trimmed, is exactly `kind audit` (one ASCII space between the two words). `kind  audit`, `kind` and `audit` separated by a tab, `kind Audit`, `kind audits` and `kind audit x` are not that line. A law file without the line `kind audit` that has the line `kind machine` or `kind predicate` (exact in the same way) is a rule law, read as "Rule laws" below says; a law file with the line `kind audit` is an audit law whatever its other lines. A law file of your own (a `reader` is given some, see "What to build") that is none of these is an unknown law: exit with status 2.
+- **An audit law has the line `kind audit`.** A law file is an audit law when one of its lines, with its comment removed and the spaces at its two ends trimmed, is exactly `kind audit` (one ASCII space between the two words). `kind  audit`, `kind` and `audit` separated by a tab, `kind Audit`, `kind audits` and `kind audit x` are not that line. A law file without the line `kind audit` that has the line `kind machine`, `kind predicate` or `kind table` (exact in the same way) is a rule law, read as "Rule laws" below says; a law file with the line `kind audit` is an audit law whatever its other lines. A law file of your own (a `reader` is given some, see "What to build") that is none of these is an unknown law: exit with status 2.
 - **A line whose keyword is not in the table above is not read** outside the audit block. Some law files carry such lines for people (`source <where the law was taken from>`, `oracle <a worked example>`). Inside the audit block every line must be a clause (see "Audit block").
 - **Tokens are separated by spaces or tabs.** Outside the `x-` declarations (below), the words of a line may be separated by one or more spaces or tabs, and spaces at the two ends of a line do not count. `begin audit` and `end audit` are exact: two words separated by one ASCII space. `begin  audit`, `begin` and `audit` separated by a tab, and the same forms of `end audit` open or close no audit block, and the law file then does not read: a request to it is an error of the request.
 
@@ -206,14 +206,14 @@ Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" o
 
 ## Rule laws
 
-A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`) or a **predicate** over typed inputs (`kind predicate`). Its answer is exact: every output is text, `true` / `false` or `null`, and it is compared exactly.
+A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`), a **predicate** over typed inputs (`kind predicate`) or a **table** whose first holding row gives the answer (`kind table`). Its answer is exact: every output is text, `true` / `false` or `null`, and it is compared exactly.
 
 ### Reading a rule law file
 
 The characters, the comments, the line ends and the tokens are read as for every law file (above). In addition:
 
 - **Every line must be read.** A line of a rule law file is empty (after its comment is removed), a line for people (`law`, `claim`, `source`, `verdict`, `oracle`, which are not read), the `kind` line, or one of the lines of its kind below. Any other line makes the law file unreadable, and a request to it is an error of the request. A rule law file has exactly one `kind` line.
-- **Names** (of constants, inputs, bound parts, states, events, mode values, guards and allowances) are ASCII: a lower-case letter followed by lower-case letters, digits and `_`. A name is declared once in a file, whatever it names. The words `true`, `false`, `and`, `or`, `not`, `state`, `mode`, `shape` and the function names below are not names.
+- **Names** (of constants, inputs, bound parts, states, events, mode values, guards, allowances and table values) are ASCII: a lower-case letter followed by lower-case letters, digits and `_`. A name is declared once in a file, whatever it names. The words `true`, `false`, `and`, `or`, `not`, `state`, `mode`, `shape` and the function names below are not names.
 - **`const <name> <type> = <literal>`** declares a named constant. The type is `integer`, `time`, `text`, `bytes` or `bool`, and the literal is one of that type (below). A constant is used by its name in an expression.
 - **Literals.** An integer is ASCII digits (`0` or a digit 1-9 followed by digits), at most 2^53 - 1 (9007199254740991). A time literal is written as an integer. A text is `"` followed by characters other than `"` and `\` and then `"`; it has no escapes. A byte string is `0x` followed by an even number of lower-case hex digits (`0x` alone is the empty byte string). `true` and `false` are the two booleans.
 - **Types of values.**
@@ -295,6 +295,26 @@ Comparisons do not chain (`a < b < c` makes the law file unreadable); parenthese
 
 The time an implementation takes to compare two byte strings should not depend on where they first differ (compare a secret, such as a tag, in constant time). The checks cannot observe this, and nothing is scored on it.
 
+### Table (`kind table`)
+
+| line | meaning |
+|------|---------|
+| `x-input <name> <type>` | an input of the request, with its type (as in a predicate law) |
+| `value <name> <name>...` | exactly one line: the values the table gives, two or more names |
+| `row <label>: <value> when <expression>` | a row: its label, the value it gives, and when it holds |
+| `otherwise <value>` | exactly one line, after every `row` line: the value when no row holds |
+| `const ...` | a named constant (above) |
+
+A table law has at least one `row` line. Every value of the `value` line is given by a `row` or by the `otherwise` line, and a `row` or `otherwise` line gives only a declared value. Labels have a namespace of their own (as the labels of a predicate law): a label is a name that is not one of the words above, and no two rows have the same label. Each `x-input` line is the keyword, exactly one ASCII space, and the rest.
+
+**Expressions** of a table law are those of a predicate law, without `hmac_sha256` (a table law has no `use` line): the inputs and the constants declared on an earlier line, the literals, and the operators and functions of the predicate table above. A `when` expression is a boolean.
+
+**A request** gives the `x-input` values, read as in a predicate law: a request without one of the `x-input` keys is an error of the request (exit with status 2), decided before any other check; an input value that does not have its type is rejected.
+
+**The answer.** The `row` lines are evaluated in file order. The first whose expression holds gives the answer: its value and its label. When none holds the answer is the value of the `otherwise` line, and the row is `null`.
+
+**Output:** `{"outputs": {"value": "<value>", "row": "<label>"}}`, or `{"outputs": {"value": "<value>", "row": null}}` when no row holds. A table never rejects a request whose inputs have their types.
+
 ## Not specified (do not rely on it)
 
 The checks do not decide these points, and no rule is given for them yet. A program may answer them in any way, and nothing here is scored on them; a program that reads law files when it runs (`reader`) should not depend on any particular answer.
@@ -304,4 +324,4 @@ The checks do not decide these points, and no rule is given for them yet. A prog
 - **How the reported output of a simulation is linked to its states.** Which `x-state`, at which times (each step of `x-step fixed`, or the times of a list input), forms the `x-output`, when the law does not say it in words, is open.
 - **A rate of change that depends on time.** An `x-ode` expression that uses the time itself (not only the states and inputs) is not used by any law, and its meaning is open.
 - **Whether the closed form of a simulated law must be finite.** The program reports its simulation, and the closed form is the reference it is judged against. Whether a request is rejected when the closed form is not finite there but the simulation is, is open.
-- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit`, `kind machine` or `kind predicate` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit and rule law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.
+- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit`, `kind machine`, `kind predicate` or `kind table` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit and rule law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.

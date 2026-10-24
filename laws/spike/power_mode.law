@@ -1,0 +1,25 @@
+# The power mode of a device, from its battery, its heat and the frames it drops: the first holding row decides
+law power_mode
+kind table
+claim a device that is hot, or nearly out of battery, runs in the minimal mode
+claim a device with a low battery, a warm device, and one that drops frames, run in the standard mode; every other device runs in the full mode
+claim the rows are tried from the top, so a hot device with an empty battery is decided by `hot`
+source the rule is stated here (nothing outside this file defines it)
+
+x-input battery_pct integer
+x-input thermal text
+x-input frame_drops integer
+
+const empty_below integer = 15
+const low_below integer = 30
+const dropping_from integer = 10
+
+value full standard minimal
+row hot: minimal when thermal == "serious" or thermal == "critical"
+row empty: minimal when battery_pct < empty_below
+row low: standard when battery_pct < low_below
+row warm: standard when thermal == "fair"
+row dropping: standard when frame_drops >= dropping_from
+otherwise full
+
+verdict the mode and the row that gave it, for every combination of the values the rows compare with
