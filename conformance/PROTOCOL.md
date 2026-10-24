@@ -73,7 +73,7 @@ From the law files:
   - Closed-form laws: the `output` / `x-piece` / `x-expr` and `tolerance` expressions, evaluated with mpmath at 40 digits.
   - Kepler laws: the start, the acceleration and the method (`x-initial`, `x-ode`, `x-method`), integrated with mpmath at 30 digits, to give the states after step 1 and after the last step.
   - Audit laws: the clauses of the audit block.
-  - Rule laws (`kind machine` / `kind predicate`): `scripts/law_rules.py` reads the law and answers every vector exactly: every step of a machine (each mode, state, event and guard value), and for a predicate its `example`, the boundaries of its comparisons, changed bytes and parts, broken shapes, inputs of another type and missing inputs. `scripts/law_corpus_cover.py` fails when a machine step is missing, or when no vector fails a condition of a predicate on its own.
+  - Rule laws (`kind machine` / `kind predicate`): `scripts/law_rules.py` reads the law and answers every vector exactly: every step of a machine (each mode, state, event and guard value), and for a predicate its `example`, the boundaries of its comparisons, changed bytes and parts, broken shapes, inputs of another type and missing inputs. For a table (`kind table`) every combination of the values its rows compare each input with (each integer with one less and one more, each text with one it is never compared with), inputs of another type and missing inputs; a row that no combination reaches makes the generator fail. `scripts/law_corpus_cover.py` fails when a machine step is missing, when no vector fails a condition of a predicate on its own, or when a row (or the `otherwise`) that a combination reaches has no vector.
 
 Held in `gen_corpus.py` itself, because a law file does not state them:
 

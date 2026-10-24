@@ -12,6 +12,7 @@
 #   16 (includes read as set equality)                          -> at least one vector fails
 #   17, 18 (machine: last match taken, allowances before step)  -> at least one vector fails
 #   19, 20 (predicate: requires reversed, `<` read as `<=`)     -> at least one vector fails
+#   21 (table: the last holding row taken)                      -> at least one vector fails
 #   4 (RK4), 5 (last step dropped), 7 (state before each step)  -> every in-range Kepler vector fails
 #   4 again with the state comparison switched off              -> every in-range Kepler vector fails
 # The corpus is deleted at the end.
@@ -73,6 +74,7 @@ run ref_bug_17_machine_last_match fail REF_BUG=17
 run ref_bug_18_machine_allow_before_step fail REF_BUG=18
 run ref_bug_19_predicate_reverse_order fail REF_BUG=19
 run ref_bug_20_predicate_lt_inclusive fail REF_BUG=20
+run ref_bug_21_table_last_match fail REF_BUG=21
 run ref_bug_4_rk4 kepler-fail REF_BUG=4
 run ref_bug_5_last_step_dropped kepler-fail REF_BUG=5
 run ref_bug_7_state_before_step kepler-fail REF_BUG=7
