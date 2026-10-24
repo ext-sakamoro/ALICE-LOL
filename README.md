@@ -424,7 +424,7 @@ the full vocabulary and worked examples against this crate's own
 | [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | what `SdfNode` evaluation's identifier is derived from, and how it differs from `law_id` |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | reads a motion law (`kind motion`) and prints its identifier, timing and the channels of each glyph at the given instants, as numbers and bit patterns; `--semantics` measures the motion semantics pins |
-| [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | the program contract of `conformance/TASK.md` for the rule laws (`kind machine` / `kind predicate`), built on `rule_law` (scored on the generated corpus by `conformance/score_rules.sh`) |
+| [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | the program contract of `conformance/TASK.md` for the rule laws (`kind machine` / `kind predicate` / `kind table`), built on `rule_law` (scored on the generated corpus by `conformance/score_rules.sh`) |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |

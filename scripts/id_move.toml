@@ -33,6 +33,12 @@ path = "alice_lol::macro_id::EXPECTED_MACRO_EXPANSION_ID"
 [[id]]
 path = "alice_lol::rule_law::RULE_SEMANTICS_ID"
 
+# the semantics of the table laws (kind table): the fold of TABLE_SEMANTICS_PINS (the order of the rows,
+# measured from the behaviour of rule_law, and RULE_SEMANTICS_ID); it is in every table-law identifier, so
+# it moves only with a breaking version
+[[id]]
+path = "alice_lol::rule_law::TABLE_SEMANTICS_ID"
+
 # the semantics of the layout laws (kind layout): the fold of LAYOUT_SEMANTICS_PINS, measured from the
 # behaviour of alice-lol-layout and re-exported here; it is in every layout-law identifier, so it moves
 # only with a breaking version

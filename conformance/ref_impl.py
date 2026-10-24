@@ -22,6 +22,7 @@ REF_BUG=17: machine: the last matching `on` line is taken, not the first
 REF_BUG=18: machine: the allowances are evaluated on the state before the step
 REF_BUG=19: predicate: the `require` lines are evaluated from the last to the first
 REF_BUG=20: predicate: `<` read as `<=`
+REF_BUG=21: table: the last holding row gives the answer, not the first
 
 Rule laws (`kind machine` / `kind predicate`) are answered by scripts/law_rules.py, the
 evaluator the corpus generator uses; the Rust reader (alice-lol `rule_law`) is the
@@ -34,7 +35,8 @@ import json, math, os, re, sys
 
 BUG = os.environ.get("REF_BUG", "")
 RULE_BUG = {"17": "machine_last_match", "18": "machine_allow_before_step",
-            "19": "predicate_reverse_order", "20": "predicate_lt_inclusive"}.get(BUG)
+            "19": "predicate_reverse_order", "20": "predicate_lt_inclusive",
+            "21": "table_last_match"}.get(BUG)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 import law_rules  # noqa: E402
 
