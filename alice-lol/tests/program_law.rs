@@ -63,6 +63,35 @@ fn a_reference_from_its_bytes_resolves_to_the_program_s_shape() {
     }
 }
 
+/// The geometry semantics of alice-det-math 0.5.0 (alice-lol up to 0.4.1), which reproduces the same
+/// bits as the current one: a reference written under it resolves to the same shape
+const PREVIOUS_GEOMETRY_SEMANTICS: &str =
+    "251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d";
+
+#[test]
+fn a_reference_under_an_earlier_semantics_with_the_same_bits_resolves() {
+    let theirs: [u8; 32] = unhex(PREVIOUS_GEOMETRY_SEMANTICS).try_into().unwrap();
+    assert_ne!(
+        theirs, LOL_GEOMETRY_SEMANTICS_ID,
+        "an earlier generation, not this one"
+    );
+    for src in [SPHERE, BOX] {
+        let r = LawRef::new(
+            PROGRAM_LAW_KIND,
+            theirs,
+            vec![(SOURCE_ROW.into(), Value::Str(src.into()))],
+        )
+        .unwrap();
+        let back = LawRef::from_bytes(&r.to_bytes()).unwrap();
+        let shape = resolve_program(&back).unwrap_or_else(|e| panic!("{src}: {e}"));
+        assert_eq!(
+            format!("{shape:?}"),
+            format!("{:?}", parse_lol(src).unwrap()),
+            "{src}"
+        );
+    }
+}
+
 #[test]
 fn another_kind_is_refused() {
     let r = LawRef::new(
