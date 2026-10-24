@@ -114,3 +114,18 @@ jobs:
         env:
           CARGO_TARGET_DIR: target/g3-ir
         run: python3 scripts/fneg_fma_ir_check.py --package alice-lol --all-features --target ${{ matrix.target }}
+
+  # one result for the workflow: run=true needs every job above to succeed, run=false needs
+  # them skipped (a skipped, cancelled or failed job after run=true is red)
+  gate:
+    name: Gate
+    if: always()
+    needs: [changes, ir]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/changed_paths.py gate --needs-json "$NEEDS"
