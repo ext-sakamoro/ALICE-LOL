@@ -61,8 +61,8 @@ class Leg(unittest.TestCase):
         self.assertTrue(any("default --release" in p for p in self.check()[0]))
 
     def test_a_member_the_law_tests_build_must_be_in_the_paths_filter(self):
-        self.edit(r.PATTERNS, "alice-lol-humanoid/**\n", "")
-        self.assertIn(f"{r.PATTERNS}: no `alice-lol-humanoid/**` (a workspace member the Law tests build)", self.check()[0])
+        self.edit(r.PATTERNS, "alice-lol-layout/**\n", "")
+        self.assertIn(f"{r.PATTERNS}: no `alice-lol-layout/**` (a workspace member the Law tests build)", self.check()[0])
 
     def test_the_fixed_patterns_are_required(self):
         self.edit(r.PATTERNS, "Cargo.lock\n", "")
@@ -71,8 +71,8 @@ class Leg(unittest.TestCase):
     def test_the_required_members_come_from_law_tests_and_their_path_dependencies(self):
         dirs = r.required_dirs(self.tmp, self.meta)
         self.assertIn("alice-lol", dirs)
-        self.assertIn("alice-lol-robot", dirs)
-        self.assertIn("alice-lol-humanoid", dirs, "a path dependency of alice-lol-robot")
+        self.assertIn("alice-lol-layout", dirs, "a path dependency of alice-lol")
+        self.assertNotIn("alice-lol-humanoid", dirs, "no Law test builds it")
         self.assertNotIn("alice-lol-ui", dirs)
 
     def test_law_tests_must_read_the_release_profile_back(self):

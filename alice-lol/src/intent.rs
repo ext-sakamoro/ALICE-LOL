@@ -174,11 +174,11 @@ pub enum IntentNode {
     ///
     /// `values` の L2 norm ≤ 1.0 を想定
     /// この制約が Garrido の「future frame を単純 copy 予防」に相当
-    /// `alice_lol_robot::law::SafetyLaw` で validation (別 crate 参照、docs.rs cross-link 不可)
+    /// ALICE-Kinematics の `alice_lol_robot::law::SafetyLaw` で validation (別 repository の crate、docs.rs cross-link 不可)
     ///
     /// # 実行
     ///
-    /// `alice_lol_robot::IntentExecutor` が hardcoded linear projection (Phase G.1)
+    /// ALICE-Kinematics の `alice_lol_robot::IntentExecutor` が hardcoded linear projection (Phase G.1)
     /// または learned controller (Phase G.2、cross-attention block) で kinematics packet 群に翻訳
     /// Phase G.1 の projection: `values[0..3]` → target xyz、`values[3]` → speed
     LatentIntent {
@@ -497,7 +497,7 @@ pub const fn music_intent(packet: [u8; 8]) -> IntentNode {
 ///
 /// # 制約 (Garrido 由来)
 ///
-/// L2 norm ≤ 1.0 を想定 (`alice_lol_robot::law::SafetyLaw::max_latent_norm` で validation、別 crate)
+/// L2 norm ≤ 1.0 を想定 (ALICE-Kinematics の `alice_lol_robot::law::SafetyLaw::max_latent_norm` で validation、別 repository の crate)
 /// この制約が Garrido の「future frame を単純 copy 予防」の意味を持つ
 #[must_use]
 pub fn latent_intent(values: impl Into<Box<[f32]>>) -> IntentNode {

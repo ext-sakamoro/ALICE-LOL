@@ -407,7 +407,6 @@ the full vocabulary and worked examples against this crate's own
 | `alice-lol` | runtime parser, emitter, transpile and export functions, law checkers, intent IR, stdlib shapes |
 | `alice-lol-layout` | byte layout laws: declare a binary format once, decode or check bytes against it (`no_std`, re-exported as `alice_lol::layout`) |
 | `alice-lol-humanoid` | parametric humanoid template (joint FK, VRM / BVH import) |
-| `alice-lol-robot` | intent verbs to humanoid FK and an 8-byte kinematics packet, with a safety law |
 | `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law |
 | `alice-lol-datagen` | synthetic (caption, LOL) pair generator with self-check |
 | `alice-world-auditor-types` | goal and verdict types shared by law checkers and planners |
@@ -441,6 +440,7 @@ the full vocabulary and worked examples against this crate's own
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | reads a motion law (`kind motion`) and prints its identifier, timing and the channels of each glyph at the given instants, as numbers and bit patterns; `--semantics` measures the motion semantics pins |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | the program contract of `conformance/TASK.md` for the rule laws (`kind machine` / `kind predicate` / `kind table`), built on `rule_law` (scored on the generated corpus by `conformance/score_rules.sh`) |
+| [`intent_plan`](alice-lol/examples/intent_plan.rs) | an intent plan over a scene: `walk`, `grasp` and `release` composed with `sequence` / `parallel` into a `Program`, printed as LOL text |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |
 | [`autodiff_demo`](alice-lol/examples/autodiff_demo.rs) | gradients, curvatures, Hessian |
@@ -482,7 +482,6 @@ depend on sibling repositories by path, so clone those next to this one:
 git clone https://github.com/ext-sakamoro/ALICE-LOL
 git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
 git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
-git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
 git clone https://github.com/ext-sakamoro/ALICE-Sign        # feature `crypto-calls`
 cd ALICE-LOL
 cargo test
