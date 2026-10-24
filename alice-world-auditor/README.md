@@ -53,19 +53,14 @@ is reachable in finite time, so `Violated` never comes from search.
 
 ## Features
 
-| Feature | Default | Pulls in | License note |
+| Feature | Default | Pulls in | Licence of what it pulls in |
 |---|---|---|---|
 | (none) | — | `alice-world-auditor-types`, `glam` | — |
-| `physics` | off | `alice-physics` | `alice-physics` carries the same `AGPL-3.0-or-later OR LicenseRef-Commercial` dual license as this crate — enabling it does not change your license obligations beyond what using this crate already implies |
+| `physics` | off | `alice-physics` | `alice-physics` is `AGPL-3.0-or-later OR LicenseRef-Commercial` at the pinned version |
 
 ## License
 
-`AGPL-3.0-or-later OR LicenseRef-Commercial` — dual-licensed. Pick either.
-
-| Option | Terms | Use it when |
-|--------|-------|-------------|
-| **AGPL-3.0-or-later** | [LICENSE-AGPL](LICENSE-AGPL) — free, no reporting obligation | Your project is itself AGPL-compatible open source, or you are only using it internally |
-| **Commercial License** | [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) — paid, removes the copyleft | Closed-source product, proprietary SaaS, edge / firmware distribution, or a platform NDA that forbids source disclosure |
-
-`alice-world-auditor-types` (the vocabulary-only sibling crate) is
-`Apache-2.0` and carries no copyleft obligation on its own.
+`LicenseRef-Proprietary` from this version: the source is published for reading only, and
+using, copying, modifying or distributing it needs a written agreement with
+the copyright holder. The text is [LICENSE-Proprietary](LICENSE-Proprietary). Versions
+published before keep the licence they were published under.

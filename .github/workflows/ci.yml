@@ -312,21 +312,13 @@ jobs:
         working-directory: ALICE-LOL
         run: python3 scripts/published_source_check.py
 
-      - name: license-check (package の一覧に LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+      - name: license-check (各 crate の package の一覧に LICENSE-Proprietary / TRADEMARK_NOTICE)
         working-directory: ALICE-LOL
         run: python3 scripts/license_check.py --package
 
       - name: package-integrity oracle (検査器自身の試験)
         working-directory: ALICE-LOL
         run: python3 scripts/test_package_integrity.py
-      # 公開する crate (scripts/release_roster.py の ROSTER) の .crate が単独で build する、または crates.io に無い隣の版 (blocked) を名指しする
-      - name: package integrity (公開する 3 crate の .crate、blocked は .github/alice-siblings の commit で patch)
-        working-directory: ALICE-LOL
-        run: |
-          python3 scripts/package_integrity.py --member alice-lol
-          python3 scripts/package_integrity.py --member alice-lol-macro
-          python3 scripts/package_integrity.py --member alice-lol-layout
-
       - name: registry consumer (macro の全 keyword を crates.io の依存で compile)
         working-directory: ALICE-LOL
         run: scripts/registry_consumer.sh
@@ -469,7 +461,7 @@ jobs:
           python3 scripts/test_sdf_writers.py
           python3 scripts/sdf_writers.py
       # ALICE-Law G7: every public entry point of alice-lol taking text, bytes or a reader is classified in
-      # scripts/g7_boundaries.toml (the same rustdoc JSON), and the published crates' sources hold no foreign form
+      # scripts/g7_boundaries.toml (the same rustdoc JSON), and the library crates' sources hold no foreign form
       - name: g7 boundaries (tests, then the check)
         run: |
           python3 scripts/test_g7_boundaries.py
@@ -635,11 +627,11 @@ jobs:
         run: python scripts/test_fuzz_runs.py
       - name: release-roster oracle (検査器自身の試験)
         run: python scripts/test_release_roster.py
-      - name: release-roster (公開できる crate は alice-lol-macro と alice-lol だけ)
+      - name: release-roster (公開できる crate は 0、library の 3 crate の写しが一致)
         run: python scripts/release_roster.py
       - name: release-siblings oracle (検査器自身の試験)
         run: python scripts/test_release_siblings.py
-      - name: release-siblings (隣の repo への path 依存がそれぞれ Cargo.lock に 1 版ある、release.yml はその版の tag を checkout する)
+      - name: release-siblings (隣の repo への path 依存がそれぞれ Cargo.lock に 1 版あり、その版の tag がある)
         run: python scripts/release_siblings.py
       - name: alice-siblings oracle (検査器自身の試験)
         run: python scripts/test_alice_siblings_check.py
@@ -647,7 +639,7 @@ jobs:
         run: python scripts/alice_siblings_check.py
       - name: entropy-deps oracle (検査器自身の試験)
         run: python scripts/test_entropy_deps_guard.py
-      - name: entropy-deps (公開する crate の依存に乱数・UUID・時刻の crate が無い、ALICE-Law G10)
+      - name: entropy-deps (library の 3 crate の依存に乱数・UUID・時刻の crate が無い、ALICE-Law G10)
         run: python scripts/entropy_deps_guard.py
       - name: release-leg oracle (検査器自身の試験)
         run: python scripts/test_release_leg_check.py
@@ -659,7 +651,7 @@ jobs:
           python scripts/root_artifacts.py
       - name: license-check oracle (検査器自身の試験)
         run: python scripts/test_license_check.py
-      - name: license-check (各 crate の license と、公開する crate が持つ LICENSE-APACHE / NOTICE / TRADEMARK_NOTICE)
+      - name: license-check (各 crate の license が LicenseRef-Proprietary で、各 crate が LICENSE-Proprietary / TRADEMARK_NOTICE を持つ)
         run: python scripts/license_check.py
       # ALICE-Law G14, static half: no fast-math-style flag, target-cpu=native or flag
       # value the guard cannot resolve in any file a flag can come from; nothing read
