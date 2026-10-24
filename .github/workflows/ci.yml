@@ -282,7 +282,7 @@ jobs:
   # (0.2.0 の macro は alice-sdf 5.x の `Taper` と合わず、`::glam` を直接参照していた)
   registry-consumer:
     name: Registry consumer
-    # dormant: not published to crates.io, not a required check; runs only when dispatched
+    # dormant: runs only when dispatched
     # (the tests of its checkers run every time in the checker-tests job)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
