@@ -126,6 +126,8 @@ fn table_files_that_do_not_read() {
         TB.replace("n > 0", "n"),
         TB.replace("n > 0", "m > 0"),
         format!("{TB}use alice-sign hmac_sha256\n"),
+        // a table has no call: a row that calls hmac_sha256 does not read (with or without the use line)
+        "kind table\nx-input k bytes\nvalue a b\nrow mac: a when hmac_sha256(k, k) == k\notherwise b\n".to_owned(),
         TB.replace(
             "x-input n integer",
             "x-input n integer\nx-input s text\nx-split s \".\" p q",
