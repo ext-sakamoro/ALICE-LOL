@@ -21,7 +21,7 @@
 # Required for full pipeline:
 #   - Rust toolchain
 #   - ALICE-LOL workspace at ../..
-#   - The companion crate that generates .lac (not published)
+#   - The companion crate that generates .lac
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -56,7 +56,7 @@ if [[ -z "$OUTPUT" ]]; then
     OUTPUT="${STEM}.lac"
 fi
 
-echo "[alice-lol-sdf] .lac generation requires the companion crate (not published)." >&2
+echo "[alice-lol-sdf] .lac generation requires the companion crate." >&2
 echo "[alice-lol-sdf] For now, run that crate's pipeline against $INPUT by hand." >&2
 echo "[alice-lol-sdf] Target output: $OUTPUT" >&2
 exit 4
