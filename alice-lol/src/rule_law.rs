@@ -1,5 +1,7 @@
-//! Rule laws — a rule of a product written as a law file: a state machine (`kind machine`)
-//! or a predicate over typed inputs (`kind predicate`).
+//! Rule laws — a rule of a product written as a law file.
+//!
+//! A rule law is a state machine (`kind machine`), a predicate over typed inputs
+//! (`kind predicate`) or a table whose first holding row gives the answer (`kind table`).
 //!
 //! The layout and the meaning are those of `conformance/TASK.md` § "Rule laws"; this module
 //! is a reader of it ([`rule_law_from_file`]) and answers a request the way the contract says
@@ -15,7 +17,11 @@
 //! of the `on` lines and of the `require` lines, the labels and every expression are. It is
 //! hashed with its own kind tag ([`MACHINE_LAW_KIND`] / [`PREDICATE_LAW_KIND`]) under
 //! [`RULE_SEMANTICS_ID`], the fold of [`RULE_SEMANTICS_PINS`], which are measured from the
-//! behaviour of this module (`tests/rule_law_oracle.rs` recomputes them). ⚠️ The rule kinds do
+//! behaviour of this module (`tests/rule_law_oracle.rs` recomputes them). A table law
+//! ([`TABLE_LAW_KIND`]) is hashed under [`TABLE_SEMANTICS_ID`], the fold of
+//! [`TABLE_SEMANTICS_PINS`] (the order of its rows, and [`RULE_SEMANTICS_ID`] for the
+//! expressions and inputs it shares with a predicate), so adding it left the identifier of
+//! every machine and predicate law as it was. ⚠️ The rule kinds do
 //! not fold into [`crate::law_id::LOL_SEMANTICS_ID`]: adding them leaves the identifier of
 //! every audit and research law, and every stamped text, as it was.
 //!
@@ -36,6 +42,9 @@ pub const MACHINE_LAW_KIND: &[u8] = b"lol.law.machine/v1";
 
 /// The kind tag of a predicate law
 pub const PREDICATE_LAW_KIND: &[u8] = b"lol.law.predicate/v1";
+
+/// The kind tag of a table law
+pub const TABLE_LAW_KIND: &[u8] = b"lol.law.table/v1";
 
 /// The largest integer magnitude a rule law reads (2^53 - 1: every JSON reader holds it exactly)
 pub const MAX_INTEGER: i64 = (1 << 53) - 1;
@@ -68,6 +77,26 @@ pub const RULE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 pub const RULE_SEMANTICS_ID: [u8; 32] =
     hex32("a1008789ce5000d7c259234df49065b9201427155956eb8de2e7b771730d5f2c");
 
+/// The semantics of the table kind `(name, fingerprint of that behaviour)`
+///
+/// ⚠️ The first value is measured ([`table_semantics_fingerprints`]); the second is
+/// [`RULE_SEMANTICS_ID`], the expressions and inputs a table shares with a predicate. The
+/// oracle recomputes both and the fold.
+pub const TABLE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "rule table: rows in file order, the first that holds gives its value and label, otherwise with row null",
+        hex32("d1f2aedf5cfccda3f67a8b538ecaae2020618f3eccb9186cd000819ffe5f2bab"),
+    ),
+    (
+        "rule expressions and inputs (RULE_SEMANTICS_ID)",
+        RULE_SEMANTICS_ID,
+    ),
+];
+
+/// The fold of [`TABLE_SEMANTICS_PINS`] (the oracle checks the two agree)
+pub const TABLE_SEMANTICS_ID: [u8; 32] =
+    hex32("ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2");
+
 /// Which rule kind a law file is
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleKind {
@@ -75,10 +104,12 @@ pub enum RuleKind {
     Machine,
     /// `kind predicate`
     Predicate,
+    /// `kind table`
+    Table,
 }
 
 /// The kind of a rule law file: `None` when it has the line `kind audit` (an audit law,
-/// whatever its other lines) or neither `kind machine` nor `kind predicate`
+/// whatever its other lines) or none of `kind machine`, `kind predicate` and `kind table`
 #[must_use]
 pub fn rule_kind(text: &str) -> Option<RuleKind> {
     let lines: Vec<&str> = text
@@ -96,6 +127,8 @@ pub fn rule_kind(text: &str) -> Option<RuleKind> {
         Some(RuleKind::Machine)
     } else if lines.contains(&"kind predicate") {
         Some(RuleKind::Predicate)
+    } else if lines.contains(&"kind table") {
+        Some(RuleKind::Table)
     } else {
         None
     }
@@ -836,6 +869,8 @@ pub enum RuleLaw {
     Machine(MachineLaw),
     /// `kind predicate`
     Predicate(PredicateLaw),
+    /// `kind table`
+    Table(TableLaw),
 }
 
 /// A state machine law
@@ -871,6 +906,16 @@ pub struct PredicateLaw {
     inputs: Vec<(String, Ty)>,
     steps: Vec<Step>,
     requires: Vec<(String, Expr)>,
+}
+
+/// A table law: rows tried in file order
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableLaw {
+    consts: Vec<(String, Ty, Value)>,
+    inputs: Vec<(String, Ty)>,
+    values: Vec<String>,
+    rows: Vec<(String, String, Expr)>,
+    otherwise: String,
 }
 
 struct Names(Vec<String>);
@@ -925,8 +970,12 @@ fn const_line(
 ///
 /// When the file is not a rule law or does not read by the rules of its kind
 pub fn rule_law_from_file(text: &str) -> Result<RuleLaw, RuleLawError> {
-    let kind = rule_kind(text)
-        .ok_or_else(|| err(0, "not a rule law (no `kind machine` / `kind predicate`)"))?;
+    let kind = rule_kind(text).ok_or_else(|| {
+        err(
+            0,
+            "not a rule law (no `kind machine` / `kind predicate` / `kind table`)",
+        )
+    })?;
     let ls = lines(text)?;
     let kinds = ls.iter().filter(|(_, l)| words(l)[0].0 == "kind").count();
     if kinds != 1 {
@@ -935,6 +984,7 @@ pub fn rule_law_from_file(text: &str) -> Result<RuleLaw, RuleLawError> {
     match kind {
         RuleKind::Machine => read_machine(&ls).map(RuleLaw::Machine),
         RuleKind::Predicate => read_predicate(&ls).map(RuleLaw::Predicate),
+        RuleKind::Table => read_table(&ls).map(RuleLaw::Table),
     }
 }
 
@@ -1286,6 +1336,138 @@ fn read_predicate(ls: &[(usize, &str)]) -> Result<PredicateLaw, RuleLawError> {
     Ok(law)
 }
 
+/// A label of a `require` / `row` line (labels have a namespace of their own)
+fn is_label(lb: &str) -> bool {
+    let b = lb.as_bytes();
+    !b.is_empty()
+        && b[0].is_ascii_lowercase()
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
+        && !RESERVED.contains(&lb)
+}
+
+#[allow(clippy::too_many_lines)]
+fn read_table(ls: &[(usize, &str)]) -> Result<TableLaw, RuleLawError> {
+    let mut names = Names(Vec::new());
+    let mut consts: Vec<(String, Ty, Value)> = Vec::new();
+    let mut inputs: Vec<(String, Ty)> = Vec::new();
+    let mut values: Option<Vec<String>> = None;
+    let mut rows: Vec<(String, String, Expr)> = Vec::new();
+    let mut otherwise: Option<String> = None;
+    for &(n, l) in ls {
+        let w = words(l);
+        let head = w[0].0;
+        let trimmed = l.trim_start_matches([' ', '\t']);
+        if trimmed.to_ascii_lowercase().starts_with("x-") {
+            let (kw, rest) = l.split_once(' ').unwrap_or((l, ""));
+            if kw != "x-input" || rest.starts_with([' ', '\t']) {
+                return Err(err(
+                    n,
+                    format!("`{}` is not an x- line of a table law", l.trim()),
+                ));
+            }
+            let rw = words(rest);
+            let Some(&(name, at)) = rw.first() else {
+                return Err(err(n, "`x-input <name> <type>`"));
+            };
+            names.declare(n, name, "input")?;
+            inputs.push((name.to_owned(), parse_type(n, &rest[at..])?));
+            continue;
+        }
+        match head {
+            h if PEOPLE.contains(&h) || h == "kind" => {}
+            "const" => const_line(n, l, &mut names, &mut consts)?,
+            "value" => {
+                if values.is_some() || w.len() < 3 {
+                    return Err(err(
+                        n,
+                        "one `value <name> <name>...` line, two values or more",
+                    ));
+                }
+                for (v, _) in &w[1..] {
+                    names.declare(n, v, "value")?;
+                }
+                values = Some(w[1..].iter().map(|(v, _)| (*v).to_owned()).collect());
+            }
+            "row" => {
+                let bad = || err(n, "`row <label>: <value> when <expression>`");
+                if otherwise.is_some() {
+                    return Err(err(n, "a `row` line after the `otherwise` line"));
+                }
+                let label = w
+                    .get(1)
+                    .and_then(|(x, _)| x.strip_suffix(':'))
+                    .ok_or_else(bad)?;
+                if w.len() < 5 || w[3].0 != "when" || !is_name_like(label) {
+                    return Err(bad());
+                }
+                if !is_label(label) || rows.iter().any(|(lb, _, _)| lb == label) {
+                    return Err(err(n, format!("label `{label}` is reserved or used twice")));
+                }
+                let src = rest_after(l, &w, 3);
+                let p = Parser {
+                    src: &src,
+                    t: tokens(&src).map_err(|e| err(n, e))?,
+                    i: 0,
+                    scope: Scope::Predicate {
+                        types: &inputs,
+                        consts: &consts,
+                        uses_hmac: false,
+                    },
+                };
+                let (e, ty) = p.parse().map_err(|e| err(n, e))?;
+                if ty != Ty::Bool {
+                    return Err(err(n, format!("`{src}` is not a boolean")));
+                }
+                rows.push((label.to_owned(), w[2].0.to_owned(), e));
+            }
+            "otherwise" => {
+                if w.len() != 2 || otherwise.is_some() {
+                    return Err(err(n, "one `otherwise <value>` line"));
+                }
+                otherwise = Some(w[1].0.to_owned());
+            }
+            other => return Err(err(n, format!("`{other}` is not a line of a table law"))),
+        }
+    }
+    let (Some(values), Some(otherwise), false) = (values, otherwise, rows.is_empty()) else {
+        return Err(err(
+            0,
+            "a table law has one `value` line, at least one `row` line and one `otherwise` line",
+        ));
+    };
+    let given: Vec<&String> = rows
+        .iter()
+        .map(|(_, v, _)| v)
+        .chain(std::iter::once(&otherwise))
+        .collect();
+    if let Some(stray) = given.iter().find(|v| !values.contains(v)) {
+        return Err(err(
+            0,
+            format!("`{stray}` is not a value of the `value` line"),
+        ));
+    }
+    if let Some(unused) = values.iter().find(|v| !given.contains(v)) {
+        return Err(err(0, format!("value `{unused}` is given by no row")));
+    }
+    Ok(TableLaw {
+        consts,
+        inputs,
+        values,
+        rows,
+        otherwise,
+    })
+}
+
+/// The shape of a label before its namespace is checked (letters, digits and `_`)
+fn is_name_like(s: &str) -> bool {
+    let b = s.as_bytes();
+    !b.is_empty()
+        && b[0].is_ascii_lowercase()
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
+}
+
 // ------------------------------------------------------------------ answering
 
 impl RuleLaw {
@@ -1295,6 +1477,7 @@ impl RuleLaw {
         match self {
             Self::Machine(m) => m.respond(inputs),
             Self::Predicate(p) => p.respond(inputs),
+            Self::Table(t) => t.respond(inputs),
         }
     }
 
@@ -1304,6 +1487,7 @@ impl RuleLaw {
         match self {
             Self::Machine(_) => RuleKind::Machine,
             Self::Predicate(_) => RuleKind::Predicate,
+            Self::Table(_) => RuleKind::Table,
         }
     }
 
@@ -1313,6 +1497,7 @@ impl RuleLaw {
         match self {
             Self::Machine(m) => m.law_id(),
             Self::Predicate(p) => p.law_id(),
+            Self::Table(t) => t.law_id(),
         }
     }
 }
@@ -1558,18 +1743,35 @@ fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, NotBuilt> {
     })
 }
 
+/// The `x-input` values of a request (a missing input first, then one of another type)
+fn read_inputs(inputs: &[(String, Ty)], inp: &Json) -> Result<Env, Answer> {
+    if let Some((name, _)) = inputs.iter().find(|(n, _)| inp.get(n).is_none()) {
+        return Err(Answer::RequestError(format!("{name} missing")));
+    }
+    let mut env: Env = Vec::new();
+    for (name, ty) in inputs {
+        match inp.get(name).and_then(|v| read_value(v, ty)) {
+            Some(v) => env.push((name.clone(), v)),
+            None => return Err(Answer::Rejected(format!("{name} does not have its type"))),
+        }
+    }
+    Ok(env)
+}
+
+fn hash_inputs(mut h: LawIdHasher, inputs: &[(String, Ty)]) -> LawIdHasher {
+    h = h.str("inputs").u64(inputs.len() as u64);
+    for (n, ty) in inputs {
+        h = ty.hash(h.str(n));
+    }
+    h
+}
+
 impl PredicateLaw {
     fn respond(&self, inp: &Json) -> Answer {
-        if let Some((name, _)) = self.inputs.iter().find(|(n, _)| inp.get(n).is_none()) {
-            return Answer::RequestError(format!("{name} missing"));
-        }
-        let mut env: Env = Vec::new();
-        for (name, ty) in &self.inputs {
-            match inp.get(name).and_then(|v| read_value(v, ty)) {
-                Some(v) => env.push((name.clone(), v)),
-                None => return Answer::Rejected(format!("{name} does not have its type")),
-            }
-        }
+        let mut env = match read_inputs(&self.inputs, inp) {
+            Ok(env) => env,
+            Err(a) => return a,
+        };
         let out = |failed: Option<&str>| {
             Answer::Outputs(Json::Object(vec![
                 ("valid".to_owned(), Json::Bool(failed.is_none())),
@@ -1630,10 +1832,7 @@ impl PredicateLaw {
             &self.consts,
         );
         h = h.str("use hmac_sha256").u32(u32::from(self.uses_hmac));
-        h = h.str("inputs").u64(self.inputs.len() as u64);
-        for (n, ty) in &self.inputs {
-            h = ty.hash(h.str(n));
-        }
+        h = hash_inputs(h, &self.inputs);
         h = h.str("steps").u64(self.steps.len() as u64);
         for s in &self.steps {
             h = match s {
@@ -1656,6 +1855,47 @@ impl PredicateLaw {
             h = e.hash(h.str(label));
         }
         h.finish()
+    }
+}
+
+impl TableLaw {
+    fn respond(&self, inp: &Json) -> Answer {
+        let env = match read_inputs(&self.inputs, inp) {
+            Ok(env) => env,
+            Err(a) => return a,
+        };
+        let mut answer = (&self.otherwise, None);
+        for (label, value, e) in &self.rows {
+            // a table has no call, so every expression evaluates
+            if matches!(predicate_eval(e, &env), Ok(Value::Bool(true))) {
+                answer = (value, Some(label));
+                break;
+            }
+        }
+        Answer::Outputs(Json::Object(vec![
+            ("value".to_owned(), Json::Text(answer.0.clone())),
+            (
+                "row".to_owned(),
+                answer.1.map_or(Json::Null, |r| Json::Text(r.clone())),
+            ),
+        ]))
+    }
+
+    fn law_id(&self) -> [u8; 32] {
+        let mut h = hash_consts(
+            LawIdHasher::new(TABLE_LAW_KIND, &TABLE_SEMANTICS_ID),
+            &self.consts,
+        );
+        h = hash_inputs(h, &self.inputs);
+        h = h.str("values").u64(self.values.len() as u64);
+        for v in &self.values {
+            h = h.str(v);
+        }
+        h = h.str("rows").u64(self.rows.len() as u64);
+        for (label, value, e) in &self.rows {
+            h = e.hash(h.str(label).str(value));
+        }
+        h.str("otherwise").str(&self.otherwise).finish()
     }
 }
 
@@ -1743,6 +1983,31 @@ pub fn rule_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
         out.push((RULE_SEMANTICS_PINS[3].0, h.finalize().into()));
     }
     out
+}
+
+/// The measured value of every pin of [`TABLE_SEMANTICS_PINS`]
+#[must_use]
+pub fn table_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
+    let rows = digest_answers(
+        "kind table\nx-input n integer\nx-input t text\nconst k integer = 3\nvalue a b c\n\
+         row big: a when n > k\nrow named: b when t == \"x\" or n == k\nrow also: a when n > 0\n\
+         otherwise c\n",
+        &[
+            r#"{"n": 4, "t": "x"}"#,
+            r#"{"n": 3, "t": "y"}"#,
+            r#"{"n": 1, "t": "x"}"#,
+            r#"{"n": 1, "t": "y"}"#,
+            r#"{"n": 0, "t": "y"}"#,
+            r#"{"n": 2.0, "t": "y"}"#,
+            r#"{"n": 1.5, "t": "y"}"#,
+            r#"{"n": "1", "t": 1}"#,
+            r#"{"t": "x"}"#,
+        ],
+    );
+    vec![
+        (TABLE_SEMANTICS_PINS[0].0, rows),
+        (TABLE_SEMANTICS_PINS[1].0, RULE_SEMANTICS_ID),
+    ]
 }
 
 #[cfg(test)]

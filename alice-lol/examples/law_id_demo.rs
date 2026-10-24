@@ -67,6 +67,36 @@ fn rule_semantics() {
     );
 }
 
+/// 表の Law (kind table) の pin、測り直した指紋、fold と宣言
+fn table_semantics() {
+    println!("\n=== 表の Law (kind table) の意味論 ===");
+    let measured = alice_lol::rule_law::table_semantics_fingerprints();
+    for ((name, id), (_, m)) in alice_lol::rule_law::TABLE_SEMANTICS_PINS
+        .iter()
+        .zip(&measured)
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  fold = {}",
+        hex(&fold_semantics_pins(
+            alice_lol::rule_law::TABLE_SEMANTICS_PINS
+        ))
+    );
+    println!("  宣言 = {}", hex(&alice_lol::rule_law::TABLE_SEMANTICS_ID));
+    let table = alice_lol::rule_law::rule_law_from_file(
+        "kind table\nx-input n integer\nvalue a b\nrow pos: a when n > 0\notherwise b\n",
+    )
+    .expect("the demo table reads");
+    println!(
+        "  {:?} ({}) の識別子 {}",
+        table.kind(),
+        String::from_utf8_lossy(alice_lol::rule_law::TABLE_LAW_KIND),
+        short(&table.law_id())
+    );
+}
+
 fn main() -> Result<(), ParseError> {
     println!("=== 算術と判定の意味論 ===");
     for (name, id) in LOL_SEMANTICS_PINS {
@@ -107,6 +137,7 @@ fn main() -> Result<(), ParseError> {
     println!("  ⚠️ 上の pin と測り直した指紋が揃わなければ、識別子が振る舞いを名乗れていない");
 
     rule_semantics();
+    table_semantics();
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;

@@ -60,7 +60,11 @@ fn the_power_rows_are_tried_in_order() {
     let law = rule_law_from_file(&spike("power_mode")).expect("reads");
     let mut compared = 0;
     for &(b, t, d, value, row) in POWER {
-        let a = law.respond(&request(&b.to_string(), &format!("\"{t}\""), &d.to_string()));
+        let a = law.respond(&request(
+            &b.to_string(),
+            &format!("\"{t}\""),
+            &d.to_string(),
+        ));
         let want = Json::Object(vec![
             ("value".to_owned(), Json::Text(value.to_owned())),
             (
@@ -77,7 +81,11 @@ fn the_power_rows_are_tried_in_order() {
 #[test]
 fn inputs_of_another_type_are_rejected_and_a_missing_one_is_a_request_error() {
     let law = rule_law_from_file(&spike("power_mode")).expect("reads");
-    for (b, t, d) in [("1.5", "\"nominal\"", "0"), ("50", "3", "0"), ("50", "\"nominal\"", "null")] {
+    for (b, t, d) in [
+        ("1.5", "\"nominal\"", "0"),
+        ("50", "3", "0"),
+        ("50", "\"nominal\"", "null"),
+    ] {
         assert!(
             matches!(law.respond(&request(b, t, d)), Answer::Rejected(_)),
             "{b} {t} {d}"
@@ -128,13 +136,13 @@ fn table_files_that_do_not_read() {
         TB.replace("row pos: a when", "row pos: a if"),
         format!("{TB}example {{\"n\": 1}}\n"),
         TB.replace("x-input n", "x-input  n"),
-        TB.replace("x-input n integer", "x-input n integer\nconst n integer = 1"),
+        TB.replace(
+            "x-input n integer",
+            "x-input n integer\nconst n integer = 1",
+        ),
     ];
     for (i, text) in bad.iter().enumerate() {
-        assert!(
-            rule_law_from_file(text).is_err(),
-            "case {i} reads:\n{text}"
-        );
+        assert!(rule_law_from_file(text).is_err(), "case {i} reads:\n{text}");
     }
     assert!(rule_law_from_file(TB).is_ok());
 }
@@ -149,11 +157,54 @@ fn the_identifier_names_the_rows_not_the_layout() {
     // the rows, their order, their labels, their values and the otherwise are
     assert_ne!(base, id(&TB.replace("n > 0", "n >= 0")));
     assert_ne!(base, id(&TB.replace("row pos:", "row positive:")));
-    assert_ne!(base, id(&TB.replace("otherwise b", "row neg: b when n < 0\notherwise b")));
+    assert_ne!(
+        base,
+        id(&TB.replace("otherwise b", "row neg: b when n < 0\notherwise b"))
+    );
     let two = "kind table\nx-input n integer\nvalue a b\nrow p: a when n > 0\nrow q: b when n > 1\notherwise b\n";
     let swapped = "kind table\nx-input n integer\nvalue a b\nrow q: b when n > 1\nrow p: a when n > 0\notherwise b\n";
     assert_ne!(id(two), id(swapped));
     // a predicate with the same expression is another law
     let p = "kind predicate\nx-input n integer\nrequire pos: n > 0\nexample {\"n\": 1}\n";
     assert_ne!(base, id(p));
+}
+
+#[test]
+fn the_table_semantics_are_their_own_and_measured() {
+    use alice_lol::law_id::{fold_semantics_pins, LOL_SEMANTICS_ID};
+    use alice_lol::rule_law::{
+        table_semantics_fingerprints, RULE_SEMANTICS_ID, TABLE_LAW_KIND, TABLE_SEMANTICS_ID,
+        TABLE_SEMANTICS_PINS,
+    };
+    // adding the table kind moved neither the rule semantics nor the older kinds
+    assert_ne!(TABLE_SEMANTICS_ID, RULE_SEMANTICS_ID);
+    assert_ne!(TABLE_SEMANTICS_ID, LOL_SEMANTICS_ID);
+    assert_ne!(TABLE_LAW_KIND, alice_lol::rule_law::PREDICATE_LAW_KIND);
+    let measured = table_semantics_fingerprints();
+    assert_eq!(measured.len(), TABLE_SEMANTICS_PINS.len());
+    for ((name, pinned), (m_name, m)) in TABLE_SEMANTICS_PINS.iter().zip(&measured) {
+        assert_eq!(name, m_name);
+        assert_eq!(pinned, m, "pin `{name}` is not the measured behaviour");
+    }
+    assert_eq!(TABLE_SEMANTICS_PINS[1].1, RULE_SEMANTICS_ID);
+    assert_eq!(
+        fold_semantics_pins(TABLE_SEMANTICS_PINS),
+        TABLE_SEMANTICS_ID
+    );
+}
+
+/// The identifier of `laws/spike/power_mode.law`, recorded when the table kind was added
+const POWER_MODE_ID: &str = "2677511dcf1ef0ba7beea819ea6df7fd2b4a841a714e0e5edcd69932a1bdc7cd";
+
+#[test]
+fn the_power_table_keeps_its_identifier() {
+    let id = rule_law_from_file(&spike("power_mode"))
+        .expect("reads")
+        .law_id();
+    let hex = id.iter().fold(String::new(), |mut s, x| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{x:02x}");
+        s
+    });
+    assert_eq!(hex, POWER_MODE_ID);
 }

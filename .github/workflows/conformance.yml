@@ -72,9 +72,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # 539 vectors on 2026-10-22 (411 + 4 rule laws: consent_choice 34, display_name_valid 18,
-      # session_cookie_valid 62, turnstile_override 14); raise it when laws or cases are added
-      MIN_VECTORS: 539
+      # 637 vectors on 2026-10-24 (411 + 226 for the 5 rule laws of laws/spike); raise it when laws or
+      # cases are added
+      MIN_VECTORS: 637
       JOBS: 4
     steps:
       - uses: actions/checkout@v5

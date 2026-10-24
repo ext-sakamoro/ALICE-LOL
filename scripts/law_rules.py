@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rule laws (`kind machine` / `kind predicate`, conformance/TASK.md "Rule laws"): reading,
+"""Rule laws (`kind machine` / `kind predicate` / `kind table`, conformance/TASK.md "Rule laws"): reading,
 answering a request, and the conformance vectors of a law.
 
 Standard library only. Used by conformance/gen_corpus.py (the expected answers),
@@ -42,11 +42,11 @@ class RuleError(ValueError):
 # ------------------------------------------------------------------ text and kind
 
 def rule_kind(text: str):
-    """`machine` / `predicate` when the file is a rule law (no `kind audit` line), else None"""
+    """`machine` / `predicate` / `table` when the file is a rule law (no `kind audit` line), else None"""
     lines = [ln.split("#", 1)[0].strip() for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
-    for k in ("machine", "predicate"):
+    for k in ("machine", "predicate", "table"):
         if f"kind {k}" in lines:
             return k
     return None
@@ -330,7 +330,7 @@ def parse(text: str) -> dict:
             raise RuleError(f"`{name}` is declared twice")
         law["names"].add(name)
 
-    (_machine if kind == "machine" else _predicate)(law, lines, declare)
+    {"machine": _machine, "predicate": _predicate, "table": _table}[kind](law, lines, declare)
     del law["names"]
     return law
 
@@ -547,12 +547,84 @@ def _predicate(law, lines, declare):
         raise RuleError("the example does not hold")
 
 
+TABLE_MAX_COMBINATIONS = 4096  # the vectors of a table law are every combination; more is an error
+
+
+def _table(law, lines, declare):
+    law.update(inputs=[], values=None, rows=[], otherwise=None)
+    types = {}
+    for n, ln in lines:
+        w = ln.split()
+        head = w[0]
+        if head in PEOPLE or head == "kind":
+            continue
+        if ln.lstrip().lower().startswith("x-"):
+            m = re.match(r"x-input ([^ \t].*)\Z", ln.rstrip(" \t"))
+            if not m or ln[0] in " \t":
+                raise RuleError(f"line {n}: `{ln.strip()}` is not an x- line of a table law")
+            name, _, ty = m.group(1).strip().partition(" ")
+            declare(name, "input")
+            ty = _parse_type(ty)
+            types[name] = ty
+            law["inputs"].append((name, ty))
+        elif head == "const":
+            _const_line(law, ln.split(None, 1)[1] if len(w) > 1 else "", declare)
+            types[w[1]] = law["consts"][w[1]][0]
+        elif head == "value":
+            if law["values"] is not None or len(w) < 3:
+                raise RuleError(f"line {n}: one `value <name> <name>...` line, two values or more")
+            for v in w[1:]:
+                declare(v, "value")
+            law["values"] = w[1:]
+        elif head == "row":
+            m = re.fullmatch(r"row\s+([a-z][a-z0-9_]*):\s+(\S+)\s+when\s+(.+?)\s*", ln.strip())
+            if not m:
+                raise RuleError(f"line {n}: `row <label>: <value> when <expression>`")
+            label, value, src = m.groups()
+            if law["otherwise"] is not None:
+                raise RuleError(f"line {n}: a `row` line after the `otherwise` line")
+            if label in RESERVED or label in (lb for lb, _, _ in law["rows"]):
+                raise RuleError(f"line {n}: label `{label}` is reserved or used twice")
+
+            def atom(name, field, types=types):
+                if name not in types:
+                    raise RuleError(f"`{name}` is not declared on an earlier line")
+                ty = types[name]
+                if field is None:
+                    if name in law["consts"]:
+                        return ("lit", ty, law["consts"][name][1])
+                    return ("ref", _type_name(ty), name, None)
+                if not isinstance(ty, tuple) or field not in dict(ty[1]):
+                    raise RuleError(f"`{name}.{field}`: no such field")
+                return ("ref", dict(ty[1])[field], name, field)
+            e = _Parser(src, atom).parse()
+            if _typeof(e, set()) != "bool":
+                raise RuleError(f"line {n}: `{src}` is not a boolean")
+            law["rows"].append((label, value, e))
+        elif head == "otherwise":
+            if len(w) != 2 or law["otherwise"] is not None:
+                raise RuleError(f"line {n}: one `otherwise <value>` line")
+            law["otherwise"] = w[1]
+        else:
+            raise RuleError(f"line {n}: `{head}` is not a line of a table law")
+    if law["values"] is None or not law["rows"] or law["otherwise"] is None:
+        raise RuleError("a table law has one `value` line, at least one `row` line and one `otherwise` line")
+    given = {v for _, v, _ in law["rows"]} | {law["otherwise"]}
+    stray = sorted(given - set(law["values"]))
+    if stray:
+        raise RuleError(f"`{stray[0]}` is not a value of the `value` line")
+    unused = [v for v in law["values"] if v not in given]
+    if unused:
+        raise RuleError(f"value `{unused[0]}` is given by no row")
+
+
 # ------------------------------------------------------------------ answering
 
 def respond(law, inputs, bug=None):
     """The answer to a request whose `inputs` is the given object (None: no inputs key)"""
     inputs = {} if inputs is None else inputs
-    return (_machine_step if law["kind"] == "machine" else _predicate_answer)(law, inputs, bug)
+    return {"machine": _machine_step, "predicate": _predicate_answer,
+            "table": _table_answer}[law["kind"]](law, inputs, bug)
 
 
 def _machine_step(law, inp, bug):
@@ -648,6 +720,24 @@ def _predicate_answer(law, inp, bug):
     return ("outputs", {"valid": True, "failed": None})
 
 
+def _table_answer(law, inp, bug):
+    for name, _ in law["inputs"]:
+        if name not in inp:
+            return ("request_error", f"{name} missing")
+    env = {}
+    for name, ty in law["inputs"]:
+        if not _has_type(inp[name], ty):
+            return ("rejected", f"{name} does not have its type")
+        env[name] = _value(inp[name], ty)
+    answer = {"value": law["otherwise"], "row": None}
+    for label, value, e in law["rows"]:
+        if _eval(e, env, bug):
+            answer = {"value": value, "row": label}
+            if bug != "table_last_match":
+                break
+    return ("outputs", answer)
+
+
 def _eval(e, env, bug=None):
     k = e[0]
     if k in ("lit", "int"):
@@ -698,7 +788,8 @@ def _vec(name, inputs, note, answer):
 
 def vectors(law, name):
     """The conformance vectors of a rule law: every answer is computed by `respond`"""
-    return (_machine_vectors if law["kind"] == "machine" else _predicate_vectors)(law, name)
+    return {"machine": _machine_vectors, "predicate": _predicate_vectors,
+            "table": _table_vectors}[law["kind"]](law, name)
 
 
 def _guard_sets(guards):
@@ -739,6 +830,111 @@ def _machine_vectors(law, name):
     for k in ["state", "event"] + (["mode"] if law["modes"] is not None else []):
         inp = {kk: vv for kk, vv in base.items() if kk != k}
         V.append(_vec(name, inp, f"{k} missing", respond(law, inp)))
+    return V
+
+
+def _is_constant(e):
+    if e[0] == "ref":
+        return False
+    return all(_is_constant(x) for x in e[1:] if isinstance(x, tuple)) and \
+        all(_is_constant(y) for x in e[1:] if isinstance(x, list) for y in x)
+
+
+def _fresh(taken, make):
+    """A value made by `make(k)` for the smallest k that is not in `taken`"""
+    k = 0
+    while make(k) in taken:
+        k += 1
+    return make(k)
+
+
+def _table_inputs(law):
+    """Every combination of the values the rows compare each input (or field) with
+
+    An integer or time takes each value it is compared with, one less and one more; a text,
+    bytes or boolean takes each value it is compared with, and a value it is never compared
+    with; `len(x)` compared with n gives x of n - 1, n and n + 1 bytes. Two inputs compared with
+    each other take each other's values too.
+    """
+    slots = []  # (input, field, type)
+    for name, ty in law["inputs"]:
+        if isinstance(ty, tuple):
+            slots += [(name, f, t) for f, t in ty[1]]
+        else:
+            slots.append((name, None, ty))
+    cand = {(n, f): set() for n, f, _ in slots}
+    pairs = []
+    for _, _, e in law["rows"]:
+        for _, op, a, b in _comparisons(e):
+            for side, other in ((a, b), (b, a)):
+                if side[0] == "ref" and _is_constant(other):
+                    v = _eval(other, {})
+                    if side[1] in ("integer", "time"):
+                        cand[(side[2], side[3])] |= {x for x in (v - 1, v, v + 1) if abs(x) <= MAX_INT}
+                    else:
+                        cand[(side[2], side[3])].add(v)
+                elif side[0] == "call" and side[1] == "len" and side[2][0][0] == "ref" and _is_constant(other):
+                    ref, v = side[2][0], _eval(other, {})
+                    mk = (lambda k: "a" * k) if ref[1] == "text" else (lambda k: b"a" * k)
+                    cand[(ref[2], ref[3])] |= {mk(k) for k in (v - 1, v, v + 1) if 0 <= k <= 4096}
+                elif side[0] == "ref" and other[0] == "ref":
+                    pairs.append(((side[2], side[3]), (other[2], other[3])))
+    for x, y in pairs:
+        cand[x] |= cand[y]
+    dims = []
+    for n, f, ty in slots:
+        c = cand[(n, f)]
+        if ty in ("integer", "time"):
+            c = c or {0}
+        elif ty == "text":
+            c = c | {"", _fresh(c, lambda k: "other" + "_" * k)}
+        elif ty == "bytes":
+            c = c | {b"", _fresh(c, lambda k: b"\xfe" * (k + 1))}
+        else:
+            c = {False, True}
+        dims.append((n, f, ty, sorted(c, key=lambda v: (str(type(v)), v))))
+    size = 1
+    for d in dims:
+        size *= len(d[3])
+    if size > TABLE_MAX_COMBINATIONS:
+        raise RuleError(f"a table law with {size} combinations of its compared values "
+                        f"(more than {TABLE_MAX_COMBINATIONS}): split it")
+    out = [{}]
+    for n, f, ty, vals in dims:
+        js = [v.hex() if isinstance(v, bytes) else v for v in vals]
+        nxt = []
+        for o in out:
+            for v in js:
+                o2 = json.loads(json.dumps(o))
+                if f is None:
+                    o2[n] = v
+                else:
+                    o2.setdefault(n, {})[f] = v
+                nxt.append(o2)
+        out = nxt
+    return out
+
+
+def _table_vectors(law, name):
+    V = []
+    for inp in _table_inputs(law):
+        V.append(_vec(name, inp, f"combination {json.dumps(inp, sort_keys=True)}", respond(law, inp)))
+    reached = {v["expected"]["row"] for v in V}
+    for label, _, _ in law["rows"]:
+        if label not in reached:
+            raise RuleError(f"row `{label}` is reached by no combination of the compared values "
+                            f"(an earlier row decides every input that makes it hold)")
+    base = V[0]["inputs"]
+    other = {"integer": "1", "time": "1", "text": 1, "bytes": "zz", "bool": 1}
+    for n, ty in law["inputs"]:
+        bad = 1 if isinstance(ty, tuple) else other[ty]
+        inp = {**base, n: bad}
+        V.append(_vec(name, inp, f"{n} of another type", respond(law, inp)))
+        if ty in ("integer", "time"):
+            inp = {**base, n: float(base[n])}
+            V.append(_vec(name, inp, f"{n} written as a number with a fraction of 0", respond(law, inp)))
+        inp = {k: v for k, v in base.items() if k != n}
+        V.append(_vec(name, inp, f"{n} missing", respond(law, inp)))
     return V
 
 
@@ -935,6 +1131,12 @@ def coverage(law, vecs):
                             missing.append(f"step {mode} {state} {event} {gs}")
         if not any(o["expected"]["transition"] == "refused" for o in answered):
             missing.append("a refused step")
+    elif law["kind"] == "table":
+        # every row (and the otherwise) that some combination of the compared values reaches
+        want = {respond(law, inp)[1]["row"] for inp in _table_inputs(law)}
+        got = {v["expected"]["row"] for v in answered}
+        for row in sorted(want - got, key=str):
+            missing.append(f"a vector decided by {row}" if row else "a vector that no row decides")
     else:
         failed = {v["expected"]["failed"] for v in answered}
         shapes = ["shape"] if law["steps"] else []
