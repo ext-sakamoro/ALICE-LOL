@@ -270,6 +270,19 @@ TPMS の `scale`/`thickness` 受理範囲等)、`emit` の canonical text 形 (`
 Example: [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs)、oracle:
 [`alice-lol/tests/geometry_id_oracle.rs`](alice-lol/tests/geometry_id_oracle.rs)
 
+## program を Law の参照にする (`program_law`)
+
+program は形を名指すので、製品は mesh の代わりに形を Law の参照で渡せる `program_law_ref(source)`
+は kind `lol.law.program/v1`、意味論 `LOL_GEOMETRY_SEMANTICS_ID`、行は program の text 1 つ (`source`)
+の `alice_zip::law_ref::LawRef` (v2) を作る law の識別子は ALICE-Zip の v2 の識別子なので、受け手は
+byte 列だけで確かめる (`LawRef::from_bytes`) `resolve_program(&reference)` は kind、意味論 (この版の
+もの、または同じ bit を再現する以前のもの)、行の順に確かめてから program を `SdfNode` に読む 製品が形を
+どう mesh にするかは参照に含まない
+
+Example: [`program_law_demo`](alice-lol/examples/program_law_demo.rs)、oracle:
+[`alice-lol/tests/program_law.rs`](alice-lol/tests/program_law.rs) (期待する byte 列は ALICE-Zip の
+独立した Python 実装が書いた)
+
 ## 幾何法則 (`law`)
 
 `law::Constraint` は場の性質を宣言し、`LawSet` が Hard / Soft の優先度つきで集めて
@@ -381,6 +394,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | 検査を監査 Law として書き、6 値の判定に到達させる |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | Law の識別子が何から決まり、何を変えると変わるか |
 | [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | `SdfNode` 評価の識別子が何から決まり、`law_id` とどう別か |
+| [`program_law_demo`](alice-lol/examples/program_law_demo.rs) | program を Law の参照にする (`lol.law.program/v1`): byte 列、識別子、そこから作り直した形 |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | 動きの Law (`kind motion`) を読み、識別子・timing・指定した時刻の glyph ごとの channel を数値と bit で出す `--semantics` は動きの意味論の pin を計測する |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |

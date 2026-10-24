@@ -38,6 +38,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test rule_law_oracle|"
   "alice-lol|--test motion_law_oracle|"
   "alice-lol|--test law_ref_oracle|"
+  "alice-lol|--test program_law|"
   "alice-lol|--test motion_frame_oracle|"
   "alice-lol|--test audit_series_oracle|"
   "alice-lol-robot|--test analytic_robot_law|"

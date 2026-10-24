@@ -46,6 +46,11 @@ class = "authoring"
 reason = "reads the expression of an x-metric line of a law file (source)"
 
 [[entry]]
+path = "alice_lol::program_law::program_law_ref"
+class = "authoring"
+reason = "takes a program a person or a model writes and names it as a law reference under this version's geometry semantics; it does not parse the text, and resolve_program compares the reference's semantics (another one is SemanticsMismatch naming both) before parsing when another program reads it"
+
+[[entry]]
 path = "alice_lol::law_input::audit_law_from_file"
 class = "authoring"
 reason = "reads a law file a person or a model writes; its audit block goes through parse_law (a semantics first line is compared when present)"
