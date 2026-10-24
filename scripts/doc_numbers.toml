@@ -137,13 +137,6 @@ kind = "sum"
 of = ["intent.variants"]
 minus = ["intent.composites", "intent.other"]
 
-[sources."sdf.variants"]
-# every SdfNode variant emit::to_lol names (the emitter matches all of them, no wildcard arm)
-noun = '''SdfNode'''
-kind = "distinct_matches"
-file = "alice-lol/src/emit.rs"
-pattern = '''SdfNode::([A-Z][A-Za-z0-9]*)'''
-
 [sources."tests.law"]
 noun = '''law_tests|テスト'''
 kind = "rust_test_fns"
@@ -153,12 +146,6 @@ file = "alice-lol/tests/law_tests.rs"
 noun = '''target'''
 kind = "glob"
 glob = "fuzz/fuzz_targets/*.rs"
-
-[sources."datagen.families"]
-noun = '''famil'''
-kind = "rust_enum_variants"
-file = "alice-lol-datagen/src/families/mod.rs"
-name = "Family"
 
 [sources."ci.test_entries"]
 # the matrix entries of the Test job in ci.yml
@@ -256,11 +243,6 @@ reason = "the two operands of morph, not a count of the language"
 file = "README.md"
 text = "evaluates two laws written in different units"
 reason = "the two operands of compare, not a count of the language"
-
-[[allow]]
-file = "docs/HUMANOID_TEMPLATE_ROADMAP.md"
-text = "「掴む」= Grasp 等 14 verb"
-reason = "the planned verbs of the humanoid template (StandUp, RaiseArm, ...), not the variants of IntentNode"
 
 [[allow]]
 file = "docs/PIPELINE_COMPLETE.md"
