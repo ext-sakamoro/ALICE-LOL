@@ -94,7 +94,7 @@ shared = ["scripts/id_move_check.py", "scripts/test_id_move_check.py"]
 gate = "G10"
 checker = "scripts/entropy_deps_guard.py"
 canary = "scripts/test_entropy_deps_guard.py::Guard.test_each_denied_crate_fails_as_a_normal_or_build_dependency"
-zero = "scripts/test_entropy_deps_guard.py::Guard.test_no_library_member_is_compared_nothing"
+zero = "scripts/test_entropy_deps_guard.py::Config.test_no_configured_member_read_is_compared_nothing"
 shared = "n/a: this crate's dependency guard"
 
 [[row]]
