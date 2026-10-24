@@ -19,7 +19,7 @@ alice-lol-macro = { path = "../alice-lol-macro", version = "0.4" }
 # `layout`: the byte layout laws (a crate of its own, depending on sha2 only, so that a format
 # crate such as alice-zip can check its bytes against a declaration without depending on alice-lol)
 alice-lol-layout = { path = "../alice-lol-layout", version = "0.1" }
-alice-sdf = { path = "../../ALICE-SDF", version = ">=7.0.0, <8", default-features = false, features = ["glsl"] }
+alice-sdf = { git = "https://github.com/ext-sakamoro/ALICE-SDF", rev = "3c7367f09ec50881cd698545aae56700458fc15b", version = ">=7.0.0, <8", default-features = false, features = ["glsl"] }
 glam = "0.29"
 # `research_law` が成立範囲 / 残差統計 / 出典 / 判定閾値の型を共有する
 # (no_std の `law` module だけを使うので default feature の zlib は引かない)
