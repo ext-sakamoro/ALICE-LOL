@@ -1,6 +1,6 @@
 # cargo-deny 設定 (v0.14+ schema)
 # ALICE-* 共通の CI 構成
-# ALICE-LOL は 0.4.0 から Apache-2.0 (alice-world-auditor は AGPL-3.0-or-later OR LicenseRef-Commercial)
+# ALICE-LOL の全 crate はこの版から LicenseRef-Proprietary (publish = false)
 # optional sibling deps (alice-llm / alice-physics) は AGPL-3.0 (実 crate)
 # allow の MIT 等は依存 crate のための行で、本 crate の license とは別
 
@@ -41,6 +41,11 @@ allow = [
     "MPL-2.0",
     "OpenSSL",
 ]
+
+# this crate is publish = false and LicenseRef-Proprietary: unpublished
+# workspace crates are not checked against the allow list
+[licenses.private]
+ignore = true
 
 [[licenses.clarify]]
 name = "ring"
@@ -88,8 +93,3 @@ allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
 name = "alice-llm"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
 
-# alice-world-auditor is an in-workspace member (not a sibling path dep),
-# same dual license as alice-physics (AGPL-3.0-or-later OR LicenseRef-Commercial)
-[[licenses.exceptions]]
-name = "alice-world-auditor"
-allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]

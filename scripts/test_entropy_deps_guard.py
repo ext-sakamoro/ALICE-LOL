@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""tests for scripts/entropy_deps_guard.py (ALICE-Law G10): a published member's normal or build dependency on
-a source of entropy or wall-clock time fails, a dev-dependency or an unpublished member does not, and reading no
-published member fails
+"""tests for scripts/entropy_deps_guard.py (ALICE-Law G10): a library member's normal or build dependency on
+a source of entropy or wall-clock time fails (published or not), a dev-dependency or a member outside the library
+set does not, and reading no library member fails
 
     python3 scripts/test_entropy_deps_guard.py
 """
@@ -33,7 +33,7 @@ def dep(name: str, kind=None, target=None, rename=None) -> dict:
 
 
 class Guard(unittest.TestCase):
-    def test_a_clean_published_member_passes(self):
+    def test_a_clean_library_member_passes(self):
         read, problems = g.denied_deps(meta(pkg("alice-lol", [dep("glam"), dep("alice-sdf")])))
         self.assertEqual((read, problems), (["alice-lol"], []))
 
@@ -49,10 +49,16 @@ class Guard(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("rng", problems[0])
 
-    def test_dev_dependencies_and_unpublished_members_are_not_checked(self):
+    def test_dev_dependencies_and_members_outside_the_library_set_are_not_checked(self):
         read, problems = g.denied_deps(meta(pkg("alice-lol", [dep("rand", kind="dev")]),
-                                            pkg("alice-lol-datagen", [dep("rand")], publish=[])))
+                                            pkg("alice-lol-datagen", [dep("rand")])))
         self.assertEqual((read, problems), (["alice-lol"], []))
+
+    def test_a_library_member_with_publish_false_is_still_checked(self):
+        # every crate has publish = false (cargo metadata: publish = []); the library set is checked regardless
+        read, problems = g.denied_deps(meta(pkg("alice-lol-layout", [dep("getrandom")], publish=[])))
+        self.assertEqual(read, ["alice-lol-layout"])
+        self.assertEqual(len(problems), 1, problems)
 
     def test_names_that_only_contain_a_denied_word_pass(self):
         _, problems = g.denied_deps(meta(pkg("alice-lol", [dep("timely"), dep("operand"), dep("random-access")])))
@@ -69,19 +75,18 @@ class Guard(unittest.TestCase):
                                   node("r", ("u", None)), node("u"), node("t")]}}
         self.assertEqual(g.transitive(m), ["rand 0.8.5", "uuid 1.2"])
 
-    def test_no_published_member_is_compared_nothing(self):
+    def test_no_library_member_is_compared_nothing(self):
         p = subprocess.run([sys.executable, str(HERE / "entropy_deps_guard.py"), "--manifest-path",
                             str(HERE / "clippy-lib-canary" / "Cargo.toml")], capture_output=True, text=True)
         self.assertEqual(p.returncode, 2, p.stderr)
         self.assertIn("compared nothing", p.stderr)
 
-    def test_the_published_members_must_be_the_release_roster(self):
-        self.assertEqual(g.roster_differs(["alice-lol", "alice-lol-layout", "alice-lol-macro"]), [])
-        # mutant: a roster crate is not read (it gained publish = false), another one is
-        out = g.roster_differs(["alice-lol", "alice-lol-macro", "alice-lol-ui"])
-        self.assertEqual(len(out), 2, out)
+    def test_every_library_crate_must_be_read(self):
+        self.assertEqual(g.library_differs(["alice-lol", "alice-lol-layout", "alice-lol-macro"]), [])
+        # mutant: a library crate is not read (renamed or dropped from the workspace)
+        out = g.library_differs(["alice-lol", "alice-lol-macro"])
+        self.assertEqual(len(out), 1, out)
         self.assertIn("alice-lol-layout", out[0])
-        self.assertIn("alice-lol-ui", out[1])
 
     def test_this_workspace_passes(self):
         p = subprocess.run([sys.executable, str(HERE / "entropy_deps_guard.py"), "--manifest-path",

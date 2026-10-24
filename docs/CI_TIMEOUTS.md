@@ -40,7 +40,6 @@ without a warm cache still fits. Durations are from `gh run view --json jobs`
 | security-audit.yml | stub / mock guard | 7 | 0.7 | 10 |
 | security-audit.yml | coverage | 7 | 0.9 | 45 |
 | security-audit.yml | semver-checks | 0 | (no successful run in the window) | 30 |
-| release.yml | detect-crate / dry-run-publish / create-release | 0 | (runs only on a release) | 10 / 30 / 15 |
 | quality-deep.yml | mutation shards | 3 | 18.1 | 120 (unchanged) |
 
 The short durations of Clippy, MSRV and coverage come from a warm cache; their limits
