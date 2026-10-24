@@ -166,7 +166,7 @@ pub struct RobloxExportStats {
 
 ---
 
-## メッシュデシメーション戦略
+## メッシュデシメーション
 
 ALICE-SDF の Marching Cubes は解像度に応じて三角形を生成する。
 Roblox の上限 (4,000 / 10,000) に収めるため:
