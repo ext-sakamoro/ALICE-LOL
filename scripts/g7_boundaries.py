@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Every boundary where a published crate of this workspace takes a value without its Rust type is listed (ALICE-Law G7).
+"""Every boundary where a library crate of this workspace takes a value without its Rust type is listed (ALICE-Law G7).
 
 A value passed as a Rust type carries its crate version and features with it; text, bytes, a file, a
 foreign call, `dyn Any` and a value computed at build time do not, so there the writer's identifier has
 to travel with the value and the reader has to compare it. This check keeps the list of those places
-complete for the published crates (the release roster, `ROSTER` of scripts/release_roster.py), in two parts:
+complete for the library crates (the library set, `LIBRARY` of scripts/release_roster.py), in two parts:
 
   * entry points: every public function or method of alice-lol (rustdoc JSON with every feature, hidden
     and private items, the dated nightly of scripts/sdf_writers.toml; free functions reachable from the
@@ -23,7 +23,7 @@ complete for the published crates (the release roster, `ROSTER` of scripts/relea
     An entry point not listed is a finding, and so is a listed one no longer found
   * forms: the library sources rustc reads for the two crates (from the dep-info of a fresh `cargo check`
     with every feature) hold no `extern "C"`, `no_mangle`, `export_name`, wasm-bindgen, PyO3 or `dyn Any`
-    / `downcast` (comments and string literals left out); no published member has a build script or a
+    / `downcast` (comments and string literals left out); no library member has a build script or a
     crate type other than lib and proc-macro; each proc-macro crate is listed under [[macro]] with
     the file that compares its identifier and the script that pairs it with another release
 
@@ -47,9 +47,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TABLE = ROOT / "scripts" / "g7_boundaries.toml"
 sys.path.insert(0, str(ROOT / "scripts"))
-from release_roster import ROSTER  # noqa: E402  (the one place the published set is written)
+from release_roster import LIBRARY  # noqa: E402  (the one place the library set is written)
 
-PUBLISHED = tuple(sorted(ROSTER))
+LIBRARY_CRATES = tuple(sorted(LIBRARY))
 CLASSES = ("exchange", "authoring", "local")
 
 
@@ -219,11 +219,11 @@ def member_reexports(doc: dict, members: set[str]) -> list[tuple[str, list[str],
     return out
 
 
-def unread_published(published_libs: set[str], reexports: list[tuple[str, list[str], list[str]]]) -> list[str]:
-    """the published library crates (other than alice-lol, crate names) whose entry points this check does not
+def unread_library(library_libs: set[str], reexports: list[tuple[str, list[str], list[str]]]) -> list[str]:
+    """the library crates (other than alice-lol, crate names) whose entry points this check does not
     read: only a whole-crate re-export from alice-lol brings all of a member's entry points here"""
     whole = {c for c, inside, _ in reexports if not inside}
-    return sorted(published_libs - whole)
+    return sorted(library_libs - whole)
 
 
 def follow_reexports(found_in: dict[str, dict[str, str]],
@@ -305,7 +305,7 @@ def target_findings(meta: dict, table: dict, root: Path = ROOT) -> tuple[list[st
     macros = {m.get("crate"): m for m in table.get("macro", [])}
     seen = 0
     for pkg in meta["packages"]:
-        if pkg["name"] not in PUBLISHED:
+        if pkg["name"] not in LIBRARY_CRATES:
             continue
         seen += 1
         for t in pkg["targets"]:
@@ -324,7 +324,7 @@ def target_findings(meta: dict, table: dict, root: Path = ROOT) -> tuple[list[st
                     if not m.get(key) or not (root / m[key]).is_file():
                         out.append(f"{pkg['name']}: [[macro]] {key} {m.get(key)!r} is not a file")
     for name in macros:
-        out.append(f"g7_boundaries.toml lists the proc-macro crate {name}, which is not a published proc macro")
+        out.append(f"g7_boundaries.toml lists the proc-macro crate {name}, which is not a library proc macro")
     return out, seen
 
 
@@ -353,9 +353,9 @@ def main(argv: list[str] | None = None) -> int:
     packages = {p["name"].replace("-", "_"): p["name"] for p in meta["packages"]
                 if not any("proc-macro" in t.get("kind", []) for t in p.get("targets", []))}
     reexports = member_reexports(doc, set(packages) - {"alice_lol"})
-    unread = unread_published({c for c, n in packages.items() if n in PUBLISHED} - {"alice_lol"}, reexports)
+    unread = unread_library({c for c, n in packages.items() if n in LIBRARY_CRATES} - {"alice_lol"}, reexports)
     if unread:
-        print(f"error: the published crate(s) {', '.join(packages[c] for c in unread)} are not re-exported whole "
+        print(f"error: the library crate(s) {', '.join(packages[c] for c in unread)} are not re-exported whole "
               "by alice-lol, so their entry points are not read here", file=sys.stderr)
         return 2
     found_in = {}
@@ -388,26 +388,26 @@ def main(argv: list[str] | None = None) -> int:
 
     targets, seen = target_findings(meta, table)
     findings += targets
-    if seen != len(PUBLISHED):
-        print(f"error: read {seen} of the {len(PUBLISHED)} published crates in cargo metadata", file=sys.stderr)
+    if seen != len(LIBRARY_CRATES):
+        print(f"error: read {seen} of the {len(LIBRARY_CRATES)} library crates in cargo metadata", file=sys.stderr)
         return 2
     # the target directory cargo uses (CARGO_TARGET_DIR or a config may move it): cleaned there, so both
     # crates are checked afresh and their dep-info is written
     target = Path(meta["target_directory"])
-    sw.clean(list(PUBLISHED), target)
+    sw.clean(list(LIBRARY_CRATES), target)
     p = subprocess.run(["cargo", "check", "--message-format=json", "--lib", "--all-features",
-                        *[a for c in PUBLISHED for a in ("-p", c)]], cwd=ROOT, capture_output=True, text=True)
+                        *[a for c in LIBRARY_CRATES for a in ("-p", c)]], cwd=ROOT, capture_output=True, text=True)
     if p.returncode != 0:
         print(f"error: cargo check failed:\n{p.stderr[-3000:]}", file=sys.stderr)
         return 2
     msgs = [json.loads(line) for line in p.stdout.splitlines() if line.startswith("{")]
     try:
-        files, units = sw.dep_info_files(msgs, set(PUBLISHED))
+        files, units = sw.dep_info_files(msgs, set(LIBRARY_CRATES))
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    if units < len(PUBLISHED) or not files:
-        print(f"error: read the sources of {units} of {len(PUBLISHED)} crates (compared nothing)", file=sys.stderr)
+    if units < len(LIBRARY_CRATES) or not files:
+        print(f"error: read the sources of {units} of {len(LIBRARY_CRATES)} crates (compared nothing)", file=sys.stderr)
         return 2
     findings += form_findings(files, sw.RUST_NON_CODE)
 
