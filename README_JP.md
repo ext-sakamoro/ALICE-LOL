@@ -364,7 +364,6 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `alice-lol` | ランタイムパーサ、逆変換、シェーダ変換と出力の関数、法則の検査、intent IR、stdlib の形状 |
 | `alice-lol-layout` | byte layout の法則: binary 形式を 1 度宣言し、bytes をその宣言で読む・検査する (`no_std`、`alice_lol::layout` として再公開) |
 | `alice-lol-humanoid` | パラメトリックな人型テンプレート (関節 FK、VRM / BVH 読み込み) |
-| `alice-lol-robot` | intent の動詞から人型 FK と 8 byte の kinematics packet へ、安全法則つき |
 | `alice-lol-ui` | UI 形状 (button、card、panel など)、flex / grid / stack レイアウト、コントラストの法則 |
 | `alice-lol-datagen` | 自己検査つきの合成 (caption, LOL) ペア生成 |
 | `alice-world-auditor-types` | 法則の検査器とプランナが共有する goal と判定の型 |
@@ -438,7 +437,6 @@ alice-sdf と alice-zip は固定した commit を git で取る optional な fe
 git clone https://github.com/ext-sakamoro/ALICE-LOL
 git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
 git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
-git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
 git clone https://github.com/ext-sakamoro/ALICE-Sign        # feature `crypto-calls`
 cd ALICE-LOL
 cargo test

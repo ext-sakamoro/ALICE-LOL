@@ -22,8 +22,6 @@ on:
       - 'alice-lol/**'
       - 'alice-lol-macro/**'
       - 'alice-lol-layout/**'
-      - 'alice-lol-robot/**'
-      - 'alice-lol-humanoid/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'

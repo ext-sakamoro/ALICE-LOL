@@ -407,7 +407,6 @@ the full vocabulary and worked examples against this crate's own
 | `alice-lol` | runtime parser, emitter, transpile and export functions, law checkers, intent IR, stdlib shapes |
 | `alice-lol-layout` | byte layout laws: declare a binary format once, decode or check bytes against it (`no_std`, re-exported as `alice_lol::layout`) |
 | `alice-lol-humanoid` | parametric humanoid template (joint FK, VRM / BVH import) |
-| `alice-lol-robot` | intent verbs to humanoid FK and an 8-byte kinematics packet, with a safety law |
 | `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law |
 | `alice-lol-datagen` | synthetic (caption, LOL) pair generator with self-check |
 | `alice-world-auditor-types` | goal and verdict types shared by law checkers and planners |
@@ -482,7 +481,6 @@ depend on sibling repositories by path, so clone those next to this one:
 git clone https://github.com/ext-sakamoro/ALICE-LOL
 git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
 git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
-git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
 git clone https://github.com/ext-sakamoro/ALICE-Sign        # feature `crypto-calls`
 cd ALICE-LOL
 cargo test

@@ -1,5 +1,5 @@
 [workspace]
-members = ["alice-lol-macro", "alice-lol", "alice-lol-layout", "alice-lol-humanoid", "alice-lol-robot", "alice-lol-ui", "alice-lol-datagen", "alice-world-auditor-types", "alice-world-auditor"]
+members = ["alice-lol-macro", "alice-lol", "alice-lol-layout", "alice-lol-humanoid", "alice-lol-ui", "alice-lol-datagen", "alice-world-auditor-types", "alice-world-auditor"]
 resolver = "2"
 
 # the licence of every member (each member also states it); read by the licence-file checks
