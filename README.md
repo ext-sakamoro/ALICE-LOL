@@ -296,6 +296,21 @@ written down by hand.
 Example: [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs); oracle:
 [`alice-lol/tests/geometry_id_oracle.rs`](alice-lol/tests/geometry_id_oracle.rs).
 
+## A program as a law reference (`program_law`)
+
+A program names a shape, so a product can hand the shape on as a law reference instead of a
+mesh. `program_law_ref(source)` builds an `alice_zip::law_ref::LawRef` (v2) of kind
+`lol.law.program/v1` under `LOL_GEOMETRY_SEMANTICS_ID`, with one row `source` holding the
+program text; its law identifier is ALICE-Zip's v2 identifier, so a receiver checks it from the
+bytes alone (`LawRef::from_bytes`). `resolve_program(&reference)` checks the kind, then the
+semantics (this version's, or an earlier one that reproduces the same bits), then the rows, and
+parses the program into its `SdfNode`. How a product meshes the shape is not part of the
+reference.
+
+Example: [`program_law_demo`](alice-lol/examples/program_law_demo.rs); oracle:
+[`alice-lol/tests/program_law.rs`](alice-lol/tests/program_law.rs) (the expected bytes are written
+by ALICE-Zip's independent Python implementation).
+
 ## Geometric laws (`law`)
 
 `law::Constraint` declares a property of a field; `LawSet` collects them with
@@ -422,6 +437,7 @@ the full vocabulary and worked examples against this crate's own
 | [`audit_law_demo`](alice-lol/examples/audit_law_demo.rs) | writing a check as an audit law and reaching the <!-- num: verdict.audit -->6 verdicts |
 | [`law_id_demo`](alice-lol/examples/law_id_demo.rs) | what a law's identifier is derived from, and what changes it |
 | [`geometry_id_demo`](alice-lol/examples/geometry_id_demo.rs) | what `SdfNode` evaluation's identifier is derived from, and how it differs from `law_id` |
+| [`program_law_demo`](alice-lol/examples/program_law_demo.rs) | a program as a law reference (`lol.law.program/v1`): its bytes, its identifier, and the shape rebuilt from them |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | reads a motion law (`kind motion`) and prints its identifier, timing and the channels of each glyph at the given instants, as numbers and bit patterns; `--semantics` measures the motion semantics pins |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | the program contract of `conformance/TASK.md` for the rule laws (`kind machine` / `kind predicate`), built on `rule_law` (scored on the generated corpus by `conformance/score_rules.sh`) |
