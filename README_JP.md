@@ -432,15 +432,14 @@ workspace 全体を検査する
 
 ## ビルドとテスト
 
-crate は隣の repository に path で依存するので、並べて clone する
+alice-sdf と alice-zip は固定した commit を git で取る optional な feature は隣の repository に path で依存するので、並べて clone する
 
 ```bash
 git clone https://github.com/ext-sakamoro/ALICE-LOL
-git clone https://github.com/ext-sakamoro/ALICE-SDF
-git clone https://github.com/ext-sakamoro/ALICE-Zip
 git clone https://github.com/ext-sakamoro/ALICE-Physics     # feature `physics`
 git clone https://github.com/ext-sakamoro/ALICE-LLM         # feature `llm-bridge`
 git clone https://github.com/ext-sakamoro/ALICE-Kinematics  # alice-lol-robot
+git clone https://github.com/ext-sakamoro/ALICE-Sign        # feature `crypto-calls`
 cd ALICE-LOL
 cargo test
 scripts/law_tests.sh            # the law oracles, failing if any of them ran zero tests

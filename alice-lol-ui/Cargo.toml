@@ -17,7 +17,7 @@ categories = ["graphics", "gui", "no-std"]
 [dependencies]
 alice-det-math = "0.5"
 alice-lol = { path = "../alice-lol", version = "0.5.0", default-features = false }
-alice-sdf = { path = "../../ALICE-SDF", version = ">=6.1.0, <8", default-features = false }
+alice-sdf = { git = "https://github.com/ext-sakamoro/ALICE-SDF", rev = "3c7367f09ec50881cd698545aae56700458fc15b", version = ">=6.1.0, <8", default-features = false }
 glam = "0.29"
 
 # alice-lol は現状 direct use なし (doc comment のみ)、public API contract として保持

@@ -117,7 +117,10 @@ class Siblings(unittest.TestCase):
     def test_the_real_tree_lists_its_siblings(self):
         rows = rs.plan(rs.ROOT)
         self.assertGreater(len(rows), 0)
-        self.assertIn("alice-sdf", {r[1] for r in rows})
+        listed = {line.split()[0] for line in (rs.ROOT / ".github" / "alice-siblings").read_text(encoding="utf-8").splitlines()
+                  if line.strip() and not line.startswith("#")}
+        self.assertEqual({r[0] for r in rows}, listed, "the path siblings are the ones .github/alice-siblings lists")
+        self.assertNotIn("alice-sdf", {r[1] for r in rows}, "alice-sdf comes by git, not as a path sibling")
 
 
 if __name__ == "__main__":

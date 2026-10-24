@@ -55,6 +55,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=3c7367f09ec50881cd698545aae56700458fc15b#3c7367f09ec50881cd698545aae56700458fc15b"
 dependencies = [
  "alice-det-math",
  "bincode",
@@ -67,6 +68,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.20",
  "wgpu",
  "wide",
