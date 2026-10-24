@@ -26,8 +26,11 @@ ROOT = Path(__file__).resolve().parent.parent
 def metadata(root: Path) -> dict:
     cmd = ["cargo", "metadata", "--format-version", "1", "--all-features",
            "--manifest-path", str(root / "Cargo.toml")]
-    out = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
-    return json.loads(out)
+    run = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if run.returncode != 0:
+        sys.stderr.write(run.stderr)
+        raise SystemExit(f"{root}: cargo metadata failed (exit {run.returncode})")
+    return json.loads(run.stdout)
 
 
 def duplicates(meta: dict) -> tuple[int, dict[str, list[str]]]:
@@ -42,8 +45,8 @@ def duplicates(meta: dict) -> tuple[int, dict[str, list[str]]]:
     return n, {k: sorted(v) for k, v in sorted(copies.items()) if len(v) > 1}
 
 
-def check(root: Path) -> list[str]:
-    n, dup = duplicates(metadata(root))
+def check(root: Path, meta: dict) -> list[str]:
+    n, dup = duplicates(meta)
     if n == 0:
         return [f"{root}: no alice-* package in the resolved graph (nothing compared)"]
     print(f"{root}: {n} alice-* package(s) compared, {len(dup)} duplicated")
@@ -61,6 +64,7 @@ def self_test() -> int:
         ("one copy each", meta(("alice-text", "2.0.0", None), ("alice-det-math", "0.5.2", git)), 2, []),
         ("two versions", meta(("alice-det-math", "0.5.1", reg), ("alice-det-math", "0.5.2", git)), 2, ["alice-det-math"]),
         ("same version, two sources", meta(("alice-zip", "0.11.0", reg), ("alice-zip", "0.11.0", git)), 2, ["alice-zip"]),
+        ("two versions, same source", meta(("alice-det-math", "0.5.1", reg), ("alice-det-math", "0.6.0", reg)), 2, ["alice-det-math"]),
         ("other crates may repeat", meta(("alice-text", "2.0.0", None), ("rand", "0.8.5", reg), ("rand", "0.9.0", reg)), 1, []),
         ("nothing compared", meta(("rand", "0.8.5", reg)), 0, []),
     ]
@@ -76,7 +80,18 @@ def self_test() -> int:
     if duplicates(m) != (1, {}):
         print("FAIL unresolved package counted")
         bad += 1
-    print(f"self-test: {len(cases) + 1 - bad}/{len(cases) + 1} pass")
+    # check(): nothing compared is an error, a clean graph is not, a duplicate names both copies
+    extra = [
+        ("check: nothing compared", check(Path("r"), meta(("rand", "0.8.5", reg))), 1, "nothing compared"),
+        ("check: clean graph", check(Path("r"), meta(("alice-text", "2.0.0", None))), 0, ""),
+        ("check: duplicate", check(Path("r"), meta(("alice-zip", "0.11.0", reg), ("alice-zip", "0.11.0", git))), 1, "linked 2 times"),
+    ]
+    for name, errors, want, text in extra:
+        if len(errors) != want or (text and text not in errors[0]):
+            print(f"FAIL {name}: {errors}")
+            bad += 1
+    total = len(cases) + 1 + len(extra)
+    print(f"self-test: {total - bad}/{total} pass")
     return 1 if bad else 0
 
 
@@ -84,7 +99,7 @@ def main(argv: list[str]) -> int:
     if argv == ["--self-test"]:
         return self_test()
     roots = [Path(a).resolve() for a in argv] or [ROOT]
-    errors = [e for r in roots for e in check(r)]
+    errors = [e for r in roots for e in check(r, metadata(r))]
     for e in errors:
         print(f"error: {e}", file=sys.stderr)
     return 1 if errors else 0
