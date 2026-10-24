@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""The crates this workspace can publish are exactly the release roster, and every copy of it agrees.
+"""No crate of this workspace can be published, the release is retired, and every copy of the library set agrees.
 
-The release of this workspace is `alice-lol-macro`, `alice-lol` and `alice-lol-layout` (`ROSTER`
-below, the one place the set is written; `alice-lol` depends on the other two, so a release of
-it sends them as well). Every other member says `publish = false`, so that a publish of the
-whole workspace cannot send a crate that was never meant to be released. A member that loses
-`publish = false`, or a roster crate that gains it, changes what a release sends: both fail
-here and the message names the crate.
+Every crate is `LicenseRef-Proprietary` with `publish = false`, so the release roster
+(`ROSTER` below) is empty: a member that loses `publish = false` fails here and the message
+names it. The release workflow is gone and no workflow runs `cargo publish`; CI and
+preflight no longer run the packaging check of a crate (`package_integrity.py --member`
+without `--patches`).
 
-Scripts read `ROSTER` from here (g7_boundaries.py imports it, entropy_deps_guard.py compares
-the members it reads with it). The places that cannot import it are compared with it, and any
-one that disagrees fails with its file named:
+The library crates are `alice-lol-macro`, `alice-lol` and `alice-lol-layout` (`LIBRARY`
+below, the one place the set is written; `alice-lol` re-exports the other two). They carry the
+Law-bearing output (ALICE-Law G7 / G10 / G13): g7_boundaries.py imports `LIBRARY`,
+entropy_deps_guard.py compares the members it reads with it. The places that cannot import it
+are compared with it, and any one that disagrees fails with its file named:
 
-  * release.yml: a tag pattern `<crate>-v*.*.*`, a tag test and a `crate=<crate>` output for
-    each roster crate, and none for another;
-  * ci.yml and preflight.sh: `package_integrity.py --member <crate>` (the packaging check,
-    not `--patches`) exactly for the roster; every roster crate linted by a library clippy
-    command (`CLIPPY_CONF_DIR` .github/clippy-lib, by `-p` or by `--workspace` without
-    `--exclude` of it);
-  * alice-law-conformance.toml, README.md, README_JP.md: every "published crate(s) (...)"
-    names exactly the roster; the crate table of each README lists exactly the members;
-  * .github/paths/semver-checks.txt: `<crate>/src/**` and `<crate>/Cargo.toml` for each roster
+  * ci.yml and preflight.sh: every library crate linted by a library clippy command
+    (`CLIPPY_CONF_DIR` .github/clippy-lib, by `-p` or by `--workspace` without `--exclude` of
+    it), and no `package_integrity.py --member <crate>` packaging command;
+  * alice-law-conformance.toml, README.md, README_JP.md: every "library crate(s) (...)"
+    names exactly the library set, and no "published crate(s) (...)" list is left; the
+    crate table of each README lists exactly the members;
+  * .github/paths/semver-checks.txt: `<crate>/src/**` and `<crate>/Cargo.toml` for each library
     crate (alice-lol's public API includes what it re-exports, so a change there must run the
     semver check);
-  * each roster manifest: license, edition, rust-version, authors, repository and homepage
-    equal alice-lol's, documentation is its docs.rs page, a description and a readme file.
+  * each library manifest: license, edition, rust-version, authors, repository and homepage
+    equal alice-lol's, documentation is its docs.rs page, a description and a readme file;
+  * .github/workflows/: no release.yml, and no workflow line runs `cargo publish`.
 
 A file that is not there, or a comparison set that finds nothing to compare in it, is an
 error (exit 2), never a pass.
@@ -37,7 +37,7 @@ value, or a member path that is not there (a glob is not expanded here), is an e
 "not publishable".
 
 usage: release_roster.py
-Exit 1 when the publishable set is not the roster or a copy disagrees with it, 2 when no
+Exit 1 when a member can be published or a copy disagrees with the library set, 2 when no
 workspace member was read or a copy is missing or holds nothing to compare.
 """
 from __future__ import annotations
@@ -48,7 +48,10 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ROSTER = {"alice-lol-macro", "alice-lol", "alice-lol-layout"}
+# the crates a release may publish: none (every crate is LicenseRef-Proprietary, publish = false)
+ROSTER: frozenset[str] = frozenset()
+# the library crates: alice-lol and the two crates it re-exports (the Law-bearing output)
+LIBRARY = frozenset({"alice-lol-macro", "alice-lol", "alice-lol-layout"})
 
 
 class RosterError(Exception):
@@ -83,10 +86,11 @@ def publishable(root: Path) -> tuple[list[str], set[str]]:
     return names, out
 
 
-# the metadata every roster crate shares with alice-lol
+# the metadata every library crate shares with alice-lol
 SHARED = ("license", "edition", "rust-version", "authors", "repository", "homepage")
 NOTES = ("alice-law-conformance.toml", "README.md", "README_JP.md")
 TABLES = ("README.md", "README_JP.md")
+LIBRARY_LIST = re.compile(r"library crates? \(([^)]*)\)")
 PUBLISHED_LIST = re.compile(r"published crates? \(([^)]*)\)")
 CRATE_ROW = re.compile(r"^\| `([a-z0-9-]+)` \|")
 
@@ -98,22 +102,26 @@ def _read(root: Path, rel: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def _differs(where: str, what: str, have: set[str], want: set[str], of: str = "the release roster") -> list[str]:
+def _differs(where: str, what: str, have: set[str], want: set[str], of: str = "the library set") -> list[str]:
     out = [f"{where}: {what} lacks {n}" for n in sorted(want - have)]
     return out + [f"{where}: {what} has {n}, which is not in {of}" for n in sorted(have - want)]
 
 
-def release_workflow(text: str) -> tuple[int, list[str]]:
-    w = ".github/workflows/release.yml"
-    tags = set(re.findall(r"^\s*- '([a-z0-9-]+)-v\*\.\*\.\*'", text, re.M))
-    tests = set(re.findall(r'"\$TAG" == ([a-z0-9-]+)-v\*', text))
-    outputs = set(re.findall(r'"crate=([a-z0-9-]+)"', text))
-    if not (tags and tests and outputs):
-        raise RosterError(f"{w}: no tag pattern, tag test or crate output read (compared nothing)")
-    out = _differs(w, "the tag patterns", tags, ROSTER)
-    out += _differs(w, "the tag tests", tests, ROSTER)
-    out += _differs(w, "the crate outputs", outputs, ROSTER)
-    return 3, out
+RELEASE = ".github/workflows/release.yml"
+PUBLISH = re.compile(r"^(?!\s*#).*\bcargo\s+publish\b", re.M)
+
+
+def workflows(root: Path) -> tuple[int, list[str]]:
+    """(workflows read, one problem per release workflow or `cargo publish` line)"""
+    files = sorted((root / ".github" / "workflows").glob("*.yml"))
+    if not files:
+        raise RosterError(".github/workflows/: no workflow read (compared nothing)")
+    out = [f"{RELEASE} exists (nothing is released: every crate has `publish = false`)"] if (root / RELEASE).exists() else []
+    for f in files:
+        for m in PUBLISH.finditer(f.read_text(encoding="utf-8")):
+            line = f.read_text(encoding="utf-8").count("\n", 0, m.start()) + 1
+            out.append(f"{f.relative_to(root).as_posix()}:{line}: runs `cargo publish` (nothing is released)")
+    return len(files), out
 
 
 def _steps(text: str, rel: str) -> list[str]:
@@ -148,11 +156,11 @@ def ci_commands(root: Path, members: set[str]) -> tuple[int, list[str]]:
                     and "--patches" not in line and not line.lstrip().startswith("#")
                     for m in re.findall(r"--member (\S+)", line)}
         covered = clippy_lib_covered(text, rel, members)
-        if not packaged or covered is None:
-            raise RosterError(f"{rel}: no package_integrity.py --member or library clippy command read "
-                              "(compared nothing)")
-        out += _differs(rel, "package_integrity.py --member", packaged, ROSTER)
-        out += [f"{rel}: no library clippy command (.github/clippy-lib) lints {n}" for n in sorted(ROSTER - covered)]
+        if covered is None:
+            raise RosterError(f"{rel}: no library clippy command read (compared nothing)")
+        out += [f"{rel}: runs the packaging check package_integrity.py --member {n} (nothing is published)"
+                for n in sorted(packaged)]
+        out += [f"{rel}: no library clippy command (.github/clippy-lib) lints {n}" for n in sorted(LIBRARY - covered)]
         compared += 2
     return compared, out
 
@@ -165,9 +173,9 @@ def semver_paths(text: str) -> tuple[int, list[str]]:
     crates = {x.split("/", 1)[0] for x in lines if x.endswith(("/src/**", "/Cargo.toml"))}
     if not crates:
         raise RosterError(f"{SEMVER_PATHS}: no `<crate>/src/**` or `<crate>/Cargo.toml` read (compared nothing)")
-    out = [f"{SEMVER_PATHS}: lacks {c}/{tail}" for c in sorted(ROSTER) for tail in ("src/**", "Cargo.toml")
+    out = [f"{SEMVER_PATHS}: lacks {c}/{tail}" for c in sorted(LIBRARY) for tail in ("src/**", "Cargo.toml")
            if f"{c}/{tail}" not in lines]
-    return 2 * len(ROSTER), out
+    return 2 * len(LIBRARY), out
 
 
 def crate_table(text: str) -> set[str]:
@@ -188,12 +196,15 @@ def crate_table(text: str) -> set[str]:
 def documents(root: Path, members: set[str]) -> tuple[int, list[str]]:
     compared, out = 0, []
     for rel in NOTES:
-        lists = PUBLISHED_LIST.findall(_read(root, rel))
+        text = _read(root, rel)
+        lists = LIBRARY_LIST.findall(text)
         if not lists:
-            raise RosterError(f'{rel}: no "published crate(s) (...)" read (compared nothing)')
+            raise RosterError(f'{rel}: no "library crate(s) (...)" read (compared nothing)')
         for i, names in enumerate(lists, 1):
-            out += _differs(rel, f'"published crates" list {i}', {n.strip() for n in names.split(",")}, ROSTER)
+            out += _differs(rel, f'"library crates" list {i}', {n.strip() for n in names.split(",")}, LIBRARY)
             compared += 1
+        out += [f'{rel}: names "published crates ({names})", but nothing is published'
+                for names in PUBLISHED_LIST.findall(text)]
     for rel in TABLES:
         table = crate_table(_read(root, rel))
         if not table:
@@ -205,9 +216,9 @@ def documents(root: Path, members: set[str]) -> tuple[int, list[str]]:
 
 def manifests(root: Path, paths: dict[str, Path]) -> tuple[int, list[str]]:
     pkgs = {n: tomllib.loads((paths[n] / "Cargo.toml").read_text(encoding="utf-8"))["package"]
-            for n in ROSTER if n in paths}
+            for n in LIBRARY if n in paths}
     if "alice-lol" not in pkgs:
-        raise RosterError("alice-lol is not a member (the roster's metadata is compared with it)")
+        raise RosterError("alice-lol is not a member (the library metadata is compared with it)")
     base, compared, out = pkgs["alice-lol"], 0, []
     for name, pkg in sorted(pkgs.items()):
         for key in SHARED:
@@ -226,9 +237,9 @@ def manifests(root: Path, paths: dict[str, Path]) -> tuple[int, list[str]]:
 
 
 def copies(root: Path, members: dict[str, Path]) -> tuple[int, list[str]]:
-    """(comparisons made, one problem per copy of the roster that disagrees with it)"""
+    """(comparisons made, one problem per copy of the library set that disagrees with it)"""
     total, out = 0, []
-    for n, problems in (release_workflow(_read(root, ".github/workflows/release.yml")),
+    for n, problems in (workflows(root),
                         semver_paths(_read(root, SEMVER_PATHS)),
                         ci_commands(root, set(members)), documents(root, set(members)),
                         manifests(root, members)):
@@ -255,10 +266,9 @@ def main(root: Path = ROOT) -> int:
     if not names:
         print("error: read 0 workspace members", file=sys.stderr)
         return 2
-    bad = [f"{n} can be published but is not in the release roster (add `publish = false`)"
+    bad = [f"{n} can be published, but nothing is released (add `publish = false`)"
            for n in sorted(can - ROSTER)]
-    bad += [f"{n} is in the release roster but cannot be published (it has `publish = false`)"
-            for n in sorted(ROSTER - can)]
+    bad += [f"{n} is in the library set but is not a workspace member" for n in sorted(LIBRARY - set(names))]
     try:
         compared, drift = copies(root, member_dirs(root))
     except RosterError as e:
@@ -270,8 +280,8 @@ def main(root: Path = ROOT) -> int:
     bad += drift
     for b in bad:
         print(f"error: {b}", file=sys.stderr)
-    print(f"release roster: read {len(names)} members, publishable {sorted(can)}, {compared} comparison(s) "
-          f"with its copies, {len(bad)} difference(s)")
+    print(f"release roster: read {len(names)} members, {len(can)} publishable (expected {len(ROSTER)}), "
+          f"{compared} comparison(s) with the copies of the library set, {len(bad)} difference(s)")
     return 1 if bad else 0
 
 

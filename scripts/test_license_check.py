@@ -28,10 +28,11 @@ class LicenseCheck(unittest.TestCase):
         for name, extra in [("a", ""), ("b", "publish = false\n")]:
             (self.root / name).mkdir()
             (self.root / name / "Cargo.toml").write_text(
-                f'[package]\nname = "sample-{name}"\nlicense = "Apache-2.0"\n{extra}', encoding="utf-8")
+                f'[package]\nname = "sample-{name}"\nlicense = "LicenseRef-Proprietary"\n{extra}', encoding="utf-8")
         for f in lc.TEXTS:
             (self.root / f).write_text(f"{f} text\n", encoding="utf-8")
-            (self.root / "a" / f).write_text(f"{f} text\n", encoding="utf-8")
+            for name in ("a", "b"):
+                (self.root / name / f).write_text(f"{f} text\n", encoding="utf-8")
         self.saved = lc.ROOT, lc.tracked, lc.ALLOWED
         lc.ROOT = self.root
         lc.tracked = lambda: sorted(p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if p.is_file())
@@ -47,14 +48,26 @@ class LicenseCheck(unittest.TestCase):
     def test_a_correct_workspace_passes(self):
         self.assertEqual(lc.main([]), 0)
 
-    def test_a_crate_still_dual_licensed_fails(self):
+    def test_a_crate_with_another_license_fails(self):
         p = self.root / "b" / "Cargo.toml"
-        p.write_text(p.read_text(encoding="utf-8").replace('"Apache-2.0"', f'"{OLD} OR Apache-2.0"'), encoding="utf-8")
+        for other in [f"{OLD} OR Apache-2.0", "Apache-2.0", "AGPL-3.0-or-later OR LicenseRef-Commercial"]:
+            with self.subTest(other=other):
+                p.write_text(f'[package]\nname = "sample-b"\nlicense = "{other}"\n', encoding="utf-8")
+                self.assertEqual(lc.main([]), 1)
+
+    def test_a_crate_without_a_license_field_fails(self):
+        (self.root / "b" / "Cargo.toml").write_text('[package]\nname = "sample-b"\n', encoding="utf-8")
         self.assertEqual(lc.main([]), 1)
 
     def test_an_old_licence_file_fails(self):
-        (self.root / f"LICENSE-{OLD}").write_text("text\n", encoding="utf-8")
-        self.assertEqual(lc.main([]), 1)
+        for f in lc.OLD_FILES:
+            for where in ("", "b/"):
+                with self.subTest(file=where + f):
+                    p = self.root / f"{where}{f}"
+                    p.write_text("text\n", encoding="utf-8")
+                    self.assertEqual(lc.main([]), 1)
+                    p.unlink()
+        self.assertEqual(lc.main([]), 0)
 
     def test_every_form_of_the_word_fails(self):
         for line in [
@@ -149,20 +162,27 @@ class LicenseCheck(unittest.TestCase):
         self.assertEqual(lc.main([]), 2)
 
     def test_a_copy_that_differs_from_the_root_fails(self):
-        (self.root / "a" / "NOTICE").write_text("other\n", encoding="utf-8")
+        (self.root / "b" / "LICENSE-Proprietary").write_text("other\n", encoding="utf-8")
         self.assertEqual(lc.main([]), 1)
 
-    def test_a_missing_copy_in_a_published_crate_fails(self):
-        (self.root / "a" / "TRADEMARK_NOTICE").unlink()
-        self.assertEqual(lc.main([]), 1)
-
-    def test_an_unpublished_crate_needs_no_copies(self):
-        self.assertFalse((self.root / "b" / "NOTICE").exists())
+    def test_a_missing_copy_fails_in_every_crate(self):
+        # every crate is unpublished (`b`) or not (`a`): both need the copies
+        for name in ("a", "b"):
+            for f in lc.TEXTS:
+                with self.subTest(crate=name, file=f):
+                    p = self.root / name / f
+                    saved = p.read_bytes()
+                    p.unlink()
+                    self.assertEqual(lc.main([]), 1)
+                    p.write_bytes(saved)
         self.assertEqual(lc.main([]), 0)
 
-    def test_no_published_apache_crate_checks_nothing(self):
-        p = self.root / "a" / "Cargo.toml"
-        p.write_text(p.read_text(encoding="utf-8") + "publish = false\n", encoding="utf-8")
+    def test_a_missing_root_text_fails(self):
+        (self.root / "LICENSE-Proprietary").unlink()
+        self.assertEqual(lc.main([]), 1)
+
+    def test_no_crate_checks_nothing(self):
+        (self.root / "Cargo.toml").write_text('[workspace]\nmembers = []\n', encoding="utf-8")
         self.assertEqual(lc.main([]), 2)
 
 
