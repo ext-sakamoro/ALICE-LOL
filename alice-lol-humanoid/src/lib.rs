@@ -2,7 +2,7 @@
 //!
 //! Humanoid template for `alice_lol` DSL parametric character generation
 //!
-//! `docs/HUMANOID_TEMPLATE_ROADMAP.md` の Phase H.0-H.6 に沿って段階実装
+//! Phase H.0-H.6 に沿って段階実装
 //! 現在 Phase = **H.4 BVH import + pose** (BVH parser + `HumanoidTemplate::with_pose` FK)
 //!
 //! # Roadmap
