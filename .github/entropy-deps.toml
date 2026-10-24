@@ -1,0 +1,21 @@
+# Read by scripts/entropy_deps_guard.py (ALICE-Law G10): the members whose output bears the
+# Law, and the crates they may not depend on (normal or build dependencies, any target).
+
+# the library crates (LIBRARY of scripts/release_roster.py, which compares this list with it)
+members = ["alice-lol", "alice-lol-layout", "alice-lol-macro"]
+
+deny = [
+    "rand",       # random numbers, seeded from the OS unless the caller seeds it
+    "rand_*",     # the rand family (rand_core, rand_chacha, ...): generators and OS seeding
+    "getrandom",  # reads OS entropy
+    "uuid",       # v4 identifiers come from OS entropy
+    "fastrand",   # seeds itself from the clock and the thread
+    "chrono",     # reads the wall clock (Utc::now / Local::now)
+    "time",       # reads the wall clock (OffsetDateTime::now_utc)
+    "oorandom",   # random numbers (callers seed it, often from the clock)
+    "nanorand",   # random numbers, seeded from OS entropy
+]
+
+# an optional dependency counts under any feature (a feature of a library crate can be enabled
+# by any consumer)
+features = "all"
