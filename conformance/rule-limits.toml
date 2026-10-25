@@ -1,0 +1,17 @@
+# The limits of a rule law file (conformance/TASK.md "Limits of a rule law file"). This table is the
+# one source: scripts/law_rules.py reads it, alice-lol/src/rule_law.rs states the same values and
+# alice-lol/tests/rule_law_limits.rs fails when they differ, and scripts/gen_rule_limits.py writes
+# the boundary manifest both readers answer (alice-lol/tests/data/rule_limits.json) from it
+
+# bytes of the UTF-8 text of a file
+law_bytes = 4194304
+# lines that are read (not the empty lines and the comments)
+law_lines = 100000
+# tokens of one expression
+expression_tokens = 256
+# levels of one expression: each parenthesised group, `not` and function call is one
+expression_depth = 64
+# characters of a numeral, with its sign, in an expression, a line or the example's JSON
+numeral_chars = 40
+# levels of arrays and objects of the example's JSON, the object itself is level 1
+json_depth = 512

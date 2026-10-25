@@ -1,7 +1,0 @@
-law limit_probe
-claim a boundary of the reader's limits (conformance/TASK.md "Limits of a rule law file")
-source a fixture of the reader tests
-kind predicate
-x-input a bool
-require r: not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not a
-example {"a": true}

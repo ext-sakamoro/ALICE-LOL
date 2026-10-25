@@ -1,0 +1,7 @@
+law limit_probe
+claim a boundary of the rule law limits (conformance/TASK.md "Limits of a rule law file")
+source scripts/gen_rule_limits.py
+kind predicate
+x-input a bool
+require r: not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not a
+example {"a": false}

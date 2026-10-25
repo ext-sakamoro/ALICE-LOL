@@ -116,6 +116,8 @@ python3 scripts/test_check_pipe_grep_q.py
 python3 scripts/check_pipe_grep_q.py
 python3 scripts/test_g2_sites.py
 python3 scripts/g2_sites.py
+python3 scripts/test_gen_rule_limits.py
+python3 scripts/gen_rule_limits.py --check
 
 step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
 python3 scripts/test_parser_no_direct_validating_builders.py

@@ -911,63 +911,41 @@ class Separators(unittest.TestCase):
 
 
 
-LIMITS = Path(__file__).resolve().parent.parent / "alice-lol" / "tests" / "data" / "rule_limits"
+MANIFEST = Path(__file__).resolve().parent.parent / "alice-lol" / "tests" / "data" / "rule_limits.json"
+TASK = Path(__file__).resolve().parent.parent / "conformance" / "TASK.md"
 
 
 class Limits(unittest.TestCase):
-    """conformance/TASK.md "Limits of a rule law file": each limit reads at its value and one more is
-    a RuleError (never a RecursionError, a ValueError or a cut-off law); the boundary files are the
-    ones `alice-lol/tests/rule_law_limits.rs` reads, named by the outcome both readers give"""
+    """conformance/TASK.md "Limits of a rule law file": each limit reads at its value and one more is a
+    RuleError naming it (never a RecursionError, a ValueError or a cut-off law); the entries are the
+    manifest scripts/gen_rule_limits.py generates from conformance/rule-limits.toml, which
+    alice-lol/tests/rule_law_limits.rs answers with the other reader"""
 
-    def test_the_limits_are_the_values_of_the_task(self):
+    def test_the_constants_are_the_one_table_and_the_task_states_it(self):
         self.assertEqual((R.MAX_LAW_BYTES, R.MAX_LAW_LINES, R.MAX_EXPRESSION_TOKENS, R.MAX_EXPRESSION_DEPTH,
-                          R.MAX_NUMERAL_CHARS), (4 * 1024 * 1024, 100_000, 256, 64, len(str(-(2 ** 127)))))
+                          R.MAX_NUMERAL_CHARS, R.MAX_JSON_DEPTH),
+                         tuple(R.LIMITS[k] for k in ("law_bytes", "law_lines", "expression_tokens", "expression_depth",
+                                                     "numeral_chars", "json_depth")))
+        self.assertEqual(R.MAX_NUMERAL_CHARS, len(str(-(2 ** 127))))
+        section = TASK.read_text(encoding="utf-8").split("### Limits of a rule law file", 1)[1].split("\n### ", 1)[0]
+        rows = re.findall(r"^\| ([^|]+?) \| ([0-9]+)", section, re.M)
+        self.assertEqual(len(rows), len(R.LIMITS), rows)  # one TASK.md row per limit (none compared fails)
+        self.assertEqual(sorted(int(v) for _, v in rows), sorted(R.LIMITS.values()))
 
-    def test_each_boundary_file_reads_or_not_as_its_name_says(self):
+    def test_each_boundary_entry_reads_or_not_and_names_its_limit(self):
+        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["limits"], R.LIMITS)
         seen = [0, 0]
-        for f in sorted(LIMITS.glob("*.law")):
-            text = f.read_text(encoding="utf-8")
-            if f.stem.startswith("reads_"):
+        for e in manifest["entries"]:
+            text = "".join(t * c for t, c in e["parts"])
+            if e["expect"] == "reads":
                 R.parse(text)
                 seen[0] += 1
             else:
-                self.assertTrue(f.stem.startswith("unreadable_"), f.stem)
-                # unreadable for its limit, not for another fault of the file
-                why = next(w for k, w in [("parens", "nests at most 64 levels"), ("not", "nests at most 64 levels"),
-                                          ("call", "nests at most 64 levels"), ("tokens", "has at most 256 tokens"),
-                                          ("integer", "integer literal"), ("time", "is not a time")] if k in f.stem)
-                with self.assertRaisesRegex(R.RuleError, re.escape(why), msg=f.stem):
+                with self.assertRaisesRegex(R.RuleError, re.escape(e["why"]), msg=e["name"]):
                     R.parse(text)
                 seen[1] += 1
-        self.assertTrue(seen[0] >= 5 and seen[1] >= 8, seen)  # nothing compared is a failure
-
-    @staticmethod
-    def statute_of(lines):
-        return "kind statute\ntitle T\n" + "".join(f"clause c{i} obligation: x\n" for i in range(lines - 2))
-
-    def test_a_file_of_the_largest_number_of_lines_reads_and_one_more_line_does_not(self):
-        R.parse(self.statute_of(R.MAX_LAW_LINES))
-        with self.assertRaises(R.RuleError):
-            R.parse(self.statute_of(R.MAX_LAW_LINES + 1))
-        R.parse(self.statute_of(R.MAX_LAW_LINES) + "\n# a comment\n\n")  # not counted
-
-    def test_a_file_of_the_largest_size_reads_and_one_byte_more_does_not(self):
-        head = "kind statute\ntitle T\nclause c obligation: "
-        fill = lambda n: head + "x" * (n - len(head) - 1) + "\n"
-        self.assertEqual(len(fill(R.MAX_LAW_BYTES)), R.MAX_LAW_BYTES)
-        R.parse(fill(R.MAX_LAW_BYTES))
-        with self.assertRaises(R.RuleError):
-            R.parse(fill(R.MAX_LAW_BYTES + 1))
-        wide = head + "\u00e9" * ((R.MAX_LAW_BYTES - len(head)) // 2) + "\n"  # bytes of UTF-8, not characters
-        self.assertLess(len(wide), R.MAX_LAW_BYTES)
-        with self.assertRaises(R.RuleError):
-            R.parse(wide)
-
-    def test_a_long_chain_or_a_deep_nesting_is_an_error_not_a_crash(self):
-        for e in [" and ".join(["a"] * 20_000), " or ".join(["a"] * 20_000),
-                  "(" * 5_000 + "a" + ")" * 5_000, "not " * 5_000 + "a"]:
-            with self.assertRaises(R.RuleError):
-                R.parse(f"kind predicate\nx-input a bool\nrequire r: {e}\nexample {{\"a\": true}}\n")
+        self.assertTrue(seen[0] >= 15 and seen[1] >= 15, seen)  # nothing compared is a failure
 
     def test_a_money_constant_of_the_longest_amount_reads_and_a_longer_numeral_does_not(self):
         law = lambda amount: money_law(f"x-input fee money\nconst m money = {amount} JPY\nrequire r: fee >= m\n"

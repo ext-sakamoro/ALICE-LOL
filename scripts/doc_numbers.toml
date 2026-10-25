@@ -258,3 +258,8 @@ reason = "the three hooks of Phase 3''.3.1 (skadis_hook_l / j / s), named in §5
 file = "docs/PIPELINE_COMPLETE.md"
 text = "— SKADIS hook 3 種"
 reason = "the three hooks named in the same line"
+
+[[allow]]
+file = "conformance/TASK.md"
+text = "| nesting of the `example` JSON | 512 |"
+reason = "a limit of a rule law file (the deepest JSON nesting an example line reads), the value conformance/rule-limits.toml holds and the readers' tests check, not a count of items"

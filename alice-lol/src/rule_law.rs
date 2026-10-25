@@ -97,6 +97,49 @@ pub const MAX_EXPRESSION_DEPTH: usize = 64;
 /// longest amount, -2^127, has 40; a longer numeral is out of range without being converted
 pub const MAX_NUMERAL_CHARS: usize = 40;
 
+/// The deepest nesting of arrays and objects in the JSON of an `example` line, the object itself
+/// being level 1 (the same as a request, conformance/TASK.md)
+pub const MAX_JSON_DEPTH: usize = crate::law_input::MAX_DEPTH;
+
+/// `(characters of the longest number, deepest level of arrays and objects)` of JSON text, read the
+/// same way as `_json_scan` of `scripts/law_rules.py`: outside strings, a number starts at `-` or a
+/// digit and runs over digits, `.`, `e`, `E`, `+` and `-`; `[` and `{` open a level
+fn json_scan(text: &str) -> (usize, usize) {
+    let b = text.as_bytes();
+    let (mut longest, mut level, mut deepest, mut i) = (0usize, 0usize, 0usize, 0usize);
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'[' | b'{' => {
+                level += 1;
+                deepest = deepest.max(level);
+                i += 1;
+            }
+            b']' | b'}' => {
+                level = level.saturating_sub(1);
+                i += 1;
+            }
+            b'-' | b'0'..=b'9' => {
+                let mut j = i + 1;
+                while j < b.len() && matches!(b[j], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
+                {
+                    j += 1;
+                }
+                longest = longest.max(j - i);
+                i = j;
+            }
+            _ => i += 1,
+        }
+    }
+    (longest, deepest)
+}
+
 /// The semantics of the rule kinds `(name, fingerprint of that behaviour)`
 ///
 /// ⚠️ Each value is measured ([`rule_semantics_fingerprints`]); the oracle recomputes it. A
@@ -2341,8 +2384,24 @@ fn read_predicate(
                 requires.push((label.to_owned(), e));
             }
             "example" => {
+                let text = rest_after(l, &w, 0);
+                let (longest, deepest) = json_scan(&text);
+                if longest > MAX_NUMERAL_CHARS {
+                    return Err(err(
+                        n,
+                        format!(
+                            "a numeral of the example has more than {MAX_NUMERAL_CHARS} characters"
+                        ),
+                    ));
+                }
+                if deepest > MAX_JSON_DEPTH {
+                    return Err(err(
+                        n,
+                        format!("the example nests more than {MAX_JSON_DEPTH} levels"),
+                    ));
+                }
                 let j = (w.len() > 1)
-                    .then(|| crate::law_input::parse_json(&rest_after(l, &w, 0)).ok())
+                    .then(|| crate::law_input::parse_json(&text).ok())
                     .flatten()
                     .filter(|j| matches!(j, Json::Object(_)));
                 let (Some(j), None) = (j, &example) else {

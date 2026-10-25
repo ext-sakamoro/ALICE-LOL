@@ -1,0 +1,812 @@
+{
+ "table": "conformance/rule-limits.toml",
+ "limits": {
+  "law_bytes": 4194304,
+  "law_lines": 100000,
+  "expression_tokens": 256,
+  "expression_depth": 64,
+  "numeral_chars": 40,
+  "json_depth": 512
+ },
+ "entries": [
+  {
+   "name": "bytes_4194303",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: ",
+     1
+    ],
+    [
+     "x",
+     4194260
+    ],
+    [
+     "\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "bytes_4194304",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: ",
+     1
+    ],
+    [
+     "x",
+     4194261
+    ],
+    [
+     "\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "bytes_4194305",
+   "expect": "unreadable",
+   "why": "at most 4194304 bytes",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: ",
+     1
+    ],
+    [
+     "x",
+     4194262
+    ],
+    [
+     "\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "lines_99999",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: x\n# a comment\n\n",
+     1
+    ],
+    [
+     "claim a line for people\n",
+     99996
+    ]
+   ]
+  },
+  {
+   "name": "lines_100000",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: x\n# a comment\n\n",
+     1
+    ],
+    [
+     "claim a line for people\n",
+     99997
+    ]
+   ]
+  },
+  {
+   "name": "lines_100001",
+   "expect": "unreadable",
+   "why": "at most 100000 lines",
+   "parts": [
+    [
+     "kind statute\ntitle T\nclause c obligation: x\n# a comment\n\n",
+     1
+    ],
+    [
+     "claim a line for people\n",
+     99998
+    ]
+   ]
+  },
+  {
+   "name": "tokens_255",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     " or a",
+     127
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "tokens_256",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "not ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     " or a",
+     127
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "tokens_257",
+   "expect": "unreadable",
+   "why": "at most 256 tokens",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "not not ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     " or a",
+     127
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "parens_63",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     63
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     ")",
+     63
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "not_63",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "not ",
+     63
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": false}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "call_in_parens_63",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input b bytes\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     62
+    ],
+    [
+     "prefix(b, 1)",
+     1
+    ],
+    [
+     ")",
+     62
+    ],
+    [
+     " == 0x00",
+     1
+    ],
+    [
+     "\nexample {\"b\": \"00\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "parens_64",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     64
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     ")",
+     64
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "not_64",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "not ",
+     64
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "call_in_parens_64",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input b bytes\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     63
+    ],
+    [
+     "prefix(b, 1)",
+     1
+    ],
+    [
+     ")",
+     63
+    ],
+    [
+     " == 0x00",
+     1
+    ],
+    [
+     "\nexample {\"b\": \"00\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "parens_65",
+   "expect": "unreadable",
+   "why": "nests at most 64 levels",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     65
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     ")",
+     65
+    ],
+    [
+     "\nexample {\"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "not_65",
+   "expect": "unreadable",
+   "why": "nests at most 64 levels",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "not ",
+     65
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": false}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "call_in_parens_65",
+   "expect": "unreadable",
+   "why": "nests at most 64 levels",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input b bytes\nrequire r: ",
+     1
+    ],
+    [
+     "(",
+     64
+    ],
+    [
+     "prefix(b, 1)",
+     1
+    ],
+    [
+     ")",
+     64
+    ],
+    [
+     " == 0x00",
+     1
+    ],
+    [
+     "\nexample {\"b\": \"00\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_numeral_39",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": 111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_numeral_40",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": 1111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_numeral_41",
+   "expect": "unreadable",
+   "why": "more than 40 characters",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": 11111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_numeral_5000",
+   "expect": "unreadable",
+   "why": "more than 40 characters",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_negative_numeral_40",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": -111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_negative_numeral_41",
+   "expect": "unreadable",
+   "why": "more than 40 characters",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": -1111111111111111111111111111111111111111}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_depth_511",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: a\nexample {\"a\": true, \"z\": ",
+     1
+    ],
+    [
+     "[",
+     510
+    ],
+    [
+     "]",
+     510
+    ],
+    [
+     "}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_depth_512",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: a\nexample {\"a\": true, \"z\": ",
+     1
+    ],
+    [
+     "[",
+     511
+    ],
+    [
+     "]",
+     511
+    ],
+    [
+     "}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_depth_513",
+   "expect": "unreadable",
+   "why": "more than 512 levels",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: a\nexample {\"a\": true, \"z\": ",
+     1
+    ],
+    [
+     "[",
+     512
+    ],
+    [
+     "]",
+     512
+    ],
+    [
+     "}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_depth_100000",
+   "expect": "unreadable",
+   "why": "more than 512 levels",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: a\nexample {\"a\": true, \"z\": ",
+     1
+    ],
+    [
+     "[",
+     99999
+    ],
+    [
+     "]",
+     99999
+    ],
+    [
+     "}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_nan",
+   "expect": "unreadable",
+   "why": "example <JSON object>",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": NaN}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_infinity",
+   "expect": "unreadable",
+   "why": "example <JSON object>",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": Infinity}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_minus_infinity",
+   "expect": "unreadable",
+   "why": "example <JSON object>",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": -Infinity}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_lone_surrogate",
+   "expect": "unreadable",
+   "why": "example <JSON object>",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": \"\\ud800\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_lone_low_surrogate",
+   "expect": "unreadable",
+   "why": "example <JSON object>",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": \"\\udc00\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_surrogate_pair",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": \"\\ud83d\\ude00\"}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_repeated_key_last",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": false, \"a\": true}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_repeated_key_last_fails",
+   "expect": "unreadable",
+   "why": "does not hold",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"a\": false}\n",
+     1
+    ]
+   ]
+  },
+  {
+   "name": "example_large_double_is_infinity",
+   "expect": "reads",
+   "why": "",
+   "parts": [
+    [
+     "law limit_probe\nclaim a boundary of the rule law limits (conformance/TASK.md \"Limits of a rule law file\")\nsource scripts/gen_rule_limits.py\nkind predicate\nx-input a bool\nrequire r: ",
+     1
+    ],
+    [
+     "a",
+     1
+    ],
+    [
+     "\nexample {\"a\": true, \"z\": 1e400}\n",
+     1
+    ]
+   ]
+  }
+ ]
+}

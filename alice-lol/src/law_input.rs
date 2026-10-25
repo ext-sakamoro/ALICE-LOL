@@ -90,7 +90,7 @@ pub fn parse_json(text: &str) -> Result<Json, JsonError> {
 }
 
 /// 入れ子の上限 (深い入力で stack を使い切らないため)
-const MAX_DEPTH: usize = 512;
+pub(crate) const MAX_DEPTH: usize = 512;
 
 struct JsonParser<'a> {
     s: &'a [u8],
