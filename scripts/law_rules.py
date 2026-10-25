@@ -593,12 +593,14 @@ def _contract(law, lines, declare):
     `obligation <label> <party> to <party> <amount> <currency> due <time>` lines"""
     law["parties"], law["created"], law["conditions"], law["obligations"] = [], None, [], []
 
+    taken = set()  # every label of the law: one lookup per line, so reading is linear
+
     def fresh(label, n):
         if not LABEL.match(label):
             raise RuleError(f"line {n}: `{label}` is not a label")
-        if label in law["parties"] or label in [c["label"] for c in law["conditions"]] \
-                or label in [o["label"] for o in law["obligations"]]:
+        if label in taken:
             raise RuleError(f"line {n}: a second `{label}`")
+        taken.add(label)
     for n, ln in lines:
         w = ln.split()
         if w[0] in PEOPLE or w[0] == "kind":
@@ -709,6 +711,7 @@ def _statute(law, lines, declare):
     [until <time>]: <text>` lines (conformance/TASK.md "Statute laws")"""
     start = 0 if law["edition"] is None else law["edition"]["from"]
     law["title"], law["clauses"] = None, []
+    labels = set()  # the labels so far: one lookup per clause, so reading is linear
     for n, ln in lines:
         w = ln.split()
         if w[0] in PEOPLE or w[0] == "kind":
@@ -733,7 +736,6 @@ def _statute(law, lines, declare):
             label, kind, rest = h[1], h[2], h[3:]
             if not LABEL.match(label):
                 raise RuleError(f"line {n}: `{label}` is not a clause label")
-            labels = [c["label"] for c in law["clauses"]]
             if label in labels:
                 raise RuleError(f"line {n}: a second clause `{label}`")
             if kind not in CLAUSE_KINDS:
@@ -757,6 +759,7 @@ def _statute(law, lines, declare):
                 raise RuleError(f"line {n}: an exception is `of` the clause it carves out of")
             law["clauses"].append({"label": label, "kind": kind, "parent": parent, "from": frm,
                                    "until": until, "text": text})
+            labels.add(label)
         else:
             raise RuleError(f"line {n}: `{w[0]}` is not a line of a statute law")
     if law["title"] is None:

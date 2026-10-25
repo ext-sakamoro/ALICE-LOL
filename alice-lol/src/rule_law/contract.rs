@@ -271,12 +271,10 @@ pub(super) fn read_contract(
     let mut conditions: Vec<ContractCondition> = Vec::new();
     let mut obligations: Vec<ContractObligation> = Vec::new();
     let mut currency: Option<String> = None;
-    let taken =
-        |label: &str, parties: &[String], c: &[ContractCondition], o: &[ContractObligation]| {
-            parties.iter().any(|p| p == label)
-                || c.iter().any(|x| x.label == label)
-                || o.iter().any(|x| x.label == label)
-        };
+    // every label of the law, and each party's index: one lookup per line, so reading is linear
+    let mut labels: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut party_index: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for &(n, l) in ls {
         let w: Vec<&str> = l.split_whitespace().collect();
         match w[0] {
@@ -288,9 +286,10 @@ pub(super) fn read_contract(
                 if !is_label(label) {
                     return Err(err(n, format!("`{label}` is not a label")));
                 }
-                if taken(label, &parties, &conditions, &obligations) {
+                if !labels.insert((*label).to_owned()) {
                     return Err(err(n, format!("a second `{label}`")));
                 }
+                party_index.insert((*label).to_owned(), parties.len());
                 parties.push((*label).to_owned());
             }
             "created" => {
@@ -317,7 +316,7 @@ pub(super) fn read_contract(
                 if !is_label(label) {
                     return Err(err(n, format!("`{label}` is not a label")));
                 }
-                if taken(label, &parties, &conditions, &obligations) {
+                if !labels.insert((*label).to_owned()) {
                     return Err(err(n, format!("a second `{label}`")));
                 }
                 let decided_by =
@@ -338,13 +337,13 @@ pub(super) fn read_contract(
                 if !is_label(label) {
                     return Err(err(n, format!("`{label}` is not a label")));
                 }
-                if taken(label, &parties, &conditions, &obligations) {
+                if !labels.insert((*label).to_owned()) {
                     return Err(err(n, format!("a second `{label}`")));
                 }
                 let party = |p: &str| {
-                    parties
-                        .iter()
-                        .position(|x| x == p)
+                    party_index
+                        .get(p)
+                        .copied()
                         .ok_or_else(|| err(n, format!("`{p}` is not a party declared before")))
                 };
                 let (debtor, creditor) = (party(debtor)?, party(creditor)?);

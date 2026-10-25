@@ -816,5 +816,30 @@ class Contract(unittest.TestCase):
         self.assertIn("a vector at 201 with nothing fulfilled (the due time of deposit)", R.coverage(law, no_201))
 
 
+
+class Linear(unittest.TestCase):
+    """a statute or a contract of many lines reads in linear time (each label looked up once)"""
+
+    def test_many_clauses(self):
+        import time
+        n = 100_000
+        text = "kind statute\ntitle T\nclause c0 obligation: x\n" + "".join(
+            f"clause c{i} exception of c{i - 1}: y\n" for i in range(1, n))
+        t0 = time.monotonic()
+        law = R.parse(text)
+        self.assertLess(time.monotonic() - t0, 10)
+        self.assertEqual(law["clauses"][-1]["parent"], f"c{n - 2}")
+
+    def test_many_obligations(self):
+        import time
+        table = R.parse(CURRENCIES, SEM)
+        n = 100_000
+        text = (f"kind contract\ncurrencies {R.law_id(table, SEM).hex()}\nparty a\nparty b\ncreated 0\n"
+                + "".join(f"obligation o{i} a to b 1 JPY due 10\n" for i in range(n)))
+        t0 = time.monotonic()
+        R.parse(text, SEM, currencies=table)
+        self.assertLess(time.monotonic() - t0, 10)
+
+
 if __name__ == "__main__":
     unittest.main()

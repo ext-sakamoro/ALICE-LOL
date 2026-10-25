@@ -371,3 +371,21 @@ fn an_edition_of_a_contract_and_a_delta_over_it() {
     assert_eq!(out(&ask(&later, r#"{"now": 201}"#)).0, "active");
     assert_eq!(out(&ask(&law, r#"{"now": 201}"#)).0, "breached");
 }
+
+#[test]
+fn a_contract_of_many_obligations_reads_in_linear_time() {
+    use std::fmt::Write as _;
+    let t = table();
+    let n = 100_000;
+    let mut text = format!(
+        "kind contract\ncurrencies {}\nparty a\nparty b\ncreated 0\n",
+        hex(t.law_id())
+    );
+    for i in 0..n {
+        let _ = writeln!(text, "obligation o{i} a to b 1 JPY due 10");
+    }
+    let start = std::time::Instant::now();
+    rule_law_from_file_with(&text, Some(&t)).expect("reads");
+    let took = start.elapsed();
+    assert!(took.as_secs() < 10, "read {n} obligations in {took:?}");
+}

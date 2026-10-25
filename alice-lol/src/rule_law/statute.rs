@@ -6,6 +6,8 @@
 //! effective time and an expiry), so a statute law can be compiled to one: every time is at most
 //! [`MAX_LEGAL_TIME`], whose nanoseconds fit 64 bits.
 
+use std::collections::HashMap;
+
 use alice_zip::law_id::LawIdHasher;
 
 use super::{
@@ -215,6 +217,8 @@ pub(super) fn read_statute(
     let default_from = edition.as_ref().map_or(0, Edition::from);
     let mut title: Option<String> = None;
     let mut clauses: Vec<StatuteClause> = Vec::new();
+    // label -> index: each label is looked up once, so reading is linear in the clauses
+    let mut index: HashMap<String, usize> = HashMap::new();
     for &(n, l) in ls {
         let w = words(l);
         match w[0].0 {
@@ -229,7 +233,11 @@ pub(super) fn read_statute(
                 }
                 title = Some(t.to_owned());
             }
-            "clause" => clauses.push(read_clause(n, l, &clauses, default_from)?),
+            "clause" => {
+                let c = read_clause(n, l, &index, default_from)?;
+                index.insert(c.label.clone(), clauses.len());
+                clauses.push(c);
+            }
             h => return Err(err(n, format!("`{h}` is not a line of a statute law"))),
         }
     }
@@ -247,7 +255,7 @@ pub(super) fn read_statute(
 fn read_clause(
     n: usize,
     l: &str,
-    earlier: &[StatuteClause],
+    earlier: &HashMap<String, usize>,
     default_from: u64,
 ) -> Result<StatuteClause, RuleLawError> {
     const SHAPE: &str =
@@ -265,7 +273,7 @@ fn read_clause(
     if !is_label(label) {
         return Err(err(n, format!("`{label}` is not a clause label")));
     }
-    if earlier.iter().any(|c| c.label == label) {
+    if earlier.contains_key(label) {
         return Err(err(n, format!("a second clause `{label}`")));
     }
     let kind = ClauseKind::of_word(kind)
@@ -275,8 +283,8 @@ fn read_clause(
     if let ["of", p, tail @ ..] = rest {
         parent = Some(
             earlier
-                .iter()
-                .position(|c| c.label == *p)
+                .get(*p)
+                .copied()
                 .ok_or_else(|| err(n, format!("`of {p}`: no earlier clause `{p}`")))?,
         );
         rest = tail;

@@ -39,6 +39,30 @@ path = "alice_lol::rule_law::RULE_SEMANTICS_ID"
 [[id]]
 path = "alice_lol::rule_law::TABLE_SEMANTICS_ID"
 
+# the semantics of the rule laws with money (a `currencies` line): MONEY_SEMANTICS_ID (a predicate) is the
+# fold of MONEY_SEMANTICS_PINS (money measured from the behaviour of rule_law, and RULE_SEMANTICS_ID),
+# MONEY_TABLE_SEMANTICS_ID (a table) the fold of the table's row order and MONEY_SEMANTICS_ID; they are in
+# every identifier of a law with money, so they move only with a breaking version
+[[id]]
+path = "alice_lol::rule_law::MONEY_SEMANTICS_ID"
+
+[[id]]
+path = "alice_lol::rule_law::MONEY_TABLE_SEMANTICS_ID"
+
+# the semantics of the legal kinds: STATUTE_SEMANTICS_ID (kind statute, the clauses in force at a time),
+# PROCEDURE_SEMANTICS_ID (kind procedure, a machine over a procedure's statuses and step kinds, and
+# RULE_SEMANTICS_ID) and CONTRACT_SEMANTICS_ID (kind contract, its status and what it owes, and
+# MONEY_SEMANTICS_ID), each the fold of its pins measured from the behaviour of rule_law; each is in every
+# identifier of its kind, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::rule_law::STATUTE_SEMANTICS_ID"
+
+[[id]]
+path = "alice_lol::rule_law::PROCEDURE_SEMANTICS_ID"
+
+[[id]]
+path = "alice_lol::rule_law::CONTRACT_SEMANTICS_ID"
+
 # the semantics of the layout laws (kind layout): the fold of LAYOUT_SEMANTICS_PINS, measured from the
 # behaviour of alice-lol-layout and re-exported here; it is in every layout-law identifier, so it moves
 # only with a breaking version

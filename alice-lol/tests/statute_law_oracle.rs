@@ -313,3 +313,23 @@ fn a_statute_has_no_money() {
     ))
     .is_err());
 }
+
+#[test]
+fn a_statute_of_many_clauses_reads_in_linear_time() {
+    use std::fmt::Write as _;
+    // a label is looked up once per clause (its uniqueness, the clause it is `of`): reading n
+    // clauses is linear in n, 100,000 well within seconds even in a debug build
+    let n = 100_000;
+    let mut text = String::from("kind statute\ntitle T\nclause c0 obligation: x\n");
+    for i in 1..n {
+        let _ = writeln!(text, "clause c{i} exception of c{}: y", i - 1);
+    }
+    let start = std::time::Instant::now();
+    let law = rule_law_from_file(&text).expect("reads");
+    let took = start.elapsed();
+    assert!(took.as_secs() < 10, "read {n} clauses in {took:?}");
+    let RuleLaw::Statute(s) = law else {
+        panic!("a statute")
+    };
+    assert_eq!(s.clauses()[n - 1].parent(), Some(n - 2));
+}
