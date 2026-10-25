@@ -67,6 +67,58 @@ fn rule_semantics() {
     );
 }
 
+/// money を持つ Law と法令の Law (kind statute) の pin、測り直した指紋、fold と宣言
+fn money_and_statute_semantics() {
+    use alice_lol::rule_law as r;
+    println!("\n=== money を持つ規則の Law の意味論 ===");
+    for ((name, id), (_, m)) in r::MONEY_SEMANTICS_PINS
+        .iter()
+        .zip(&r::money_semantics_fingerprints())
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  predicate: fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::MONEY_SEMANTICS_PINS)),
+        hex(&r::MONEY_SEMANTICS_ID)
+    );
+    println!(
+        "  table:     fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::MONEY_TABLE_SEMANTICS_PINS)),
+        hex(&r::MONEY_TABLE_SEMANTICS_ID)
+    );
+    println!("\n=== 法令の Law (kind statute) の意味論 ===");
+    for ((name, id), (_, m)) in r::STATUTE_SEMANTICS_PINS
+        .iter()
+        .zip(&r::statute_semantics_fingerprints())
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::STATUTE_SEMANTICS_PINS)),
+        hex(&r::STATUTE_SEMANTICS_ID)
+    );
+    let text = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/spike/demo_statute.law"),
+    )
+    .expect("laws/spike/demo_statute.law");
+    if let r::RuleLaw::Statute(s) = r::rule_law_from_file(&text).expect("the demo statute reads") {
+        println!("  「{}」 {} 条", s.title(), s.clauses().len());
+        for c in s.clauses() {
+            println!(
+                "    {} {} {}..{}",
+                c.label(),
+                c.kind().word(),
+                c.from(),
+                c.until().map_or_else(String::new, |u| u.to_string())
+            );
+        }
+    }
+}
+
 /// 表の Law (kind table) の pin、測り直した指紋、fold と宣言
 fn table_semantics() {
     println!("\n=== 表の Law (kind table) の意味論 ===");
@@ -138,6 +190,7 @@ fn main() -> Result<(), ParseError> {
 
     rule_semantics();
     table_semantics();
+    money_and_statute_semantics();
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;

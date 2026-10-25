@@ -50,7 +50,7 @@ def rule_kind(text: str):
     lines = [ln.split("#", 1)[0].strip() for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
-    for k in ("machine", "predicate", "table"):
+    for k in ("machine", "predicate", "table", "statute"):
         if f"kind {k}" in lines:
             return k
     return None
@@ -392,6 +392,8 @@ def _time_literal(tok, n):
 
 def _kind_semantics(semantics, kind, money):
     """The semantics identifier a law of `kind`, with or without money, is evaluated under"""
+    if kind == "statute":
+        return semantics["statute"]
     return semantics[("money_" if money else "") + ("table" if kind == "table" else "rule")]
 
 
@@ -533,14 +535,99 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
             raise RuleError(f"`{name}` is declared twice")
         law["names"].add(name)
 
-    {"machine": _machine, "predicate": _predicate, "table": _table}[kind](law, lines, declare)
+    {"machine": _machine, "predicate": _predicate, "table": _table, "statute": _statute}[kind](law, lines, declare)
     del law["names"]
     if kind == "machine" and _uses_money(law):
         raise RuleError("a machine law has no money")
+    if kind == "statute" and clines:
+        raise RuleError("a statute law has no money")
     _bind_currencies(law, clines[0] if clines else None, currencies, semantics)
     if kind == "predicate" and respond(law, law["example"]) != ("outputs", {"valid": True, "failed": None}):
         raise RuleError("the example does not hold")
     return law
+
+
+CLAUSE_KINDS = ("obligation", "prohibition", "permission", "definition", "penalty", "exception")
+LABEL = re.compile(r"[a-z][a-z0-9_]*\Z")
+MAX_STATUTE_TIME = (2 ** 64 - 1) // 10 ** 9  # the nanoseconds of every statute time fit 64 bits
+
+
+def _statute_time(tok, n):
+    t = _time_literal(tok, n)
+    if t > MAX_STATUTE_TIME:
+        raise RuleError(f"line {n}: `{tok}` is after the latest time a statute names ({MAX_STATUTE_TIME})")
+    return t
+
+
+def _statute(law, lines, declare):
+    """`kind statute`: one `title <text>` line and `clause <label> <kind> [of <clause>] [from <time>]
+    [until <time>]: <text>` lines (conformance/TASK.md "Statute laws")"""
+    start = 0 if law["edition"] is None else law["edition"]["from"]
+    law["title"], law["clauses"] = None, []
+    for n, ln in lines:
+        w = ln.split()
+        if w[0] in PEOPLE or w[0] == "kind":
+            continue
+        if w[0] == "title":
+            if law["title"] is not None:
+                raise RuleError(f"line {n}: a second `title` line")
+            t = ln[len("title"):].strip(" \t")
+            if not t:
+                raise RuleError(f"line {n}: `title <text>`")
+            law["title"] = t
+        elif w[0] == "clause":
+            if ":" not in ln:
+                raise RuleError(f"line {n}: `clause <label> <kind> [of <clause>] [from <time>] [until <time>]: <text>`")
+            head, text = ln.split(":", 1)
+            text = text.strip(" \t")
+            if not text:
+                raise RuleError(f"line {n}: a clause has a text after the `:`")
+            h = head.split()
+            if len(h) < 3:
+                raise RuleError(f"line {n}: a clause has a label and a kind")
+            label, kind, rest = h[1], h[2], h[3:]
+            if not LABEL.match(label):
+                raise RuleError(f"line {n}: `{label}` is not a clause label")
+            labels = [c["label"] for c in law["clauses"]]
+            if label in labels:
+                raise RuleError(f"line {n}: a second clause `{label}`")
+            if kind not in CLAUSE_KINDS:
+                raise RuleError(f"line {n}: `{kind}` is not a clause kind")
+            parent = None
+            if rest[:1] == ["of"] and len(rest) >= 2:
+                if rest[1] not in labels:
+                    raise RuleError(f"line {n}: `of {rest[1]}`: no earlier clause `{rest[1]}`")
+                parent, rest = rest[1], rest[2:]
+            frm = start
+            if rest[:1] == ["from"] and len(rest) >= 2:
+                frm, rest = _statute_time(rest[1], n), rest[2:]
+            until = None
+            if rest[:1] == ["until"] and len(rest) >= 2:
+                until, rest = _statute_time(rest[1], n), rest[2:]
+                if until <= frm:
+                    raise RuleError(f"line {n}: `until` is not after the clause's start")
+            if rest:
+                raise RuleError(f"line {n}: `{' '.join(rest)}` is not part of a clause line")
+            if kind == "exception" and parent is None:
+                raise RuleError(f"line {n}: an exception is `of` the clause it carves out of")
+            law["clauses"].append({"label": label, "kind": kind, "parent": parent, "from": frm,
+                                   "until": until, "text": text})
+        else:
+            raise RuleError(f"line {n}: `{w[0]}` is not a line of a statute law")
+    if law["title"] is None:
+        raise RuleError("a statute law has one `title <text>` line")
+    if not law["clauses"]:
+        raise RuleError("a statute law has at least one `clause` line")
+
+
+def _statute_answer(law, inp, bug):
+    if "at" not in inp:
+        return ("request_error", "at missing")
+    if not _has_type(inp["at"], "time"):
+        return ("rejected", "at does not have its type")
+    at = int(inp["at"])
+    return ("outputs", {"in_force": [c["label"] for c in law["clauses"]
+                                     if c["from"] <= at and (c["until"] is None or at < c["until"])]})
 
 
 def _const_line(law, rest, declare):
@@ -839,7 +926,7 @@ def _key(line: str) -> str:
     w = line.split()
     if w[0] in ("row", "require") and len(w) > 1 and w[1].endswith(":"):
         return f"{w[0]} {w[1][:-1]}"
-    if w[0] in KEYED + ("x-split",) and len(w) > 1:
+    if w[0] in KEYED + ("x-split", "clause") and len(w) > 1:
         return f"{w[0]} {w[1]}"
     if w[0] == "on" and "to" in w:
         return " ".join(w[:w.index("to")])
@@ -939,7 +1026,8 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
 # big-endian u64 / u32. What a rule law hashes, and in which order, is conformance/TASK.md's
 # "Rule laws" read as alice-lol `rule_law` hashes it; scripts/rule_law_ids.py records the values.
 LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
-LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1"}
+LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1",
+             "statute": b"lol.law.statute/v1"}
 
 
 class _LawId:
@@ -1057,6 +1145,17 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
         h = h.u64(ed["from"]).u32(int(ed["until"] is not None))
         if ed["until"] is not None:
             h = h.u64(ed["until"])
+    if kind == "statute":
+        h = h.text("title").text(law["title"]).text("clauses").u64(len(law["clauses"]))
+        for c in law["clauses"]:
+            h = h.text(c["label"]).text(c["kind"]).u32(int(c["parent"] is not None))
+            if c["parent"] is not None:
+                h = h.text(c["parent"])
+            h = h.u64(c["from"]).u32(int(c["until"] is not None))
+            if c["until"] is not None:
+                h = h.u64(c["until"])
+            h = h.text(c["text"])
+        return h.finish()
     h = _hash_consts(h, law)
     if law.get("currencies") is not None:
         h = h.text("currencies").ident(law["currencies"])
@@ -1116,7 +1215,7 @@ def respond(law, inputs, bug=None):
     """The answer to a request whose `inputs` is the given object (None: no inputs key)"""
     inputs = {} if inputs is None else inputs
     return {"machine": _machine_step, "predicate": _predicate_answer,
-            "table": _table_answer}[law["kind"]](law, inputs, bug)
+            "table": _table_answer, "statute": _statute_answer}[law["kind"]](law, inputs, bug)
 
 
 def _machine_step(law, inp, bug):
@@ -1299,7 +1398,28 @@ def _vec(name, inputs, note, answer):
 def vectors(law, name):
     """The conformance vectors of a rule law: every answer is computed by `respond`"""
     return {"machine": _machine_vectors, "predicate": _predicate_vectors,
-            "table": _table_vectors}[law["kind"]](law, name)
+            "table": _table_vectors, "statute": _statute_vectors}[law["kind"]](law, name)
+
+
+def _statute_times(law):
+    """Each clause's start and end, one before each, and the ends of the range of a time"""
+    ts = {0, -1, MAX_INT, -MAX_INT}
+    for c in law["clauses"]:
+        for t in (c["from"], c["until"]):
+            if t is not None:
+                ts |= {t - 1, t}
+    return sorted(t for t in ts if abs(t) <= MAX_INT)
+
+
+def _statute_vectors(law, name):
+    V = [_vec(name, {"at": t}, f"at {t}", respond(law, {"at": t})) for t in _statute_times(law)]
+    first = law["clauses"][0]["from"]
+    for v, note in ((float(first), "at written as a number with a fraction of 0"), (first + 0.5, "at with a fraction"),
+                    (str(first), "at as text"), (None, "at null"), (True, "at true"),
+                    (MAX_INT + 1, "at beyond 2^53 - 1"), (-MAX_INT - 1, "at below -(2^53 - 1)")):
+        V.append(_vec(name, {"at": v}, note, respond(law, {"at": v})))
+    V.append(_vec(name, {}, "at missing", respond(law, {})))
+    return V
 
 
 def _guard_sets(guards):
@@ -1708,6 +1828,22 @@ def coverage(law, vecs):
                             missing.append(f"step {mode} {state} {event} {gs}")
         if not any(o["expected"]["transition"] == "refused" for o in answered):
             missing.append("a refused step")
+    elif law["kind"] == "statute":
+        # every clause both in force and not in force at some answered time
+        for c in law["clauses"]:
+            seen = {c["label"] in v["expected"]["in_force"] for v in answered}
+            for state in (True, False):
+                if state not in seen:
+                    missing.append(f"a vector with {c['label']} {'in force' if state else 'not in force'}")
+        # each start and end of a clause, and the time just before it
+        times = {v["inputs"].get("at") for v in answered}
+        for c in law["clauses"]:
+            for t in (c["from"], c["until"]):
+                if t is None:
+                    continue
+                for x in (t - 1, t):
+                    if abs(x) <= MAX_INT and x not in times:
+                        missing.append(f"a vector at {x} (a bound of {c['label']})")
     elif law["kind"] == "table":
         # every row (and the otherwise) that some combination of the compared values reaches
         want = {respond(law, inp)[1]["row"] for inp in _table_inputs(law)}

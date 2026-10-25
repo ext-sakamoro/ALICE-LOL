@@ -1,7 +1,8 @@
 //! Rule laws — a rule of a product written as a law file.
 //!
 //! A rule law is a state machine (`kind machine`), a predicate over typed inputs
-//! (`kind predicate`) or a table whose first holding row gives the answer (`kind table`).
+//! (`kind predicate`), a table whose first holding row gives the answer (`kind table`) or the
+//! clauses of a statute in force at a time (`kind statute`, [`StatuteLaw`]).
 //!
 //! The layout and the meaning are those of `conformance/TASK.md` § "Rule laws"; this module
 //! is a reader of it ([`rule_law_from_file`]) and answers a request the way the contract says
@@ -44,6 +45,12 @@ use alice_zip::law_id::LawIdHasher;
 
 use crate::law_id::hex32;
 use crate::law_input::Json;
+
+mod statute;
+pub use statute::{
+    statute_semantics_fingerprints, ClauseKind, StatuteClause, StatuteLaw, MAX_STATUTE_TIME,
+    STATUTE_LAW_KIND,
+};
 
 /// The kind tag of a machine law
 pub const MACHINE_LAW_KIND: &[u8] = b"lol.law.machine/v1";
@@ -138,8 +145,22 @@ pub const MONEY_TABLE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 pub const MONEY_TABLE_SEMANTICS_ID: [u8; 32] =
     hex32("ec955bdef6d9cfc5bdaff031a076c9e5cd18e00ef46f6c27fb9754c924fa9cbc");
 
+/// The semantics of the statute kind `(name, fingerprint of that behaviour)`
+///
+/// ⚠️ The value is measured ([`statute_semantics_fingerprints`]); the oracle recomputes it and
+/// the fold.
+pub const STATUTE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[(
+    "rule statute: the clauses in force at a time (from inclusive, until exclusive), in file order",
+    hex32("56e44ff8dd56b62626ccedf1ae1e4c5b2c9ae94f75aed045ecbfa10d5da6a39a"),
+)];
+
+/// The fold of [`STATUTE_SEMANTICS_PINS`] (the oracle checks the two agree)
+pub const STATUTE_SEMANTICS_ID: [u8; 32] =
+    hex32("428a5863af343ed0b3c8c67c6e9355a57f2b23ce57a915b6941dd1179281ed6a");
+
 /// Which rule kind a law file is
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RuleKind {
     /// `kind machine`
     Machine,
@@ -147,6 +168,8 @@ pub enum RuleKind {
     Predicate,
     /// `kind table`
     Table,
+    /// `kind statute`
+    Statute,
 }
 
 /// The kind of a rule law file: `None` when it has the line `kind audit` (an audit law,
@@ -170,6 +193,8 @@ pub fn rule_kind(text: &str) -> Option<RuleKind> {
         Some(RuleKind::Predicate)
     } else if lines.contains(&"kind table") {
         Some(RuleKind::Table)
+    } else if lines.contains(&"kind statute") {
+        Some(RuleKind::Statute)
     } else {
         None
     }
@@ -1080,6 +1105,7 @@ const fn kind_semantics(kind: RuleKind, money: bool) -> [u8; 32] {
     match (kind, money) {
         (RuleKind::Table, false) => TABLE_SEMANTICS_ID,
         (RuleKind::Table, true) => MONEY_TABLE_SEMANTICS_ID,
+        (RuleKind::Statute, _) => STATUTE_SEMANTICS_ID,
         (_, false) => RULE_SEMANTICS_ID,
         (_, true) => MONEY_SEMANTICS_ID,
     }
@@ -1218,8 +1244,8 @@ fn line_key(line: &str) -> String {
         [k @ ("row" | "require"), label, ..] if label.ends_with(':') => {
             format!("{k} {}", &label[..label.len() - 1])
         }
-        [k @ ("const" | "x-input" | "x-bind" | "allow" | "state" | "event" | "x-split"), name, ..] =>
-        {
+        [k @ ("const" | "x-input" | "x-bind" | "allow" | "state" | "event" | "x-split"
+        | "clause"), name, ..] => {
             format!("{k} {name}")
         }
         ["on", ..] if w.contains(&"to") => {
@@ -1578,6 +1604,7 @@ impl RuleSet {
 
 /// A rule law, read from its file
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RuleLaw {
     /// `kind machine`
     Machine(MachineLaw),
@@ -1585,6 +1612,8 @@ pub enum RuleLaw {
     Predicate(PredicateLaw),
     /// `kind table`
     Table(TableLaw),
+    /// `kind statute`
+    Statute(StatuteLaw),
 }
 
 /// A state machine law
@@ -1753,7 +1782,7 @@ pub fn rule_law_from_file_with(
     let kind = rule_kind(text).ok_or_else(|| {
         err(
             0,
-            "not a rule law (no `kind machine` / `kind predicate` / `kind table`)",
+            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute`)",
         )
     })?;
     let ls = lines(text)?;
@@ -1823,6 +1852,12 @@ pub fn rule_law_from_file_with(
             edition,
             ..read_table(&ls, cur.as_ref())?
         }),
+        RuleKind::Statute => {
+            if cur.is_some() {
+                return Err(err(0, "a statute law has no money"));
+            }
+            RuleLaw::Statute(statute::read_statute(&ls, edition)?)
+        }
     })
 }
 
@@ -2326,6 +2361,7 @@ impl RuleLaw {
             Self::Machine(m) => m.respond(inputs),
             Self::Predicate(p) => p.respond(inputs),
             Self::Table(t) => t.respond(inputs),
+            Self::Statute(s) => s.respond(inputs),
         }
     }
 
@@ -2336,6 +2372,7 @@ impl RuleLaw {
             Self::Machine(_) => RuleKind::Machine,
             Self::Predicate(_) => RuleKind::Predicate,
             Self::Table(_) => RuleKind::Table,
+            Self::Statute(_) => RuleKind::Statute,
         }
     }
 
@@ -2346,6 +2383,7 @@ impl RuleLaw {
             Self::Machine(m) => m.edition.as_ref(),
             Self::Predicate(p) => p.edition.as_ref(),
             Self::Table(t) => t.edition.as_ref(),
+            Self::Statute(s) => s.edition.as_ref(),
         }
     }
 
@@ -2356,6 +2394,7 @@ impl RuleLaw {
             Self::Machine(m) => m.law_id(),
             Self::Predicate(p) => p.law_id(),
             Self::Table(t) => t.law_id(),
+            Self::Statute(s) => s.law_id(),
         }
     }
 }

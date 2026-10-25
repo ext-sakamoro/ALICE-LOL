@@ -624,6 +624,10 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
             ),
             ("rule".to_owned(), hex(RULE_SEMANTICS_ID)),
             (
+                "statute".to_owned(),
+                hex(alice_lol::rule_law::STATUTE_SEMANTICS_ID)
+            ),
+            (
                 "table".to_owned(),
                 hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
             ),
