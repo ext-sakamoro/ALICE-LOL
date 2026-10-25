@@ -207,12 +207,19 @@ def _no_json_constant(name):
 
 
 def _has_lone_surrogate(v) -> bool:
-    if isinstance(v, str):
-        return any(0xD800 <= ord(ch) <= 0xDFFF for ch in v)
-    if isinstance(v, dict):
-        return any(_has_lone_surrogate(k) or _has_lone_surrogate(x) for k, x in v.items())
-    if isinstance(v, list):
-        return any(_has_lone_surrogate(x) for x in v)
+    """a text (key or value) with a code point D800-DFFF: json reads a lone `\\u` surrogate into one;
+    walked with a stack, so a value nested MAX_JSON_DEPTH levels does not exhaust the recursion"""
+    todo = [v]
+    while todo:
+        x = todo.pop()
+        if isinstance(x, str):
+            if any(0xD800 <= ord(ch) <= 0xDFFF for ch in x):
+                return True
+        elif isinstance(x, dict):
+            todo.extend(x.keys())
+            todo.extend(x.values())
+        elif isinstance(x, list):
+            todo.extend(x)
     return False
 
 

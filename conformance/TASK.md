@@ -238,9 +238,10 @@ A rule law file within these limits reads (when it is otherwise readable); a fil
 | lines read | 100000 | the lines that are read: not the empty lines and the comments |
 | tokens of an expression | 256 | the tokens of one `require` / `when` / row / `allow` expression |
 | nesting of an expression | 64 | each parenthesised group, `not` and function call is one level inside the levels around it: `(a)` has 1, `not (a)` has 2 |
-| characters of a numeral | 40 | an integer, a time or an amount of money with its sign (-2^127, the smallest amount, has 40) |
+| characters of a numeral | 40 | an integer, a time or an amount of money with its sign (-2^127, the smallest amount, has 40), and every number of the `example` line's JSON |
+| nesting of the `example` JSON | 512 | levels of arrays and objects, the example object itself being level 1 (the same as a request) |
 
-A numeral of more characters is out of the range of every type: in a law file it does not read; in a request, a value with such a numeral does not have its type. The limit on the tokens also bounds a chain: `a and b and c and ...` has at most 128 operands. The other ranges stay as above (integers and times at most 2^53 - 1, amounts from -2^127 to 2^127 - 1, statute times at most 18446744073, JSON input nested at most 512 levels).
+A numeral of more characters is out of the range of every type: in a law file it does not read; in a request, a value with such a numeral does not have its type. The `example` line's JSON is read as a request is (above: RFC 8259, no `NaN` / `Infinity`, the last of a repeated key, no lone surrogate); a JSON text that is not one, or not an object, makes the law file unreadable. The limit on the tokens also bounds a chain: `a and b and c and ...` has at most 128 operands. The other ranges stay as above (integers and times at most 2^53 - 1, amounts from -2^127 to 2^127 - 1, statute times at most 18446744073, JSON input nested at most 512 levels).
 
 ### State machine (`kind machine`)
 
