@@ -18,6 +18,8 @@ rust-toolchain.toml
 # the gate, its tests and the consumer feature sets
 scripts/semver_gate.py
 scripts/test_semver_gate.py
+scripts/release_baseline.py
+scripts/test_release_baseline.py
 .github/semver-gate.toml
 # the changes and gate jobs
 scripts/changed_paths.py

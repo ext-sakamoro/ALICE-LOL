@@ -98,18 +98,18 @@ lock="$OUT/Cargo.lock"
 # the [[package]] entry of a crate (not a [[patch.unused]] entry: a patch cargo did not use
 # is listed there by name and must not read as linked)
 block() { awk -v n="$1" '/^\[/{pkg=($0=="[[package]]"); p=0} pkg && $0=="name = \""n"\""{p=1} p' "$lock"; }
-if block alice-lol-macro | grep -q '^source'; then
+if block alice-lol-macro | grep '^source' >/dev/null; then
   echo "error: the [patch] for alice-lol-macro was not used (alice-lol requires another version)" >&2
   exit 1
 fi
 for c in alice-sdf alice-det-math; do
   if is_blocked "$c"; then
-    if block "$c" | grep -q '^source'; then
+    if block "$c" | grep '^source' >/dev/null; then
       echo "error: $c is blocked (unpublished) but the consumer's lock took it from a registry, not the patch" >&2
       exit 1
     fi
     echo "registry consumer: $c from its sibling (blocked: unpublished on crates.io)"
-  elif ! block "$c" | grep -q '^source = "registry+'; then
+  elif ! block "$c" | grep '^source = "registry+' >/dev/null; then
     echo "error: $c is not from crates.io in the consumer's lock" >&2
     exit 1
   fi
@@ -119,7 +119,7 @@ for b in ${BLOCKED[@]+"${BLOCKED[@]}"}; do
     echo "error: $b is blocked (unpublished) but is not in the consumer's lock at all" >&2
     exit 1
   fi
-  if block "$b" | grep -q '^source'; then
+  if block "$b" | grep '^source' >/dev/null; then
     echo "error: $b is blocked (unpublished) but the consumer's lock did not use the patch" >&2
     exit 1
   fi

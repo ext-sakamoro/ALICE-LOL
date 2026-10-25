@@ -42,6 +42,8 @@ on:
       - 'rust-toolchain.toml'
       - 'scripts/semver_gate.py'
       - 'scripts/test_semver_gate.py'
+      - 'scripts/release_baseline.py'
+      - 'scripts/test_release_baseline.py'
       - '.github/semver-gate.toml'
       - 'scripts/changed_paths.py'
       - '.github/actions/alice-siblings/**'
@@ -133,6 +135,8 @@ jobs:
       # tool is missing, so the recorded lines cannot drift from the tool unseen)
       - name: semver gate (tests)
         run: python3 scripts/test_semver_gate.py
+      - name: release baseline (tests, the shared base of a crate under a publication freeze)
+        run: python3 scripts/test_release_baseline.py
 
       # exit 1: a change the step does not allow, a run that compared nothing or named
       # another step; exit 2: crates.io or the configuration could not be read
