@@ -21,6 +21,12 @@ import re
 from pathlib import Path
 
 MAX_INT = 2 ** 53 - 1  # every JSON reader holds it exactly (TASK.md "Rule laws")
+# TASK.md "Limits of a rule law file" (the same values as alice-lol/src/rule_law.rs)
+MAX_LAW_BYTES = 4 * 1024 * 1024  # of the UTF-8 text
+MAX_LAW_LINES = 100_000  # the lines read (not the empty ones and the comments)
+MAX_EXPRESSION_TOKENS = 256  # of one expression (it also bounds the depth of a chain)
+MAX_EXPRESSION_DEPTH = 64  # each parenthesised group, `not` and call is a level
+MAX_NUMERAL_CHARS = 40  # -2^127 has 40; a longer numeral is out of range, never converted
 NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
 FUNCTIONS = {"len", "prefix", "utf8", "hmac_sha256"}
 RESERVED = {"true", "false", "and", "or", "not", "state", "mode", "shape"} | FUNCTIONS
@@ -94,12 +100,16 @@ def _check_text(text: str):
 
 def _lines(text: str):
     """(line number, text without comment) of the lines that are not empty after trimming spaces and tabs"""
+    if len(text.encode("utf-8")) > MAX_LAW_BYTES:
+        raise RuleError(f"a rule law file has at most {MAX_LAW_BYTES} bytes")
     _check_text(text)
     out = []
     for n, raw in enumerate(text.split("\n"), 1):
         raw = raw[:-1] if raw.endswith("\r") else raw
         ln = raw.split("#", 1)[0]
         if _trim(ln):
+            if len(out) == MAX_LAW_LINES:
+                raise RuleError(f"line {n}: a rule law file has at most {MAX_LAW_LINES} lines that are read")
             out.append((n, ln))
     return out
 
@@ -130,9 +140,16 @@ def _tokens(src: str):
     return out
 
 
+def _numeral(tok: str):
+    """The integer a numeral of at most MAX_NUMERAL_CHARS characters names, None for a longer one (it
+    is out of every range; it is not converted)"""
+    return int(tok) if len(tok) <= MAX_NUMERAL_CHARS else None
+
+
 def _literal(kind, tok):
     if kind == "int":
-        if (len(tok) > 1 and tok[0] == "0") or int(tok) > MAX_INT:
+        v = _numeral(tok)
+        if (len(tok) > 1 and tok[0] == "0") or v is None or v > MAX_INT:
             raise RuleError(f"integer literal `{tok}`")
         return ("int", "integer", int(tok))
     if kind == "bytes":
@@ -148,7 +165,15 @@ class _Parser:
     """Recursive descent over the token list; `atom` decides what a name means"""
 
     def __init__(self, src, atom):
-        self.src, self.t, self.i, self.atom = src, _tokens(src), 0, atom
+        self.src, self.t, self.i, self.atom, self.depth = src, _tokens(src), 0, atom, 0
+        if len(self.t) > MAX_EXPRESSION_TOKENS:
+            raise RuleError(f"`{src[:80]}`: an expression has at most {MAX_EXPRESSION_TOKENS} tokens")
+
+    def deeper(self):
+        """one level more: a parenthesised group, a `not` or a call"""
+        self.depth += 1
+        if self.depth > MAX_EXPRESSION_DEPTH:
+            raise RuleError(f"`{self.src[:80]}`: an expression nests at most {MAX_EXPRESSION_DEPTH} levels")
 
     def peek(self, off=0):
         j = self.i + off
@@ -184,7 +209,10 @@ class _Parser:
     def not_(self):
         if self.peek() == ("name", "not"):
             self.take()
-            return ("not", self.not_())
+            self.deeper()
+            e = ("not", self.not_())
+            self.depth -= 1
+            return e
         return self.cmp()
 
     def cmp(self):
@@ -214,8 +242,10 @@ class _Parser:
         k, v = self.peek()
         if v == "(":
             self.take()
+            self.deeper()
             e = self.or_()
             self.take(")")
+            self.depth -= 1
             return e
         if k in ("int", "bytes", "text"):
             self.take()
@@ -226,11 +256,13 @@ class _Parser:
                 return ("lit", "bool", v == "true")
             if v in FUNCTIONS and self.peek()[1] == "(":
                 self.take("(")
+                self.deeper()
                 args = [self.or_()]
                 while self.peek()[1] == ",":
                     self.take()
                     args.append(self.or_())
                 self.take(")")
+                self.depth -= 1
                 return ("call", v, args)
             if self.peek()[1] == ".":
                 self.take()
@@ -340,8 +372,8 @@ def _money_text(v: str):
     m = MONEY.fullmatch(v) if isinstance(v, str) else None
     if not m:
         return None
-    amount = int(m.group(1))
-    if not MONEY_MIN <= amount <= MONEY_MAX:
+    amount = _numeral(m.group(1))
+    if amount is None or not MONEY_MIN <= amount <= MONEY_MAX:
         return None
     return Money(amount, m.group(2))
 
@@ -414,8 +446,8 @@ ID_HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _time_literal(tok, n):
-    if not re.fullmatch(r"0|[1-9][0-9]*", tok) or int(tok) > MAX_INT:
-        raise RuleError(f"line {n}: `{tok}` is not a time (an integer literal, at most 2^53 - 1)")
+    if not re.fullmatch(r"0|[1-9][0-9]*", tok) or _numeral(tok) is None or int(tok) > MAX_INT:
+        raise RuleError(f"line {n}: `{tok[:50]}` is not a time (an integer literal, at most 2^53 - 1)")
     return int(tok)
 
 
@@ -1463,8 +1495,8 @@ def _machine_step(law, inp, bug):
 def _parse_int_text(s):
     if not INT_TEXT.match(s):
         return None
-    v = int(s)
-    return v if abs(v) <= MAX_INT else None
+    v = _numeral(s)
+    return v if v is not None and abs(v) <= MAX_INT else None
 
 
 def _predicate_answer(law, inp, bug):

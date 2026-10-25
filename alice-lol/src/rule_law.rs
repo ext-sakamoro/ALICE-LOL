@@ -78,6 +78,25 @@ pub const PROCEDURE_LAW_KIND: &[u8] = b"lol.law.procedure/v1";
 /// The largest integer magnitude a rule law reads (2^53 - 1: every JSON reader holds it exactly)
 pub const MAX_INTEGER: i64 = (1 << 53) - 1;
 
+/// The largest rule law file, in bytes of its UTF-8 text (conformance/TASK.md "Limits of a rule law
+/// file"); a larger file does not read
+pub const MAX_LAW_BYTES: usize = 4 * 1024 * 1024;
+
+/// The most lines a rule law file has, counting the lines that are read (not the empty ones and the
+/// comments)
+pub const MAX_LAW_LINES: usize = 100_000;
+
+/// The most tokens of one expression (it also bounds the depth of a chain such as `a and b and c`)
+pub const MAX_EXPRESSION_TOKENS: usize = 256;
+
+/// The deepest nesting of one expression: each parenthesised group, `not` and function call is a
+/// level inside the one around it
+pub const MAX_EXPRESSION_DEPTH: usize = 64;
+
+/// The most characters of a numeral (an integer, a time, an amount of money, with its sign): the
+/// longest amount, -2^127, has 40; a longer numeral is out of range without being converted
+pub const MAX_NUMERAL_CHARS: usize = 40;
+
 /// The semantics of the rule kinds `(name, fingerprint of that behaviour)`
 ///
 /// ⚠️ Each value is measured ([`rule_semantics_fingerprints`]); the oracle recomputes it. A
@@ -409,6 +428,12 @@ fn hex_bytes(s: &str) -> Option<Vec<u8>> {
     Some(b.chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect())
 }
 
+/// A numeral of at most [`MAX_NUMERAL_CHARS`] characters; a longer one is out of every range and is
+/// not converted
+const fn numeral_fits(s: &str) -> bool {
+    s.len() <= MAX_NUMERAL_CHARS
+}
+
 /// `<amount> <currency>` (TASK.md "Types of values": money), without checking the currency table
 fn money_text(s: &str) -> Option<(i128, String)> {
     let (amount, code) = s.split_once(' ')?;
@@ -418,7 +443,7 @@ fn money_text(s: &str) -> Option<(i128, String)> {
         && b.iter().all(u8::is_ascii_digit)
         && (b[0] != b'0' || (b.len() == 1 && digits.len() == amount.len()));
     let code_ok = code.len() == 3 && code.bytes().all(|c| c.is_ascii_uppercase());
-    if !well_formed || !code_ok {
+    if !well_formed || !code_ok || !numeral_fits(amount) {
         return None;
     }
     Some((amount.parse::<i128>().ok()?, code.to_owned()))
@@ -672,6 +697,8 @@ struct Parser<'a> {
     t: Vec<Tok>,
     i: usize,
     scope: Scope<'a>,
+    /// the levels open around the token read now (`deeper`)
+    depth: usize,
 }
 
 type Typed = (Expr, Ty);
@@ -710,7 +737,23 @@ impl Parser<'_> {
         matches!(self.scope, Scope::Machine { .. })
     }
 
+    /// One level more: a parenthesised group, a `not` or a call
+    fn deeper(&mut self) -> Result<(), String> {
+        self.depth += 1;
+        if self.depth > MAX_EXPRESSION_DEPTH {
+            return self.fail(format!(
+                "an expression nests at most {MAX_EXPRESSION_DEPTH} levels"
+            ));
+        }
+        Ok(())
+    }
+
     fn parse(mut self) -> Result<Typed, String> {
+        if self.t.len() > MAX_EXPRESSION_TOKENS {
+            return self.fail(format!(
+                "an expression has at most {MAX_EXPRESSION_TOKENS} tokens"
+            ));
+        }
         let e = self.or()?;
         if self.i != self.t.len() {
             return self.fail("unexpected text after the expression");
@@ -753,7 +796,9 @@ impl Parser<'_> {
     fn not(&mut self) -> Result<Typed, String> {
         if self.is_word("not") {
             self.i += 1;
+            self.deeper()?;
             let e = self.not()?;
+            self.depth -= 1;
             self.boolean(&e, "not")?;
             return Ok((Expr::Not(Box::new(e.0)), Ty::Bool));
         }
@@ -864,8 +909,10 @@ impl Parser<'_> {
         let lit = |v: Value, ty: Ty| Ok((Expr::Lit(v), ty));
         match tok {
             Tok::Op("(") => {
+                self.deeper()?;
                 let e = self.or()?;
                 self.expect_op(")")?;
+                self.depth -= 1;
                 Ok(e)
             }
             Tok::Name(n) if n == "true" || n == "false" => lit(Value::Bool(n == "true"), Ty::Bool),
@@ -969,12 +1016,14 @@ impl Parser<'_> {
 
     fn call(&mut self, f: Func) -> Result<Typed, String> {
         self.expect_op("(")?;
+        self.deeper()?;
         let mut args = vec![self.or()?];
         while self.is_op(",") {
             self.i += 1;
             args.push(self.or()?);
         }
         self.expect_op(")")?;
+        self.depth -= 1;
         let tys: Vec<&Ty> = args.iter().map(|a| &a.1).collect();
         let ty = match (f, tys.as_slice()) {
             (Func::Len, [Ty::Text | Ty::Bytes]) => Ty::Integer,
@@ -1066,6 +1115,12 @@ fn rest_after(line: &str, w: &[(&str, usize)], k: usize) -> String {
 
 /// The lines of a law file without comments: `(line number, text)`, empty lines left out
 fn lines(text: &str) -> Result<Vec<(usize, &str)>, RuleLawError> {
+    if text.len() > MAX_LAW_BYTES {
+        return Err(err(
+            0,
+            format!("a rule law file has at most {MAX_LAW_BYTES} bytes"),
+        ));
+    }
     let segments: Vec<&str> = text.split('\n').collect();
     let last = segments.len() - 1;
     let mut out = Vec::new();
@@ -1083,6 +1138,12 @@ fn lines(text: &str) -> Result<Vec<(usize, &str)>, RuleLawError> {
         }
         let l = body.split('#').next().unwrap_or("");
         if !l.trim_matches([' ', '\t']).is_empty() {
+            if out.len() == MAX_LAW_LINES {
+                return Err(err(
+                    n + 1,
+                    format!("a rule law file has at most {MAX_LAW_LINES} lines that are read"),
+                ));
+            }
             out.push((n + 1, l));
         }
     }
@@ -1159,7 +1220,10 @@ fn id_hex(s: &str) -> Option<[u8; 32]> {
 /// A time literal: an integer literal (no sign, no leading zero) of at most [`MAX_INTEGER`]
 fn time_literal(line: usize, s: &str) -> Result<u64, RuleLawError> {
     let b = s.as_bytes();
-    let ok = !b.is_empty() && b.iter().all(u8::is_ascii_digit) && (b[0] != b'0' || b.len() == 1);
+    let ok = !b.is_empty()
+        && b.iter().all(u8::is_ascii_digit)
+        && (b[0] != b'0' || b.len() == 1)
+        && numeral_fits(s);
     match s.parse::<u64>() {
         Ok(v) if ok && v <= MAX_INTEGER.unsigned_abs() => Ok(v),
         _ => Err(err(
@@ -2028,6 +2092,7 @@ fn read_machine(ls: &[(usize, &str)]) -> Result<MachineLaw, RuleLawError> {
             src,
             t: tokens(src).map_err(|e| err(n, e))?,
             i: 0,
+            depth: 0,
             scope: Scope::Machine {
                 states: &states,
                 modes: modes.as_deref(),
@@ -2262,6 +2327,7 @@ fn read_predicate(
                     src: &src,
                     t: tokens(&src).map_err(|e| err(n, e))?,
                     i: 0,
+                    depth: 0,
                     scope: Scope::Predicate {
                         types: &types,
                         consts: &consts,
@@ -2398,6 +2464,7 @@ fn read_table(ls: &[(usize, &str)], cur: Option<&Currencies>) -> Result<TableLaw
                     src: &src,
                     t: tokens(&src).map_err(|e| err(n, e))?,
                     i: 0,
+                    depth: 0,
                     scope: Scope::Predicate {
                         types: &inputs,
                         consts: &consts,

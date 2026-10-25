@@ -49,5 +49,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_rule_law_read"
+path = "fuzz_targets/fuzz_rule_law_read.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]
