@@ -633,15 +633,30 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
     assert!(ids.len() >= 5, "compared {} rule laws", ids.len());
     // the resolved text of each edition, by its identifier, for the deltas that supersede it
     let mut resolved: Vec<([u8; 32], String)> = Vec::new();
+    // a money law is read with the currency table its `currencies` line names
+    let mut read: Vec<alice_lol::rule_law::RuleLaw> = Vec::new();
+    let mut money = 0;
     for (path, kind, want, _) in ids.iter().filter(|r| r.3.is_none()) {
         let text = std::fs::read_to_string(root.join(path)).expect("law file");
-        let law = rule_law_from_file(&text).expect("reads");
+        let named = text
+            .lines()
+            .find_map(|l| l.strip_prefix("currencies "))
+            .map(str::trim);
+        let table = named.map(|id| {
+            money += 1;
+            read.iter()
+                .find(|t| hex(t.law_id()) == id)
+                .unwrap_or_else(|| panic!("{path}: no currency table {id} read before it"))
+        });
+        let law = alice_lol::rule_law::rule_law_from_file_with(&text, table).expect("reads");
         assert_eq!(hex(law.law_id()), *want, "{path} ({kind})");
         if law.edition().is_some() {
             let r = alice_lol::rule_law::edition_text(&text).expect("resolves");
             resolved.push((law.law_id(), r));
         }
+        read.push(law);
     }
+    assert!(money >= 1, "no money law compared");
     let mut deltas: Vec<_> = ids.iter().filter(|r| r.3.is_some()).collect();
     assert!(!deltas.is_empty(), "no delta compared");
     while !deltas.is_empty() {
@@ -1095,4 +1110,235 @@ fn rule_sets_that_do_not_load() {
     let d2 = named[1].1.replace(&old, &id);
     assert!(RuleSet::from_files(&[(named[0].0, gap.as_str()), (named[1].0, d2.as_str())]).is_err());
     assert!(RuleSet::from_files(&[named[0], named[1]]).is_ok());
+}
+
+// ------------------------------------------------------------------ money (TASK.md "Types of values" / "The currency table")
+
+const CURRENCIES: &str = "kind table\nx-input code text\nvalue e0 e2 unknown\n\
+     row jpy: e0 when code == \"JPY\"\nrow usd: e2 when code == \"USD\"\notherwise unknown\n";
+
+fn currency_table() -> alice_lol::rule_law::RuleLaw {
+    rule_law_from_file(CURRENCIES).expect("the currency table reads")
+}
+
+fn money_law(kind: &str, body: &str) -> Result<alice_lol::rule_law::RuleLaw, String> {
+    let table = currency_table();
+    let text = format!("kind {kind}\ncurrencies {}\n{body}", hex(table.law_id()));
+    alice_lol::rule_law::rule_law_from_file_with(&text, Some(&table)).map_err(|e| e.to_string())
+}
+
+const BIG: i128 = (1 << 63) + 1;
+const TOP: i128 = i128::MAX;
+
+fn sum_law() -> alice_lol::rule_law::RuleLaw {
+    money_law(
+        "predicate",
+        &format!(
+            "x-input a money\nx-input b money\nconst cap money = {TOP} JPY\n\
+             require sum_fits: a + b <= cap\nrequire ordered: a < b\n\
+             example {{\"a\": \"1 JPY\", \"b\": \"2 JPY\"}}\n"
+        ),
+    )
+    .expect("reads")
+}
+
+fn ask(law: &alice_lol::rule_law::RuleLaw, a: &str, b: &str) -> alice_lol::rule_law::Answer {
+    law.respond(&json(&format!(r#"{{"a": {a}, "b": {b}}}"#)))
+}
+
+fn rejected(a: &alice_lol::rule_law::Answer) -> bool {
+    matches!(a, alice_lol::rule_law::Answer::Rejected(_))
+}
+
+#[test]
+fn money_beyond_2_63_compares_and_adds_exactly() {
+    use alice_lol::rule_law::Answer;
+    let law = sum_law();
+    let q = |v: i128| format!("\"{v} JPY\"");
+    let valid =
+        |a: &Answer| matches!(a, Answer::Outputs(o) if o.get("valid") == Some(&Json::Bool(true)));
+    assert!(valid(&ask(&law, &q(BIG), &q(BIG + 1))));
+    assert!(!valid(&ask(&law, &q(BIG + 1), &q(BIG))), "ordered fails");
+    assert!(!rejected(&ask(&law, &q(TOP - 1), &q(1))));
+    assert!(
+        rejected(&ask(&law, &q(TOP), &q(1))),
+        "a sum beyond 2^127 - 1 rejects"
+    );
+    assert!(
+        rejected(&ask(&law, &q(i128::MIN), &q(-1))),
+        "below -2^127 rejects"
+    );
+    assert!(
+        !rejected(&ask(&law, &q(i128::MIN), &q(1))),
+        "-2^127 is money"
+    );
+}
+
+#[test]
+fn what_is_not_money() {
+    let law = sum_law();
+    for v in [
+        "\"170141183460469231731687303715884105728 JPY\"",
+        "\"-170141183460469231731687303715884105729 JPY\"",
+        "\"1 jpy\"",
+        "\"1 JP\"",
+        "\"1  JPY\"",
+        "\"+1 JPY\"",
+        "\"01 JPY\"",
+        "\"1 EUR\"",
+        "\"1JPY\"",
+        "5",
+        "5.0",
+        "null",
+        "true",
+    ] {
+        assert!(rejected(&ask(&law, v, "\"1 JPY\"")), "{v}");
+    }
+}
+
+#[test]
+fn a_code_is_three_upper_case_letters_whatever_the_table_lists() {
+    use alice_lol::rule_law::rule_law_from_file_with;
+    // a table that lists "jpy" and "JP" does not make them money: the form is checked first
+    let odd = rule_law_from_file(&CURRENCIES.replace(
+        "row usd",
+        "row low: e0 when code == \"jpy\"\nrow two: e0 when code == \"JP\"\nrow usd",
+    ))
+    .expect("reads");
+    let text = format!(
+        "kind predicate\ncurrencies {}\nx-input a money\nrequire t: a == a\nexample {{\"a\": \"1 JPY\"}}\n",
+        hex(odd.law_id())
+    );
+    let law = rule_law_from_file_with(&text, Some(&odd)).expect("reads");
+    assert!(!rejected(&law.respond(&json(r#"{"a": "1 JPY"}"#))));
+    for v in ["1 jpy", "1 JP"] {
+        assert!(
+            rejected(&law.respond(&json(&format!(r#"{{"a": "{v}"}}"#)))),
+            "{v}"
+        );
+    }
+    for c in ["jpy", "JP"] {
+        let with = text.replace(
+            "require t: a == a",
+            &format!("const k money = 1 {c}\nrequire t: a == a"),
+        );
+        assert!(rule_law_from_file_with(&with, Some(&odd)).is_err(), "{c}");
+    }
+}
+
+#[test]
+fn currencies_do_not_mix() {
+    let law = sum_law();
+    assert!(rejected(&ask(&law, "\"1 USD\"", "\"2 JPY\"")));
+    assert!(money_law(
+        "predicate",
+        "x-input a money\nconst x money = 1 JPY\nconst y money = 1 USD\nrequire r: x < y\n\
+         example {\"a\": \"1 JPY\"}\n"
+    )
+    .is_err());
+    let t = money_law(
+        "table",
+        "x-input a money\nconst limit money = 100 JPY\nvalue small big\n\
+         row s: small when a < limit\notherwise big\n",
+    )
+    .expect("reads");
+    let small = t.respond(&json(r#"{"a": "99 JPY"}"#));
+    assert!(
+        matches!(&small, alice_lol::rule_law::Answer::Outputs(o) if o.get("value") == Some(&Json::Text("small".to_owned())))
+    );
+    assert!(rejected(&t.respond(&json(r#"{"a": "99 USD"}"#))));
+    // a law without examples: the reading itself refuses, not an example
+    assert!(money_law(
+        "table",
+        "x-input a money\nconst x money = 1 JPY\nconst y money = 1 USD\nvalue small big\n\
+         row s: small when a < x or x < y\notherwise big\n",
+    )
+    .is_err());
+    assert!(money_law(
+        "table",
+        "x-input a money\nconst limit money = 100 EUR\nvalue small big\n\
+         row s: small when a < limit\notherwise big\n",
+    )
+    .is_err());
+    // an input in a currency the table does not know is not money, even when nothing mixes
+    let only = money_law(
+        "predicate",
+        "x-input a money\nx-input b money\nrequire o: a < b\n\
+         example {\"a\": \"1 JPY\", \"b\": \"2 JPY\"}\n",
+    )
+    .expect("reads");
+    assert!(!rejected(&ask(&only, "\"1 USD\"", "\"2 USD\"")));
+    assert!(rejected(&ask(&only, "\"1 EUR\"", "\"2 EUR\"")));
+}
+
+#[test]
+fn the_currency_table_is_part_of_the_law() {
+    use alice_lol::rule_law::rule_law_from_file_with;
+    let table = currency_table();
+    let text = format!(
+        "kind predicate\ncurrencies {}\nx-input a money\nconst zero money = 0 JPY\n\
+         require pos: a > zero\nexample {{\"a\": \"1 JPY\"}}\n",
+        hex(table.law_id())
+    );
+    let other = rule_law_from_file(
+        &CURRENCIES.replace("row usd", "row eur: e2 when code == \"EUR\"\nrow usd"),
+    )
+    .expect("reads");
+    assert!(
+        rule_law_from_file_with(&text, Some(&other)).is_err(),
+        "another table"
+    );
+    assert!(rule_law_from_file(&text).is_err(), "read without its table");
+    assert!(rule_law_from_file(
+        "kind predicate\nx-input a money\nrequire t: a == a\nexample {\"a\": \"1 JPY\"}\n"
+    )
+    .is_err());
+    assert!(rule_law_from_file_with(
+        &format!(
+            "kind predicate\ncurrencies {}\nx-input n integer\nrequire t: n == n\nexample {{\"n\": 1}}\n",
+            hex(table.law_id())
+        ),
+        Some(&table)
+    )
+    .is_err(), "a currencies line without money");
+    assert!(rule_law_from_file_with(&text.replace("0 JPY", "0 EUR"), Some(&table)).is_err());
+    let base = rule_law_from_file_with(&text, Some(&table))
+        .expect("reads")
+        .law_id();
+    let t2 = rule_law_from_file(&CURRENCIES.replace("unknown", "none")).expect("reads");
+    let moved = text.replace(&hex(table.law_id()), &hex(t2.law_id()));
+    assert_ne!(
+        base,
+        rule_law_from_file_with(&moved, Some(&t2))
+            .expect("reads")
+            .law_id()
+    );
+    let minus = text.replace("0 JPY", "-1 JPY");
+    assert_ne!(
+        base,
+        rule_law_from_file_with(&minus, Some(&table))
+            .expect("reads")
+            .law_id()
+    );
+    let id = |body: &str| money_law("predicate", body).expect("reads").law_id();
+    let add = id("x-input a money\nx-input b money\nrequire r: a + b > a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\"}\n");
+    let sub = id("x-input a money\nx-input b money\nrequire r: a - b < a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\"}\n");
+    assert_ne!(add, sub);
+}
+
+#[test]
+fn an_operation_not_evaluated_does_not_reject() {
+    let law = money_law(
+        "predicate",
+        "x-input a money\nx-input b money\nx-input go bool\n\
+         require r: not go or a + b > a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\", \"go\": true}\n",
+    )
+    .expect("reads");
+    let q = |go: bool| {
+        law.respond(&json(&format!(
+            r#"{{"a": "1 JPY", "b": "1 USD", "go": {go}}}"#
+        )))
+    };
+    assert!(!rejected(&q(false)));
+    assert!(rejected(&q(true)));
 }

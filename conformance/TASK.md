@@ -223,6 +223,8 @@ The characters, the comments, the line ends and the tokens are read as for every
   - `bytes`: a JSON string of lower-case hex digits, of even length (`""` is the empty byte string).
   - `bool`: `true` or `false`.
   - `record(<field>: <type>, ...)`: a JSON object that has every field, each of its type. Other keys are ignored. A field is used as `<input>.<field>`.
+  - `money`: a JSON string `<amount> <currency>`, an amount of minor units and a currency, separated by one ASCII space. The amount is `0`, or an optional `-` followed by a digit 1-9 and digits (no `+`, no leading zero), from -2^127 to 2^127 - 1; the currency is three upper-case ASCII letters that the law's currency table knows (below). A JSON number is not money. A money constant is written the same way without the quotes: `const fee money = 1200 JPY`.
+- **The currency table.** A law with a `money` input or constant has the line `currencies <id>`, exactly once: the law identifier (64 lower-case hex digits) of the currency table it reads, a table law with the input `x-input code text` whose values are names `e<digits>` (the number of minor-unit digits of a currency: `e0` for JPY, `e2` for USD) and one more value given when a code is unknown. A currency is known when the table's answer for its code is an `e<digits>` value. The table is a law of its own (an edition of a rule set, because currencies change); a reader is given it next to the law, and a law whose `currencies` line names another table does not answer. A law without money has no `currencies` line.
   - A value of another JSON type, or text that is not of the form, does not have the type.
 - **Every expression is typed when the file is read.** A name that is not declared (in a predicate law: on an earlier line; in a machine law: anywhere in the file), a function or operator applied to values of other types, or a `require` / `when` that is not a boolean makes the law file unreadable.
 
@@ -275,14 +277,17 @@ A predicate law has at least one `require` line and one `example` line. Each `x-
 |------|-------|-------|
 | `a or b`, `a and b`, `not a` | bool | as usual |
 | `a == b`, `a != b` | two values of one type (not a record) | equality; bytes and text are equal when they are the same sequence |
-| `a < b`, `a <= b`, `a > b`, `a >= b` | two integers, or two times | the order of the numbers |
+| `a < b`, `a <= b`, `a > b`, `a >= b` | two integers, two times, or two money | the order of the numbers; of money, the order of the amounts in minor units |
+| `a + b`, `a - b` | two money | the sum or the difference of the amounts, in the same currency |
 | `a ++ b` | bytes | the concatenation |
 | `len(x)` | text or bytes | the number of bytes (of the UTF-8 form of a text): an integer |
 | `prefix(b, n)` | bytes, integer | the first `n` bytes of `b`; all of `b` when `n` is at least its length; empty when `n` is 0 or less |
 | `utf8(t)` | text | the UTF-8 bytes of `t` |
 | `hmac_sha256(key, message)` | bytes, bytes | HMAC-SHA256 (RFC 2104 with SHA-256): 32 bytes. Only in a law with the `use` line |
 
-Comparisons do not chain (`a < b < c` makes the law file unreadable); parentheses group.
+Comparisons do not chain (`a < b < c` makes the law file unreadable); parentheses group. `+` and `-` bind tighter than the comparisons and looser than `++`, from left to right.
+
+**Money** is compared and added by its amount in minor units only: two amounts of one currency are compared as integers, and nothing is converted between currencies or between numbers of minor-unit digits. Two money values of different currencies are never compared or added: with two constants the law file does not read, and when a request's money input has another currency than the value it meets, the request is rejected. A sum or difference outside -2^127 to 2^127 - 1 also rejects the request (it is never wrapped or clamped). `and` and `or` stop at the first operand that decides them: an operation they do not reach is not evaluated and does not reject.
 
 **A request** gives the `x-input` values:
 
@@ -291,7 +296,7 @@ Comparisons do not chain (`a < b < c` makes the law file unreadable); parenthese
 
 **The answer.** First the `x-split` and `x-bind` lines are applied in file order. When a split does not give exactly its number of parts, or a part does not read as its type, the predicate does not hold and `failed` is `shape`. Then the `require` lines are evaluated in file order; the first that does not hold gives its label as `failed`.
 
-**Output:** `{"outputs": {"valid": true, "failed": null}}` when every line holds, otherwise `{"outputs": {"valid": false, "failed": "<label or shape>"}}`. A predicate never rejects a request whose inputs have their types.
+**Output:** `{"outputs": {"valid": true, "failed": null}}` when every line holds, otherwise `{"outputs": {"valid": false, "failed": "<label or shape>"}}`. A predicate never rejects a request whose inputs have their types, except when its money meets another currency or leaves the range of an amount (above).
 
 The time an implementation takes to compare two byte strings should not depend on where they first differ (compare a secret, such as a tag, in constant time). The checks cannot observe this, and nothing is scored on it.
 
@@ -313,7 +318,7 @@ A table law has at least one `row` line. Every value of the `value` line is give
 
 **The answer.** The `row` lines are evaluated in file order. The first whose expression holds gives the answer: its value and its label. When none holds the answer is the value of the `otherwise` line, and the row is `null`.
 
-**Output:** `{"outputs": {"value": "<value>", "row": "<label>"}}`, or `{"outputs": {"value": "<value>", "row": null}}` when no row holds. A table never rejects a request whose inputs have their types.
+**Output:** `{"outputs": {"value": "<value>", "row": "<label>"}}`, or `{"outputs": {"value": "<value>", "row": null}}` when no row holds. A table never rejects a request whose inputs have their types, except when its money meets another currency or leaves the range of an amount (see "Predicate" above).
 
 ### Editions of a rule set (`domain` / `edition`)
 

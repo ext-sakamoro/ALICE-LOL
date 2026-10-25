@@ -46,11 +46,20 @@ def semantics(rust_src: str) -> dict[str, bytes]:
 def render(root: Path, sem: dict[str, bytes]) -> str:
     rows = []
     resolved = {}  # law id -> resolved text of each edition, for the deltas that supersede it
-    for path in sorted(root.glob("laws/**/*.law")):
-        text = path.read_text(encoding="utf-8")
-        if law_rules.rule_kind(text) is None:
-            continue
-        law = law_rules.parse(text, sem)
+    laws = [(p, p.read_text(encoding="utf-8")) for p in sorted(root.glob("laws/**/*.law"))]
+    laws = [(p, t) for p, t in laws if law_rules.rule_kind(t) is not None]
+    # a law with money is read with the currency table its `currencies` line names
+    tables = {}
+    for _, t in laws:
+        if "\ncurrencies " not in "\n" + t:
+            law = law_rules.parse(t, sem)
+            if law["kind"] == "table":
+                tables[law_rules.law_id(law, sem).hex()] = law
+    for path, text in laws:
+        cid = next((ln.split()[1] for ln in text.splitlines() if ln.split()[:1] == ["currencies"]), None)
+        if cid is not None and cid not in tables:
+            raise SystemExit(f"{path.relative_to(root)}: its currency table {cid[:12]}… is not under laws/")
+        law = law_rules.parse(text, sem, currencies=tables.get(cid))
         lid = law_rules.law_id(law, sem)
         rows.append(f"{path.relative_to(root).as_posix()} {law['kind']} {lid.hex()}")
         if law["edition"] is not None:
