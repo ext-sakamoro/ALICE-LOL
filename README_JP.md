@@ -457,10 +457,10 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 - [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): `music` intent の 8 byte の中身を定義する
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu レンダラ
 
-<!-- law-integration:begin law=8f5c6e6774474596e2ac920ae6585c70c55d6ea4 -->
+<!-- law-integration:begin law=eb9a8cab90861f766e7e9a6cc1ad7a0eeb005e77 -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `8f5c6e677447` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `eb9a8cab9086` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
