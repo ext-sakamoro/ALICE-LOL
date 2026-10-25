@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 0.4.2 の `scripts/docs_lint.py` の項の補足: 公開 text の検査の機器名の class は所有する機材の名前に限る (計算機の platform の名前は含まないので、docs_lint の機器名の正規表現にあった platform の名前は検出の対象から外れた、意図した変更)
 - CI: `scripts/clippy_lib_gate.py` の canary を path で判定するようにした (ALICE-SDF / ALICE-Physics / ALICE-LOL で同じ file、repository ごとの library 専用の禁止と canary の形は `scripts/clippy_lib_gate.toml`) これまでは canary の各行に何らかの禁止の診断があれば通したので、同じ行で別の禁止が出ると、消した禁止の行も通っていた (ALICE-SDF で `RandomState::new` の禁止を消しても green だった) 形ごとにその形の path の診断を要求し、どの形にも当たらない診断、2 回以上または 0 回現れる形の文字列、形が 0 件、clippy の exit 0、何も指さない設定の path (clippy の `does not refer to` の警告) で失敗する library 専用の禁止はどれも、それを名指す形を canary に持つ (method の path の打ち間違いは clippy が警告しないため) 表示は「形の数 / 期待した数」 (28 / 28、足した形 12: 形の無かった glam の禁止)
 - `.github/alice-siblings` の ALICE-Physics の pin を 5327ea42 (`LicenseRef-Proprietary`) に進め、`deny.toml` から `alice-physics` と `alice-physics-core` の license 例外を外した ALICE-LLM の pin と例外はそのまま
+- CI: Security & Hygiene (cargo audit / cargo-deny / cargo-machete / stub-guard / coverage) は ci/** の branch でも走る main だけで走っていたので、依存や `deny.toml` の変更は取り込む前に検査されなかった `changes` job (`scripts/changed_paths.py`、`.github/paths/security-audit.txt`、`.github/alice-siblings` も対象) が実行を決め、`gate` job が飛ばされた job を失敗にする
+- 共有 file の pin (`.github/shared-files-pin` / `.github/g11-table-pin`) を ALICE-Law 0e8c14ec に進め、`scripts/id_move_check.py` とその試験を表の目標の bytes にした
 
 ### Removed
 
