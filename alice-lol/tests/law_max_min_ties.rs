@@ -195,3 +195,43 @@ fn drawer_slot_depth_min_of_mixed_zeros_and_nan() {
         "a negative NaN min depth (first operand) falls to the drawer depth"
     );
 }
+
+/// Density hatching (`laser_pattern::density_hatch`): the first line is at `d = proj_min`, the Law
+/// min over the corner projections, and its y on the left edge is `(sin * x_min + d) / cos`
+///
+/// At angle 0 with `x = -1`, `y = -0` and a height of `+0`, the projections `-sin * cx + cos * cy`
+/// are `+0, -0, +0, +0` (corner order `(x, y)`, `(x + w, y)`, `(x + w, y + h)`, `(x, y + h)`), so the
+/// fold meets the equal pair in both orders (`min(+0, -0)`, then `min(-0, +0)`): the Law min is -0
+/// either way, `d` is -0 and, with `sin * x_min = -0`, the line's y on the left edge is -0. The
+/// platform min returns the second operand of an equal pair on x86_64, which gives +0 there.
+/// A NaN projection cannot be the first operand (the fold starts from +inf and never holds a NaN),
+/// and as the second operand the Law and the platform both return the other one; a NaN corner also
+/// makes the clip find no edge, so no line is drawn: not a tie
+#[test]
+fn density_hatch_first_line_takes_the_law_min_of_mixed_zero_projections() {
+    use alice_lol::laser_pattern::{density_hatch, Bounds, LaserElement};
+    let lines = |b: Bounds| -> Vec<(u64, u64, u64, u64)> {
+        density_hatch(1.0, 1.0, 0.0, &b, &|_, _| 0.5)
+            .into_iter()
+            .map(|e| match e {
+                LaserElement::Line(x1, y1, x2, y2) => {
+                    (x1.to_bits(), y1.to_bits(), x2.to_bits(), y2.to_bits())
+                }
+                other => panic!("not a line: {other:?}"),
+            })
+            .collect()
+    };
+    let neg_zero = (-0.0f64).to_bits();
+    // the projections are +0, -0, +0, +0: the min is -0 in either order of the equal pair
+    let got = lines(Bounds::new(-1.0, -0.0, 2.0, 0.0));
+    assert!(!got.is_empty(), "the flat box gives its line");
+    assert_eq!(
+        got[0].1, neg_zero,
+        "the first line's y on the left edge is the Law min: -0"
+    );
+    // on the right edge `sin * x_max` is +0, and +0 + -0 is +0: only the left edge shows the sign
+    assert_eq!(got[0].3, 0.0f64.to_bits());
+    // all projections +0: the min is +0 and so is the line's y
+    let got = lines(Bounds::new(1.0, 0.0, 2.0, 0.0));
+    assert_eq!(got[0].1, 0.0f64.to_bits());
+}

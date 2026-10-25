@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- CI (ALICE-Law G2): Law の max / min を呼ぶ library の関数を全て `scripts/g2_sites.toml` に載せ (21 関数、38 呼び出し)、各行に公開 API 経由の tie 試験か、ゼロの符号と NaN が観測できない理由を書く `scripts/g2_sites.py` (試験 `scripts/test_g2_sites.py`) が、行の無い呼び出し・消えた site や数の違う行・存在しない試験・試験も理由も無い行・比較 0 件を fail にする (wiring-guard job の 3 OS と preflight) `laser_pattern::density_hatch` の最初の線の tie 試験 (角の射影の Law min が -0 を選ぶ平らな箱) を足し、`alice-law-conformance.toml` の G2 を pass にした
 - `scripts/alice_dup_check.py`: `cargo metadata --all-features` の解決結果で、同じ `alice-*` が 1 つの build に 2 つ (版か取得元が違う) link されていれば fail する (lock の無い crate でも読める、比べた件数 0 も fail) CI の wiring-guard job と preflight で workspace と `fuzz/` に掛ける
 - `alice-lol/examples/intent_plan.rs`: intent の動詞 (`walk` / `grasp` / `release`) と合成 (`sequence` / `parallel`) で `Program` を組み、`registry_len` / `has_intent` と LOL の text を出す (workspace の中でこの API を使っていた `alice-lol-robot` が ALICE-Kinematics に移ったので、公開 API の使い方をこの example が示す)
 - program の Law の参照 (`alice_lol::program_law`): kind `lol.law.program/v1`、意味論は `LOL_GEOMETRY_SEMANTICS_ID`、行は program の text 1 つ (`source`) の `alice_zip::law_ref::LawRef` (v2) を `program_law_ref` で作り、`resolve_program` が kind・意味論・行を確かめてから program を `SdfNode` に読む law の識別子は ALICE-Zip の v2 の識別子なので、受け手は byte 列だけで確かめ、mesh を受け取らずに形を作り直せる 試験の期待値は ALICE-Zip の独立実装 (Python) が書いた 依存: alice-zip の sibling を LawRef v2 の入った fec22a0 に上げた

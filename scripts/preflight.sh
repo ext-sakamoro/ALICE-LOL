@@ -103,6 +103,8 @@ step "ci.yml / fmt: Check formatting"
 step "ci.yml / wiring-guard: oracle + 新規の未配線 / 理由の無い dead_code が無い"
 python3 scripts/test_wiring_guard.py
 python3 scripts/wiring_guard.py
+python3 scripts/test_g2_sites.py
+python3 scripts/g2_sites.py
 
 step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
 python3 scripts/test_parser_no_direct_validating_builders.py
