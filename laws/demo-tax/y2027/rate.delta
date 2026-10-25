@@ -1,0 +1,8 @@
+# the 2027 edition: amounts of 10000 or less become exempt
+domain demo-tax
+edition y2027
+supersedes 7cc1eee63893b9cfb7eddac6c6f45f03aa16f10206c29686afbc42126bebd3cc
+effective 1798761600
+semantics ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
+replace value: value exempt reduced standard
+add before row small: row tiny: exempt when amount <= 10000

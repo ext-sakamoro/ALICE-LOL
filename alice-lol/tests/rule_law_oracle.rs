@@ -529,9 +529,12 @@ fn the_rule_semantics_are_their_own_and_measured() {
 
 /// The v2 identifiers of the rule laws under `laws/`, as `scripts/rule_law_ids.py` writes them from
 /// the second implementation (`scripts/law_rules.py`): `(path, kind, hex id)`, and the semantics
-/// identifiers the file was written under
-/// `(path, kind, hex id)` rows and `(kind, hex semantics)` rows of the recorded file
-type Recorded = (Vec<(String, String, String)>, Vec<(String, String)>);
+/// identifiers the file was written under: `(path, kind, hex id, hex digest of the resolved text
+/// for a delta)` rows and `(kind, hex semantics)` rows
+type Recorded = (
+    Vec<(String, String, String, Option<String>)>,
+    Vec<(String, String)>,
+);
 
 fn recorded_ids() -> Recorded {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/rule_law_ids_v2.txt");
@@ -550,12 +553,16 @@ fn recorded_ids() -> Recorded {
         .iter()
         .filter(|w| w[0] != "semantics")
         .map(|w| {
-            assert_eq!(
-                w.len(),
-                3,
-                "rule_law_ids_v2.txt: not `<path> <kind> <id>`: {w:?}"
+            assert!(
+                w.len() == 3 || w.len() == 4,
+                "rule_law_ids_v2.txt: not `<path> <kind> <id> [<digest>]`: {w:?}"
             );
-            (w[0].to_owned(), w[1].to_owned(), w[2].to_owned())
+            (
+                w[0].to_owned(),
+                w[1].to_owned(),
+                w[2].to_owned(),
+                w.get(3).map(|d| (*d).to_owned()),
+            )
         })
         .collect();
     (ids, sem)
@@ -576,7 +583,7 @@ fn rule_laws_on_disk(root: &std::path::Path) -> Vec<String> {
             let p = e.expect("entry").path();
             if p.is_dir() {
                 walk(&p, out);
-            } else if p.extension().is_some_and(|x| x == "law") {
+            } else if p.extension().is_some_and(|x| x == "law" || x == "delta") {
                 out.push(p);
             }
         }
@@ -587,7 +594,8 @@ fn rule_laws_on_disk(root: &std::path::Path) -> Vec<String> {
         .iter()
         .filter(|f| {
             let text = std::fs::read_to_string(f).expect("law file");
-            alice_lol::rule_law::rule_kind(&text).is_some()
+            f.extension().is_some_and(|x| x == "delta")
+                || alice_lol::rule_law::rule_kind(&text).is_some()
         })
         .map(|f| {
             f.strip_prefix(root)
@@ -616,17 +624,52 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
     );
     // every rule law under laws/ is listed, so a new one cannot go unchecked
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-    let listed: Vec<String> = ids.iter().map(|(p, _, _)| p.clone()).collect();
+    let listed: Vec<String> = ids.iter().map(|(p, _, _, _)| p.clone()).collect();
     assert_eq!(
         listed,
         rule_laws_on_disk(&root),
         "run scripts/rule_law_ids.py"
     );
     assert!(ids.len() >= 5, "compared {} rule laws", ids.len());
-    for (path, kind, want) in &ids {
+    // the resolved text of each edition, by its identifier, for the deltas that supersede it
+    let mut resolved: Vec<([u8; 32], String)> = Vec::new();
+    for (path, kind, want, _) in ids.iter().filter(|r| r.3.is_none()) {
         let text = std::fs::read_to_string(root.join(path)).expect("law file");
         let law = rule_law_from_file(&text).expect("reads");
         assert_eq!(hex(law.law_id()), *want, "{path} ({kind})");
+        if law.edition().is_some() {
+            let r = alice_lol::rule_law::edition_text(&text).expect("resolves");
+            resolved.push((law.law_id(), r));
+        }
+    }
+    let mut deltas: Vec<_> = ids.iter().filter(|r| r.3.is_some()).collect();
+    assert!(!deltas.is_empty(), "no delta compared");
+    while !deltas.is_empty() {
+        let before = deltas.len();
+        deltas.retain(|(path, kind, want, digest)| {
+            let delta = std::fs::read_to_string(root.join(path)).expect("delta file");
+            let Some((_, prev)) = resolved
+                .iter()
+                .find(|(id, _)| delta.contains(&format!("supersedes {}", hex(*id))))
+            else {
+                return true;
+            };
+            let (text, _) = alice_lol::rule_law::resolve_delta(prev, &delta).expect("resolves");
+            let id = rule_law_from_file(&text).expect("reads").law_id();
+            assert_eq!(hex(id), *want, "{path} ({kind})");
+            let d: [u8; 32] = <sha2::Sha256 as sha2::Digest>::digest(text.as_bytes()).into();
+            assert_eq!(
+                Some(hex(d)),
+                *digest,
+                "{path}: the resolved text differs from the second implementation's"
+            );
+            resolved.push((id, text));
+            false
+        });
+        assert!(
+            deltas.len() < before,
+            "a delta supersedes no recorded edition: {deltas:?}"
+        );
     }
 }
 
@@ -718,5 +761,154 @@ fn edition_headers_that_do_not_read() {
     ];
     for b in bad {
         assert!(rule_law_from_file(&(b.clone() + RATE)).is_err(), "{b}");
+    }
+}
+
+// ------------------------------------------------------------------ editions as deltas (TASK.md "A later edition written as a delta")
+
+fn e1() -> String {
+    format!(
+        "law the first edition, written in full\ndomain demo-tax\nedition e1\nsupersedes first\n\
+         effective 100 until 200\nsemantics {}\nkind table\nx-input amount integer\n\
+         value reduced standard\nrow small: reduced when amount <= 1000   # the bound\notherwise standard\n",
+        hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+    )
+}
+
+fn delta(prev: &str, edition: &str, ops: &str, effective: &str) -> String {
+    let id = hex(rule_law_from_file(prev).expect("reads").law_id());
+    format!(
+        "domain demo-tax\nedition {edition}\nsupersedes {id}\neffective {effective}\nsemantics {}\n{ops}",
+        hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+    )
+}
+
+#[test]
+fn the_resolved_text_of_a_full_edition() {
+    let want = format!(
+        "domain demo-tax\nedition e1\nsupersedes first\neffective 100 until 200\nsemantics {}\n\
+         kind table\nx-input amount integer\nvalue reduced standard\n\
+         row small: reduced when amount <= 1000\notherwise standard\n",
+        hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+    );
+    assert_eq!(
+        alice_lol::rule_law::edition_text(&e1()).expect("resolves"),
+        want
+    );
+}
+
+#[test]
+fn a_chain_of_deltas_equals_the_edition_written_in_full() {
+    use alice_lol::rule_law::{edition_text, resolve_delta};
+    let r1 = edition_text(&e1()).expect("resolves");
+    let d2 = delta(
+        &r1,
+        "e2",
+        "replace row small: row small: reduced when amount <= 1200\nchanges mid\n",
+        "200 until 300",
+    );
+    let (r2, ch2) = resolve_delta(&r1, &d2).expect("resolves");
+    assert_eq!(ch2, vec!["mid".to_owned()]);
+    let d3 = delta(
+        &r2,
+        "e3",
+        "add after row small: row tiny: reduced when amount <= 10\nremove row small\n",
+        "300",
+    );
+    let (r3, _) = resolve_delta(&r2, &d3).expect("resolves");
+    let e2_id = hex(rule_law_from_file(&r2).expect("reads").law_id());
+    let by_hand = format!(
+        "domain demo-tax\nedition e3\nsupersedes {e2_id}\neffective 300\nsemantics {}\n\
+         kind table\nx-input amount integer\nvalue reduced standard\n\
+         row tiny: reduced when amount <= 10\notherwise standard\n",
+        hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+    );
+    assert_eq!(r3, edition_text(&by_hand).expect("resolves"));
+    assert_eq!(
+        rule_law_from_file(&r3).expect("reads").law_id(),
+        rule_law_from_file(&by_hand).expect("reads").law_id()
+    );
+    let answer = |t: &str| {
+        rule_law_from_file(t)
+            .expect("reads")
+            .respond(&json(r#"{"amount": 1100}"#))
+    };
+    assert_ne!(
+        answer(&r1),
+        answer(&r2),
+        "the delta changes the answer at 1100"
+    );
+}
+
+#[test]
+fn add_after_and_before_place_the_line() {
+    use alice_lol::rule_law::{edition_text, resolve_delta};
+    let r1 = edition_text(&e1()).expect("resolves");
+    let rows = |t: &str| -> Vec<String> {
+        t.lines()
+            .filter(|l| l.starts_with("row "))
+            .map(|l| l.split_whitespace().nth(1).unwrap_or("").to_owned())
+            .collect()
+    };
+    let add = |side: &str| {
+        let ops = format!("add {side} row small: row tiny: reduced when amount <= 10\n");
+        resolve_delta(&r1, &delta(&r1, "e2", &ops, "200"))
+            .expect("resolves")
+            .0
+    };
+    assert_eq!(rows(&add("after")), ["small:", "tiny:"]);
+    assert_eq!(rows(&add("before")), ["tiny:", "small:"]);
+}
+
+#[test]
+fn two_lines_with_one_key_do_not_resolve() {
+    let m = format!(
+        "domain demo-tax\nedition e1\nsupersedes first\neffective 100\nsemantics {}\n\
+         kind machine\nstate a initial\nstate b\nevent go\non go from a to b\non go from a to a\n",
+        hex(RULE_SEMANTICS_ID)
+    );
+    assert!(rule_law_from_file(&m).is_ok());
+    assert!(alice_lol::rule_law::edition_text(&m).is_err());
+    let sources = e1().replace("kind table", "source a\nsource b\nkind table");
+    assert!(alice_lol::rule_law::edition_text(&sources).is_ok());
+}
+
+#[test]
+fn independent_operations_commute() {
+    use alice_lol::rule_law::{edition_text, resolve_delta};
+    let r1 = edition_text(&e1()).expect("resolves");
+    let a = "replace row small: row small: reduced when amount <= 999\n";
+    let b = "add row big: standard when amount > 5000\n";
+    let one = resolve_delta(&r1, &delta(&r1, "e2", &format!("{a}{b}"), "200")).expect("resolves");
+    let two = resolve_delta(&r1, &delta(&r1, "e2", &format!("{b}{a}"), "200")).expect("resolves");
+    assert_eq!(one, two);
+}
+
+#[test]
+fn deltas_that_do_not_resolve() {
+    use alice_lol::rule_law::{edition_text, resolve_delta};
+    let r1 = edition_text(&e1()).expect("resolves");
+    let id = hex(rule_law_from_file(&r1).expect("reads").law_id());
+    let bad = [
+        delta(&r1, "e2", "remove row nothing\n", "200"),
+        delta(
+            &r1,
+            "e2",
+            "add row small: reduced when amount <= 5\n",
+            "200",
+        ),
+        delta(
+            &r1,
+            "e2",
+            "replace row small: row big: reduced when amount <= 5\n",
+            "200",
+        ),
+        delta(&r1, "e2", "rename row small\n", "200"),
+        delta(&r1, "e2", "", "200").replace(&id, &"ab".repeat(32)),
+        delta(&r1, "e2", "", "200").replace("domain demo-tax", "domain demo-vat"),
+        delta(&r1, "e2", "add row x: reduced when amount <=\n", "200"),
+    ];
+    for d in bad {
+        assert!(resolve_delta(&r1, &d).is_err(), "{d}");
     }
 }

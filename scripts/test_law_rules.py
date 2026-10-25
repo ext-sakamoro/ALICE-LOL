@@ -331,5 +331,91 @@ class Editions(unittest.TestCase):
                 R.parse(text + RATE, SEM)
 
 
+E1 = ("law the first edition, written in full\n"
+      "domain demo-tax\nedition e1\nsupersedes first\neffective 100 until 200\nsemantics " + "00" * 32 + "\n"
+      "kind table\nx-input amount integer\nvalue reduced standard\n"
+      "row small: reduced when amount <= 1000   # the bound\notherwise standard\n")
+
+
+def _delta(prev_text, edition, ops, effective="200"):
+    prev_id = R.law_id(R.parse(prev_text, SEM), SEM).hex()
+    return (f"domain demo-tax\nedition {edition}\nsupersedes {prev_id}\neffective {effective}\n"
+            f"semantics {'00' * 32}\n" + ops)
+
+
+class Deltas(unittest.TestCase):
+    """conformance/TASK.md: A later edition written as a delta"""
+
+    def test_the_resolved_text_of_a_full_edition(self):
+        self.assertEqual(R.resolved_text(E1, SEM),
+                         "domain demo-tax\nedition e1\nsupersedes first\neffective 100 until 200\n"
+                         "semantics " + "00" * 32 + "\nkind table\n"
+                         "x-input amount integer\nvalue reduced standard\nrow small: reduced when amount <= 1000\n"
+                         "otherwise standard\n")
+
+    def test_a_chain_of_deltas_equals_the_edition_written_in_full(self):
+        r1 = R.resolved_text(E1, SEM)
+        d2 = _delta(r1, "e2", "replace row small: row small: reduced when amount <= 1200\nchanges mid\n",
+                    "200 until 300")
+        r2, ch2 = R.resolve(r1, d2, SEM)
+        self.assertEqual(ch2, ["mid"])
+        d3 = _delta(r2, "e3", "add after row small: row tiny: reduced when amount <= 10\n"
+                              "remove row small\n", "300")
+        r3, _ = R.resolve(r2, d3, SEM)
+        e2_id = R.law_id(R.parse(r2, SEM), SEM).hex()
+        by_hand = ("domain demo-tax\nedition e3\nsupersedes " + e2_id + "\neffective 300\nsemantics " + "00" * 32 + "\n"
+                   "kind table\nx-input amount integer\n"
+                   "value reduced standard\nrow tiny: reduced when amount <= 10\notherwise standard\n")
+        self.assertEqual(r3, R.resolved_text(by_hand, SEM))
+        self.assertEqual(R.law_id(R.parse(r3, SEM), SEM), R.law_id(R.parse(by_hand, SEM), SEM))
+        # the resolved edition answers as the text it resolves to
+        self.assertEqual(R.respond(R.parse(r2, SEM), {"amount": 1100})[1]["value"], "reduced")
+        self.assertEqual(R.respond(R.parse(r1, SEM), {"amount": 1100})[1]["value"], "standard")
+
+    def test_add_after_and_before_place_the_line(self):
+        r1 = R.resolved_text(E1, SEM)
+        body = lambda r: [ln for ln in r.splitlines() if ln.startswith("row ")]
+        after, _ = R.resolve(r1, _delta(r1, "e2", "add after row small: row tiny: reduced when amount <= 10\n"), SEM)
+        before, _ = R.resolve(r1, _delta(r1, "e2", "add before row small: row tiny: reduced when amount <= 10\n"), SEM)
+        self.assertEqual([ln.split()[1] for ln in body(after)], ["small:", "tiny:"])
+        self.assertEqual([ln.split()[1] for ln in body(before)], ["tiny:", "small:"])
+        # first match: the order is part of the rule and of its identifier
+        self.assertNotEqual(R.law_id(R.parse(after, SEM), SEM), R.law_id(R.parse(before, SEM), SEM))
+
+    def test_two_lines_with_one_key_do_not_resolve(self):
+        m = ("domain demo-tax\nedition e1\nsupersedes first\neffective 100\nsemantics " + "00" * 32 + "\n"
+             "kind machine\nstate a initial\nstate b\nevent go\non go from a to b\non go from a to a\n")
+        R.parse(m, SEM)  # the reader takes two transitions from one state (the first matching one is taken)
+        with self.assertRaises(R.RuleError):
+            R.resolved_text(m, SEM)
+        # lines for people are not in the body, so two `source` lines are fine
+        R.resolved_text(E1.replace("kind table", "source a\nsource b\nkind table"), SEM)
+
+    def test_independent_operations_commute(self):
+        r1 = R.resolved_text(E1, SEM)
+        a = "replace row small: row small: reduced when amount <= 999\n"
+        b = "add row big: standard when amount > 5000\n"
+        ra, _ = R.resolve(r1, _delta(r1, "e2", a + b), SEM)
+        rb, _ = R.resolve(r1, _delta(r1, "e2", b + a), SEM)
+        self.assertEqual(ra, rb)
+
+    def test_deltas_that_do_not_resolve(self):
+        r1 = R.resolved_text(E1, SEM)
+        bad = [
+            _delta(r1, "e2", "remove row nothing\n"),                                  # no such key
+            _delta(r1, "e2", "add row small: reduced when amount <= 5\n"),             # key already there
+            _delta(r1, "e2", "replace row small: row big: reduced when amount <= 5\n"),  # changes the key
+            _delta(r1, "e2", "rename row small\n"),                                     # not an operation
+            _delta(r1, "e2", "").replace(R.law_id(R.parse(r1, SEM), SEM).hex(), "ab" * 32),  # wrong predecessor
+            _delta(r1, "e2", "").replace("domain demo-tax", "domain demo-vat"),         # another domain
+            _delta(r1, "e2", "add row x: reduced when amount <=\n"),                   # does not read after
+        ]
+        for d in bad:
+            with self.assertRaises(R.RuleError, msg=d):
+                R.resolve(r1, d, SEM)
+        with self.assertRaises(R.RuleError):
+            R.resolved_text(E1.replace("otherwise standard", "otherwise standard\nrow small: x when amount > 1"), SEM)
+
+
 if __name__ == "__main__":
     unittest.main()
