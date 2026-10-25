@@ -6,7 +6,7 @@
 //! effective time and an expiry), so a statute law can be compiled to one: every time is at most
 //! [`MAX_LEGAL_TIME`], whose nanoseconds fit 64 bits.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use alice_zip::law_id::LawIdHasher;
 
@@ -218,7 +218,7 @@ pub(super) fn read_statute(
     let mut title: Option<String> = None;
     let mut clauses: Vec<StatuteClause> = Vec::new();
     // label -> index: each label is looked up once, so reading is linear in the clauses
-    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut index: BTreeMap<String, usize> = BTreeMap::new();
     for &(n, l) in ls {
         let w = words(l);
         match w[0].0 {
@@ -255,7 +255,7 @@ pub(super) fn read_statute(
 fn read_clause(
     n: usize,
     l: &str,
-    earlier: &HashMap<String, usize>,
+    earlier: &BTreeMap<String, usize>,
     default_from: u64,
 ) -> Result<StatuteClause, RuleLawError> {
     const SHAPE: &str =

@@ -272,9 +272,9 @@ pub(super) fn read_contract(
     let mut obligations: Vec<ContractObligation> = Vec::new();
     let mut currency: Option<String> = None;
     // every label of the law, and each party's index: one lookup per line, so reading is linear
-    let mut labels: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut party_index: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut labels: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut party_index: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
     for &(n, l) in ls {
         let w: Vec<&str> = l.split_whitespace().collect();
         match w[0] {
