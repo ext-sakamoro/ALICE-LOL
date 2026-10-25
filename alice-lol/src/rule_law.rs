@@ -2105,19 +2105,29 @@ fn parse_type(line: usize, src: &str) -> Result<Ty, RuleLawError> {
         .ok_or_else(|| err(line, format!("type `{src}`")))?;
     let mut fields: Vec<(String, Ty)> = Vec::new();
     for part in inner.split(',') {
-        let (name, ty) = part
-            .split_once(':')
-            .ok_or_else(|| err(line, format!("record field `{}`", part.trim())))?;
+        let (name, ty) = part.split_once(':').ok_or_else(|| {
+            err(
+                line,
+                format!("record field `{}`", part.trim_matches([' ', '\t'])),
+            )
+        })?;
         let (name, ty) = (name.trim_matches([' ', '\t']), ty.trim_matches([' ', '\t']));
-        let ty =
-            Ty::scalar(ty).ok_or_else(|| err(line, format!("record field `{}`", part.trim())))?;
+        let ty = Ty::scalar(ty).ok_or_else(|| {
+            err(
+                line,
+                format!("record field `{}`", part.trim_matches([' ', '\t'])),
+            )
+        })?;
         let b = name.as_bytes();
         let ok = !b.is_empty()
             && b[0].is_ascii_lowercase()
             && b.iter()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_');
         if !ok || fields.iter().any(|(f, _)| f == name) {
-            return Err(err(line, format!("record field `{}`", part.trim())));
+            return Err(err(
+                line,
+                format!("record field `{}`", part.trim_matches([' ', '\t'])),
+            ));
         }
         fields.push((name.to_owned(), ty));
     }
@@ -2147,7 +2157,10 @@ fn read_predicate(
             if !matches!(kw, "x-input" | "x-split" | "x-bind") || rest.starts_with([' ', '\t']) {
                 return Err(err(
                     n,
-                    format!("`{}` is not an x- line of a predicate law", l.trim()),
+                    format!(
+                        "`{}` is not an x- line of a predicate law",
+                        l.trim_matches([' ', '\t'])
+                    ),
                 ));
             }
             let rw = words(rest);
@@ -2336,7 +2349,10 @@ fn read_table(ls: &[(usize, &str)], cur: Option<&Currencies>) -> Result<TableLaw
             if kw != "x-input" || rest.starts_with([' ', '\t']) {
                 return Err(err(
                     n,
-                    format!("`{}` is not an x- line of a table law", l.trim()),
+                    format!(
+                        "`{}` is not an x- line of a table law",
+                        l.trim_matches([' ', '\t'])
+                    ),
                 ));
             }
             let rw = words(rest);
