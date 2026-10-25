@@ -203,7 +203,7 @@ fn drawer_slot_depth_min_of_mixed_zeros_and_nan() {
 /// are `+0, -0, +0, +0` (corner order `(x, y)`, `(x + w, y)`, `(x + w, y + h)`, `(x, y + h)`), so the
 /// fold meets the equal pair in both orders (`min(+0, -0)`, then `min(-0, +0)`): the Law min is -0
 /// either way, `d` is -0 and, with `sin * x_min = -0`, the line's y on the left edge is -0. The
-/// platform min returns the second operand of an equal pair on x86_64, which gives +0 there.
+/// platform min returns the second operand of an equal pair on `x86_64`, which gives +0 there.
 /// A NaN projection cannot be the first operand (the fold starts from +inf and never holds a NaN),
 /// and as the second operand the Law and the platform both return the other one; a NaN corner also
 /// makes the clip find no edge, so no line is drawn: not a tie
