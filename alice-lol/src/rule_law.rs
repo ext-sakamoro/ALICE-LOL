@@ -189,6 +189,7 @@ enum Ty {
     Text,
     Bytes,
     Bool,
+    Money,
     Record(Vec<(String, Self)>),
 }
 
@@ -200,6 +201,7 @@ impl Ty {
             "text" => Self::Text,
             "bytes" => Self::Bytes,
             "bool" => Self::Bool,
+            "money" => Self::Money,
             _ => return None,
         })
     }
@@ -211,6 +213,7 @@ impl Ty {
             Self::Text => "text",
             Self::Bytes => "bytes",
             Self::Bool => "bool",
+            Self::Money => "money",
             Self::Record(_) => "record",
         }
     }
@@ -235,6 +238,8 @@ enum Value {
     Text(String),
     Bytes(Vec<u8>),
     Bool(bool),
+    /// An amount of minor units and its currency (three upper-case letters)
+    Money(i128, String),
     Record(Vec<(String, Self)>),
 }
 
@@ -245,6 +250,8 @@ impl Value {
             Self::Text(t) => h.str("text").str(t),
             Self::Bytes(b) => h.str("bytes").bytes(b),
             Self::Bool(b) => h.str("bool").u32(u32::from(*b)),
+            // the amount as 16 bytes, two's complement, big-endian
+            Self::Money(a, c) => h.str("money").bytes(&a.to_be_bytes()).str(c),
             Self::Record(_) => h.str("record"),
         }
     }
@@ -279,16 +286,54 @@ fn hex_bytes(s: &str) -> Option<Vec<u8>> {
     Some(b.chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect())
 }
 
+/// `<amount> <currency>` (TASK.md "Types of values": money), without checking the currency table
+fn money_text(s: &str) -> Option<(i128, String)> {
+    let (amount, code) = s.split_once(' ')?;
+    let digits = amount.strip_prefix('-').unwrap_or(amount);
+    let b = digits.as_bytes();
+    let well_formed = !b.is_empty()
+        && b.iter().all(u8::is_ascii_digit)
+        && (b[0] != b'0' || (b.len() == 1 && digits.len() == amount.len()));
+    let code_ok = code.len() == 3 && code.bytes().all(|c| c.is_ascii_uppercase());
+    if !well_formed || !code_ok {
+        return None;
+    }
+    Some((amount.parse::<i128>().ok()?, code.to_owned()))
+}
+
+/// The currency table a law with money reads (TASK.md "The currency table"): a table law with the
+/// input `x-input code text`, named by its identifier in the law's `currencies` line
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Currencies {
+    id: [u8; 32],
+    table: Box<TableLaw>,
+}
+
+impl Currencies {
+    /// A currency is known when the table's answer for its code is an `e<digits>` value
+    fn knows(&self, code: &str) -> bool {
+        let req = Json::Object(vec![("code".to_owned(), Json::Text(code.to_owned()))]);
+        match self.table.respond(&req) {
+            Answer::Outputs(o) => matches!(o.get("value"), Some(Json::Text(v))
+                if v.len() > 1 && v.starts_with('e') && v[1..].bytes().all(|c| c.is_ascii_digit())),
+            _ => false,
+        }
+    }
+}
+
 /// A JSON value read as a type (TASK.md "Types of values"); `None` when it does not have it
-fn read_value(v: &Json, ty: &Ty) -> Option<Value> {
+fn read_value(v: &Json, ty: &Ty, cur: Option<&Currencies>) -> Option<Value> {
     match (ty, v) {
+        (Ty::Money, Json::Text(t)) => money_text(t)
+            .filter(|(_, c)| cur.is_some_and(|k| k.knows(c)))
+            .map(|(a, c)| Value::Money(a, c)),
         (Ty::Integer | Ty::Time, _) => json_integer(v).map(Value::Int),
         (Ty::Text, Json::Text(t)) => Some(Value::Text(t.clone())),
         (Ty::Bytes, Json::Text(t)) => hex_bytes(t).map(Value::Bytes),
         (Ty::Bool, Json::Bool(b)) => Some(Value::Bool(*b)),
         (Ty::Record(fields), Json::Object(_)) => fields
             .iter()
-            .map(|(f, t)| Some((f.clone(), read_value(v.get(f)?, t)?)))
+            .map(|(f, t)| Some((f.clone(), read_value(v.get(f)?, t, cur)?)))
             .collect::<Option<Vec<_>>>()
             .map(Value::Record),
         _ => None,
@@ -361,6 +406,8 @@ enum Expr {
     Or(Box<Self>, Box<Self>),
     Cmp(Cmp, Box<Self>, Box<Self>),
     Cat(Box<Self>, Box<Self>),
+    Add(Box<Self>, Box<Self>),
+    Sub(Box<Self>, Box<Self>),
     Call(Func, Vec<Self>),
 }
 
@@ -381,6 +428,8 @@ impl Expr {
             Self::Or(a, b) => b.hash(a.hash(h.str("or"))),
             Self::Cmp(op, a, b) => b.hash(a.hash(h.str("cmp").str(op.word()))),
             Self::Cat(a, b) => b.hash(a.hash(h.str("++"))),
+            Self::Add(a, b) => b.hash(a.hash(h.str("+"))),
+            Self::Sub(a, b) => b.hash(a.hash(h.str("-"))),
             Self::Call(f, args) => {
                 let name = FUNCTIONS
                     .iter()
@@ -405,7 +454,9 @@ enum Tok {
     Op(&'static str),
 }
 
-const OPS: &[&str] = &["==", "!=", "<=", ">=", "++", "<", ">", "(", ")", ",", "."];
+const OPS: &[&str] = &[
+    "==", "!=", "<=", ">=", "++", "+", "-", "<", ">", "(", ")", ",", ".",
+];
 
 /// The bytes from `at` on that `keep` accepts, as a count
 fn run_len(b: &[u8], at: usize, keep: impl Fn(u8) -> bool) -> usize {
@@ -599,7 +650,7 @@ impl Parser<'_> {
     }
 
     fn cmp(&mut self) -> Result<Typed, String> {
-        let a = self.cat()?;
+        let a = self.add()?;
         let Some(op) = self.cmp_op() else {
             return Ok(a);
         };
@@ -607,7 +658,7 @@ impl Parser<'_> {
             return self.fail("a machine expression compares only `state` and `mode`");
         }
         self.i += 1;
-        let b = self.cat()?;
+        let b = self.add()?;
         if self.cmp_op().is_some() {
             return self.fail("comparisons do not chain");
         }
@@ -619,14 +670,51 @@ impl Parser<'_> {
                 b.1.word()
             ));
         }
-        if !matches!(op, Cmp::Eq | Cmp::Ne) && !matches!(a.1, Ty::Integer | Ty::Time) {
+        if !matches!(op, Cmp::Eq | Cmp::Ne) && !matches!(a.1, Ty::Integer | Ty::Time | Ty::Money) {
             return self.fail(format!(
-                "`{}` orders integers or times, not {}",
+                "`{}` orders integers, times or money, not {}",
                 op.word(),
                 a.1.word()
             ));
         }
+        self.same_currency(&a.0, &b.0)?;
         Ok((Expr::Cmp(op, Box::new(a.0), Box::new(b.0)), Ty::Bool))
+    }
+
+    /// Two money constants of different currencies never meet (the law does not read)
+    fn same_currency(&self, a: &Expr, b: &Expr) -> Result<(), String> {
+        match (a, b) {
+            (Expr::Lit(Value::Money(_, x)), Expr::Lit(Value::Money(_, y))) if x != y => {
+                self.fail(format!("money of {x} and of {y} are compared or added"))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn add(&mut self) -> Result<Typed, String> {
+        let mut e = self.cat()?;
+        while self.is_op("+") || self.is_op("-") {
+            if self.machine() {
+                return self.fail("a machine expression has no `+` / `-`");
+            }
+            let plus = self.is_op("+");
+            self.i += 1;
+            let r = self.cat()?;
+            if e.1 != Ty::Money || r.1 != Ty::Money {
+                return self.fail("`+` and `-` add money");
+            }
+            self.same_currency(&e.0, &r.0)?;
+            let (a, b) = (Box::new(e.0), Box::new(r.0));
+            e = (
+                if plus {
+                    Expr::Add(a, b)
+                } else {
+                    Expr::Sub(a, b)
+                },
+                Ty::Money,
+            );
+        }
+        Ok(e)
     }
 
     fn cat(&mut self) -> Result<Typed, String> {
@@ -1450,6 +1538,7 @@ enum BindAs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PredicateLaw {
     edition: Option<Edition>,
+    currencies: Option<Currencies>,
     consts: Vec<(String, Ty, Value)>,
     uses_hmac: bool,
     inputs: Vec<(String, Ty)>,
@@ -1461,6 +1550,7 @@ pub struct PredicateLaw {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableLaw {
     edition: Option<Edition>,
+    currencies: Option<Currencies>,
     consts: Vec<(String, Ty, Value)>,
     inputs: Vec<(String, Ty)>,
     values: Vec<String>,
@@ -1497,6 +1587,16 @@ fn const_line(
     let ty = Ty::scalar(w[2].0).ok_or_else(bad)?;
     names.declare(line, w[1].0, "constant")?;
     let lit = rest_after(l, &w, 3);
+    if ty == Ty::Money {
+        let (a, c) = money_text(lit.trim_matches([' ', '\t'])).ok_or_else(|| {
+            err(
+                line,
+                format!("`{lit}` is not money (`<amount> <currency>`)"),
+            )
+        })?;
+        consts.push((w[1].0.to_owned(), ty, Value::Money(a, c)));
+        return Ok(());
+    }
     let toks = tokens(&lit).map_err(|e| err(line, e))?;
     let v = match (&ty, toks.as_slice()) {
         (Ty::Integer | Ty::Time, [Tok::Int(v)]) => Value::Int(*v),
@@ -1514,12 +1614,63 @@ fn const_line(
     Ok(())
 }
 
+fn uses_money(consts: &[(String, Ty, Value)], inputs: &[(String, Ty)]) -> bool {
+    let has = |t: &Ty| match t {
+        Ty::Money => true,
+        Ty::Record(fields) => fields.iter().any(|(_, f)| *f == Ty::Money),
+        _ => false,
+    };
+    consts.iter().any(|(_, t, _)| *t == Ty::Money) || inputs.iter().any(|(_, t)| has(t))
+}
+
+/// A law with money reads its currency table; a law without money has none (TASK.md)
+fn check_money(
+    consts: &[(String, Ty, Value)],
+    inputs: &[(String, Ty)],
+    cur: Option<&Currencies>,
+) -> Result<(), RuleLawError> {
+    match (uses_money(consts, inputs), cur) {
+        (true, None) => Err(err(
+            0,
+            "a law with money has one `currencies <id>` line and is read with that currency table",
+        )),
+        (false, Some(_)) => Err(err(0, "a law without money has no `currencies` line")),
+        (true, Some(c)) => match consts.iter().find_map(|(n, _, v)| match v {
+            Value::Money(_, code) if !c.knows(code) => Some((n, code)),
+            _ => None,
+        }) {
+            Some((n, code)) => Err(err(
+                0,
+                format!("constant `{n}`: the currency table does not know {code}"),
+            )),
+            None => Ok(()),
+        },
+        (false, None) => Ok(()),
+    }
+}
+
 /// Reads a rule law file (conformance/TASK.md "Rule laws")
 ///
 /// # Errors
 ///
-/// When the file is not a rule law or does not read by the rules of its kind
+/// When the file is not a rule law or does not read by the rules of its kind (a law with money
+/// does not read here: [`rule_law_from_file_with`] gives it its currency table)
 pub fn rule_law_from_file(text: &str) -> Result<RuleLaw, RuleLawError> {
+    rule_law_from_file_with(text, None)
+}
+
+/// Reads a rule law file with the currency table a law with money names in its `currencies` line
+/// (conformance/TASK.md "The currency table")
+///
+/// # Errors
+///
+/// As [`rule_law_from_file`]; and when the law names another table than `currencies`, the table is
+/// not a table law with the one input `x-input code text`, or a money constant's currency is not
+/// in it
+pub fn rule_law_from_file_with(
+    text: &str,
+    currencies: Option<&RuleLaw>,
+) -> Result<RuleLaw, RuleLawError> {
     let kind = rule_kind(text).ok_or_else(|| {
         err(
             0,
@@ -1532,18 +1683,64 @@ pub fn rule_law_from_file(text: &str) -> Result<RuleLaw, RuleLawError> {
         return Err(err(0, "a rule law file has exactly one `kind` line"));
     }
     let (edition, ls) = read_edition(&ls, kind)?;
+    let clines: Vec<&(usize, &str)> = ls
+        .iter()
+        .filter(|(_, l)| words(l)[0].0 == "currencies")
+        .collect();
+    let cur = match clines.as_slice() {
+        [] => None,
+        [(n, l)] => {
+            let w: Vec<&str> = l.split_whitespace().collect();
+            let id = match w.as_slice() {
+                [_, v] => id_hex(v),
+                _ => None,
+            }
+            .ok_or_else(|| err(*n, "`currencies <64 lower-case hex>`"))?;
+            let table = match currencies {
+                Some(RuleLaw::Table(t)) if t.inputs == [("code".to_owned(), Ty::Text)] => t,
+                Some(_) => {
+                    return Err(err(
+                        *n,
+                        "the currency table is a table law with the one input `x-input code text`",
+                    ))
+                }
+                None => return Err(err(
+                    *n,
+                    "a law with money is read with its currency table (rule_law_from_file_with)",
+                )),
+            };
+            if table.law_id() != id {
+                return Err(err(
+                    *n,
+                    "the law names another currency table than the one given",
+                ));
+            }
+            Some(Currencies {
+                id,
+                table: Box::new(table.clone()),
+            })
+        }
+        [_, (n, _), ..] => return Err(err(*n, "a second `currencies` line")),
+    };
+    let ls: Vec<(usize, &str)> = ls
+        .into_iter()
+        .filter(|(_, l)| words(l)[0].0 != "currencies")
+        .collect();
     Ok(match kind {
-        RuleKind::Machine => RuleLaw::Machine(MachineLaw {
-            edition,
-            ..read_machine(&ls)?
-        }),
+        RuleKind::Machine => {
+            let m = read_machine(&ls)?;
+            if cur.is_some() || m.consts.iter().any(|(_, t, _)| *t == Ty::Money) {
+                return Err(err(0, "a machine law has no money"));
+            }
+            RuleLaw::Machine(MachineLaw { edition, ..m })
+        }
         RuleKind::Predicate => RuleLaw::Predicate(PredicateLaw {
             edition,
-            ..read_predicate(&ls)?
+            ..read_predicate(&ls, cur.as_ref())?
         }),
         RuleKind::Table => RuleLaw::Table(TableLaw {
             edition,
-            ..read_table(&ls)?
+            ..read_table(&ls, cur.as_ref())?
         }),
     })
 }
@@ -1719,7 +1916,10 @@ fn parse_type(line: usize, src: &str) -> Result<Ty, RuleLawError> {
 }
 
 #[allow(clippy::too_many_lines)]
-fn read_predicate(ls: &[(usize, &str)]) -> Result<PredicateLaw, RuleLawError> {
+fn read_predicate(
+    ls: &[(usize, &str)],
+    cur: Option<&Currencies>,
+) -> Result<PredicateLaw, RuleLawError> {
     let mut names = Names(Vec::new());
     let mut consts: Vec<(String, Ty, Value)> = Vec::new();
     let mut uses_hmac = false;
@@ -1882,8 +2082,10 @@ fn read_predicate(ls: &[(usize, &str)]) -> Result<PredicateLaw, RuleLawError> {
             "a predicate law has at least one `require` line and one `example` line",
         ));
     }
+    check_money(&consts, &inputs, cur)?;
     let law = PredicateLaw {
         edition: None,
+        currencies: cur.cloned(),
         consts,
         uses_hmac,
         inputs,
@@ -1909,7 +2111,7 @@ fn is_label(lb: &str) -> bool {
 }
 
 #[allow(clippy::too_many_lines)]
-fn read_table(ls: &[(usize, &str)]) -> Result<TableLaw, RuleLawError> {
+fn read_table(ls: &[(usize, &str)], cur: Option<&Currencies>) -> Result<TableLaw, RuleLawError> {
     let mut names = Names(Vec::new());
     let mut consts: Vec<(String, Ty, Value)> = Vec::new();
     let mut inputs: Vec<(String, Ty)> = Vec::new();
@@ -2012,8 +2214,10 @@ fn read_table(ls: &[(usize, &str)]) -> Result<TableLaw, RuleLawError> {
     if let Some(unused) = values.iter().find(|v| !given.contains(v)) {
         return Err(err(0, format!("value `{unused}` is given by no row")));
     }
+    check_money(&consts, &inputs, cur)?;
     Ok(TableLaw {
         edition: None,
+        currencies: cur.cloned(),
         consts,
         inputs,
         values,
@@ -2253,9 +2457,38 @@ fn lookup<'a>(env: &'a Env, name: &str) -> &'a Value {
         .expect("the reader declared every name")
 }
 
-fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, NotBuilt> {
+/// Why an evaluation stops before its value
+enum Stop {
+    /// The law calls a function this build does not have
+    NotBuilt,
+    /// The request is rejected (money of two currencies met, or an amount out of range)
+    Rejected(String),
+}
+
+fn money_of(v: Value) -> (i128, String) {
+    match v {
+        Value::Money(a, c) => (a, c),
+        _ => unreachable!("typed: money"),
+    }
+}
+
+fn money_op(lhs: Value, rhs: Value, plus: bool) -> Result<Value, Stop> {
+    let ((a, x), (b, y)) = (money_of(lhs), money_of(rhs));
+    if x != y {
+        return Err(Stop::Rejected(format!("money of {x} and of {y} meet")));
+    }
+    let v = if plus {
+        a.checked_add(b)
+    } else {
+        a.checked_sub(b)
+    };
+    v.map(|v| Value::Money(v, x))
+        .ok_or_else(|| Stop::Rejected("an amount outside -2^127 to 2^127 - 1".to_owned()))
+}
+
+fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, Stop> {
     let sub = |x: &Expr| predicate_eval(x, env);
-    let truth = |x: &Expr| -> Result<bool, NotBuilt> { Ok(matches!(sub(x)?, Value::Bool(true))) };
+    let truth = |x: &Expr| -> Result<bool, Stop> { Ok(matches!(sub(x)?, Value::Bool(true))) };
     Ok(match expr {
         Expr::Lit(v) => v.clone(),
         Expr::Ref(name, None) => lookup(env, name).clone(),
@@ -2277,10 +2510,18 @@ fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, NotBuilt> {
             }
             _ => unreachable!("typed: bytes"),
         },
+        Expr::Add(lhs, rhs) => money_op(sub(lhs)?, sub(rhs)?, true)?,
+        Expr::Sub(lhs, rhs) => money_op(sub(lhs)?, sub(rhs)?, false)?,
         Expr::Cmp(op, lhs, rhs) => {
             let (left, right) = (sub(lhs)?, sub(rhs)?);
+            if let (Value::Money(_, x), Value::Money(_, y)) = (&left, &right) {
+                if x != y {
+                    return Err(Stop::Rejected(format!("money of {x} and of {y} meet")));
+                }
+            }
             let ord = match (&left, &right) {
                 (Value::Int(l), Value::Int(r)) => Some(l.cmp(r)),
+                (Value::Money(l, _), Value::Money(r, _)) => Some(l.cmp(r)),
                 _ => None,
             };
             let eq = match (&left, &right) {
@@ -2310,7 +2551,7 @@ fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, NotBuilt> {
                 }
                 (Func::Utf8, [Value::Text(text)]) => Value::Bytes(text.as_bytes().to_vec()),
                 (Func::HmacSha256, [Value::Bytes(key), Value::Bytes(msg)]) => {
-                    Value::Bytes(hmac(key, msg)?)
+                    Value::Bytes(hmac(key, msg).map_err(|NotBuilt| Stop::NotBuilt)?)
                 }
                 _ => unreachable!("typed call"),
             }
@@ -2322,13 +2563,17 @@ fn predicate_eval(expr: &Expr, env: &Env) -> Result<Value, NotBuilt> {
 }
 
 /// The `x-input` values of a request (a missing input first, then one of another type)
-fn read_inputs(inputs: &[(String, Ty)], inp: &Json) -> Result<Env, Answer> {
+fn read_inputs(
+    inputs: &[(String, Ty)],
+    inp: &Json,
+    cur: Option<&Currencies>,
+) -> Result<Env, Answer> {
     if let Some((name, _)) = inputs.iter().find(|(n, _)| inp.get(n).is_none()) {
         return Err(Answer::RequestError(format!("{name} missing")));
     }
     let mut env: Env = Vec::new();
     for (name, ty) in inputs {
-        match inp.get(name).and_then(|v| read_value(v, ty)) {
+        match inp.get(name).and_then(|v| read_value(v, ty, cur)) {
             Some(v) => env.push((name.clone(), v)),
             None => return Err(Answer::Rejected(format!("{name} does not have its type"))),
         }
@@ -2346,7 +2591,7 @@ fn hash_inputs(mut h: LawIdHasher, inputs: &[(String, Ty)]) -> LawIdHasher {
 
 impl PredicateLaw {
     fn respond(&self, inp: &Json) -> Answer {
-        let mut env = match read_inputs(&self.inputs, inp) {
+        let mut env = match read_inputs(&self.inputs, inp, self.currencies.as_ref()) {
             Ok(env) => env,
             Err(a) => return a,
         };
@@ -2395,7 +2640,8 @@ impl PredicateLaw {
             match predicate_eval(e, &env) {
                 Ok(Value::Bool(true)) => {}
                 Ok(_) => return out(Some(label)),
-                Err(NotBuilt) => return Answer::Unsupported(
+                Err(Stop::Rejected(why)) => return Answer::Rejected(why),
+                Err(Stop::NotBuilt) => return Answer::Unsupported(
                     "the law calls hmac_sha256; build alice-lol with the `crypto-calls` feature"
                         .to_owned(),
                 ),
@@ -2414,6 +2660,9 @@ impl PredicateLaw {
             ),
             &self.consts,
         );
+        if let Some(c) = &self.currencies {
+            h = h.str("currencies").id(&c.id);
+        }
         h = h.str("use hmac_sha256").u32(u32::from(self.uses_hmac));
         h = hash_inputs(h, &self.inputs);
         h = h.str("steps").u64(self.steps.len() as u64);
@@ -2443,16 +2692,20 @@ impl PredicateLaw {
 
 impl TableLaw {
     fn respond(&self, inp: &Json) -> Answer {
-        let env = match read_inputs(&self.inputs, inp) {
+        let env = match read_inputs(&self.inputs, inp, self.currencies.as_ref()) {
             Ok(env) => env,
             Err(a) => return a,
         };
         let mut answer = (&self.otherwise, None);
         for (label, value, e) in &self.rows {
-            // a table has no call, so every expression evaluates
-            if matches!(predicate_eval(e, &env), Ok(Value::Bool(true))) {
-                answer = (value, Some(label));
-                break;
+            // a table has no call, so an evaluation stops only to reject (money)
+            match predicate_eval(e, &env) {
+                Ok(Value::Bool(true)) => {
+                    answer = (value, Some(label));
+                    break;
+                }
+                Err(Stop::Rejected(why)) => return Answer::Rejected(why),
+                _ => {}
             }
         }
         Answer::Outputs(Json::Object(vec![
@@ -2474,6 +2727,9 @@ impl TableLaw {
             ),
             &self.consts,
         );
+        if let Some(c) = &self.currencies {
+            h = h.str("currencies").id(&c.id);
+        }
         h = hash_inputs(h, &self.inputs);
         h = h.str("values").u64(self.values.len() as u64);
         for v in &self.values {

@@ -24,7 +24,10 @@ NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
 FUNCTIONS = {"len", "prefix", "utf8", "hmac_sha256"}
 RESERVED = {"true", "false", "and", "or", "not", "state", "mode", "shape"} | FUNCTIONS
 PEOPLE = {"law", "claim", "source", "verdict", "oracle"}
-SCALARS = {"integer", "time", "text", "bytes", "bool"}
+SCALARS = {"integer", "time", "text", "bytes", "bool", "money"}
+MONEY_MIN, MONEY_MAX = -(2 ** 127), 2 ** 127 - 1  # an amount of minor units fits an i128
+MONEY = re.compile(r"(0|-?[1-9][0-9]*) ([A-Z]{3})\Z")
+EXPONENT = re.compile(r"e[0-9]+\Z")
 INT_TEXT = re.compile(r"(0|-?[1-9][0-9]*)\Z")
 HEX = re.compile(r"(?:[0-9a-f]{2})*\Z")
 # conformance/TASK.md: format characters that make a law file unreadable
@@ -83,7 +86,7 @@ TOKEN = re.compile(r"""
   | (?P<bytes>0x[0-9a-f]*)
   | (?P<int>[0-9]+)
   | (?P<text>"[^"\\]*")
-  | (?P<op>==|!=|<=|>=|\+\+|<|>|\(|\)|,|\.)
+  | (?P<op>==|!=|<=|>=|\+\+|\+|-|<|>|\(|\)|,|\.)
   | (?P<name>[a-z][a-z0-9_]*)
 """, re.X)
 
@@ -160,12 +163,19 @@ class _Parser:
         return self.cmp()
 
     def cmp(self):
-        e = self.cat()
+        e = self.add()
         if self.peek()[1] in ("==", "!=", "<", "<=", ">", ">="):
             op = self.take()[1]
-            e = ("cmp", op, e, self.cat())
+            e = ("cmp", op, e, self.add())
             if self.peek()[1] in ("==", "!=", "<", "<=", ">", ">="):
                 raise RuleError(f"`{self.src}`: comparisons do not chain")
+        return e
+
+    def add(self):
+        e = self.cat()
+        while self.peek()[1] in ("+", "-"):
+            op = self.take()[1]
+            e = (op, e, self.cat())
         return e
 
     def cat(self):
@@ -224,9 +234,15 @@ def _typeof(e, uses):
         a, b = _typeof(e[2], uses), _typeof(e[3], uses)
         if a != b or a.startswith("record"):
             raise RuleError(f"`{e[1]}` compares {a} with {b}")
-        if e[1] not in ("==", "!=") and a not in ("integer", "time"):
-            raise RuleError(f"`{e[1]}` orders integers or times, not {a}")
+        if e[1] not in ("==", "!=") and a not in ("integer", "time", "money"):
+            raise RuleError(f"`{e[1]}` orders integers, times or money, not {a}")
+        _same_currency(e[2], e[3])
         return "bool"
+    if k in ("+", "-"):
+        if _typeof(e[1], uses) != "money" or _typeof(e[2], uses) != "money":
+            raise RuleError(f"`{k}` adds money")
+        _same_currency(e[1], e[2])
+        return "money"
     if k == "++":
         if _typeof(e[1], uses) != "bytes" or _typeof(e[2], uses) != "bytes":
             raise RuleError("`++` joins bytes")
@@ -274,7 +290,49 @@ def _type_name(ty):
     return ty if isinstance(ty, str) else "record"
 
 
-def _has_type(v, ty) -> bool:
+class Money:
+    """An amount of minor units and its currency; compared and added only within one currency"""
+    __slots__ = ("amount", "currency")
+
+    def __init__(self, amount: int, currency: str):
+        self.amount, self.currency = amount, currency
+
+    def __eq__(self, other):
+        return isinstance(other, Money) and (self.amount, self.currency) == (other.amount, other.currency)
+
+    def __hash__(self):
+        return hash((self.amount, self.currency))
+
+    def __repr__(self):
+        return f"Money({self.amount}, {self.currency!r})"
+
+
+class _Rejected(Exception):
+    """A request rejected while evaluating (money of two currencies met, or an amount out of range)"""
+
+
+def _money_text(v: str):
+    m = MONEY.fullmatch(v) if isinstance(v, str) else None
+    if not m:
+        return None
+    amount = int(m.group(1))
+    if not MONEY_MIN <= amount <= MONEY_MAX:
+        return None
+    return Money(amount, m.group(2))
+
+
+def _same_currency(a, b):
+    """Two money constants of different currencies never meet (the law does not read)"""
+    ca = a[2].currency if a[0] == "lit" and isinstance(a[2], Money) else None
+    cb = b[2].currency if b[0] == "lit" and isinstance(b[2], Money) else None
+    if ca and cb and ca != cb:
+        raise RuleError(f"money of {ca} and of {cb} are compared or added")
+
+
+def _has_type(v, ty, known=None) -> bool:
+    if ty == "money":
+        m = _money_text(v)
+        return m is not None and known is not None and known(m.currency)
     if ty in ("integer", "time"):
         return (not isinstance(v, bool) and isinstance(v, (int, float))
                 and v == v and abs(v) != float("inf") and float(v).is_integer() and abs(v) <= MAX_INT)
@@ -285,10 +343,12 @@ def _has_type(v, ty) -> bool:
     if ty == "bool":
         return isinstance(v, bool)
     _, fields = ty
-    return isinstance(v, dict) and all(f in v and _has_type(v[f], t) for f, t in fields)
+    return isinstance(v, dict) and all(f in v and _has_type(v[f], t, known) for f, t in fields)
 
 
 def _value(v, ty):
+    if ty == "money":
+        return _money_text(v)
     if ty in ("integer", "time"):
         return int(v)
     if ty == "bytes":
@@ -299,6 +359,11 @@ def _value(v, ty):
 
 
 def _const(ty, lit):
+    if ty == "money":
+        m = _money_text(lit.strip())
+        if m is None or "  " in lit.strip():
+            raise RuleError(f"`{lit}` is not money (`<amount> <currency>`)")
+        return m
     toks = _tokens(lit)
     if ty == "bool" and toks in ([("name", "true")], [("name", "false")]):
         return toks[0][1] == "true"
@@ -366,14 +431,53 @@ def _edition(lines, semantics, kind):
     return ed, rest
 
 
-def parse(text: str, semantics: dict[str, bytes] | None = None) -> dict:
+def _uses_money(law) -> bool:
+    def has(ty):
+        return ty == "money" or (isinstance(ty, tuple) and any(t == "money" for _, t in ty[1]))
+    return any(ty == "money" for ty, _ in law["consts"].values()) or any(has(t) for _, t in law.get("inputs", []))
+
+
+def _bind_currencies(law, cline, currencies, semantics):
+    """Checks the `currencies` line against the law's money and the table given (TASK.md)"""
+    money = _uses_money(law)
+    if not money:
+        if cline is not None:
+            raise RuleError(f"line {cline[0]}: a law without money has no `currencies` line")
+        return
+    if cline is None:
+        raise RuleError("a law with money has one `currencies <id>` line")
+    n, w = cline
+    if len(w) != 1 or not ID_HEX.match(w[0]):
+        raise RuleError(f"line {n}: `currencies <64 lower-case hex>`")
+    law["currencies"] = bytes.fromhex(w[0])
+    if currencies is None or semantics is None:
+        raise RuleError("a law with money is read with its currency table and the semantics it is evaluated under")
+    if currencies["kind"] != "table" or currencies["inputs"] != [("code", "text")]:
+        raise RuleError("the currency table is a table law with the one input `x-input code text`")
+    if law_id(currencies, semantics) != law["currencies"]:
+        raise RuleError(f"line {n}: the law names another currency table than the one given")
+
+    def known(code):
+        return bool(EXPONENT.match(respond(currencies, {"code": code})[1]["value"]))
+    law["known"] = known
+    for name, (ty, v) in law["consts"].items():
+        if ty == "money" and not known(v.currency):
+            raise RuleError(f"constant `{name}`: the currency table does not know {v.currency}")
+
+
+def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict | None = None) -> dict:
     """A rule law; `semantics` ("rule" / "table" -> identifier), when given, is what this reader
-    evaluates, and an edition written against another semantics does not read"""
+    evaluates, and an edition written against another semantics does not read; `currencies` is the
+    parsed currency table a law with money reads"""
     kind = rule_kind(text)
     if kind is None:
         raise RuleError("not a rule law")
-    law = {"kind": kind, "consts": {}, "names": set(), "uses": set()}
+    law = {"kind": kind, "consts": {}, "names": set(), "uses": set(), "currencies": None, "known": None}
     law["edition"], lines = _edition(_lines(text), semantics, kind)
+    clines = [(n, ln.split()[1:]) for n, ln in lines if ln.split()[0] == "currencies"]
+    if len(clines) > 1:
+        raise RuleError(f"line {clines[1][0]}: a second `currencies` line")
+    lines = [(n, ln) for n, ln in lines if ln.split()[0] != "currencies"]
     kinds = [n for n, ln in lines if ln.split()[0] == "kind"]
     if len(kinds) != 1:
         raise RuleError("a rule law file has exactly one `kind` line")
@@ -387,6 +491,11 @@ def parse(text: str, semantics: dict[str, bytes] | None = None) -> dict:
 
     {"machine": _machine, "predicate": _predicate, "table": _table}[kind](law, lines, declare)
     del law["names"]
+    if kind == "machine" and _uses_money(law):
+        raise RuleError("a machine law has no money")
+    _bind_currencies(law, clines[0] if clines else None, currencies, semantics)
+    if kind == "predicate" and respond(law, law["example"]) != ("outputs", {"valid": True, "failed": None}):
+        raise RuleError("the example does not hold")
     return law
 
 
@@ -598,8 +707,6 @@ def _predicate(law, lines, declare):
             raise RuleError(f"line {n}: `{head}` is not a line of a predicate law")
     if not law["requires"] or law["example"] is None:
         raise RuleError("a predicate law has at least one `require` line and one `example` line")
-    if respond(law, law["example"]) != ("outputs", {"valid": True, "failed": None}):
-        raise RuleError("the example does not hold")
 
 
 TABLE_MAX_COMBINATIONS = 4096  # the vectors of a table law are every combination; more is an error
@@ -840,6 +947,8 @@ def _hash_type(h, ty):
 
 
 def _hash_value(h, v):
+    if isinstance(v, Money):  # the amount as 16 bytes, two's complement, big-endian (an i128)
+        return h.text("money").raw(v.amount.to_bytes(16, "big", signed=True)).text(v.currency)
     # bool before int: a Python bool is an int
     if isinstance(v, bool):
         return h.text("bool").u32(int(v))
@@ -862,7 +971,7 @@ def _hash_expr(h, e):
         return h.text(k).text(e[2])
     if k == "not":
         return _hash_expr(h.text("not"), e[1])
-    if k in ("and", "or", "++"):
+    if k in ("and", "or", "++", "+", "-"):
         return _hash_expr(_hash_expr(h.text(k), e[1]), e[2])
     if k == "cmp":
         return _hash_expr(_hash_expr(h.text("cmp").text(e[1]), e[2]), e[3])
@@ -903,6 +1012,8 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
         if ed["until"] is not None:
             h = h.u64(ed["until"])
     h = _hash_consts(h, law)
+    if law.get("currencies") is not None:
+        h = h.text("currencies").ident(law["currencies"])
     if kind == "machine":
         h = h.text("modes").u32(int(law["modes"] is not None))
         for m in law["modes"] or []:
@@ -1026,7 +1137,7 @@ def _predicate_answer(law, inp, bug):
             return ("request_error", f"{name} missing")
     env = {}
     for name, ty in law["inputs"]:
-        if not _has_type(inp[name], ty):
+        if not _has_type(inp[name], ty, law.get("known")):
             return ("rejected", f"{name} does not have its type")
         env[name] = _value(inp[name], ty)
     shape = ("outputs", {"valid": False, "failed": "shape"})
@@ -1049,9 +1160,12 @@ def _predicate_answer(law, inp, bug):
                     return shape
                 env[name] = v
     order = law["requires"][::-1] if bug == "predicate_reverse_order" else law["requires"]
-    for label, e in order:
-        if not _eval(e, env, bug):
-            return ("outputs", {"valid": False, "failed": label})
+    try:
+        for label, e in order:
+            if not _eval(e, env, bug):
+                return ("outputs", {"valid": False, "failed": label})
+    except _Rejected as why:
+        return ("rejected", str(why))
     return ("outputs", {"valid": True, "failed": None})
 
 
@@ -1061,15 +1175,18 @@ def _table_answer(law, inp, bug):
             return ("request_error", f"{name} missing")
     env = {}
     for name, ty in law["inputs"]:
-        if not _has_type(inp[name], ty):
+        if not _has_type(inp[name], ty, law.get("known")):
             return ("rejected", f"{name} does not have its type")
         env[name] = _value(inp[name], ty)
     answer = {"value": law["otherwise"], "row": None}
-    for label, value, e in law["rows"]:
-        if _eval(e, env, bug):
-            answer = {"value": value, "row": label}
-            if bug != "table_last_match":
-                break
+    try:
+        for label, value, e in law["rows"]:
+            if _eval(e, env, bug):
+                answer = {"value": value, "row": label}
+                if bug != "table_last_match":
+                    break
+    except _Rejected as why:
+        return ("rejected", str(why))
     return ("outputs", answer)
 
 
@@ -1088,8 +1205,20 @@ def _eval(e, env, bug=None):
         return _eval(e[1], env, bug) or _eval(e[2], env, bug)
     if k == "++":
         return _eval(e[1], env, bug) + _eval(e[2], env, bug)
+    if k in ("+", "-"):
+        a, b = _eval(e[1], env, bug), _eval(e[2], env, bug)
+        if a.currency != b.currency:
+            raise _Rejected(f"money of {a.currency} and of {b.currency} meet")
+        v = a.amount + b.amount if k == "+" else a.amount - b.amount
+        if not MONEY_MIN <= v <= MONEY_MAX:
+            raise _Rejected("an amount outside -2^127 to 2^127 - 1")
+        return Money(v, a.currency)
     if k == "cmp":
         a, b = _eval(e[2], env, bug), _eval(e[3], env, bug)
+        if isinstance(a, Money):
+            if a.currency != b.currency:
+                raise _Rejected(f"money of {a.currency} and of {b.currency} meet")
+            a, b = a.amount, b.amount
         op = e[1]
         if bug == "predicate_lt_inclusive" and op == "<":
             op = "<="

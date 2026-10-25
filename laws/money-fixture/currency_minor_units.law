@@ -1,0 +1,9 @@
+law currency minor units (fixture)
+claim the number of minor-unit digits of a currency, by its code; a code that is not listed is unknown
+source ISO 4217 (a fixture of two currencies, for the money tests)
+kind table
+x-input code text
+value e0 e2 unknown
+row jpy: e0 when code == "JPY"
+row usd: e2 when code == "USD"
+otherwise unknown

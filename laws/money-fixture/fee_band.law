@@ -1,0 +1,10 @@
+law the band of a fee (fixture)
+claim a fee up to the small band's limit is small, a larger one is large; amounts are minor units, beyond 2^63
+source a fixture for the money tests
+kind table
+currencies f60d6ffbd84f963c6387c3e3ece82865329ec3a1c2572e4a6e0724abef12fbf8
+x-input fee money
+const small_max money = 9223372036854775809 JPY
+value small large
+row small: small when fee <= small_max
+otherwise large

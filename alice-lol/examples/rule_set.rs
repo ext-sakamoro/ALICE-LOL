@@ -43,7 +43,9 @@ fn main() {
     .expect("the rule set loads");
     let request = parse_json(r#"{"amount": 110000}"#).expect("JSON");
     for at in [1_735_689_600, 1_767_225_600, 1_798_761_600] {
-        let (answer, id) = set.evaluate_as_of(&request, at).expect("an edition is in force");
+        let (answer, id) = set
+            .evaluate_as_of(&request, at)
+            .expect("an edition is in force");
         println!("at {at}: {answer:?} (edition {})", &hex(&id)[..12]);
     }
     // an old edition answers as it did, whatever the date

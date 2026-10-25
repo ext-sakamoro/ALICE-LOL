@@ -417,5 +417,120 @@ class Deltas(unittest.TestCase):
             R.resolved_text(E1.replace("otherwise standard", "otherwise standard\nrow small: x when amount > 1"), SEM)
 
 
+CURRENCIES = ("kind table\nx-input code text\nvalue e0 e2 unknown\n"
+              "row jpy: e0 when code == \"JPY\"\nrow usd: e2 when code == \"USD\"\notherwise unknown\n")
+
+
+def money_law(body, kind="predicate"):
+    table = R.parse(CURRENCIES, SEM)
+    cid = R.law_id(table, SEM).hex()
+    return R.parse(f"kind {kind}\ncurrencies {cid}\n" + body, SEM, currencies=table), table
+
+
+BIG = 2 ** 63 + 1
+TOP = 2 ** 127 - 1
+
+
+class Money(unittest.TestCase):
+    """conformance/TASK.md: money (exact minor units, a currency from the currency table)"""
+
+    def law(self):
+        return money_law("x-input a money\nx-input b money\nconst cap money = 170141183460469231731687303715884105727 JPY\n"
+                         "require sum_fits: a + b <= cap\nrequire ordered: a < b\n"
+                         "example {\"a\": \"1 JPY\", \"b\": \"2 JPY\"}\n")[0]
+
+    def test_amounts_beyond_2_63_compare_and_add_exactly(self):
+        law = self.law()
+        ok = R.respond(law, {"a": f"{BIG} JPY", "b": f"{BIG + 1} JPY"})
+        self.assertEqual(ok, ("outputs", {"valid": True, "failed": None}))
+        self.assertEqual(R.respond(law, {"a": f"{BIG + 1} JPY", "b": f"{BIG} JPY"}),
+                         ("outputs", {"valid": False, "failed": "ordered"}))
+        # 2^127 - 1 is the largest amount; a sum beyond it rejects, never wraps or clamps
+        self.assertEqual(R.respond(law, {"a": f"{TOP - 1} JPY", "b": "1 JPY"})[0], "outputs")
+        self.assertEqual(R.respond(law, {"a": f"{TOP} JPY", "b": "1 JPY"})[0], "rejected")
+        self.assertEqual(R.respond(law, {"a": f"-{TOP + 1} JPY", "b": "-1 JPY"})[0], "rejected")
+
+    def test_what_is_not_money(self):
+        law = self.law()
+        for v in (f"{TOP + 1} JPY", f"-{TOP + 2} JPY", "1 jpy", "1 JP", "1  JPY", "+1 JPY", "01 JPY",
+                  "1 EUR", "1JPY", 5, 5.0, None, True):
+            self.assertEqual(R.respond(law, {"a": v, "b": "1 JPY"})[0], "rejected", repr(v))
+        self.assertEqual(R.respond(law, {"a": f"-{TOP + 1} JPY", "b": "1 JPY"})[0], "outputs")  # -2^127 is money
+
+    def test_a_code_is_three_upper_case_letters_whatever_the_table_lists(self):
+        # a table that lists "jpy" and "JP" does not make them money: the form is checked first
+        odd = R.parse(CURRENCIES.replace("row usd", "row low: e0 when code == \"jpy\"\n"
+                                         "row two: e0 when code == \"JP\"\nrow usd"), SEM)
+        text = (f"kind predicate\ncurrencies {R.law_id(odd, SEM).hex()}\nx-input a money\n"
+                "require t: a == a\nexample {\"a\": \"1 JPY\"}\n")
+        law = R.parse(text, SEM, currencies=odd)
+        self.assertEqual(R.respond(law, {"a": "1 JPY"})[0], "outputs")
+        for v in ("1 jpy", "1 JP"):
+            self.assertEqual(R.respond(law, {"a": v})[0], "rejected", v)
+        for c in ("jpy", "JP"):
+            with self.assertRaises(R.RuleError):
+                R.parse(text.replace("require t: a == a", f"const k money = 1 {c}\nrequire t: a == a"),
+                        SEM, currencies=odd)
+
+    def test_currencies_do_not_mix(self):
+        law = self.law()
+        self.assertEqual(R.respond(law, {"a": "1 USD", "b": "2 JPY"})[0], "rejected")
+        with self.assertRaises(R.RuleError):  # two constants of different currencies
+            money_law("x-input a money\nconst x money = 1 JPY\nconst y money = 1 USD\nrequire r: x < y\n"
+                      "example {\"a\": \"1 JPY\"}\n")
+        # minor units only: 100 JPY and 100 USD are not compared, and nothing is converted
+        t, _ = money_law("x-input a money\nconst limit money = 100 JPY\nvalue small big\n"
+                         "row s: small when a < limit\notherwise big\n", kind="table")
+        self.assertEqual(R.respond(t, {"a": "99 JPY"})[1]["value"], "small")
+        self.assertEqual(R.respond(t, {"a": "99 USD"})[0], "rejected")
+        # a law without examples: the reading itself refuses, not an example
+        with self.assertRaises(R.RuleError):  # two constants of different currencies
+            money_law("x-input a money\nconst x money = 1 JPY\nconst y money = 1 USD\nvalue small big\n"
+                      "row s: small when a < x or x < y\notherwise big\n", kind="table")
+        with self.assertRaises(R.RuleError):  # a constant in a currency the table does not know
+            money_law("x-input a money\nconst limit money = 100 EUR\nvalue small big\n"
+                      "row s: small when a < limit\notherwise big\n", kind="table")
+        # an input in a currency the table does not know is not money, even when nothing mixes
+        only, _ = money_law("x-input a money\nx-input b money\nrequire o: a < b\n"
+                            "example {\"a\": \"1 JPY\", \"b\": \"2 JPY\"}\n")
+        self.assertEqual(R.respond(only, {"a": "1 USD", "b": "2 USD"})[0], "outputs")
+        self.assertEqual(R.respond(only, {"a": "1 EUR", "b": "2 EUR"})[0], "rejected")
+
+    def test_the_currency_table_is_part_of_the_law(self):
+        law, table = money_law("x-input a money\nconst zero money = 0 JPY\nrequire pos: a > zero\n"
+                               "example {\"a\": \"1 JPY\"}\n")
+        other = R.parse(CURRENCIES.replace("row usd", "row eur: e2 when code == \"EUR\"\nrow usd"), SEM)
+        text = f"kind predicate\ncurrencies {R.law_id(table, SEM).hex()}\nx-input a money\nconst zero money = 0 JPY\n" \
+               "require pos: a > zero\nexample {\"a\": \"1 JPY\"}\n"
+        with self.assertRaises(R.RuleError):  # the table given is not the one the law names
+            R.parse(text, SEM, currencies=other)
+        with self.assertRaises(R.RuleError):  # a money law read without its table
+            R.parse(text, SEM)
+        with self.assertRaises(R.RuleError):  # money without a currencies line
+            R.parse("kind predicate\nx-input a money\nrequire t: a == a\nexample {\"a\": \"1 JPY\"}\n", SEM)
+        with self.assertRaises(R.RuleError):  # a currencies line without money
+            R.parse(f"kind predicate\ncurrencies {R.law_id(table, SEM).hex()}\nx-input n integer\n"
+                    "require t: n == n\nexample {\"n\": 1}\n", SEM, currencies=table)
+        with self.assertRaises(R.RuleError):  # a constant in a currency the table does not know
+            R.parse(text.replace("0 JPY", "0 EUR"), SEM, currencies=table)
+        # the table's identity is in the law's identity; money values are hashed exactly
+        base = R.law_id(R.parse(text, SEM, currencies=table), SEM)
+        t2 = R.parse(CURRENCIES.replace("otherwise unknown", "otherwise none").replace("unknown", "none"), SEM)
+        moved = text.replace(R.law_id(table, SEM).hex(), R.law_id(t2, SEM).hex())
+        self.assertNotEqual(base, R.law_id(R.parse(moved, SEM, currencies=t2), SEM))
+        self.assertNotEqual(base, R.law_id(R.parse(text.replace("0 JPY", "-1 JPY"), SEM, currencies=table), SEM))
+        # + and - are in the identity, and are not each other
+        add = money_law("x-input a money\nx-input b money\nrequire r: a + b > a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\"}\n")[0]
+        sub = money_law("x-input a money\nx-input b money\nrequire r: a - b < a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\"}\n")[0]
+        add2 = money_law("x-input a money\nx-input b money\nrequire r: a - b > a\nexample {\"a\": \"1 JPY\", \"b\": \"-1 JPY\"}\n")[0]
+        self.assertEqual(len({R.law_id(x, SEM) for x in (add, sub, add2)}), 3)
+
+    def test_an_operation_not_evaluated_does_not_reject(self):
+        law, _ = money_law("x-input a money\nx-input b money\nx-input go bool\n"
+                           "require r: not go or a + b > a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\", \"go\": true}\n")
+        self.assertEqual(R.respond(law, {"a": "1 JPY", "b": "1 USD", "go": False})[0], "outputs")
+        self.assertEqual(R.respond(law, {"a": "1 JPY", "b": "1 USD", "go": True})[0], "rejected")
+
+
 if __name__ == "__main__":
     unittest.main()
