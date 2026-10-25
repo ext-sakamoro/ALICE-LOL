@@ -614,6 +614,14 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
     assert_eq!(
         sem,
         vec![
+            (
+                "money_rule".to_owned(),
+                hex(alice_lol::rule_law::MONEY_SEMANTICS_ID)
+            ),
+            (
+                "money_table".to_owned(),
+                hex(alice_lol::rule_law::MONEY_TABLE_SEMANTICS_ID)
+            ),
             ("rule".to_owned(), hex(RULE_SEMANTICS_ID)),
             (
                 "table".to_owned(),
@@ -1341,4 +1349,147 @@ fn an_operation_not_evaluated_does_not_reject() {
     };
     assert!(!rejected(&q(false)));
     assert!(rejected(&q(true)));
+}
+
+#[test]
+fn money_is_hashed_under_its_own_measured_semantics() {
+    use alice_lol::law_id::fold_semantics_pins;
+    use alice_lol::rule_law::{
+        money_semantics_fingerprints, MONEY_SEMANTICS_ID, MONEY_SEMANTICS_PINS,
+        MONEY_TABLE_SEMANTICS_ID, MONEY_TABLE_SEMANTICS_PINS, TABLE_SEMANTICS_ID,
+    };
+    let measured = money_semantics_fingerprints();
+    assert_eq!(measured.len(), MONEY_SEMANTICS_PINS.len());
+    for ((name, pinned), (m_name, m)) in MONEY_SEMANTICS_PINS.iter().zip(&measured) {
+        assert_eq!(name, m_name);
+        assert_eq!(
+            hex(*m),
+            hex(*pinned),
+            "pin `{name}` is not the measured behaviour"
+        );
+    }
+    assert_eq!(
+        hex(fold_semantics_pins(MONEY_SEMANTICS_PINS)),
+        hex(MONEY_SEMANTICS_ID)
+    );
+    assert_eq!(
+        hex(fold_semantics_pins(MONEY_TABLE_SEMANTICS_PINS)),
+        hex(MONEY_TABLE_SEMANTICS_ID)
+    );
+    // four distinct semantics: a law with money never shares one with a law without
+    let all = [
+        RULE_SEMANTICS_ID,
+        TABLE_SEMANTICS_ID,
+        MONEY_SEMANTICS_ID,
+        MONEY_TABLE_SEMANTICS_ID,
+    ];
+    for (i, a) in all.iter().enumerate() {
+        for b in &all[i + 1..] {
+            assert_ne!(a, b);
+        }
+    }
+}
+
+#[test]
+fn a_rule_set_of_predicate_editions_with_a_delta_loads() {
+    use alice_lol::rule_law::{RuleSet, RULE_SEMANTICS_ID};
+    let first = format!(
+        "domain demo-age\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n\
+         semantics {}\nkind predicate\nx-input age integer\nconst adult integer = 20\n\
+         require old_enough: age >= adult\nexample {{\"age\": 30}}\n",
+        hex(RULE_SEMANTICS_ID)
+    );
+    let id = rule_law_from_file(&first).expect("reads").law_id();
+    let delta = format!(
+        "domain demo-age\nedition y2026\nsupersedes {}\neffective 1767225600\nsemantics {}\n\
+         replace const adult: const adult integer = 18\nchanges eighteen\n",
+        hex(id),
+        hex(RULE_SEMANTICS_ID)
+    );
+    let set = RuleSet::from_files(&[("age.law", first.as_str()), ("age.delta", delta.as_str())])
+        .expect("a predicate rule set loads");
+    let (later, _) = set
+        .evaluate_as_of(&json(r#"{"age": 19}"#), 1_767_225_600)
+        .expect("in force");
+    let (earlier, _) = set
+        .evaluate_as_of(&json(r#"{"age": 19}"#), 1_735_689_600)
+        .expect("in force");
+    assert_ne!(later, earlier);
+}
+
+#[test]
+fn an_edition_with_money_names_the_money_semantics_and_a_rule_set_reads_it_with_its_table() {
+    use alice_lol::rule_law::{
+        resolve_delta, resolve_delta_with, rule_law_from_file_with, RuleSet, MONEY_SEMANTICS_ID,
+        RULE_SEMANTICS_ID,
+    };
+    let table = currency_table();
+    let body = format!(
+        "kind predicate\ncurrencies {}\nx-input fee money\nconst cap money = 1000 JPY\n\
+         require within: fee <= cap\nexample {{\"fee\": \"1 JPY\"}}\n",
+        hex(table.law_id())
+    );
+    let head = |sem: [u8; 32]| {
+        format!(
+            "domain demo-fee\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n\
+             semantics {}\n",
+            hex(sem)
+        )
+    };
+    let first = head(MONEY_SEMANTICS_ID) + &body;
+    let law = rule_law_from_file_with(&first, Some(&table)).expect("reads");
+    assert!(
+        rule_law_from_file_with(&(head(RULE_SEMANTICS_ID) + &body), Some(&table)).is_err(),
+        "a law with money is not evaluated under the rule semantics"
+    );
+    let delta = format!(
+        "domain demo-fee\nedition y2026\nsupersedes {}\neffective 1767225600\nsemantics {}\n\
+         replace const cap: const cap money = 2000 JPY\nchanges raised\n",
+        hex(law.law_id()),
+        hex(MONEY_SEMANTICS_ID)
+    );
+    let resolved = alice_lol::rule_law::edition_text_with(&first, Some(&table)).expect("resolves");
+    assert!(
+        resolve_delta(&resolved, &delta).is_err(),
+        "read without its table"
+    );
+    assert!(resolve_delta_with(&resolved, &delta, Some(&table)).is_ok());
+    assert!(
+        resolve_delta_with(
+            &resolved,
+            &delta.replace(&hex(MONEY_SEMANTICS_ID), &hex(RULE_SEMANTICS_ID)),
+            Some(&table)
+        )
+        .is_err(),
+        "the delta names the rule semantics"
+    );
+    let files = [("fee.law", first.as_str()), ("fee.delta", delta.as_str())];
+    assert!(
+        RuleSet::from_files(&files).is_err(),
+        "a rule set with money needs its table"
+    );
+    let set = RuleSet::from_files_with(&files, Some(&table)).expect("loads");
+    let q = json(r#"{"fee": "1500 JPY"}"#);
+    let (later, _) = set.evaluate_as_of(&q, 1_767_225_600).expect("in force");
+    let (earlier, _) = set.evaluate_as_of(&q, 1_735_689_600).expect("in force");
+    assert_ne!(later, earlier, "the raised cap answers differently");
+}
+
+#[test]
+fn an_edition_of_a_table_with_money_names_the_money_table_semantics() {
+    use alice_lol::rule_law::{
+        rule_law_from_file_with, MONEY_TABLE_SEMANTICS_ID, TABLE_SEMANTICS_ID,
+    };
+    let table = currency_table();
+    let text = |sem: [u8; 32]| {
+        format!(
+            "domain demo-band\nedition y2025\nsupersedes first\neffective 1735689600\nsemantics {}\n\
+             kind table\ncurrencies {}\nx-input fee money\nconst small_max money = 1000 JPY\n\
+             value small large\nrow small: small when fee <= small_max\notherwise large\n",
+            hex(sem),
+            hex(table.law_id())
+        )
+    };
+    assert!(rule_law_from_file_with(&text(MONEY_TABLE_SEMANTICS_ID), Some(&table)).is_ok());
+    assert!(rule_law_from_file_with(&text(TABLE_SEMANTICS_ID), Some(&table)).is_err());
 }

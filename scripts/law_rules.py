@@ -390,7 +390,12 @@ def _time_literal(tok, n):
     return int(tok)
 
 
-def _edition(lines, semantics, kind):
+def _kind_semantics(semantics, kind, money):
+    """The semantics identifier a law of `kind`, with or without money, is evaluated under"""
+    return semantics[("money_" if money else "") + ("table" if kind == "table" else "rule")]
+
+
+def _edition(lines, semantics, kind, money=False):
     """The five header lines (TASK.md "Editions of a rule set"): (edition or None, the other lines)"""
     found, rest = {}, []
     for n, ln in lines:
@@ -427,7 +432,7 @@ def _edition(lines, semantics, kind):
     if len(w) != 1 or not ID_HEX.match(w[0]):
         raise RuleError(f"line {n}: `semantics <64 lower-case hex>`")
     ed["semantics"] = bytes.fromhex(w[0])
-    if semantics is not None and ed["semantics"] != semantics["table" if kind == "table" else "rule"]:
+    if semantics is not None and ed["semantics"] != _kind_semantics(semantics, kind, money):
         raise RuleError(f"line {n}: written against the semantics {w[0]}, which this reader does not evaluate")
     return ed, rest
 
@@ -510,7 +515,9 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
     if kind is None:
         raise RuleError("not a rule law")
     law = {"kind": kind, "consts": {}, "names": set(), "uses": set(), "currencies": None, "known": None}
-    law["edition"], lines = _edition(_lines(text), semantics, kind)
+    # a law with money is evaluated under the money semantics (MONEY_SEMANTICS_PINS)
+    money = any(ln.split()[0] == "currencies" for _, ln in _lines(text))
+    law["edition"], lines = _edition(_lines(text), semantics, kind, money)
     clines = [(n, ln.split()[1:]) for n, ln in lines if ln.split()[0] == "currencies"]
     if len(clines) > 1:
         raise RuleError(f"line {clines[1][0]}: a second `currencies` line")
@@ -854,20 +861,22 @@ def _resolved(ed: dict, body: list[str]) -> str:
     return "".join(line + "\n" for line in _header_lines(ed) + body)
 
 
-def resolved_text(text: str, semantics: dict[str, bytes] | None = None) -> str:
+def resolved_text(text: str, semantics: dict[str, bytes] | None = None, currencies: dict | None = None) -> str:
     """The resolved text of a full edition file"""
-    law = parse(text, semantics)
+    law = parse(text, semantics, currencies)
     if law["edition"] is None:
         raise RuleError("not an edition (no header)")
     return _resolved(law["edition"], _body(_lines(text)))
 
 
-def resolve(previous: str, delta: str, semantics: dict[str, bytes]) -> tuple[str, list[str]]:
-    """The resolved text of `delta` over the resolved text `previous`, and its `changes` names"""
-    prev = parse(previous, semantics)
+def resolve(previous: str, delta: str, semantics: dict[str, bytes],
+            currencies: dict | None = None) -> tuple[str, list[str]]:
+    """The resolved text of `delta` over the resolved text `previous`, and its `changes` names
+    (`currencies`: the currency table of a rule set with money)"""
+    prev = parse(previous, semantics, currencies)
     if prev["edition"] is None:
         raise RuleError("the superseded file is not an edition")
-    ed, ops = _edition(_lines(delta), semantics, prev["kind"])
+    ed, ops = _edition(_lines(delta), semantics, prev["kind"], prev["currencies"] is not None)
     if ed is None:
         raise RuleError("a delta has the five header lines")
     if ed["domain"] != prev["edition"]["domain"]:
@@ -918,7 +927,7 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes]) -> tuple[str
         else:
             raise RuleError(f"line {n}: `{w[0]}` is not an operation of a delta")
     text = _resolved(ed, body)
-    parse(text, semantics)  # the resolved text reads as a rule law
+    parse(text, semantics, currencies)  # the resolved text reads as a rule law
     return text, changes
 
 
@@ -1040,7 +1049,7 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
     kind = law["kind"]
     ed = law.get("edition")
     tag = LAW_KINDS[kind] if ed is None else f"lol.law.{ed['domain']}.{kind}/v1".encode()
-    h = _LawId(tag, semantics["table" if kind == "table" else "rule"])
+    h = _LawId(tag, _kind_semantics(semantics, kind, law.get("currencies") is not None))
     if ed is not None:
         h = h.text("edition").text(ed["name"]).u32(int(ed["supersedes"] is not None))
         if ed["supersedes"] is not None:

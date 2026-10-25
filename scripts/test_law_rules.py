@@ -286,7 +286,7 @@ class Corpus(unittest.TestCase):
         self.assertEqual(failed, {None, "shape", "tag", "fresh", "current"})
 
 
-SEM = {"rule": bytes(32), "table": bytes(32)}
+SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32}
 RATE = ("kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n")
 HEADER = ("domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
           "semantics " + "00" * 32 + "\n")
@@ -491,6 +491,31 @@ class Money(unittest.TestCase):
             with self.assertRaises(R.RuleError):  # a law with money needs the semantics identifiers
                 R.parse_file(d / "fee.law")
             self.assertEqual(R.parse_file(d / "units.law")["kind"], "table")  # a law without money
+
+    def test_an_edition_with_money_names_the_money_semantics(self):
+        table = R.parse(CURRENCIES, SEM)
+        body = (f"kind predicate\ncurrencies {R.law_id(table, SEM).hex()}\nx-input fee money\n"
+                "const cap money = 1000 JPY\nrequire within: fee <= cap\nexample {\"fee\": \"1 JPY\"}\n")
+
+        def head(sem):
+            return ("domain demo-fee\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
+                    f"semantics {sem.hex()}\n")
+        first = head(SEM["money_rule"]) + body
+        law = R.parse(first, SEM, currencies=table)
+        with self.assertRaises(R.RuleError):  # a law with money is not evaluated under the rule semantics
+            R.parse(head(SEM["rule"]) + body, SEM, currencies=table)
+        delta = (f"domain demo-fee\nedition y2026\nsupersedes {R.law_id(law, SEM).hex()}\neffective 1767225600\n"
+                 f"semantics {SEM['money_rule'].hex()}\nreplace const cap: const cap money = 2000 JPY\nchanges raised\n")
+        resolved = R.resolved_text(first, SEM, table)
+        with self.assertRaises(R.RuleError):  # read without its table
+            R.resolve(resolved, delta, SEM)
+        text, changes = R.resolve(resolved, delta, SEM, table)
+        self.assertEqual(changes, ["raised"])
+        later = R.parse(text, SEM, currencies=table)
+        self.assertEqual(R.respond(later, {"fee": "1500 JPY"})[1]["valid"], True)
+        self.assertEqual(R.respond(law, {"fee": "1500 JPY"})[1]["valid"], False)
+        with self.assertRaises(R.RuleError):  # the delta names the rule semantics
+            R.resolve(resolved, delta.replace(SEM["money_rule"].hex(), SEM["rule"].hex()), SEM, table)
 
     def test_currencies_do_not_mix(self):
         law = self.law()

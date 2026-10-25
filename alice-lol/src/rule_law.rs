@@ -24,7 +24,10 @@
 //! ([`TABLE_LAW_KIND`]) is hashed under [`TABLE_SEMANTICS_ID`], the fold of
 //! [`TABLE_SEMANTICS_PINS`] (the order of its rows, and [`RULE_SEMANTICS_ID`] for the
 //! expressions and inputs it shares with a predicate), so adding it left the identifier of
-//! every machine and predicate law as it was. ⚠️ The rule kinds do
+//! every machine and predicate law as it was. A law with money (a `currencies` line) is hashed
+//! under [`MONEY_SEMANTICS_ID`] (a predicate) or [`MONEY_TABLE_SEMANTICS_ID`] (a table), the
+//! folds of [`MONEY_SEMANTICS_PINS`] / [`MONEY_TABLE_SEMANTICS_PINS`], so a change of how money
+//! is evaluated moves its identifier and nothing else's. ⚠️ The rule kinds do
 //! not fold into [`crate::law_id::LOL_SEMANTICS_ID`]: adding them leaves the identifier of
 //! every audit and research law, and every stamped text, as it was.
 //!
@@ -101,6 +104,39 @@ pub const TABLE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 /// The fold of [`TABLE_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const TABLE_SEMANTICS_ID: [u8; 32] =
     hex32("ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2");
+
+/// The semantics of money in a predicate law `(name, fingerprint of that behaviour)`
+///
+/// A law with money (a `currencies` line) is hashed under [`MONEY_SEMANTICS_ID`], so adding
+/// money left the identifier of every law without it as it was.
+///
+/// ⚠️ The first value is measured ([`money_semantics_fingerprints`]); the second is
+/// [`RULE_SEMANTICS_ID`]. The oracle recomputes both and the fold.
+pub const MONEY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "rule money: integer minor units in i128, one currency, checked sums, the currency table decides what is known",
+        hex32("18222c4357973f3e643db72819ddbe21e0e88eb2c8e7ea1a42ace0a833eb0254"),
+    ),
+    (
+        "rule expressions and inputs (RULE_SEMANTICS_ID)",
+        RULE_SEMANTICS_ID,
+    ),
+];
+
+/// The fold of [`MONEY_SEMANTICS_PINS`]: the semantics of a predicate law with money
+pub const MONEY_SEMANTICS_ID: [u8; 32] =
+    hex32("36b1e7d02b3231a7cfa35c81b6a8c8a34818abb6e299cbc0e8d52067852f1c04");
+
+/// The semantics of a table law with money: the order of its rows ([`TABLE_SEMANTICS_PINS`]'s
+/// first pin) and money ([`MONEY_SEMANTICS_ID`])
+pub const MONEY_TABLE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (TABLE_SEMANTICS_PINS[0].0, TABLE_SEMANTICS_PINS[0].1),
+    ("rule money (MONEY_SEMANTICS_ID)", MONEY_SEMANTICS_ID),
+];
+
+/// The fold of [`MONEY_TABLE_SEMANTICS_PINS`]: the semantics of a table law with money
+pub const MONEY_TABLE_SEMANTICS_ID: [u8; 32] =
+    hex32("ec955bdef6d9cfc5bdaff031a076c9e5cd18e00ef46f6c27fb9754c924fa9cbc");
 
 /// Which rule kind a law file is
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1039,9 +1075,19 @@ fn time_literal(line: usize, s: &str) -> Result<u64, RuleLawError> {
 type Lines<'a> = Vec<(usize, &'a str)>;
 
 /// Splits the header lines off: the edition (or `None` when the file has none) and the other lines
+/// The semantics a rule law of `kind` is evaluated and hashed under, with or without money
+const fn kind_semantics(kind: RuleKind, money: bool) -> [u8; 32] {
+    match (kind, money) {
+        (RuleKind::Table, false) => TABLE_SEMANTICS_ID,
+        (RuleKind::Table, true) => MONEY_TABLE_SEMANTICS_ID,
+        (_, false) => RULE_SEMANTICS_ID,
+        (_, true) => MONEY_SEMANTICS_ID,
+    }
+}
+
 fn read_edition<'a>(
     ls: &[(usize, &'a str)],
-    kind: RuleKind,
+    evaluated: Option<[u8; 32]>,
 ) -> Result<(Option<Edition>, Lines<'a>), RuleLawError> {
     let mut found: Vec<(&str, usize, Vec<&str>)> = Vec::new();
     let mut rest = Vec::new();
@@ -1110,12 +1156,7 @@ fn read_edition<'a>(
         (n, [v]) => id_hex(v).ok_or_else(|| err(n, "`semantics <64 lower-case hex>`"))?,
         (n, _) => return Err(err(n, "`semantics <64 lower-case hex>`")),
     };
-    let evaluated = if kind == RuleKind::Table {
-        TABLE_SEMANTICS_ID
-    } else {
-        RULE_SEMANTICS_ID
-    };
-    if semantics != evaluated {
+    if evaluated.is_some_and(|e| e != semantics) {
         return Err(err(
             line("semantics").0,
             "written against a semantics this reader does not evaluate",
@@ -1240,7 +1281,17 @@ fn resolved(e: &Edition, body: &[String]) -> Result<String, RuleLawError> {
 ///
 /// When the file does not read, has no edition header, or has two body lines with one key
 pub fn edition_text(text: &str) -> Result<String, RuleLawError> {
-    let law = rule_law_from_file(text)?;
+    edition_text_with(text, None)
+}
+
+/// [`edition_text`] for a law with money, read with the currency table its `currencies` line
+/// names
+///
+/// # Errors
+///
+/// As [`edition_text`], and as [`rule_law_from_file_with`] for the currency table
+pub fn edition_text_with(text: &str, currencies: Option<&RuleLaw>) -> Result<String, RuleLawError> {
+    let law = rule_law_from_file_with(text, currencies)?;
     let e = law
         .edition()
         .ok_or_else(|| err(0, "not an edition (no header)"))?;
@@ -1259,11 +1310,25 @@ pub fn edition_text(text: &str) -> Result<String, RuleLawError> {
 /// an operation names a key the body does not have (or adds one it has), or the result does not
 /// read
 pub fn resolve_delta(previous: &str, delta: &str) -> Result<(String, Vec<String>), RuleLawError> {
-    let prev = rule_law_from_file(previous)?;
+    resolve_delta_with(previous, delta, None)
+}
+
+/// [`resolve_delta`] for a law with money: `currencies` is the currency table its `currencies`
+/// line names (conformance/TASK.md "The currency table")
+///
+/// # Errors
+///
+/// As [`resolve_delta`], and as [`rule_law_from_file_with`] for the currency table
+pub fn resolve_delta_with(
+    previous: &str,
+    delta: &str,
+    currencies: Option<&RuleLaw>,
+) -> Result<(String, Vec<String>), RuleLawError> {
+    let prev = rule_law_from_file_with(previous, currencies)?;
     let pe = prev
         .edition()
         .ok_or_else(|| err(0, "the superseded file is not an edition"))?;
-    let (e, ops) = read_edition(&lines(delta)?, prev.kind())?;
+    let (e, ops) = read_edition(&lines(delta)?, Some(*pe.semantics()))?;
     let e = e.ok_or_else(|| err(0, "a delta has the five header lines"))?;
     if e.domain != pe.domain {
         return Err(err(
@@ -1342,7 +1407,7 @@ pub fn resolve_delta(previous: &str, delta: &str) -> Result<(String, Vec<String>
         }
     }
     let text = resolved(&e, &body)?;
-    rule_law_from_file(&text)?;
+    rule_law_from_file_with(&text, currencies)?;
     Ok((text, changes))
 }
 
@@ -1365,6 +1430,19 @@ impl RuleSet {
     /// edition (each superseded by at most one), they are not of one domain, or their periods
     /// leave a gap or overlap
     pub fn from_files(files: &[(&str, &str)]) -> Result<Self, RuleLawError> {
+        Self::from_files_with(files, None)
+    }
+
+    /// [`RuleSet::from_files`] for a rule set with money: every edition is read with the currency
+    /// table `currencies` (conformance/TASK.md "The currency table")
+    ///
+    /// # Errors
+    ///
+    /// As [`RuleSet::from_files`], and when an edition names another currency table
+    pub fn from_files_with(
+        files: &[(&str, &str)],
+        currencies: Option<&RuleLaw>,
+    ) -> Result<Self, RuleLawError> {
         let mut resolved: Vec<(String, RuleLaw, [u8; 32])> = Vec::new();
         let mut deltas: Vec<&str> = Vec::new();
         for (name, text) in files {
@@ -1374,23 +1452,24 @@ impl RuleSet {
             {
                 deltas.push(text);
             } else {
-                let law = rule_law_from_file(text)?;
+                let law = rule_law_from_file_with(text, currencies)?;
                 if law.edition().is_none() {
                     return Err(err(0, format!("{name}: not an edition (no header)")));
                 }
                 let id = law.law_id();
-                resolved.push((edition_text(text)?, law, id));
+                resolved.push((edition_text_with(text, currencies)?, law, id));
             }
         }
         while !deltas.is_empty() {
             let before = deltas.len();
             let mut i = 0;
             while i < deltas.len() {
-                let (e, _) = read_edition(&lines(deltas[i])?, RuleKind::Table)?;
+                // only `supersedes` is read here; the semantics is checked when it resolves
+                let (e, _) = read_edition(&lines(deltas[i])?, None)?;
                 let sup = e.and_then(|e| e.supersedes);
                 if let Some(prev) = resolved.iter().find(|(_, _, id)| Some(*id) == sup) {
-                    let (text, _) = resolve_delta(&prev.0, deltas[i])?;
-                    let law = rule_law_from_file(&text)?;
+                    let (text, _) = resolve_delta_with(&prev.0, deltas[i], currencies)?;
+                    let law = rule_law_from_file_with(&text, currencies)?;
                     let id = law.law_id();
                     resolved.push((text, law, id));
                     deltas.remove(i);
@@ -1682,7 +1761,9 @@ pub fn rule_law_from_file_with(
     if kinds != 1 {
         return Err(err(0, "a rule law file has exactly one `kind` line"));
     }
-    let (edition, ls) = read_edition(&ls, kind)?;
+    // a law with money is evaluated under the money semantics (MONEY_SEMANTICS_PINS)
+    let money = ls.iter().any(|(_, l)| words(l)[0].0 == "currencies");
+    let (edition, ls) = read_edition(&ls, Some(kind_semantics(kind, money)))?;
     let clines: Vec<&(usize, &str)> = ls
         .iter()
         .filter(|(_, l)| words(l)[0].0 == "currencies")
@@ -2658,7 +2739,11 @@ impl PredicateLaw {
             law_id_start(
                 PREDICATE_LAW_KIND,
                 "predicate",
-                &RULE_SEMANTICS_ID,
+                if self.currencies.is_some() {
+                    &MONEY_SEMANTICS_ID
+                } else {
+                    &RULE_SEMANTICS_ID
+                },
                 self.edition.as_ref(),
             ),
             &self.consts,
@@ -2725,7 +2810,11 @@ impl TableLaw {
             law_id_start(
                 TABLE_LAW_KIND,
                 "table",
-                &TABLE_SEMANTICS_ID,
+                if self.currencies.is_some() {
+                    &MONEY_TABLE_SEMANTICS_ID
+                } else {
+                    &TABLE_SEMANTICS_ID
+                },
                 self.edition.as_ref(),
             ),
             &self.consts,
@@ -2753,6 +2842,60 @@ fn digest_answers(law: &str, requests: &[&str]) -> [u8; 32] {
     let law = rule_law_from_file(law).expect("the fingerprint law reads");
     let mut h = Sha256::new();
     for r in requests {
+        let a = law.respond(&crate::law_input::parse_json(r).expect("fingerprint JSON"));
+        h.update(format!("{r} -> {a:?}\n").as_bytes());
+    }
+    h.finalize().into()
+}
+
+/// The measured value of every pin of [`MONEY_SEMANTICS_PINS`]
+///
+/// The first is the digest of the answers of a fixed predicate law with money, read with its
+/// currency table, to fixed requests (amounts beyond 2^63, the ends of the range, sums that
+/// leave it, another currency, a currency the table does not know, forms that are not money, an
+/// operation `or` does not reach).
+#[must_use]
+pub fn money_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
+    vec![
+        (MONEY_SEMANTICS_PINS[0].0, money_fingerprint()),
+        (MONEY_SEMANTICS_PINS[1].0, RULE_SEMANTICS_ID),
+    ]
+}
+
+fn money_fingerprint() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
+    let table = rule_law_from_file(
+        "kind table\nx-input code text\nvalue e0 e2 unknown\nrow jpy: e0 when code == \"JPY\"\n\
+         row usd: e2 when code == \"USD\"\notherwise unknown\n",
+    )
+    .expect("the fingerprint currency table reads");
+    let id = table.law_id().iter().fold(String::new(), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    });
+    let law = rule_law_from_file_with(
+        &format!(
+            "kind predicate\ncurrencies {id}\nx-input a money\nx-input b money\nx-input go bool\n\
+             const cap money = 9223372036854775809 JPY\nrequire sum: not go or a + b <= cap\n\
+             require less: a - b < b\nexample {{\"a\": \"1 JPY\", \"b\": \"2 JPY\", \"go\": true}}\n"
+        ),
+        Some(&table),
+    )
+    .expect("the fingerprint money law reads");
+    let mut h = Sha256::new();
+    for r in [
+        r#"{"a": "9223372036854775800 JPY", "b": "9 JPY", "go": true}"#,
+        r#"{"a": "9223372036854775801 JPY", "b": "9 JPY", "go": true}"#,
+        r#"{"a": "170141183460469231731687303715884105727 JPY", "b": "1 JPY", "go": true}"#,
+        r#"{"a": "-170141183460469231731687303715884105728 JPY", "b": "1 JPY", "go": false}"#,
+        r#"{"a": "1 USD", "b": "2 USD", "go": false}"#,
+        r#"{"a": "1 USD", "b": "2 JPY", "go": false}"#,
+        r#"{"a": "1 USD", "b": "2 USD", "go": true}"#,
+        r#"{"a": "1 EUR", "b": "2 EUR", "go": false}"#,
+        r#"{"a": "01 JPY", "b": "2 JPY", "go": false}"#,
+        r#"{"a": 1, "b": "2 JPY", "go": false}"#,
+    ] {
         let a = law.respond(&crate::law_input::parse_json(r).expect("fingerprint JSON"));
         h.update(format!("{r} -> {a:?}\n").as_bytes());
     }
