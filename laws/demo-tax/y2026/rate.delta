@@ -5,3 +5,7 @@ supersedes 3634bd55a7e53340a3701cd3020518afc8bffe2fc4322c9c5debc0aea8e6c50e
 effective 1767225600 until 1798761600
 semantics ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
 replace row small: row small: reduced when amount <= 120000
+changes 2af946895a5d   # amount 100001
+changes 7f316ce11fc5   # amount 119999
+changes e700040575ee   # amount 119999.0
+changes 05ca78016716   # amount 120000

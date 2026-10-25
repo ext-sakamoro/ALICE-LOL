@@ -1,0 +1,31 @@
+# the editions of this rule set, written by scripts/edition_check.py --write: do not edit
+
+[[edition]]
+name = "y2025"
+file = "y2025/rate.law"
+law_id = "3634bd55a7e53340a3701cd3020518afc8bffe2fc4322c9c5debc0aea8e6c50e"
+supersedes = "first"
+from = 1735689600
+until = 1767225600
+semantics = "ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2"
+corpus_sha256 = "f89be302ff7c5d1f75684043328f773bb157b41401aee5601124b15448143e36"
+
+[[edition]]
+name = "y2026"
+file = "y2026/rate.delta"
+law_id = "7cc1eee63893b9cfb7eddac6c6f45f03aa16f10206c29686afbc42126bebd3cc"
+supersedes = "3634bd55a7e53340a3701cd3020518afc8bffe2fc4322c9c5debc0aea8e6c50e"
+from = 1767225600
+until = 1798761600
+semantics = "ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2"
+corpus_sha256 = "75c6ff9a025061cd3823b661653b08c691c9f645adca0cf5d92e3ecd9884eb29"
+
+[[edition]]
+name = "y2027"
+file = "y2027/rate.delta"
+law_id = "639c5d4d4dd89f149ca20712dada8313eb698ed281c2d861310f327b6363c681"
+supersedes = "7cc1eee63893b9cfb7eddac6c6f45f03aa16f10206c29686afbc42126bebd3cc"
+from = 1798761600
+until = -1
+semantics = "ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2"
+corpus_sha256 = "b49bd09c9c62cfd43e14cc90647da7663edcef6da85a962268339cc61293b918"
