@@ -50,7 +50,7 @@ def rule_kind(text: str):
     lines = [ln.split("#", 1)[0].strip() for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
-    for k in ("machine", "predicate", "table", "statute", "procedure"):
+    for k in ("machine", "predicate", "table", "statute", "procedure", "contract"):
         if f"kind {k}" in lines:
             return k
     return None
@@ -392,7 +392,7 @@ def _time_literal(tok, n):
 
 def _kind_semantics(semantics, kind, money):
     """The semantics identifier a law of `kind`, with or without money, is evaluated under"""
-    if kind in ("statute", "procedure"):
+    if kind in ("statute", "procedure", "contract"):
         return semantics[kind]
     return semantics[("money_" if money else "") + ("table" if kind == "table" else "rule")]
 
@@ -442,6 +442,8 @@ def _edition(lines, semantics, kind, money=False):
 def _uses_money(law) -> bool:
     def has(ty):
         return ty == "money" or (isinstance(ty, tuple) and any(t == "money" for _, t in ty[1]))
+    if law["kind"] == "contract":
+        return True  # its obligations are money
     return any(ty == "money" for ty, _ in law["consts"].values()) or any(has(t) for _, t in law.get("inputs", []))
 
 
@@ -536,13 +538,21 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
         law["names"].add(name)
 
     {"machine": _machine, "predicate": _predicate, "table": _table, "statute": _statute,
-     "procedure": _procedure}[kind](law, lines, declare)
+     "procedure": _procedure, "contract": _contract}[kind](law, lines, declare)
     del law["names"]
     if kind in ("machine", "procedure") and _uses_money(law):
         raise RuleError(f"a {kind} law has no money")
     if kind == "statute" and clines:
         raise RuleError("a statute law has no money")
     _bind_currencies(law, clines[0] if clines else None, currencies, semantics)
+    if kind == "contract":
+        codes = {o["currency"] for o in law["obligations"]}
+        for c in sorted(codes):
+            if not law["known"](c):
+                raise RuleError(f"the currency table does not know {c}")
+        if len(codes) != 1:
+            raise RuleError("the obligations of a contract are in one currency")
+        law["currency"] = codes.pop()
     if kind == "predicate" and respond(law, law["example"]) != ("outputs", {"valid": True, "failed": None}):
         raise RuleError("the example does not hold")
     return law
@@ -578,15 +588,119 @@ def _procedure(law, lines, declare):
                 raise RuleError(f"`on {ev} from {f} to {to}`: a {ev} step from {f} leads to {next_status(f, ev)}")
 
 
+def _contract(law, lines, declare):
+    """`kind contract`: `party`, `created`, `condition <label> decided by <id>: <description>` and
+    `obligation <label> <party> to <party> <amount> <currency> due <time>` lines"""
+    law["parties"], law["created"], law["conditions"], law["obligations"] = [], None, [], []
+
+    def fresh(label, n):
+        if not LABEL.match(label):
+            raise RuleError(f"line {n}: `{label}` is not a label")
+        if label in law["parties"] or label in [c["label"] for c in law["conditions"]] \
+                or label in [o["label"] for o in law["obligations"]]:
+            raise RuleError(f"line {n}: a second `{label}`")
+    for n, ln in lines:
+        w = ln.split()
+        if w[0] in PEOPLE or w[0] == "kind":
+            continue
+        if w[0] == "party":
+            if len(w) != 2:
+                raise RuleError(f"line {n}: `party <label>`")
+            fresh(w[1], n)
+            law["parties"].append(w[1])
+        elif w[0] == "created":
+            if len(w) != 2:
+                raise RuleError(f"line {n}: `created <time>`")
+            if law["created"] is not None:
+                raise RuleError(f"line {n}: a second `created` line")
+            law["created"] = _statute_time(w[1], n)
+        elif w[0] == "condition":
+            if ":" not in ln:
+                raise RuleError(f"line {n}: `condition <label> decided by <law identifier>: <description>`")
+            head, text = ln.split(":", 1)
+            h, text = head.split(), text.strip(" \t")
+            if len(h) != 5 or h[2:4] != ["decided", "by"]:
+                raise RuleError(f"line {n}: `condition <label> decided by <law identifier>: <description>`")
+            if not text:
+                raise RuleError(f"line {n}: a condition has a description after the `:`")
+            fresh(h[1], n)
+            if not ID_HEX.match(h[4]):
+                raise RuleError(f"line {n}: `decided by <64 lower-case hex>`")
+            law["conditions"].append({"label": h[1], "decided_by": bytes.fromhex(h[4]), "description": text})
+        elif w[0] == "obligation":
+            if len(w) != 9 or w[3] != "to" or w[7] != "due":
+                raise RuleError(f"line {n}: `obligation <label> <party> to <party> <amount> <currency> due <time>`")
+            fresh(w[1], n)
+            for party in (w[2], w[4]):
+                if party not in law["parties"]:
+                    raise RuleError(f"line {n}: `{party}` is not a party declared before")
+            if w[2] == w[4]:
+                raise RuleError(f"line {n}: a party does not owe itself")
+            m = _money_text(f"{w[5]} {w[6]}")
+            if m is None:
+                raise RuleError(f"line {n}: the amount is `<minor units> <currency>`")
+            if m.amount <= 0:
+                raise RuleError(f"line {n}: an obligation owes more than 0")
+            law["obligations"].append({"label": w[1], "debtor": w[2], "creditor": w[4], "amount": m.amount,
+                                       "currency": m.currency, "due": _statute_time(w[8], n)})
+        else:
+            raise RuleError(f"line {n}: `{w[0]}` is not a line of a contract law")
+    if law["created"] is None:
+        raise RuleError("a contract has one `created <time>` line")
+    if not law["obligations"]:
+        raise RuleError("a contract has at least one obligation")
+    for o in law["obligations"]:
+        if o["due"] < law["created"]:
+            raise RuleError(f"obligation `{o['label']}` is due before the contract is made")
+
+
+def _contract_labels(v, known, what):
+    if v is None:
+        return set(), None
+    if not isinstance(v, list):
+        return None, f"{what} is not a list"
+    out = set()
+    for x in v:
+        if not isinstance(x, str) or x not in known:
+            return None, f"{what}: not a label of the law"
+        if x in out:
+            return None, f"{what}: a label given twice"
+        out.add(x)
+    return out, None
+
+
+def _contract_answer(law, inp, bug):
+    if "now" not in inp:
+        return ("request_error", "now missing")
+    if not _has_type(inp["now"], "time"):
+        return ("rejected", "now does not have its type")
+    now = int(inp["now"])
+    fulfilled, why = _contract_labels(inp.get("fulfilled"), [o["label"] for o in law["obligations"]], "fulfilled")
+    if why:
+        return ("rejected", why)
+    met, why = _contract_labels(inp.get("met"), [c["label"] for c in law["conditions"]], "met")
+    if why:
+        return ("rejected", why)
+    if "met" in inp and inp["met"] is None or "fulfilled" in inp and inp["fulfilled"] is None:
+        return ("rejected", "a list is null")
+    open_ = [o for o in law["obligations"] if o["label"] not in fulfilled]
+    status = ("breached" if any(now > o["due"] for o in open_) else "fulfilled" if not open_ else "active")
+    owed = sum(o["amount"] for o in open_)
+    if not MONEY_MIN <= owed <= MONEY_MAX:
+        return ("rejected", "an amount outside -2^127 to 2^127 - 1")
+    return ("outputs", {"status": status, "unfulfilled": [o["label"] for o in open_],
+                        "owed": f"{owed} {law['currency']}", "conditions_met": len(met) == len(law["conditions"])})
+
+
 CLAUSE_KINDS = ("obligation", "prohibition", "permission", "definition", "penalty", "exception")
 LABEL = re.compile(r"[a-z][a-z0-9_]*\Z")
-MAX_STATUTE_TIME = (2 ** 64 - 1) // 10 ** 9  # the nanoseconds of every statute time fit 64 bits
+MAX_LEGAL_TIME = (2 ** 64 - 1) // 10 ** 9  # the nanoseconds of every statute time fit 64 bits
 
 
 def _statute_time(tok, n):
     t = _time_literal(tok, n)
-    if t > MAX_STATUTE_TIME:
-        raise RuleError(f"line {n}: `{tok}` is after the latest time a statute names ({MAX_STATUTE_TIME})")
+    if t > MAX_LEGAL_TIME:
+        raise RuleError(f"line {n}: `{tok}` is after the latest time a statute names ({MAX_LEGAL_TIME})")
     return t
 
 
@@ -957,7 +1071,7 @@ def _key(line: str) -> str:
     w = line.split()
     if w[0] in ("row", "require") and len(w) > 1 and w[1].endswith(":"):
         return f"{w[0]} {w[1][:-1]}"
-    if w[0] in KEYED + ("x-split", "clause") and len(w) > 1:
+    if w[0] in KEYED + ("x-split", "clause", "party", "condition", "obligation") and len(w) > 1:
         return f"{w[0]} {w[1]}"
     if w[0] == "on" and "to" in w:
         return " ".join(w[:w.index("to")])
@@ -1058,7 +1172,8 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
 # "Rule laws" read as alice-lol `rule_law` hashes it; scripts/rule_law_ids.py records the values.
 LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
 LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1",
-             "statute": b"lol.law.statute/v1", "procedure": b"lol.law.procedure/v1"}
+             "statute": b"lol.law.statute/v1", "procedure": b"lol.law.procedure/v1",
+             "contract": b"lol.law.contract/v1"}
 
 
 class _LawId:
@@ -1176,6 +1291,18 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
         h = h.u64(ed["from"]).u32(int(ed["until"] is not None))
         if ed["until"] is not None:
             h = h.u64(ed["until"])
+    if kind == "contract":
+        h = h.text("currencies").ident(law["currencies"]).text("parties").u64(len(law["parties"]))
+        for party in law["parties"]:
+            h = h.text(party)
+        h = h.text("created").u64(law["created"]).text("conditions").u64(len(law["conditions"]))
+        for c in law["conditions"]:
+            h = h.text(c["label"]).ident(c["decided_by"]).text(c["description"])
+        h = h.text("obligations").u64(len(law["obligations"]))
+        for o in law["obligations"]:
+            h = h.text(o["label"]).text(o["debtor"]).text(o["creditor"])
+            h = h.text("money").raw(o["amount"].to_bytes(16, "big", signed=True)).text(o["currency"]).u64(o["due"])
+        return h.finish()
     if kind == "statute":
         h = h.text("title").text(law["title"]).text("clauses").u64(len(law["clauses"]))
         for c in law["clauses"]:
@@ -1246,7 +1373,7 @@ def respond(law, inputs, bug=None):
     """The answer to a request whose `inputs` is the given object (None: no inputs key)"""
     inputs = {} if inputs is None else inputs
     return {"machine": _machine_step, "procedure": _machine_step, "predicate": _predicate_answer,
-            "table": _table_answer, "statute": _statute_answer}[law["kind"]](law, inputs, bug)
+            "table": _table_answer, "statute": _statute_answer, "contract": _contract_answer}[law["kind"]](law, inputs, bug)
 
 
 def _machine_step(law, inp, bug):
@@ -1429,7 +1556,42 @@ def _vec(name, inputs, note, answer):
 def vectors(law, name):
     """The conformance vectors of a rule law: every answer is computed by `respond`"""
     return {"machine": _machine_vectors, "procedure": _machine_vectors, "predicate": _predicate_vectors,
-            "table": _table_vectors, "statute": _statute_vectors}[law["kind"]](law, name)
+            "table": _table_vectors, "statute": _statute_vectors,
+            "contract": _contract_vectors}[law["kind"]](law, name)
+
+
+def _contract_vectors(law, name):
+    """Each due time, one before and one after it, with every set of fulfilled obligations (each
+    one alone and all of them when there are more than 4), the conditions met or not, and requests
+    that are not of the contract"""
+    obl = [o["label"] for o in law["obligations"]]
+    cond = [c["label"] for c in law["conditions"]]
+    times = sorted({t for o in law["obligations"] for t in (o["due"] - 1, o["due"], o["due"] + 1)}
+                   | {law["created"], -1, MAX_INT, -MAX_INT})
+    if len(obl) <= 4:
+        sets = [[x for i, x in enumerate(obl) if m >> i & 1] for m in range(1 << len(obl))]
+    else:
+        sets = [[]] + [[x] for x in obl] + [obl]
+    V = []
+    for t in times:
+        for f in sets:
+            inp = {"now": t, "fulfilled": f}
+            V.append(_vec(name, inp, f"now {t}, fulfilled {f}", respond(law, inp)))
+    for m in ([], cond):
+        inp = {"now": law["created"], "met": m}
+        V.append(_vec(name, inp, f"met {m}", respond(law, inp)))
+    first = obl[0]
+    for inp, note in (({"now": law["created"]}, "no fulfilled key"), ({"now": str(law["created"])}, "now as text"),
+                      ({"now": law["created"] + 0.5}, "now with a fraction"), ({"now": float(law["created"])}, "now as 1.0e"),
+                      ({"now": law["created"], "fulfilled": first}, "fulfilled not a list"),
+                      ({"now": law["created"], "fulfilled": [first, first]}, "a label twice"),
+                      ({"now": law["created"], "fulfilled": [law["parties"][0]]}, "a party's label"),
+                      ({"now": law["created"], "fulfilled": [1]}, "a number"),
+                      ({"now": law["created"], "fulfilled": None}, "fulfilled null"),
+                      ({"now": law["created"], "met": [first]}, "an obligation as a condition"),
+                      ({"fulfilled": []}, "now missing")):
+        V.append(_vec(name, inp, note, respond(law, inp)))
+    return V
 
 
 def _statute_times(law):
@@ -1859,6 +2021,20 @@ def coverage(law, vecs):
                             missing.append(f"step {mode} {state} {event} {gs}")
         if not any(o["expected"]["transition"] == "refused" for o in answered):
             missing.append("a refused step")
+    elif law["kind"] == "contract":
+        got = {v["expected"]["status"] for v in answered}
+        for st in ("active", "fulfilled", "breached"):
+            if st not in got:
+                missing.append(f"a vector with status {st}")
+        for o in law["obligations"]:
+            seen = {o["label"] in v["expected"]["unfulfilled"] for v in answered}
+            for state in (True, False):
+                if state not in seen:
+                    missing.append(f"a vector with {o['label']} {'unfulfilled' if state else 'fulfilled'}")
+            times = {v["inputs"].get("now") for v in answered if not v["inputs"].get("fulfilled")}
+            for t in (o["due"], o["due"] + 1):
+                if t not in times:
+                    missing.append(f"a vector at {t} with nothing fulfilled (the due time of {o['label']})")
     elif law["kind"] == "statute":
         # every clause both in force and not in force at some answered time
         for c in law["clauses"]:

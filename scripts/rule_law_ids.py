@@ -37,7 +37,8 @@ def semantics(rust_src: str) -> dict[str, bytes]:
     out = {}
     for key, name in (("rule", "RULE_SEMANTICS_ID"), ("table", "TABLE_SEMANTICS_ID"),
                       ("money_rule", "MONEY_SEMANTICS_ID"), ("money_table", "MONEY_TABLE_SEMANTICS_ID"),
-                      ("statute", "STATUTE_SEMANTICS_ID"), ("procedure", "PROCEDURE_SEMANTICS_ID")):
+                      ("statute", "STATUTE_SEMANTICS_ID"), ("procedure", "PROCEDURE_SEMANTICS_ID"),
+                      ("contract", "CONTRACT_SEMANTICS_ID")):
         m = re.search(rf"pub const {name}: \[u8; 32\] =\s*hex32\(\"([0-9a-f]{{64}})\"\);", rust_src)
         if not m:
             raise SystemExit(f"{RUST}: no `pub const {name}: [u8; 32] = hex32(\"<64 hex>\");`")

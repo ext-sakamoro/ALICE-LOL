@@ -3,7 +3,8 @@
 //! A rule law is a state machine (`kind machine`), a predicate over typed inputs
 //! (`kind predicate`), a table whose first holding row gives the answer (`kind table`) or the
 //! clauses of a statute in force at a time (`kind statute`, [`StatuteLaw`]) or a machine over the
-//! steps of an administrative procedure (`kind procedure`, [`next_status`]).
+//! steps of an administrative procedure (`kind procedure`, [`next_status`]) or the obligations of
+//! a contract at a time (`kind contract`, [`ContractLaw`]).
 //!
 //! The layout and the meaning are those of `conformance/TASK.md` § "Rule laws"; this module
 //! is a reader of it ([`rule_law_from_file`]) and answers a request the way the contract says
@@ -47,13 +48,18 @@ use alice_zip::law_id::LawIdHasher;
 use crate::law_id::hex32;
 use crate::law_input::Json;
 
+mod contract;
 mod procedure;
+pub use contract::{
+    contract_semantics_fingerprints, ContractCondition, ContractLaw, ContractObligation,
+    CONTRACT_LAW_KIND,
+};
 mod statute;
 pub use procedure::{
     next_status, procedure_semantics_fingerprints, PROCEDURE_STATUSES, STEP_KINDS,
 };
 pub use statute::{
-    statute_semantics_fingerprints, ClauseKind, StatuteClause, StatuteLaw, MAX_STATUTE_TIME,
+    statute_semantics_fingerprints, ClauseKind, StatuteClause, StatuteLaw, MAX_LEGAL_TIME,
     STATUTE_LAW_KIND,
 };
 
@@ -182,6 +188,26 @@ pub const PROCEDURE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 pub const PROCEDURE_SEMANTICS_ID: [u8; 32] =
     hex32("b27f457fb2df479530989a2195803bd96708ab939a67af5e50bd641e7d93c8b6");
 
+/// The semantics of the contract kind `(name, fingerprint of that behaviour)`
+///
+/// ⚠️ The first value is measured ([`contract_semantics_fingerprints`]); the second is
+/// [`MONEY_SEMANTICS_ID`] (a contract's obligations are money). The oracle recomputes both and the
+/// fold.
+pub const CONTRACT_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "rule contract: status as ALICE-Legal's check_status (breached past an unfulfilled due time, fulfilled when all are, else active), what is still owed, conditions met",
+        hex32("f65144dd9443280456307d68a005c5b0b54be051caa65db942e5a4e1854ad5a1"),
+    ),
+    (
+        "rule money (MONEY_SEMANTICS_ID)",
+        MONEY_SEMANTICS_ID,
+    ),
+];
+
+/// The fold of [`CONTRACT_SEMANTICS_PINS`] (the oracle checks the two agree)
+pub const CONTRACT_SEMANTICS_ID: [u8; 32] =
+    hex32("bb055ca2e92a2b3607464bdb4c3a90026b0c9a9240f73d9e66d9042ee99a6ce3");
+
 /// The fold of [`STATUTE_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const STATUTE_SEMANTICS_ID: [u8; 32] =
     hex32("428a5863af343ed0b3c8c67c6e9355a57f2b23ce57a915b6941dd1179281ed6a");
@@ -200,6 +226,8 @@ pub enum RuleKind {
     Statute,
     /// `kind procedure`
     Procedure,
+    /// `kind contract`
+    Contract,
 }
 
 /// The kind of a rule law file: `None` when it has the line `kind audit` (an audit law,
@@ -227,6 +255,8 @@ pub fn rule_kind(text: &str) -> Option<RuleKind> {
         Some(RuleKind::Statute)
     } else if lines.contains(&"kind procedure") {
         Some(RuleKind::Procedure)
+    } else if lines.contains(&"kind contract") {
+        Some(RuleKind::Contract)
     } else {
         None
     }
@@ -1135,6 +1165,7 @@ type Lines<'a> = Vec<(usize, &'a str)>;
 /// The semantics a rule law of `kind` is evaluated and hashed under, with or without money
 const fn kind_semantics(kind: RuleKind, money: bool) -> [u8; 32] {
     match (kind, money) {
+        (RuleKind::Contract, _) => CONTRACT_SEMANTICS_ID,
         (RuleKind::Table, false) => TABLE_SEMANTICS_ID,
         (RuleKind::Table, true) => MONEY_TABLE_SEMANTICS_ID,
         (RuleKind::Statute, _) => STATUTE_SEMANTICS_ID,
@@ -1278,7 +1309,7 @@ fn line_key(line: &str) -> String {
             format!("{k} {}", &label[..label.len() - 1])
         }
         [k @ ("const" | "x-input" | "x-bind" | "allow" | "state" | "event" | "x-split"
-        | "clause"), name, ..] => {
+        | "clause" | "party" | "condition" | "obligation"), name, ..] => {
             format!("{k} {name}")
         }
         ["on", ..] if w.contains(&"to") => {
@@ -1649,6 +1680,8 @@ pub enum RuleLaw {
     Statute(StatuteLaw),
     /// `kind procedure`: a machine over a procedure's statuses and step kinds
     Procedure(MachineLaw),
+    /// `kind contract`
+    Contract(ContractLaw),
 }
 
 /// A state machine law
@@ -1817,7 +1850,7 @@ pub fn rule_law_from_file_with(
     let kind = rule_kind(text).ok_or_else(|| {
         err(
             0,
-            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure`)",
+            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract`)",
         )
     })?;
     let ls = lines(text)?;
@@ -1878,6 +1911,9 @@ pub fn rule_law_from_file_with(
                 return Err(err(0, "a machine law has no money"));
             }
             RuleLaw::Machine(MachineLaw { edition, ..m })
+        }
+        RuleKind::Contract => {
+            RuleLaw::Contract(contract::read_contract(&ls, edition, cur.as_ref())?)
         }
         RuleKind::Procedure => {
             let m = read_machine(&ls)?;
@@ -2405,6 +2441,7 @@ impl RuleLaw {
             Self::Predicate(p) => p.respond(inputs),
             Self::Table(t) => t.respond(inputs),
             Self::Statute(s) => s.respond(inputs),
+            Self::Contract(c) => c.respond(inputs),
         }
     }
 
@@ -2417,6 +2454,7 @@ impl RuleLaw {
             Self::Table(_) => RuleKind::Table,
             Self::Statute(_) => RuleKind::Statute,
             Self::Procedure(_) => RuleKind::Procedure,
+            Self::Contract(_) => RuleKind::Contract,
         }
     }
 
@@ -2428,6 +2466,7 @@ impl RuleLaw {
             Self::Predicate(p) => p.edition.as_ref(),
             Self::Table(t) => t.edition.as_ref(),
             Self::Statute(s) => s.edition.as_ref(),
+            Self::Contract(c) => c.edition.as_ref(),
         }
     }
 
@@ -2439,6 +2478,7 @@ impl RuleLaw {
             Self::Predicate(p) => p.law_id(),
             Self::Table(t) => t.law_id(),
             Self::Statute(s) => s.law_id(),
+            Self::Contract(c) => c.law_id(),
             Self::Procedure(m) => {
                 m.law_id(PROCEDURE_LAW_KIND, "procedure", &PROCEDURE_SEMANTICS_ID)
             }

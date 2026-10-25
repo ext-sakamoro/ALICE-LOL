@@ -4,7 +4,7 @@
 //! The answer to `{"at": <time>}` is the labels of the clauses in force at that time, in file order.
 //! The clauses are the shape ALICE-Legal's `StatuteTree` holds (`ClauseKind`, a parent, an
 //! effective time and an expiry), so a statute law can be compiled to one: every time is at most
-//! [`MAX_STATUTE_TIME`], whose nanoseconds fit 64 bits.
+//! [`MAX_LEGAL_TIME`], whose nanoseconds fit 64 bits.
 
 use alice_zip::law_id::LawIdHasher;
 
@@ -16,8 +16,8 @@ use super::{
 /// The kind tag of a statute law
 pub const STATUTE_LAW_KIND: &[u8] = b"lol.law.statute/v1";
 
-/// The latest time a statute names (seconds): its nanoseconds are at most `u64::MAX`
-pub const MAX_STATUTE_TIME: u64 = u64::MAX / 1_000_000_000;
+/// The latest time a statute or a contract names (seconds): its nanoseconds are at most `u64::MAX`
+pub const MAX_LEGAL_TIME: u64 = u64::MAX / 1_000_000_000;
 
 /// The legal nature of a clause (the words of a `clause` line, ALICE-Legal's `ClauseKind`)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -195,12 +195,12 @@ fn is_label(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
 }
 
-fn statute_time(n: usize, s: &str) -> Result<u64, RuleLawError> {
+pub(super) fn statute_time(n: usize, s: &str) -> Result<u64, RuleLawError> {
     let t = time_literal(n, s)?;
-    if t > MAX_STATUTE_TIME {
+    if t > MAX_LEGAL_TIME {
         return Err(err(
             n,
-            format!("`{s}` is after the latest time a statute names ({MAX_STATUTE_TIME})"),
+            format!("`{s}` is after the latest time a statute names ({MAX_LEGAL_TIME})"),
         ));
     }
     Ok(t)

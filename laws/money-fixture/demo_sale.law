@@ -1,0 +1,12 @@
+law a demo sale contract (fixture)
+claim the status of a sale at a time: a deposit and a price owed by the buyer, a delivery fee owed by the seller
+source a fixture for the contract kind, not a real contract
+kind contract
+currencies f60d6ffbd84f963c6387c3e3ece82865329ec3a1c2572e4a6e0724abef12fbf8
+party buyer
+party seller
+created 1735689600
+condition inspected decided by 3a005e64cae77e6ae4dbc7a713425f571f9bd2234131f3064bae6df6e7777aae: the fee law holds for the goods
+obligation deposit buyer to seller 100000 JPY due 1738368000
+obligation price buyer to seller 9223372036854775900 JPY due 1740787200
+obligation delivery_fee seller to buyer 5000 JPY due 1740787200
