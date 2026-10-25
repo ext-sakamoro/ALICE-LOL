@@ -1,4 +1,4 @@
-law a fee within its cap (fixture)
+law fee_within_cap
 claim a fee and a surcharge together stay within the cap, and the fee is not negative; amounts are minor units, beyond 2^63
 kind predicate
 currencies f60d6ffbd84f963c6387c3e3ece82865329ec3a1c2572e4a6e0724abef12fbf8

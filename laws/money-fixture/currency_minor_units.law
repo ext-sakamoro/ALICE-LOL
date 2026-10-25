@@ -1,4 +1,4 @@
-law currency minor units (fixture)
+law currency_minor_units
 claim the number of minor-unit digits of a currency, by its code; a code that is not listed is unknown
 source ISO 4217 (a fixture of two currencies, for the money tests)
 kind table

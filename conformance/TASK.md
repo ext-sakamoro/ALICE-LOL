@@ -287,7 +287,7 @@ A predicate law has at least one `require` line and one `example` line. Each `x-
 
 Comparisons do not chain (`a < b < c` makes the law file unreadable); parentheses group. `+` and `-` bind tighter than the comparisons and looser than `++`, from left to right.
 
-**Money** is compared and added by its amount in minor units only: two amounts of one currency are compared as integers, and nothing is converted between currencies or between numbers of minor-unit digits. Two money values of different currencies are never compared or added: with two constants the law file does not read, and when a request's money input has another currency than the value it meets, the request is rejected. A sum or difference outside -2^127 to 2^127 - 1 also rejects the request (it is never wrapped or clamped). `and` and `or` stop at the first operand that decides them: an operation they do not reach is not evaluated and does not reject.
+**Money** is compared and added by its amount in minor units only: two amounts of one currency are compared as integers, and nothing is converted between currencies or between numbers of minor-unit digits. Two money values of different currencies are never compared or added: when both are constants the law file does not read, and when a request's money input has another currency than the value it meets, the request is rejected. A sum or difference outside -2^127 to 2^127 - 1 also rejects the request (it is never wrapped or clamped). `and` and `or` stop at the first operand that decides them: an operation they do not reach is not evaluated and does not reject.
 
 **A request** gives the `x-input` values:
 

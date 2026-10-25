@@ -1,4 +1,4 @@
-law a demo permit procedure (fixture)
+law demo_permit
 claim which step of a permit procedure may come in which status; each step leads where the procedure record goes
 source a fixture for the procedure kind, not a real procedure
 kind procedure

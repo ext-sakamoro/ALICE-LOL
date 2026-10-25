@@ -1,4 +1,4 @@
-law the band of a fee (fixture)
+law fee_band
 claim a fee up to the small band's limit is small, a larger one is large; amounts are minor units, beyond 2^63
 source a fixture for the money tests
 kind table
