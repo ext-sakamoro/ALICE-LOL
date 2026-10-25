@@ -270,6 +270,26 @@ jobs:
       # CHANGELOG.md; the released value is read from the published crate at the newest
       # release tag (scripts/id_move_check.py, shared with the other ALICE crates). A
       # registry that cannot be read fails on main and warns on ci/ branches and PRs
+      # the release compared with is built against the siblings its own tree takes by path
+      # (`path = "../../ALICE-<repo>"` in any manifest of the newest alice-lol-v* tag); each one not
+      # already beside this checkout is cloned, and scripts/id_move_check.py fetches into it the commit
+      # that tree pins (or the sibling's main as of the release) and fails, naming the repository, when
+      # one it needs is missing; no manifest read at the tag is a failure
+      - name: Identifier moves (the release's sibling checkouts)
+        run: |
+          set -euo pipefail
+          tag=$(git -C ALICE-LOL tag --list 'alice-lol-v*' --sort=-v:refname | head -n 1)
+          [ -n "$tag" ] || { echo "::error::no alice-lol-v* tag"; exit 1; }
+          manifests=$(git -C ALICE-LOL ls-tree -r --name-only "$tag" | grep -E '(^|/)Cargo\.toml$' || true)
+          [ -n "$manifests" ] || { echo "::error::no Cargo.toml at $tag"; exit 1; }
+          repos=$(printf '%s\n' "$manifests" | while read -r m; do git -C ALICE-LOL show "$tag:$m"; done \
+            | grep -oE 'path *= *"(\.\./)+ALICE-[A-Za-z0-9-]+' | grep -oE 'ALICE-[A-Za-z0-9-]+' | sort -u || true)
+          echo "$tag takes by path: ${repos:-none}"
+          printf '%s\n' "$repos" | while read -r r; do
+            [ -n "$r" ] || continue
+            [ -e "$r/.git" ] && continue
+            git clone -q --filter=blob:none "https://github.com/ext-sakamoro/$r" "$r"
+          done
       - name: Identifier moves (tests)
         working-directory: ALICE-LOL
         run: python3 scripts/test_id_move_check.py
