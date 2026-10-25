@@ -58,6 +58,17 @@ class Forms(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(hf.main([d]), 1)
 
+    def test_an_exempt_line_passes_and_a_stale_exemption_fails(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "scripts").mkdir()
+        rel = next(iter(hf.EXEMPT))[0]
+        lines = "".join(f"{text}\n    capture_output=True)\n" for r, text in hf.EXEMPT if r == rel)
+        (d / rel).write_text("import subprocess\nd = 'x'\n" + lines, encoding="utf-8")
+        self.assertEqual(hf.main([str(d)]), 0)
+        # the same call on another line is still a finding
+        (d / rel).write_text("import subprocess\nsubprocess.run([\"git\", \"-C\", str(d), \"show\", \"HEAD:x\"])\n", encoding="utf-8")
+        self.assertEqual(hf.main([str(d)]), 1)
+
     def test_the_repository_passes(self):
         self.assertEqual(hf.main([]), 0)
 
