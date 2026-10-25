@@ -1,13 +1,17 @@
 //! A rule set with editions: `laws/demo-tax` (a first edition and two editions written as deltas),
 //! answered by the edition in force at a date and by the edition an identifier names
 //!
-//! cargo run -p alice-lol --example rule_set
+//! `cargo run -p alice-lol --example rule_set`
 
 use alice_lol::law_input::parse_json;
 use alice_lol::rule_law::{edition_text, resolve_delta, rule_law_from_file, RuleSet};
 
 fn hex(b: &[u8; 32]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    b.iter().fold(String::new(), |mut s, x| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 
 fn main() {

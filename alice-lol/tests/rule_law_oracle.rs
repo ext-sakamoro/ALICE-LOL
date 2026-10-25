@@ -1146,7 +1146,7 @@ fn ask(law: &alice_lol::rule_law::RuleLaw, a: &str, b: &str) -> alice_lol::rule_
     law.respond(&json(&format!(r#"{{"a": {a}, "b": {b}}}"#)))
 }
 
-fn rejected(a: &alice_lol::rule_law::Answer) -> bool {
+const fn rejected(a: &alice_lol::rule_law::Answer) -> bool {
     matches!(a, alice_lol::rule_law::Answer::Rejected(_))
 }
 
