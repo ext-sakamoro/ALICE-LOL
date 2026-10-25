@@ -6,3 +6,6 @@ effective 1798761600
 semantics ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
 replace value: value exempt reduced standard
 add before row small: row tiny: exempt when amount <= 10000
+changes 273ed844682f   # amount 9999.0
+changes 88740ad3f868   # amount 9999
+changes 5f3b3137d88f   # amount 10000

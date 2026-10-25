@@ -1,0 +1,6 @@
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":119999},"name":"7f316ce11fc5"}
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":120000},"name":"05ca78016716"}
+{"answer":{"outputs":{"row":null,"value":"standard"}},"inputs":{"amount":120001},"name":"f1ed0ba4597a"}
+{"answer":{"rejected":true},"inputs":{"amount":"1"},"name":"cdb8de78f10f"}
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":119999.0},"name":"e700040575ee"}
+{"answer":{"request_error":true},"inputs":{},"name":"44136fa355b3"}

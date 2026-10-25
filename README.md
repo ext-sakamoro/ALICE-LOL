@@ -440,6 +440,7 @@ the full vocabulary and worked examples against this crate's own
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | the program contract of `conformance/TASK.md` for the audit laws, built on `law_input` (checked against `conformance/probes.json`) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | reads a motion law (`kind motion`) and prints its identifier, timing and the channels of each glyph at the given instants, as numbers and bit patterns; `--semantics` measures the motion semantics pins |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | the program contract of `conformance/TASK.md` for the rule laws (`kind machine` / `kind predicate` / `kind table`), built on `rule_law` (scored on the generated corpus by `conformance/score_rules.sh`) |
+| [`rule_set`](alice-lol/examples/rule_set.rs) | a rule set with editions (`laws/demo-tax`: a first edition and two written as deltas): `resolve_delta`, the edition in force at a date (`RuleSet::evaluate_as_of`) and an old edition by its identifier (`RuleSet::evaluate_edition`) |
 | [`intent_plan`](alice-lol/examples/intent_plan.rs) | an intent plan over a scene: `walk`, `grasp` and `release` composed with `sequence` / `parallel` into a `Program`, printed as LOL text |
 | [`export_formats`](alice-lol/examples/export_formats.rs) | STL / 3MF / FBX written from the same mesh, and the resolution presets side by side |
 | [`pruning_demo`](alice-lol/examples/pruning_demo.rs) | interval-arithmetic pruning per grid cell |

@@ -1,0 +1,9 @@
+{"answer":{"outputs":{"row":"tiny","value":"exempt"}},"inputs":{"amount":9999},"name":"88740ad3f868"}
+{"answer":{"outputs":{"row":"tiny","value":"exempt"}},"inputs":{"amount":10000},"name":"5f3b3137d88f"}
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":10001},"name":"00d1042e4a85"}
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":119999},"name":"7f316ce11fc5"}
+{"answer":{"outputs":{"row":"small","value":"reduced"}},"inputs":{"amount":120000},"name":"05ca78016716"}
+{"answer":{"outputs":{"row":null,"value":"standard"}},"inputs":{"amount":120001},"name":"f1ed0ba4597a"}
+{"answer":{"rejected":true},"inputs":{"amount":"1"},"name":"cdb8de78f10f"}
+{"answer":{"outputs":{"row":"tiny","value":"exempt"}},"inputs":{"amount":9999.0},"name":"273ed844682f"}
+{"answer":{"request_error":true},"inputs":{},"name":"44136fa355b3"}

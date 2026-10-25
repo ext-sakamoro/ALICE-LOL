@@ -912,3 +912,187 @@ fn deltas_that_do_not_resolve() {
         assert!(resolve_delta(&r1, &d).is_err(), "{d}");
     }
 }
+
+// ------------------------------------------------------------------ rule sets (editions kept, evaluated by date or by identifier)
+
+/// The files of `laws/<domain>/`: `(edition dir, file name, text)` of each `.law` / `.delta`
+fn domain_files(domain: &str) -> Vec<(String, String, String)> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../laws")
+        .join(domain);
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(&dir).expect("laws/<domain>") {
+        let ed = e.expect("entry").path();
+        if !ed.is_dir() {
+            continue;
+        }
+        for f in std::fs::read_dir(&ed).expect("edition dir") {
+            let f = f.expect("entry").path();
+            if f.extension().is_some_and(|x| x == "law" || x == "delta") {
+                out.push((
+                    ed.file_name().expect("name").to_string_lossy().into_owned(),
+                    f.file_name().expect("name").to_string_lossy().into_owned(),
+                    std::fs::read_to_string(&f).expect("file"),
+                ));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn rule_set(domain: &str) -> alice_lol::rule_law::RuleSet {
+    let files = domain_files(domain);
+    let refs: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(_, n, t)| (n.as_str(), t.as_str()))
+        .collect();
+    alice_lol::rule_law::RuleSet::from_files(&refs).expect("the rule set resolves")
+}
+
+/// A JSON value with every object's keys sorted, for comparing answers whatever their key order
+fn sorted(j: &Json) -> Json {
+    match j {
+        Json::Object(kv) => {
+            let mut kv: Vec<(String, Json)> =
+                kv.iter().map(|(k, v)| (k.clone(), sorted(v))).collect();
+            kv.sort_by(|a, b| a.0.cmp(&b.0));
+            Json::Object(kv)
+        }
+        Json::Array(a) => Json::Array(a.iter().map(sorted).collect()),
+        other => other.clone(),
+    }
+}
+
+fn answer_json(a: &alice_lol::rule_law::Answer) -> Json {
+    use alice_lol::rule_law::Answer;
+    match a {
+        Answer::Outputs(o) => Json::Object(vec![("outputs".to_owned(), sorted(o))]),
+        Answer::Rejected(_) => Json::Object(vec![("rejected".to_owned(), Json::Bool(true))]),
+        Answer::RequestError(_) => {
+            Json::Object(vec![("request_error".to_owned(), Json::Bool(true))])
+        }
+        Answer::Unsupported(s) => panic!("unsupported: {s}"),
+    }
+}
+
+/// `(edition dir, name, inputs, frozen answer)` of every example of the domain's frozen corpora
+fn frozen(domain: &str) -> Vec<(String, String, Json, Json)> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../laws")
+        .join(domain);
+    let mut out = Vec::new();
+    for (ed, _, _) in domain_files(domain) {
+        let text =
+            std::fs::read_to_string(dir.join(&ed).join("examples.jsonl")).expect("frozen corpus");
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let v = json(line);
+            let field = |k: &str| v.get(k).expect(k).clone();
+            let Json::Text(name) = field("name") else {
+                panic!("name")
+            };
+            out.push((ed.clone(), name, field("inputs"), sorted(&field("answer"))));
+        }
+    }
+    out
+}
+
+#[test]
+fn every_frozen_example_is_answered_today_by_its_edition() {
+    let set = rule_set("demo-tax");
+    let files = domain_files("demo-tax");
+    let ids = set.law_ids();
+    assert_eq!(ids.len(), files.len());
+    let examples = frozen("demo-tax");
+    assert!(examples.len() >= 20, "compared {} examples", examples.len());
+    for (ed, name, inputs, want) in &examples {
+        // the editions are in chain order, and so are the sorted edition directories of the fixture
+        let at = files.iter().position(|(d, _, _)| d == ed).expect("edition");
+        let (answer, id) = set
+            .evaluate_edition(&ids[at], inputs)
+            .expect("the edition is kept");
+        assert_eq!(id, ids[at]);
+        assert_eq!(answer_json(&answer), *want, "{ed} {name}");
+    }
+}
+
+#[test]
+fn two_editions_differ_exactly_where_the_later_one_says() {
+    let set = rule_set("demo-tax");
+    let ids = set.law_ids();
+    let files = domain_files("demo-tax");
+    let examples = frozen("demo-tax");
+    for w in 0..ids.len() - 1 {
+        let (a, b) = (&files[w].0, &files[w + 1].0);
+        let mut differ: Vec<String> = examples
+            .iter()
+            .filter(|(ed, _, _, _)| ed == a || ed == b)
+            .filter(|(_, _, inputs, _)| {
+                let x = set.evaluate_edition(&ids[w], inputs).expect("kept").0;
+                let y = set.evaluate_edition(&ids[w + 1], inputs).expect("kept").0;
+                answer_json(&x) != answer_json(&y)
+            })
+            .map(|(_, n, _, _)| n.clone())
+            .collect();
+        differ.sort();
+        differ.dedup();
+        let mut said: Vec<String> = files[w + 1]
+            .2
+            .lines()
+            .filter_map(|l| l.split('#').next())
+            .filter_map(|l| l.trim().strip_prefix("changes "))
+            .map(|n| n.trim().to_owned())
+            .collect();
+        said.sort();
+        assert!(!differ.is_empty(), "{b} changes no answer of {a}");
+        assert_eq!(
+            differ, said,
+            "{b}: the changed answers are not its `changes` lines"
+        );
+    }
+}
+
+#[test]
+fn the_edition_in_force_answers_by_date() {
+    let set = rule_set("demo-tax");
+    let ids = set.law_ids();
+    let req = json(r#"{"amount": 110000}"#);
+    let at = |t: u64| set.evaluate_as_of(&req, t);
+    // y2025 [1735689600, 1767225600), y2026 [1767225600, 1798761600), y2027 from 1798761600
+    assert!(at(1_735_689_599).is_err(), "before the first edition");
+    assert_eq!(at(1_735_689_600).expect("in force").1, ids[0]);
+    assert_eq!(at(1_767_225_599).expect("in force").1, ids[0]);
+    assert_eq!(at(1_767_225_600).expect("in force").1, ids[1]);
+    assert_eq!(at(1_798_761_600).expect("in force").1, ids[2]);
+    assert_eq!(at(9_007_199_254_740_991).expect("open").1, ids[2]);
+    // 110000 is standard in 2025 and reduced in 2026 (the bound moved to 120000)
+    let value = |t: u64| answer_json(&at(t).expect("in force").0);
+    assert_ne!(value(1_735_689_600), value(1_767_225_600));
+    assert!(
+        set.evaluate_edition(&[0; 32], &req).is_err(),
+        "an unknown identifier is an error"
+    );
+}
+
+#[test]
+fn rule_sets_that_do_not_load() {
+    use alice_lol::rule_law::RuleSet;
+    let files = domain_files("demo-tax");
+    let named: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(_, n, t)| (n.as_str(), t.as_str()))
+        .collect();
+    assert!(RuleSet::from_files(&named).is_ok());
+    // a delta without the edition it supersedes
+    assert!(RuleSet::from_files(&named[1..]).is_err());
+    // two first editions
+    assert!(RuleSet::from_files(&[named[0], named[0]]).is_err());
+    // a gap: the first edition ends a second earlier than the next starts (its identifier moves
+    // too, so the second edition is pointed at the first edition rewritten with the gap)
+    let gap = named[0].1.replace("until 1767225600", "until 1767225599");
+    let id = hex(rule_law_from_file(&gap).expect("reads").law_id());
+    let old = hex(rule_law_from_file(named[0].1).expect("reads").law_id());
+    let d2 = named[1].1.replace(&old, &id);
+    assert!(RuleSet::from_files(&[(named[0].0, gap.as_str()), (named[1].0, d2.as_str())]).is_err());
+    assert!(RuleSet::from_files(&[named[0], named[1]]).is_ok());
+}

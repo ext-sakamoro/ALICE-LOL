@@ -1258,6 +1258,157 @@ pub fn resolve_delta(previous: &str, delta: &str) -> Result<(String, Vec<String>
     Ok((text, changes))
 }
 
+/// The editions of one rule set, resolved and in chain order (the first edition first)
+///
+/// Every edition stays: [`RuleSet::evaluate_edition`] answers with the edition a law identifier
+/// names, whatever the date, and [`RuleSet::evaluate_as_of`] with the one in force at a time
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleSet {
+    editions: Vec<(RuleLaw, [u8; 32])>,
+}
+
+impl RuleSet {
+    /// The rule set of one domain from its files: `(name, text)`, a name ending in `.delta` for an
+    /// edition written as a delta, any other name for a full rule law file
+    ///
+    /// # Errors
+    ///
+    /// When a file does not read or resolve, the editions are not one chain from one first
+    /// edition (each superseded by at most one), they are not of one domain, or their periods
+    /// leave a gap or overlap
+    pub fn from_files(files: &[(&str, &str)]) -> Result<Self, RuleLawError> {
+        let mut resolved: Vec<(String, RuleLaw, [u8; 32])> = Vec::new();
+        let mut deltas: Vec<&str> = Vec::new();
+        for (name, text) in files {
+            if std::path::Path::new(name)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("delta"))
+            {
+                deltas.push(text);
+            } else {
+                let law = rule_law_from_file(text)?;
+                if law.edition().is_none() {
+                    return Err(err(0, format!("{name}: not an edition (no header)")));
+                }
+                let id = law.law_id();
+                resolved.push((edition_text(text)?, law, id));
+            }
+        }
+        while !deltas.is_empty() {
+            let before = deltas.len();
+            let mut i = 0;
+            while i < deltas.len() {
+                let (e, _) = read_edition(&lines(deltas[i])?, RuleKind::Table)?;
+                let sup = e.and_then(|e| e.supersedes);
+                if let Some(prev) = resolved.iter().find(|(_, _, id)| Some(*id) == sup) {
+                    let (text, _) = resolve_delta(&prev.0, deltas[i])?;
+                    let law = rule_law_from_file(&text)?;
+                    let id = law.law_id();
+                    resolved.push((text, law, id));
+                    deltas.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+            if deltas.len() == before {
+                return Err(err(0, "a delta supersedes no edition of the rule set"));
+            }
+        }
+        let first: Vec<usize> = (0..resolved.len())
+            .filter(|&i| {
+                resolved[i]
+                    .1
+                    .edition()
+                    .is_some_and(|e| e.supersedes.is_none())
+            })
+            .collect();
+        let [first] = first[..] else {
+            return Err(err(
+                0,
+                format!("{} first editions (one is required)", first.len()),
+            ));
+        };
+        let domain = resolved[first].1.edition().map(|e| e.domain.clone());
+        let mut chain = vec![first];
+        loop {
+            let last = resolved[chain[chain.len() - 1]].2;
+            let next: Vec<usize> = (0..resolved.len())
+                .filter(|&i| resolved[i].1.edition().and_then(|e| e.supersedes) == Some(last))
+                .collect();
+            match next[..] {
+                [] => break,
+                [n] => chain.push(n),
+                _ => return Err(err(0, "two editions supersede the same edition")),
+            }
+        }
+        if chain.len() != resolved.len() {
+            return Err(err(
+                0,
+                "an edition is not in the chain from the first edition",
+            ));
+        }
+        let mut editions: Vec<(RuleLaw, [u8; 32])> = Vec::with_capacity(chain.len());
+        for i in chain {
+            let (_, law, id) = resolved[i].clone();
+            if law.edition().map(|e| e.domain.clone()) != domain {
+                return Err(err(0, "the editions are not of one domain"));
+            }
+            if let Some((prev, _)) = editions.last() {
+                let (p, e) = (prev.edition(), law.edition());
+                if p.and_then(Edition::until) != e.map(Edition::from) {
+                    return Err(err(0, "the periods of two editions leave a gap or overlap"));
+                }
+            }
+            editions.push((law, id));
+        }
+        Ok(Self { editions })
+    }
+
+    /// The law identifiers of the editions, first to last
+    #[must_use]
+    pub fn law_ids(&self) -> Vec<[u8; 32]> {
+        self.editions.iter().map(|(_, id)| *id).collect()
+    }
+
+    /// The answer of the edition `law_id` names, and that identifier
+    ///
+    /// # Errors
+    ///
+    /// When no edition of the rule set has that identifier (never a fallback to another one)
+    pub fn evaluate_edition(
+        &self,
+        law_id: &[u8; 32],
+        inputs: &Json,
+    ) -> Result<(Answer, [u8; 32]), RuleLawError> {
+        self.editions
+            .iter()
+            .find(|(_, id)| id == law_id)
+            .map(|(law, id)| (law.respond(inputs), *id))
+            .ok_or_else(|| err(0, "no edition of the rule set has this identifier"))
+    }
+
+    /// The answer of the edition in force at `at` (seconds since 1970-01-01 00:00:00 UTC), and its
+    /// identifier
+    ///
+    /// # Errors
+    ///
+    /// When no edition is in force at `at` (before the first edition, or after the last one ends)
+    pub fn evaluate_as_of(
+        &self,
+        inputs: &Json,
+        at: u64,
+    ) -> Result<(Answer, [u8; 32]), RuleLawError> {
+        self.editions
+            .iter()
+            .find(|(law, _)| {
+                law.edition()
+                    .is_some_and(|e| e.from <= at && e.until.is_none_or(|u| at < u))
+            })
+            .map(|(law, id)| (law.respond(inputs), *id))
+            .ok_or_else(|| err(0, format!("no edition of the rule set is in force at {at}")))
+    }
+}
+
 /// A rule law, read from its file
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleLaw {
