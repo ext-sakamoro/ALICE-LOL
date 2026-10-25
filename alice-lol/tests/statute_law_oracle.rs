@@ -7,8 +7,7 @@
 use alice_lol::law_input::{parse_json, Json};
 use alice_lol::rule_law::{
     resolve_delta, rule_law_from_file, statute_semantics_fingerprints, Answer, ClauseKind,
-    RuleKind, RuleLaw, StatuteClause, MAX_STATUTE_TIME, STATUTE_SEMANTICS_ID,
-    STATUTE_SEMANTICS_PINS,
+    RuleKind, RuleLaw, StatuteClause, MAX_LEGAL_TIME, STATUTE_SEMANTICS_ID, STATUTE_SEMANTICS_PINS,
 };
 
 fn hex(b: [u8; 32]) -> String {
@@ -111,9 +110,9 @@ fn the_clauses_keep_the_shape_alice_legal_holds() {
     assert_eq!((c[3].from(), c[3].until()), (0, None));
     assert_eq!(c[1].text(), "unless the seller waives payment");
     // every time's nanoseconds fit 64 bits
-    assert_eq!(MAX_STATUTE_TIME, 18_446_744_073);
-    assert!(MAX_STATUTE_TIME.checked_mul(1_000_000_000).is_some());
-    assert!((MAX_STATUTE_TIME + 1).checked_mul(1_000_000_000).is_none());
+    assert_eq!(MAX_LEGAL_TIME, 18_446_744_073);
+    assert!(MAX_LEGAL_TIME.checked_mul(1_000_000_000).is_some());
+    assert!((MAX_LEGAL_TIME + 1).checked_mul(1_000_000_000).is_none());
 }
 
 #[test]

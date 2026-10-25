@@ -286,7 +286,7 @@ class Corpus(unittest.TestCase):
         self.assertEqual(failed, {None, "shape", "tag", "fresh", "current"})
 
 
-SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32, "statute": bytes([5]) * 32, "procedure": bytes([6]) * 32}
+SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32, "statute": bytes([5]) * 32, "procedure": bytes([6]) * 32, "contract": bytes([7]) * 32}
 RATE = ("kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n")
 HEADER = ("domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
           "semantics " + "00" * 32 + "\n")
@@ -727,6 +727,93 @@ class Procedure(unittest.TestCase):
         R.parse(head(SEM["procedure"]) + PERMIT, SEM)
         with self.assertRaises(R.RuleError):
             R.parse(head(SEM["rule"]) + PERMIT, SEM)
+
+
+
+def sale_law():
+    table = R.parse(CURRENCIES, SEM)
+    text = (f"kind contract\ncurrencies {R.law_id(table, SEM).hex()}\nparty buyer\nparty seller\ncreated 100\n"
+            f"condition inspected decided by {'cd' * 32}: the goods were inspected\n"
+            "obligation deposit buyer to seller 1000 JPY due 200\n"
+            "obligation price buyer to seller 9223372036854775900 JPY due 300\n"
+            "obligation delivery_fee seller to buyer 50 JPY due 300\n")
+    return text, table
+
+
+class Contract(unittest.TestCase):
+    """conformance/TASK.md "Contract": the status ALICE-Legal's check_status gives"""
+
+    def ask(self, inp):
+        text, table = sale_law()
+        return R.respond(R.parse(text, SEM, currencies=table), inp)
+
+    def test_the_status(self):
+        allo = ["deposit", "price", "delivery_fee"]
+        self.assertEqual(self.ask({"now": 150}), ("outputs", {"status": "active", "unfulfilled": allo,
+                                                              "owed": "9223372036854776950 JPY", "conditions_met": False}))
+        self.assertEqual(self.ask({"now": 200})[1]["status"], "active")
+        self.assertEqual(self.ask({"now": 201})[1]["status"], "breached")
+        self.assertEqual(self.ask({"now": 201, "fulfilled": ["deposit"]})[1]["owed"], "9223372036854775950 JPY")
+        self.assertEqual(self.ask({"now": 301, "fulfilled": ["deposit", "price"]})[1]["status"], "breached")
+        self.assertEqual(self.ask({"now": 999, "fulfilled": ["delivery_fee", "deposit", "price"], "met": ["inspected"]}),
+                         ("outputs", {"status": "fulfilled", "unfulfilled": [], "owed": "0 JPY", "conditions_met": True}))
+        self.assertEqual(self.ask({"now": -5})[1]["status"], "active")
+        text, table = sale_law()
+        two = R.parse(text.replace("obligation deposit", f"condition paid decided by {'ef' * 32}: the bank confirmed\n"
+                                   "obligation deposit"), SEM, currencies=table)
+        self.assertFalse(R.respond(two, {"now": 150, "met": ["inspected"]})[1]["conditions_met"])
+        self.assertTrue(R.respond(two, {"now": 150, "met": ["paid", "inspected"]})[1]["conditions_met"])
+        big = R.parse(text.replace("1000 JPY due 200", f"{2 ** 126} JPY due 200").replace("9223372036854775900 JPY", f"{2 ** 126} JPY"),
+                      SEM, currencies=table)
+        self.assertEqual(R.respond(big, {"now": 150})[0], "rejected")
+        self.assertEqual(R.respond(big, {"now": 150, "fulfilled": ["deposit"]})[0], "outputs")
+        self.assertEqual(self.ask({"fulfilled": []})[0], "request_error")
+        for bad in ({"now": "150"}, {"now": 1.5}, {"now": 150, "fulfilled": "deposit"},
+                    {"now": 150, "fulfilled": ["deposit", "deposit"]}, {"now": 150, "fulfilled": ["buyer"]},
+                    {"now": 150, "fulfilled": ["inspected"]}, {"now": 150, "fulfilled": [1]},
+                    {"now": 150, "met": ["deposit"]}, {"now": 150, "met": None}, {"now": 150, "fulfilled": None}):
+            self.assertEqual(self.ask(bad)[0], "rejected", bad)
+
+    def test_what_does_not_read(self):
+        base, table = sale_law()
+        R.parse(base, SEM, currencies=table)
+        for a, b in (("party seller\n", ""), ("party seller\n", "party seller\nparty seller\n"), ("created 100\n", ""),
+                     ("created 100\n", "created 100\ncreated 101\n"), ("created 100\n", "created 301\n"),
+                     ("created 100\n", "created 18446744074\n"), ("buyer to seller 1000 JPY", "buyer to buyer 1000 JPY"),
+                     ("buyer to seller 1000 JPY", "buyer to carrier 1000 JPY"), ("1000 JPY due 200", "1000 USD due 200"),
+                     ("1000 JPY due 200", "1000 EUR due 200"), ("1000 JPY due 200", "0 JPY due 200"),
+                     ("1000 JPY due 200", "-1 JPY due 200"), ("1000 JPY due 200", "1000 jpy due 200"),
+                     ("1000 JPY due 200", "1000 JPY by 200"), ("due 200\n", "due 18446744074\n"),
+                     ("decided by cdcd", "decided bycdcd"), (": the goods were inspected", ":"),
+                     ("condition inspected", "condition deposit"), ("obligation price", "obligation buyer"),
+                     ("created 100\n", "created 100\nrequire r: true\n")):
+            with self.assertRaises(R.RuleError, msg=b):
+                R.parse(base.replace(a, b), SEM, currencies=table)
+        with self.assertRaises(R.RuleError):
+            R.parse(base, SEM)
+        with self.assertRaises(R.RuleError):
+            R.parse("".join(l + "\n" for l in base.splitlines() if not l.startswith("currencies")), SEM, currencies=table)
+
+    def test_the_identifier_names_every_field(self):
+        base, table = sale_law()
+        idf = lambda t: R.law_id(R.parse(t, SEM, currencies=table), SEM)
+        b = idf(base)
+        for x, y in (("party buyer\nparty seller\n", "party seller\nparty buyer\n"), ("created 100", "created 101"),
+                     ("condition inspected", "condition checked"), ("decided by cdcd", "decided by cdcc"),
+                     ("the goods were inspected", "the goods were seen"), ("obligation deposit", "obligation down_payment"),
+                     ("deposit buyer to seller", "deposit seller to buyer"), ("1000 JPY due 200", "1001 JPY due 200"),
+                     ("1000 JPY due 200", "1000 JPY due 201")):
+            self.assertNotEqual(idf(base.replace(x, y)), b, f"{x} -> {y}")
+
+    def test_the_corpus_covers_every_status_and_obligation(self):
+        base, table = sale_law()
+        law = R.parse(base, SEM, currencies=table)
+        vecs = R.vectors(law, "sale")
+        self.assertEqual(R.coverage(law, vecs), [])
+        no_breach = [v for v in vecs if not (v["kind"] == "exact" and v["expected"]["status"] == "breached")]
+        self.assertIn("a vector with status breached", R.coverage(law, no_breach))
+        no_201 = [v for v in vecs if v["inputs"].get("now") != 201]
+        self.assertIn("a vector at 201 with nothing fulfilled (the due time of deposit)", R.coverage(law, no_201))
 
 
 if __name__ == "__main__":

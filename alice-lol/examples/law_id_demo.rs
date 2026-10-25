@@ -67,6 +67,58 @@ fn rule_semantics() {
     );
 }
 
+/// 契約の Law (kind contract) の pin、測り直した指紋、fold と宣言、demo の契約
+fn contract_semantics() {
+    use alice_lol::rule_law as r;
+    println!("\n=== 契約の Law (kind contract) の意味論 ===");
+    for ((name, id), (_, m)) in r::CONTRACT_SEMANTICS_PINS
+        .iter()
+        .zip(&r::contract_semantics_fingerprints())
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::CONTRACT_SEMANTICS_PINS)),
+        hex(&r::CONTRACT_SEMANTICS_ID)
+    );
+    let money = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/money-fixture");
+    let read =
+        |f: &str| std::fs::read_to_string(money.join(f)).expect("a file of laws/money-fixture");
+    let table =
+        r::rule_law_from_file(&read("currency_minor_units.law")).expect("the currency table reads");
+    if let r::RuleLaw::Contract(c) =
+        r::rule_law_from_file_with(&read("demo_sale.law"), Some(&table))
+            .expect("the demo sale reads")
+    {
+        println!(
+            "  当事者 {} / 作成 {} / 通貨 {}",
+            c.parties().join(" "),
+            c.created(),
+            c.currency()
+        );
+        for k in c.conditions() {
+            println!(
+                "    条件 {} ({}): {}",
+                k.label(),
+                short(k.decided_by()),
+                k.description()
+            );
+        }
+        for o in c.obligations() {
+            println!(
+                "    債務 {}: {} → {} {} due {}",
+                o.label(),
+                c.parties()[o.debtor()],
+                c.parties()[o.creditor()],
+                o.amount(),
+                o.due()
+            );
+        }
+    }
+}
+
 /// money を持つ Law と法令の Law (kind statute) の pin、測り直した指紋、fold と宣言
 fn money_and_statute_semantics() {
     use alice_lol::rule_law as r;
@@ -211,6 +263,7 @@ fn main() -> Result<(), ParseError> {
     rule_semantics();
     table_semantics();
     money_and_statute_semantics();
+    contract_semantics();
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;
