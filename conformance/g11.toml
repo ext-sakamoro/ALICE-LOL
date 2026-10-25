@@ -96,6 +96,13 @@ shared = ["scripts/id_move_check.py", "scripts/test_id_move_check.py"]
 
 [[row]]
 gate = "G10"
+checker = "scripts/clippy_lib_gate.py"
+canary = "scripts/test_clippy_lib_gate.py::Judge.test_a_removed_entry_with_another_diagnostic_on_the_line_is_red"
+zero = "scripts/test_clippy_lib_gate.py::Judge.test_no_forms_and_a_clean_exit_are_red"
+shared = ["scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py"]
+
+[[row]]
+gate = "G10"
 checker = "scripts/disallowed_methods_allow_reasons.py"
 canary = "scripts/test_disallowed_methods_allow_reasons.py::Check.test_an_unknown_prefix_fails"
 zero = "scripts/test_disallowed_methods_allow_reasons.py::Check.test_zero_sites_at_all_fails"
@@ -121,6 +128,13 @@ checker = "alice-lol/tests/print_export_determinism.rs"
 canary = "alice-lol/tests/print_export_determinism.rs::stl_and_3mf_export_are_byte_identical_across_process_and_thread_count"
 zero = "alice-lol/tests/print_export_determinism.rs#assert_eq!(compared, 2, \"compared nothing\")"
 shared = "n/a: this crate's export"
+
+[[row]]
+gate = "G13"
+checker = "scripts/clippy_lib_gate.py"
+canary = "scripts/clippy_lib_gate.toml#type Hm = std::collections::HashMap<u8, u8>;"
+zero = "scripts/test_clippy_lib_gate.py::Judge.test_no_forms_and_a_clean_exit_are_red"
+shared = ["scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py"]
 
 [[row]]
 gate = "G13"

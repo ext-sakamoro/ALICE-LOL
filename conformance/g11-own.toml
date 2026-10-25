@@ -92,3 +92,17 @@ canary = "scripts/test_g2_sites.py::G2Sites.test_a_site_without_a_row_fails"
 zero = "scripts/test_g2_sites.py::G2Sites.test_no_site_compared_fails"
 shared = "n/a: this crate's own table of its Law max / min call sites"
 
+[[row]]
+gate = "G10"
+checker = "scripts/clippy_lib_gate.py"
+canary = "scripts/test_clippy_lib_gate.py::Judge.test_a_removed_entry_with_another_diagnostic_on_the_line_is_red"
+zero = "scripts/test_clippy_lib_gate.py::Judge.test_no_forms_and_a_clean_exit_are_red"
+shared = ["scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py"]
+
+[[row]]
+gate = "G13"
+checker = "scripts/clippy_lib_gate.py"
+canary = "scripts/clippy_lib_gate.toml#type Hm = std::collections::HashMap<u8, u8>;"
+zero = "scripts/test_clippy_lib_gate.py::Judge.test_no_forms_and_a_clean_exit_are_red"
+shared = ["scripts/clippy_lib_gate.py", "scripts/test_clippy_lib_gate.py"]
+
