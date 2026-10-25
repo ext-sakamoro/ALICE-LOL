@@ -18,15 +18,19 @@ import hashlib
 import hmac
 import json
 import re
+import tomllib
 from pathlib import Path
 
 MAX_INT = 2 ** 53 - 1  # every JSON reader holds it exactly (TASK.md "Rule laws")
-# TASK.md "Limits of a rule law file" (the same values as alice-lol/src/rule_law.rs)
-MAX_LAW_BYTES = 4 * 1024 * 1024  # of the UTF-8 text
-MAX_LAW_LINES = 100_000  # the lines read (not the empty ones and the comments)
-MAX_EXPRESSION_TOKENS = 256  # of one expression (it also bounds the depth of a chain)
-MAX_EXPRESSION_DEPTH = 64  # each parenthesised group, `not` and call is a level
-MAX_NUMERAL_CHARS = 40  # -2^127 has 40; a longer numeral is out of range, never converted
+# TASK.md "Limits of a rule law file", read from the one table both readers take
+LIMITS = tomllib.loads((Path(__file__).resolve().parent.parent / "conformance" / "rule-limits.toml")
+                       .read_text(encoding="utf-8"))
+MAX_LAW_BYTES = LIMITS["law_bytes"]  # of the UTF-8 text
+MAX_LAW_LINES = LIMITS["law_lines"]  # the lines read (not the empty ones and the comments)
+MAX_EXPRESSION_TOKENS = LIMITS["expression_tokens"]  # of one expression (it also bounds a chain)
+MAX_EXPRESSION_DEPTH = LIMITS["expression_depth"]  # each parenthesised group, `not` and call is a level
+MAX_NUMERAL_CHARS = LIMITS["numeral_chars"]  # -2^127 has 40; a longer numeral is out of range
+MAX_JSON_DEPTH = LIMITS["json_depth"]  # of the example's JSON, the object itself is level 1
 NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
 FUNCTIONS = {"len", "prefix", "utf8", "hmac_sha256"}
 RESERVED = {"true", "false", "and", "or", "not", "state", "mode", "shape"} | FUNCTIONS
@@ -159,6 +163,73 @@ def _literal(kind, tok):
     if kind == "text":
         return ("lit", "text", tok[1:-1])
     raise RuleError(f"`{tok}` is not a literal")
+
+
+def _json_scan(text: str):
+    """(characters of the longest number, deepest level of arrays and objects) of JSON text, read
+    the same way as alice-lol's `rule_law::json_scan`: outside strings, a number starts at `-` or a
+    digit and runs over digits, `.`, `e`, `E`, `+` and `-`; `[` and `{` open a level"""
+    longest = level = deepest = 0
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+        elif c in "[{":
+            level += 1
+            deepest = max(deepest, level)
+            i += 1
+        elif c in "]}":
+            level -= 1
+            i += 1
+        elif c == "-" or "0" <= c <= "9":
+            j = i + 1
+            while j < n and (("0" <= text[j] <= "9") or text[j] in ".eE+-"):
+                j += 1
+            longest = max(longest, j - i)
+            i = j
+        else:
+            i += 1
+    return longest, deepest
+
+
+def _json_number(text: str):
+    """A JSON number as conformance/TASK.md reads one: a double (an integer of up to 15 digits is the
+    same double); a literal too large for one is infinity"""
+    return int(text) if "." not in text and "e" not in text.lower() and len(text.lstrip("-")) <= 15 else float(text)
+
+
+def _no_json_constant(name):
+    raise ValueError(f"`{name}` is not JSON")
+
+
+def _has_lone_surrogate(v) -> bool:
+    if isinstance(v, str):
+        return any(0xD800 <= ord(ch) <= 0xDFFF for ch in v)
+    if isinstance(v, dict):
+        return any(_has_lone_surrogate(k) or _has_lone_surrogate(x) for k, x in v.items())
+    if isinstance(v, list):
+        return any(_has_lone_surrogate(x) for x in v)
+    return False
+
+
+def _example_json(text: str, n: int):
+    """The example's JSON (conformance/TASK.md: RFC 8259, no NaN / Infinity, the last of a repeated
+    key, no lone surrogate, at most MAX_JSON_DEPTH levels, numerals of at most MAX_NUMERAL_CHARS
+    characters), None when it is not JSON"""
+    longest, deepest = _json_scan(text)
+    if longest > MAX_NUMERAL_CHARS:
+        raise RuleError(f"line {n}: a numeral of the example has more than {MAX_NUMERAL_CHARS} characters")
+    if deepest > MAX_JSON_DEPTH:
+        raise RuleError(f"line {n}: the example nests more than {MAX_JSON_DEPTH} levels")
+    try:
+        v = json.loads(text, parse_constant=_no_json_constant, parse_int=_json_number, parse_float=float)
+    except (ValueError, RecursionError):
+        return None
+    return None if _has_lone_surrogate(v) else v
 
 
 class _Parser:
@@ -548,18 +619,27 @@ def currencies_named(text: str):
     return None
 
 
+def _read_law_text(path: Path) -> str:
+    """The text of a law file, refused by its size before it is read"""
+    if path.stat().st_size > MAX_LAW_BYTES:
+        raise RuleError(f"{path.name}: a rule law file has at most {MAX_LAW_BYTES} bytes")
+    return path.read_text(encoding="utf-8")
+
+
 def parse_file(path, semantics: dict[str, bytes] | None = None) -> dict:
     """Reads the law file `path`; a law with money is read with its currency table, the rule law
     file of the same directory whose identifier its `currencies` line names (conformance/TASK.md
     "The currency table")"""
     path = Path(path)
-    text = path.read_text(encoding="utf-8")
+    text = _read_law_text(path)
     want = currencies_named(text)
     if want is None:
         return parse(text)
     if semantics is None:
         raise RuleError(f"{path.name}: a law with money is read under the semantics identifiers")
     for f in sorted(path.parent.glob("*.law")):
+        if f.stat().st_size > MAX_LAW_BYTES:
+            continue  # not a readable law, so not the table
         t = f.read_text(encoding="utf-8")
         if f == path or rule_kind(t) != "table" or currencies_named(t) is not None:
             continue
@@ -1036,10 +1116,8 @@ def _predicate(law, lines, declare):
                 raise RuleError(f"line {n}: `{src}` is not a boolean")
             law["requires"].append((label, e))
         elif head == "example":
-            try:
-                ex = json.loads(_split1(ln)[1])
-            except (ValueError, IndexError):
-                raise RuleError(f"line {n}: `example <JSON object>`")
+            parts = _split1(ln)
+            ex = _example_json(parts[1], n) if len(parts) > 1 else None
             if not isinstance(ex, dict) or law["example"] is not None:
                 raise RuleError(f"line {n}: one `example <JSON object>` line")
             law["example"] = ex
