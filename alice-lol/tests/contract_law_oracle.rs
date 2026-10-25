@@ -376,16 +376,33 @@ fn an_edition_of_a_contract_and_a_delta_over_it() {
 fn a_contract_of_many_obligations_reads_in_linear_time() {
     use std::fmt::Write as _;
     let t = table();
-    let n = 100_000;
-    let mut text = format!(
-        "kind contract\ncurrencies {}\nparty a\nparty b\ncreated 0\n",
-        hex(t.law_id())
+    // reading 2n obligations takes about twice as long as n (four times if each label were
+    // looked up among the earlier ones); the ratio, not a time, so a slow runner does not fail it
+    let text_of = |n: usize| {
+        let mut text = format!(
+            "kind contract\ncurrencies {}\nparty a\nparty b\ncreated 0\n",
+            hex(t.law_id())
+        );
+        for i in 0..n {
+            let _ = writeln!(text, "obligation o{i} a to b 1 JPY due 10");
+        }
+        text
+    };
+    let best = |text: &str| {
+        (0..3)
+            .map(|_| {
+                let start = std::time::Instant::now();
+                rule_law_from_file_with(text, Some(&t)).expect("reads");
+                start.elapsed()
+            })
+            .min()
+            .expect("three runs")
+    };
+    let (small, large) = (20_000, 40_000);
+    let (t_small, t_large) = (best(&text_of(small)), best(&text_of(large)));
+    let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
+    assert!(
+        ratio < 3.0,
+        "{small} obligations in {t_small:?}, {large} in {t_large:?}: ratio {ratio:.2}"
     );
-    for i in 0..n {
-        let _ = writeln!(text, "obligation o{i} a to b 1 JPY due 10");
-    }
-    let start = std::time::Instant::now();
-    rule_law_from_file_with(&text, Some(&t)).expect("reads");
-    let took = start.elapsed();
-    assert!(took.as_secs() < 10, "read {n} obligations in {took:?}");
 }

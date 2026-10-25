@@ -1522,3 +1522,103 @@ fn an_identifier_of_no_edition_is_an_error_not_another_edition() {
         }
     }
 }
+
+// ------------------------------------------------------------------ the characters between tokens (TASK.md "Tokens are separated by spaces or tabs")
+
+#[test]
+fn indentation_and_tabs_do_not_change_a_law_and_other_whitespace_is_not_a_separator() {
+    let id = |t: &str| rule_law_from_file(t).expect("reads").law_id();
+    // a statute's title and text are what follows their keyword, whatever the indentation
+    let plain = "kind statute\ntitle Demo Act\nclause a obligation from 1: pay\n";
+    let indented = "kind statute\n  title Demo Act\n\tclause\ta obligation  from 1:\tpay\n";
+    assert_eq!(id(plain), id(indented));
+    // a no-break space (U+00A0) is part of a token: not a kind line, not a keyword, not a separator
+    let nbsp = '\u{a0}';
+    assert!(rule_kind(&format!(
+        "kind statute{nbsp}\ntitle T\nclause a obligation: x\n"
+    ))
+    .is_none());
+    for bad in [
+        format!("kind statute\ntitle{nbsp}T\nclause a obligation: x\n"),
+        format!("kind statute\ntitle T\nclause{nbsp}a obligation: x\n"),
+        format!("kind statute\ntitle T\nclause a{nbsp}obligation: x\n"),
+        format!(
+            "kind predicate\nx-input a integer\nrequire{nbsp}r: a == a\nexample {{\"a\": 1}}\n"
+        ),
+        format!("kind machine\nstate a initial\nstate{nbsp}b\nevent go\non go from a to b\n"),
+        format!(
+            "domain{nbsp}demo\nedition y1\nsupersedes first\neffective 0\nsemantics {}\n\
+             kind statute\ntitle T\nclause a obligation: x\n",
+            hex(alice_lol::rule_law::STATUTE_SEMANTICS_ID)
+        ),
+    ] {
+        assert!(rule_law_from_file(&bad).is_err(), "{bad:?}");
+    }
+    // only spaces and tabs are trimmed at the two ends of a text: a trailing no-break space stays
+    assert_ne!(
+        id("kind statute\ntitle T\nclause a obligation: x\n"),
+        id(&format!(
+            "kind statute\ntitle T{nbsp}\nclause a obligation: x\n"
+        ))
+    );
+    // inside a text a no-break space is a character of the text
+    assert_ne!(
+        id("kind statute\ntitle Demo Act\nclause a obligation: pay\n"),
+        id(&format!(
+            "kind statute\ntitle Demo{nbsp}Act\nclause a obligation: pay\n"
+        ))
+    );
+}
+
+#[test]
+fn a_delta_key_is_its_tokens_whatever_the_separators() {
+    use alice_lol::rule_law::{edition_text, resolve_delta, RULE_SEMANTICS_ID};
+    let first = format!(
+        "domain demo-age\nedition y2025\nsupersedes first\neffective 0 until 10\nsemantics {}\n\
+         kind predicate\nx-input age integer\nconst adult integer = 20\n\
+         require old_enough: age >= adult\nexample {{\"age\": 30}}\n",
+        hex(RULE_SEMANTICS_ID)
+    );
+    let law = rule_law_from_file(&first).expect("reads");
+    let delta = format!(
+        "domain demo-age\nedition y2026\nsupersedes {}\neffective 10\nsemantics {}\n\
+         replace const\tadult: const adult integer = 18\nchanges eighteen\n",
+        hex(law.law_id()),
+        hex(RULE_SEMANTICS_ID)
+    );
+    let resolved = edition_text(&first).expect("resolves");
+    let (text, _) = resolve_delta(&resolved, &delta).expect("a key with a tab names `const adult`");
+    assert!(text.contains("const adult integer = 18"));
+    assert!(resolve_delta(
+        &resolved,
+        &delta.replace("const\tadult", "const\u{a0}adult")
+    )
+    .is_err());
+}
+
+#[test]
+fn a_contract_line_with_a_no_break_space_between_its_words_does_not_read() {
+    let t = rule_law_from_file(
+        "kind table\nx-input code text\nvalue e0 unknown\nrow jpy: e0 when code == \"JPY\"\notherwise unknown\n",
+    )
+    .expect("reads");
+    let text = |sep: &str| {
+        format!(
+            "kind contract\ncurrencies {}\nparty a\nparty b\ncreated 0\nobligation o a to b 1{sep}JPY due 10\n",
+            hex(t.law_id())
+        )
+    };
+    assert!(alice_lol::rule_law::rule_law_from_file_with(&text(" "), Some(&t)).is_ok());
+    assert!(alice_lol::rule_law::rule_law_from_file_with(&text("\u{a0}"), Some(&t)).is_err());
+    assert!(alice_lol::rule_law::rule_law_from_file_with(&text("\t"), Some(&t)).is_ok());
+}
+
+#[test]
+fn an_integer_of_four_hundred_digits_is_rejected_not_an_error() {
+    let law = rule_law_from_file("kind statute\ntitle T\nclause a obligation: x\n").expect("reads");
+    let big = "9".repeat(400);
+    assert!(matches!(
+        law.respond(&json(&format!(r#"{{"at": {big}}}"#))),
+        alice_lol::rule_law::Answer::Rejected(_)
+    ));
+}

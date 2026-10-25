@@ -47,13 +47,37 @@ class RuleError(ValueError):
 
 def rule_kind(text: str):
     """`machine` / `predicate` / `table` when the file is a rule law (no `kind audit` line), else None"""
-    lines = [ln.split("#", 1)[0].strip() for ln in text.split("\n")]
+    lines = [ln.split("#", 1)[0].strip(" \t\r") for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
     for k in ("machine", "predicate", "table", "statute", "procedure", "contract"):
         if f"kind {k}" in lines:
             return k
     return None
+
+
+WS = " \t"  # the separators of tokens (conformance/TASK.md "Tokens are separated by spaces or tabs")
+
+
+def _words(s: str) -> list[str]:
+    """The tokens of a line: the runs between spaces and tabs (a no-break space is part of a token)"""
+    return [w for w in re.split(r"[ \t]+", s) if w]
+
+
+def _trim(s: str) -> str:
+    """`s` without the spaces and tabs at its two ends"""
+    return s.strip(WS)
+
+
+def _normal_key(key: str) -> str:
+    """A key as written in a delta operation, its tokens joined by one space (the form of `_key`)"""
+    return " ".join(_words(key))
+
+
+def _split1(s: str) -> list[str]:
+    """`str.split(None, 1)` with spaces and tabs as the only separators"""
+    s = s.lstrip(WS)
+    return re.split(r"[ \t]+", s, maxsplit=1) if s else []
 
 
 def _check_text(text: str):
@@ -69,13 +93,13 @@ def _check_text(text: str):
 
 
 def _lines(text: str):
-    """(line number, text without comment, trimmed) of the non-empty lines"""
+    """(line number, text without comment) of the lines that are not empty after trimming spaces and tabs"""
     _check_text(text)
     out = []
     for n, raw in enumerate(text.split("\n"), 1):
         raw = raw[:-1] if raw.endswith("\r") else raw
         ln = raw.split("#", 1)[0]
-        if ln.strip():
+        if _trim(ln):
             out.append((n, ln))
     return out
 
@@ -268,7 +292,7 @@ def _typeof(e, uses):
 # ------------------------------------------------------------------ types of values
 
 def _parse_type(src: str):
-    src = src.strip()
+    src = _trim(src)
     if src in SCALARS:
         return src
     m = re.fullmatch(r"record\((.*)\)", src)
@@ -277,9 +301,9 @@ def _parse_type(src: str):
     fields, seen = [], set()
     for part in m.group(1).split(","):
         name, sep, ty = part.partition(":")
-        name, ty = name.strip(), ty.strip()
+        name, ty = _trim(name), _trim(ty)
         if not sep or not NAME.match(name) or name in seen or ty not in SCALARS:
-            raise RuleError(f"record field `{part.strip()}`")
+            raise RuleError(f"record field `{_trim(part)}`")
         seen.add(name)
         fields.append((name, ty))
     if not fields:
@@ -335,8 +359,13 @@ def _has_type(v, ty, known=None) -> bool:
         m = _money_text(v)
         return m is not None and known is not None and known(m.currency)
     if ty in ("integer", "time"):
-        return (not isinstance(v, bool) and isinstance(v, (int, float))
-                and v == v and abs(v) != float("inf") and float(v).is_integer() and abs(v) <= MAX_INT)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return False
+        # compared exactly: a JSON integer of any size, never through float() (the float path below
+        # would also reject it from 3.12 on, where int has is_integer; this branch is the exact one)
+        if isinstance(v, int):
+            return abs(v) <= MAX_INT
+        return v == v and abs(v) != float("inf") and v.is_integer() and abs(v) <= MAX_INT
     if ty == "text":
         return isinstance(v, str)
     if ty == "bytes":
@@ -361,8 +390,8 @@ def _value(v, ty):
 
 def _const(ty, lit):
     if ty == "money":
-        m = _money_text(lit.strip())
-        if m is None or "  " in lit.strip():
+        m = _money_text(_trim(lit))
+        if m is None or "  " in _trim(lit):
             raise RuleError(f"`{lit}` is not money (`<amount> <currency>`)")
         return m
     toks = _tokens(lit)
@@ -401,7 +430,7 @@ def _edition(lines, semantics, kind, money=False):
     """The five header lines (TASK.md "Editions of a rule set"): (edition or None, the other lines)"""
     found, rest = {}, []
     for n, ln in lines:
-        w = ln.split()
+        w = _words(ln)
         if w[0] not in HEADER:
             rest.append((n, ln))
             continue
@@ -481,7 +510,7 @@ def _bind_currencies(law, cline, currencies, semantics):
 def currencies_named(text: str):
     """The identifier a law file's `currencies` line names (bytes), or None without one"""
     for ln in text.splitlines():
-        w = ln.split("#", 1)[0].split()
+        w = _words(ln.split("#", 1)[0])
         if w[:1] == ["currencies"] and len(w) == 2 and ID_HEX.match(w[1]):
             return bytes.fromhex(w[1])
     return None
@@ -520,13 +549,13 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
         raise RuleError("not a rule law")
     law = {"kind": kind, "consts": {}, "names": set(), "uses": set(), "currencies": None, "known": None}
     # a law with money is evaluated under the money semantics (MONEY_SEMANTICS_PINS)
-    money = any(ln.split()[0] == "currencies" for _, ln in _lines(text))
+    money = any(_words(ln)[0] == "currencies" for _, ln in _lines(text))
     law["edition"], lines = _edition(_lines(text), semantics, kind, money)
-    clines = [(n, ln.split()[1:]) for n, ln in lines if ln.split()[0] == "currencies"]
+    clines = [(n, _words(ln)[1:]) for n, ln in lines if _words(ln)[0] == "currencies"]
     if len(clines) > 1:
         raise RuleError(f"line {clines[1][0]}: a second `currencies` line")
-    lines = [(n, ln) for n, ln in lines if ln.split()[0] != "currencies"]
-    kinds = [n for n, ln in lines if ln.split()[0] == "kind"]
+    lines = [(n, ln) for n, ln in lines if _words(ln)[0] != "currencies"]
+    kinds = [n for n, ln in lines if _words(ln)[0] == "kind"]
     if len(kinds) != 1:
         raise RuleError("a rule law file has exactly one `kind` line")
 
@@ -602,7 +631,7 @@ def _contract(law, lines, declare):
             raise RuleError(f"line {n}: a second `{label}`")
         taken.add(label)
     for n, ln in lines:
-        w = ln.split()
+        w = _words(ln)
         if w[0] in PEOPLE or w[0] == "kind":
             continue
         if w[0] == "party":
@@ -620,7 +649,7 @@ def _contract(law, lines, declare):
             if ":" not in ln:
                 raise RuleError(f"line {n}: `condition <label> decided by <law identifier>: <description>`")
             head, text = ln.split(":", 1)
-            h, text = head.split(), text.strip(" \t")
+            h, text = _words(head), text.strip(" \t")
             if len(h) != 5 or h[2:4] != ["decided", "by"]:
                 raise RuleError(f"line {n}: `condition <label> decided by <law identifier>: <description>`")
             if not text:
@@ -713,13 +742,13 @@ def _statute(law, lines, declare):
     law["title"], law["clauses"] = None, []
     labels = set()  # the labels so far: one lookup per clause, so reading is linear
     for n, ln in lines:
-        w = ln.split()
+        w = _words(ln)
         if w[0] in PEOPLE or w[0] == "kind":
             continue
         if w[0] == "title":
             if law["title"] is not None:
                 raise RuleError(f"line {n}: a second `title` line")
-            t = ln[len("title"):].strip(" \t")
+            t = _trim(_trim(ln)[len("title"):])
             if not t:
                 raise RuleError(f"line {n}: `title <text>`")
             law["title"] = t
@@ -730,7 +759,7 @@ def _statute(law, lines, declare):
             text = text.strip(" \t")
             if not text:
                 raise RuleError(f"line {n}: a clause has a text after the `:`")
-            h = head.split()
+            h = _words(head)
             if len(h) < 3:
                 raise RuleError(f"line {n}: a clause has a label and a kind")
             label, kind, rest = h[1], h[2], h[3:]
@@ -779,9 +808,9 @@ def _statute_answer(law, inp, bug):
 
 
 def _const_line(law, rest, declare):
-    m = re.fullmatch(r"\s*(\S+)\s+(\S+)\s*=\s*(.*?)\s*", rest)
+    m = re.fullmatch(r"[ \t]*([^ \t]+)[ \t]+([^ \t]+)[ \t]*=[ \t]*(.*?)[ \t]*", rest)
     if not m or m.group(2) not in SCALARS:
-        raise RuleError(f"`const {rest.strip()}`: `const <name> <type> = <literal>` expected")
+        raise RuleError(f"`const {_trim(rest)}`: `const <name> <type> = <literal>` expected")
     name, ty, lit = m.groups()
     declare(name, "constant")
     law["consts"][name] = (ty, _const(ty, lit))
@@ -791,8 +820,8 @@ def _machine(law, lines, declare):
     law.update(modes=None, states=[], initial=None, events={}, on=[], allow=[])
     pending = []   # expressions read after every declaration
     for n, ln in lines:
-        w = ln.split()
-        head, rest = w[0], ln.split(None, 1)[1] if len(w) > 1 else ""
+        w = _words(ln)
+        head, rest = w[0], _split1(ln)[1] if len(w) > 1 else ""
         if head in PEOPLE or head == "kind":
             continue
         if head == "const":
@@ -820,13 +849,13 @@ def _machine(law, lines, declare):
                 declare(g, "guard")
             law["events"][w[1]] = w[3:]
         elif head == "on":
-            m = re.fullmatch(r"on\s+(\S+)\s+from\s+(.+?)\s+to\s+(\S+)(?:\s+when\s+(.+?))?\s*", ln.strip())
+            m = re.fullmatch(r"on[ \t]+([^ \t]+)[ \t]+from[ \t]+(.+?)[ \t]+to[ \t]+([^ \t]+)(?:[ \t]+when[ \t]+(.+?))?[ \t]*", _trim(ln))
             if not m:
                 raise RuleError(f"line {n}: `on <event> from <state>... to <state> [when <expression>]`")
             ev, frm, to, when = m.groups()
-            pending.append(("on", n, ev, frm.split(), to, when))
+            pending.append(("on", n, ev, _words(frm), to, when))
         elif head == "allow":
-            m = re.fullmatch(r"allow\s+(\S+)\s+when\s+(.+?)\s*", ln.strip())
+            m = re.fullmatch(r"allow[ \t]+([^ \t]+)[ \t]+when[ \t]+(.+?)[ \t]*", _trim(ln))
             if not m:
                 raise RuleError(f"line {n}: `allow <name> when <expression>`")
             declare(m.group(1), "allowance")
@@ -909,26 +938,26 @@ def _predicate(law, lines, declare):
     for name, (ty, _) in law["consts"].items():
         types[name] = ty
     for n, ln in lines:
-        w = ln.split()
+        w = _words(ln)
         head = w[0]
         if head in PEOPLE or head == "kind":
             continue
-        if head.lower().startswith("x-") or ln.lstrip().lower().startswith("x-"):
+        if head.lower().startswith("x-") or ln.lstrip(WS).lower().startswith("x-"):
             m = re.match(r"(x-input|x-split|x-bind) ([^ \t].*)\Z", ln.rstrip(" \t"))
             if not m or ln[0] in " \t":
-                raise RuleError(f"line {n}: `{ln.strip()}` is not an x- line of a predicate law")
+                raise RuleError(f"line {n}: `{_trim(ln)}` is not an x- line of a predicate law")
             kw, rest = m.groups()
             if kw == "x-input":
-                name, _, ty = rest.strip().partition(" ")
+                name, ty = (_split1(_trim(rest)) + [""])[:2]
                 declare(name, "input")
                 ty = _parse_type(ty)
                 types[name] = ty
                 law["inputs"].append((name, ty))
             elif kw == "x-split":
-                m2 = re.fullmatch(r"\s*(\S+)\s+(\"[^\"\\]*\")\s+(.+?)\s*", rest)
+                m2 = re.fullmatch(r"[ \t]*([^ \t]+)[ \t]+(\"[^\"\\]*\")[ \t]+(.+?)[ \t]*", rest)
                 if not m2:
                     raise RuleError(f"line {n}: `x-split <source> \"<separator>\" <name>...`")
-                src, sep, names = m2.group(1), m2.group(2)[1:-1], m2.group(3).split()
+                src, sep, names = m2.group(1), m2.group(2)[1:-1], _words(m2.group(3))
                 if types.get(src) != "text" or not sep or len(names) < 2:
                     raise RuleError(f"line {n}: a split takes a text, a separator that is not empty and two names or more")
                 for nm in names:
@@ -936,22 +965,22 @@ def _predicate(law, lines, declare):
                     types[nm] = "text"
                 law["steps"].append(("split", src, sep, names))
             else:
-                p = rest.split()
+                p = _words(rest)
                 if len(p) != 3 or p[2] not in ("integer", "time", "hex") or types.get(p[1]) != "text":
                     raise RuleError(f"line {n}: `x-bind <name> <part> integer|time|hex`")
                 declare(p[0], "bound part")
                 types[p[0]] = "bytes" if p[2] == "hex" else p[2]
                 law["steps"].append(("bind", p[0], p[1], p[2]))
         elif head == "const":
-            _const_line(law, ln.split(None, 1)[1] if len(w) > 1 else "", declare)
-            nm = ln.split()[1]
+            _const_line(law, _split1(ln)[1] if len(w) > 1 else "", declare)
+            nm = _words(ln)[1]
             types[nm] = law["consts"][nm][0]
         elif head == "use":
             if w[1:] != ["alice-sign", "hmac_sha256"]:
                 raise RuleError(f"line {n}: the only call is `use alice-sign hmac_sha256`")
             law["uses"].add("hmac_sha256")
         elif head == "require":
-            m = re.fullmatch(r"require\s+([a-z][a-z0-9_]*):\s+(.+?)\s*", ln.strip())
+            m = re.fullmatch(r"require[ \t]+([a-z][a-z0-9_]*):[ \t]+(.+?)[ \t]*", _trim(ln))
             if not m:
                 raise RuleError(f"line {n}: `require <label>: <expression>`")
             label, src = m.groups()
@@ -976,7 +1005,7 @@ def _predicate(law, lines, declare):
             law["requires"].append((label, e))
         elif head == "example":
             try:
-                ex = json.loads(ln.split(None, 1)[1])
+                ex = json.loads(_split1(ln)[1])
             except (ValueError, IndexError):
                 raise RuleError(f"line {n}: `example <JSON object>`")
             if not isinstance(ex, dict) or law["example"] is not None:
@@ -995,21 +1024,21 @@ def _table(law, lines, declare):
     law.update(inputs=[], values=None, rows=[], otherwise=None)
     types = {}
     for n, ln in lines:
-        w = ln.split()
+        w = _words(ln)
         head = w[0]
         if head in PEOPLE or head == "kind":
             continue
-        if ln.lstrip().lower().startswith("x-"):
+        if ln.lstrip(WS).lower().startswith("x-"):
             m = re.match(r"x-input ([^ \t].*)\Z", ln.rstrip(" \t"))
             if not m or ln[0] in " \t":
-                raise RuleError(f"line {n}: `{ln.strip()}` is not an x- line of a table law")
-            name, _, ty = m.group(1).strip().partition(" ")
+                raise RuleError(f"line {n}: `{_trim(ln)}` is not an x- line of a table law")
+            name, ty = (_split1(_trim(m.group(1))) + [""])[:2]
             declare(name, "input")
             ty = _parse_type(ty)
             types[name] = ty
             law["inputs"].append((name, ty))
         elif head == "const":
-            _const_line(law, ln.split(None, 1)[1] if len(w) > 1 else "", declare)
+            _const_line(law, _split1(ln)[1] if len(w) > 1 else "", declare)
             types[w[1]] = law["consts"][w[1]][0]
         elif head == "value":
             if law["values"] is not None or len(w) < 3:
@@ -1018,7 +1047,7 @@ def _table(law, lines, declare):
                 declare(v, "value")
             law["values"] = w[1:]
         elif head == "row":
-            m = re.fullmatch(r"row\s+([a-z][a-z0-9_]*):\s+(\S+)\s+when\s+(.+?)\s*", ln.strip())
+            m = re.fullmatch(r"row[ \t]+([a-z][a-z0-9_]*):[ \t]+([^ \t]+)[ \t]+when[ \t]+(.+?)[ \t]*", _trim(ln))
             if not m:
                 raise RuleError(f"line {n}: `row <label>: <value> when <expression>`")
             label, value, src = m.groups()
@@ -1064,14 +1093,14 @@ def _table(law, lines, declare):
 def _body(lines):
     """The body (TASK.md "A later edition written as a delta"): the lines that are read (not the header,
     not the lines for people), ends trimmed"""
-    return [ln.rstrip(" \t") for _, ln in lines if ln.split()[0] not in HEADER and ln.split()[0] not in PEOPLE]
+    return [ln.rstrip(" \t") for _, ln in lines if _words(ln)[0] not in HEADER and _words(ln)[0] not in PEOPLE]
 
 
 KEYED = ("const", "x-input", "x-bind", "allow", "state", "event")
 
 
 def _key(line: str) -> str:
-    w = line.split()
+    w = _words(line)
     if w[0] in ("row", "require") and len(w) > 1 and w[1].endswith(":"):
         return f"{w[0]} {w[1][:-1]}"
     if w[0] in KEYED + ("x-split", "clause", "party", "condition", "obligation") and len(w) > 1:
@@ -1128,27 +1157,28 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
         return hits[0]
 
     for n, raw in ops:
-        op = raw.strip()
-        w = op.split()
+        op = _trim(raw)
+        w = _words(op)
         if w[0] == "changes":
             if len(w) != 2:
                 raise RuleError(f"line {n}: `changes <name>`")
             changes.append(w[1])
         elif w[0] == "remove":
-            del body[where(op.split(None, 1)[1].strip(), n)]
+            del body[where(_normal_key(op[len("remove"):]), n)]
         elif w[0] == "replace":
             key, sep, line = op[len("replace"):].partition(":")
-            key, line = key.strip(), line.strip(" \t")
+            key, line = _normal_key(key), line.strip(" \t")
             if not sep or not line or _key(line) != key:
                 raise RuleError(f"line {n}: `replace <key>: <line>` with a line of the same key")
             body[where(key, n)] = line
         elif w[0] == "add":
-            rest = op[len("add"):].strip()
+            rest = _trim(op[len("add"):])
             pos = None
-            if rest.split()[0] in ("after", "before") and ":" in rest:
-                side, _, tail = rest.partition(" ")
+            side = (_words(rest) or [""])[0]
+            if side in ("after", "before") and ":" in rest:
+                tail = rest[len(side):]
                 key, _, line = tail.partition(":")
-                key, line = key.strip(), line.strip(" \t")
+                key, line = _normal_key(key), line.strip(" \t")
                 at = where(key, n)
                 pos = at + 1 if side == "after" else at
             else:
@@ -1156,7 +1186,7 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
             if not line or any(_key(b) == _key(line) for b in body):
                 raise RuleError(f"line {n}: `add` of a key the body already has, or of nothing")
             if pos is None:
-                same = [i for i, b in enumerate(body) if b.split()[0] == line.split()[0]]
+                same = [i for i, b in enumerate(body) if _words(b)[0] == _words(line)[0]]
                 pos = same[-1] + 1 if same else len(body)
             body.insert(pos, line)
         else:

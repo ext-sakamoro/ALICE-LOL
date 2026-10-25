@@ -97,6 +97,25 @@ class SrcGap(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertTrue(any("<crate>/tests/<target>.rs" in p for p in problems), problems)
 
+    def test_an_ignore_over_several_lines_is_found_and_run(self):
+        split = '#[test]\n#[ignore =\n    "src gap: glue-a: a is not wired"]\nfn a_is_wired() {\n    assert!(false);\n}\n'
+        repo = self.repo(files={"crate/tests/gap.rs": split})
+        self.assertEqual(G.check(repo, False)[0], 0)
+        code, problems = G.check(repo, True, fake(0, 1, 0))
+        self.assertEqual(code, 1, "a stale gap in the split form is caught")
+        self.assertTrue(any("the gap closed" in p for p in problems), problems)
+
+    def test_src_gap_text_outside_an_ignore_fails(self):
+        files = {"crate/tests/gap.rs": TEST + "// src gap: glue-a: mentioned in a comment\n"}
+        code, problems = G.check(self.repo(files=files), False)
+        self.assertEqual(code, 1)
+        self.assertTrue(any("outside an `#[ignore" in p for p in problems), problems)
+        # an ignore written as a string the checker does not read is a finding, not silence
+        odd = TEST.replace('#[ignore = "src gap: glue-a: a is not wired"]', '#[ignore(reason = "src gap: glue-a: x")]')
+        code, problems = G.check(self.repo(files={"crate/tests/gap.rs": odd}), False)
+        self.assertNotEqual(code, 0)
+        self.assertTrue(any("outside an `#[ignore" in p for p in problems), problems)
+
     def test_this_repository_passes(self):
         self.assertEqual(G.check(G.ROOT, False)[0], 0)
 

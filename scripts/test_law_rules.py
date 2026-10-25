@@ -817,28 +817,93 @@ class Contract(unittest.TestCase):
 
 
 
+def _best_of_three(f):
+    import time
+    best = None
+    for _ in range(3):
+        t0 = time.perf_counter()
+        f()
+        took = time.perf_counter() - t0
+        best = took if best is None else min(best, took)
+    return best
+
+
 class Linear(unittest.TestCase):
-    """a statute or a contract of many lines reads in linear time (each label looked up once)"""
+    """a statute or a contract of many lines reads in linear time (each label looked up once): 2n
+    lines take about twice as long as n, four times if each label were looked up among the earlier
+    ones; the ratio, not a time, so a slow runner does not fail it"""
+
+    def ratio(self, text_of, read, n=10_000):
+        a = _best_of_three(lambda: read(text_of(n)))
+        b = _best_of_three(lambda: read(text_of(2 * n)))
+        self.assertLess(b / max(a, 1e-9), 3.0, f"{n}: {a:.3f} s, {2 * n}: {b:.3f} s")
 
     def test_many_clauses(self):
-        import time
-        n = 100_000
-        text = "kind statute\ntitle T\nclause c0 obligation: x\n" + "".join(
+        text_of = lambda n: "kind statute\ntitle T\nclause c0 obligation: x\n" + "".join(
             f"clause c{i} exception of c{i - 1}: y\n" for i in range(1, n))
-        t0 = time.monotonic()
-        law = R.parse(text)
-        self.assertLess(time.monotonic() - t0, 10)
-        self.assertEqual(law["clauses"][-1]["parent"], f"c{n - 2}")
+        self.ratio(text_of, R.parse)
+        self.assertEqual(R.parse(text_of(100))["clauses"][-1]["parent"], "c98")
 
     def test_many_obligations(self):
-        import time
         table = R.parse(CURRENCIES, SEM)
-        n = 100_000
-        text = (f"kind contract\ncurrencies {R.law_id(table, SEM).hex()}\nparty a\nparty b\ncreated 0\n"
-                + "".join(f"obligation o{i} a to b 1 JPY due 10\n" for i in range(n)))
-        t0 = time.monotonic()
-        R.parse(text, SEM, currencies=table)
-        self.assertLess(time.monotonic() - t0, 10)
+        text_of = lambda n: (f"kind contract\ncurrencies {R.law_id(table, SEM).hex()}\nparty a\nparty b\ncreated 0\n"
+                             + "".join(f"obligation o{i} a to b 1 JPY due 10\n" for i in range(n)))
+        self.ratio(text_of, lambda t: R.parse(t, SEM, currencies=table))
+
+
+
+NBSP = " "
+
+
+class Separators(unittest.TestCase):
+    """conformance/TASK.md "Tokens are separated by spaces or tabs": any other character is part of a token"""
+
+    def test_indentation_and_tabs_do_not_change_a_law(self):
+        plain = "kind statute\ntitle Demo Act\nclause a obligation from 1: pay\n"
+        indented = "kind statute\n  title Demo Act\n\tclause\ta obligation  from 1:\tpay\n"
+        self.assertEqual(R.law_id(R.parse(plain), SEM), R.law_id(R.parse(indented), SEM))
+
+    def test_a_no_break_space_is_not_a_separator(self):
+        self.assertIsNone(R.rule_kind(f"kind statute{NBSP}\ntitle T\nclause a obligation: x\n"))
+        for bad in (f"kind statute\ntitle{NBSP}T\nclause a obligation: x\n",
+                    f"kind statute\ntitle T\nclause{NBSP}a obligation: x\n",
+                    f"kind statute\ntitle T\nclause a{NBSP}obligation: x\n",
+                    f"kind predicate\nx-input a integer\nrequire{NBSP}r: a == a\nexample {{\"a\": 1}}\n",
+                    f"kind machine\nstate a initial\nstate{NBSP}b\nevent go\non go from a to b\n",
+                    f"domain{NBSP}demo\nedition y1\nsupersedes first\neffective 0\nsemantics {SEM['statute'].hex()}\n"
+                    "kind statute\ntitle T\nclause a obligation: x\n"):
+            with self.assertRaises(R.RuleError, msg=repr(bad)):
+                R.parse(bad, SEM)
+        # only spaces and tabs are trimmed at the two ends of a text: a trailing no-break space stays
+        self.assertNotEqual(R.law_id(R.parse("kind statute\ntitle T\nclause a obligation: x\n"), SEM),
+                            R.law_id(R.parse(f"kind statute\ntitle T{NBSP}\nclause a obligation: x\n"), SEM))
+        self.assertNotEqual(R.law_id(R.parse("kind statute\ntitle Demo Act\nclause a obligation: pay\n"), SEM),
+                            R.law_id(R.parse(f"kind statute\ntitle Demo{NBSP}Act\nclause a obligation: pay\n"), SEM))
+
+    def test_a_contract_line_with_a_no_break_space_does_not_read(self):
+        table = R.parse("kind table\nx-input code text\nvalue e0 unknown\nrow jpy: e0 when code == \"JPY\"\notherwise unknown\n", SEM)
+        text = lambda sep: (f"kind contract\ncurrencies {R.law_id(table, SEM).hex()}\nparty a\nparty b\ncreated 0\n"
+                            f"obligation o a to b 1{sep}JPY due 10\n")
+        R.parse(text(" "), SEM, currencies=table)
+        R.parse(text("\t"), SEM, currencies=table)
+        with self.assertRaises(R.RuleError):
+            R.parse(text(NBSP), SEM, currencies=table)
+
+    def test_an_integer_of_four_hundred_digits_is_rejected(self):
+        law = R.parse("kind statute\ntitle T\nclause a obligation: x\n")
+        self.assertEqual(R.respond(law, {"at": 10 ** 400})[0], "rejected")
+        self.assertEqual(R.respond(law, {"at": -(10 ** 400)})[0], "rejected")
+
+    def test_a_delta_key_is_its_tokens_whatever_the_separators(self):
+        head = (f"domain demo-age\nedition y2025\nsupersedes first\neffective 0 until 10\nsemantics {SEM['rule'].hex()}\n")
+        first = head + "kind predicate\nx-input age integer\nconst adult integer = 20\nrequire old_enough: age >= adult\nexample {\"age\": 30}\n"
+        law = R.parse(first, SEM)
+        delta = (f"domain demo-age\nedition y2026\nsupersedes {R.law_id(law, SEM).hex()}\neffective 10\nsemantics {SEM['rule'].hex()}\n"
+                 "replace const\tadult: const adult integer = 18\nchanges eighteen\n")
+        text, _ = R.resolve(R.resolved_text(first, SEM), delta, SEM)
+        self.assertIn("const adult integer = 18", text)
+        with self.assertRaises(R.RuleError):
+            R.resolve(R.resolved_text(first, SEM), delta.replace("const\tadult", f"const{NBSP}adult"), SEM)
 
 
 if __name__ == "__main__":

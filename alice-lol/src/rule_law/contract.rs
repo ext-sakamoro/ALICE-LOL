@@ -12,8 +12,8 @@
 use alice_zip::law_id::LawIdHasher;
 
 use super::{
-    err, law_id_start, money_text, read_value, statute::statute_time, Answer, Currencies, Edition,
-    Json, RuleLawError, Ty, Value, CONTRACT_SEMANTICS_ID, PEOPLE,
+    err, fields, law_id_start, money_text, read_value, statute::statute_time, Answer, Currencies,
+    Edition, Json, RuleLawError, Ty, Value, CONTRACT_SEMANTICS_ID, PEOPLE,
 };
 
 /// The kind tag of a contract law
@@ -276,7 +276,7 @@ pub(super) fn read_contract(
     let mut party_index: std::collections::BTreeMap<String, usize> =
         std::collections::BTreeMap::new();
     for &(n, l) in ls {
-        let w: Vec<&str> = l.split_whitespace().collect();
+        let w = fields(l);
         match w[0] {
             h if PEOPLE.contains(&h) || h == "kind" => {}
             "party" => {
@@ -306,7 +306,7 @@ pub(super) fn read_contract(
                     "`condition <label> decided by <law identifier>: <description>`";
                 let (head, text) = l.split_once(':').ok_or_else(|| err(n, SHAPE))?;
                 let description = text.trim_matches([' ', '\t']);
-                let h: Vec<&str> = head.split_whitespace().collect();
+                let h = fields(head);
                 let [_, label, "decided", "by", id] = h.as_slice() else {
                     return Err(err(n, SHAPE));
                 };

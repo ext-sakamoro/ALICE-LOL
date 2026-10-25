@@ -1049,6 +1049,17 @@ fn words(line: &str) -> Vec<(&str, usize)> {
     out
 }
 
+/// The tokens of a line: the runs between spaces and tabs (conformance/TASK.md "Tokens are
+/// separated by spaces or tabs"); any other character, a no-break space included, is part of a token
+fn fields(line: &str) -> Vec<&str> {
+    words(line).into_iter().map(|(w, _)| w).collect()
+}
+
+/// A key as written in a delta operation, its tokens joined by one space (the form of [`line_key`])
+fn normal_key(key: &str) -> String {
+    fields(key).join(" ")
+}
+
 fn rest_after(line: &str, w: &[(&str, usize)], k: usize) -> String {
     line[w[k].1..].trim_matches([' ', '\t']).to_owned()
 }
@@ -1182,7 +1193,7 @@ fn read_edition<'a>(
     let mut found: Vec<(&str, usize, Vec<&str>)> = Vec::new();
     let mut rest = Vec::new();
     for &(n, l) in ls {
-        let w: Vec<&str> = l.split_whitespace().collect();
+        let w = fields(l);
         if !EDITION_HEADER.contains(&w[0]) {
             rest.push((n, l));
             continue;
@@ -1303,7 +1314,7 @@ fn body_lines(ls: &[(usize, &str)]) -> Vec<String> {
 
 /// The key of a body line (TASK.md "A later edition written as a delta")
 fn line_key(line: &str) -> String {
-    let w: Vec<&str> = line.split_whitespace().collect();
+    let w = fields(line);
     match w.as_slice() {
         [k @ ("row" | "require"), label, ..] if label.ends_with(':') => {
             format!("{k} {}", &label[..label.len() - 1])
@@ -1444,33 +1455,36 @@ pub fn resolve_delta_with(
     };
     for (n, raw) in ops {
         let op = raw.trim_matches([' ', '\t']);
-        let w: Vec<&str> = op.split_whitespace().collect();
+        let w = fields(op);
         match w[0] {
             "changes" if w.len() == 2 => changes.push(w[1].to_owned()),
             "changes" => return Err(err(n, "`changes <name>`")),
             "remove" => {
-                let at = find(&body, op["remove".len()..].trim(), n)?;
+                let at = find(&body, &normal_key(&op["remove".len()..]), n)?;
                 body.remove(at);
             }
             "replace" => {
                 let (key, line) = op["replace".len()..]
                     .split_once(':')
-                    .map_or(("", ""), |(k, l)| (k.trim(), l.trim_matches([' ', '\t'])));
+                    .map_or(("", ""), |(k, l)| (k, l.trim_matches([' ', '\t'])));
+                let key = normal_key(key);
                 if line.is_empty() || line_key(line) != key {
                     return Err(err(
                         n,
                         "`replace <key>: <line>` with a line of the same key",
                     ));
                 }
-                let at = find(&body, key, n)?;
+                let at = find(&body, &key, n)?;
                 line.clone_into(&mut body[at]);
             }
             "add" => {
-                let rest = op["add".len()..].trim();
-                let placed = match rest.split_once(' ') {
-                    Some((side @ ("after" | "before"), tail)) if tail.contains(':') => {
+                let rest = op["add".len()..].trim_matches([' ', '\t']);
+                let side = fields(rest).first().copied().unwrap_or("");
+                let placed = match side {
+                    "after" | "before" if rest.contains(':') => {
+                        let tail = &rest[side.len()..];
                         let (key, line) = tail.split_once(':').unwrap_or(("", ""));
-                        let at = find(&body, key.trim(), n)?;
+                        let at = find(&body, &normal_key(key), n)?;
                         Some((
                             if side == "after" { at + 1 } else { at },
                             line.trim_matches([' ', '\t']),
@@ -1868,7 +1882,7 @@ pub fn rule_law_from_file_with(
     let cur = match clines.as_slice() {
         [] => None,
         [(n, l)] => {
-            let w: Vec<&str> = l.split_whitespace().collect();
+            let w = fields(l);
             let id = match w.as_slice() {
                 [_, v] => id_hex(v),
                 _ => None,

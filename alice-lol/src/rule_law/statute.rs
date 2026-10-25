@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 use alice_zip::law_id::LawIdHasher;
 
 use super::{
-    err, law_id_start, read_inputs, time_literal, words, Answer, Edition, Json, RuleLawError, Ty,
-    Value, PEOPLE, STATUTE_SEMANTICS_ID, STATUTE_SEMANTICS_PINS,
+    err, fields, law_id_start, read_inputs, time_literal, words, Answer, Edition, Json,
+    RuleLawError, Ty, Value, PEOPLE, STATUTE_SEMANTICS_ID, STATUTE_SEMANTICS_PINS,
 };
 
 /// The kind tag of a statute law
@@ -265,7 +265,7 @@ fn read_clause(
     if text.is_empty() {
         return Err(err(n, "a clause has a text after the `:`"));
     }
-    let w: Vec<&str> = head.split_whitespace().collect();
+    let w = fields(head);
     let (label, kind) = match w.as_slice() {
         [_, label, kind, ..] => (*label, *kind),
         _ => return Err(err(n, SHAPE)),

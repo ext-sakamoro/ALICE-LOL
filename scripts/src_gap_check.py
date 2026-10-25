@@ -28,7 +28,6 @@ ROOT = Path(__file__).resolve().parent.parent
 TABLE = Path("docs/wiring-debt.md")
 KEY = re.compile(r"[a-z][a-z0-9]*(-[a-z0-9]+)*\Z")
 ROW = re.compile(r"^\|\s*`?([^|`]*?)`?\s*\|(.*)\|\s*$")
-IGNORE = re.compile(r'#\[ignore\s*=\s*"src gap:\s*([^:"]*)(:?)')
 FN = re.compile(r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)")
 
 
@@ -64,24 +63,44 @@ def tracked_rs(root: Path) -> list[Path]:
     return [root / p for p in out.stdout.split()]
 
 
+# an `#[ignore = "..."]` attribute, its parts on one line or over several
+IGNORE_ATTR = re.compile(r'#\[\s*ignore\s*=\s*"([^"]*)"\s*\]')
+
+
 def find_ignores(files: list[Path], root: Path):
-    """[(path, line, key, test name)] and problems (a `src gap` ignore not in the `<key>:` form)"""
+    """[(path, line, key, test name)] and problems: a `src gap` ignore not in the `<key>:` form, one
+    no `fn` follows, and any `src gap` text of a `.rs` file that is not inside such an attribute
+    (so a form this check does not read cannot hide a gap)"""
     found, problems = [], []
     for f in files:
-        lines = f.read_text(encoding="utf-8").splitlines()
-        for i, ln in enumerate(lines):
-            if "src gap" not in ln or "#[ignore" not in ln:
+        text = f.read_text(encoding="utf-8")
+        if "src gap" not in text:
+            continue
+        rel = f.relative_to(root).as_posix()
+        placed = []
+        for m in IGNORE_ATTR.finditer(text):
+            reason = m.group(1)
+            if "src gap" not in reason:
                 continue
-            m = IGNORE.search(ln)
-            rel = f.relative_to(root).as_posix()
-            if not m or not m.group(2) or not KEY.match(m.group(1).strip()):
-                problems.append(f"{rel}:{i + 1}: write `#[ignore = \"src gap: <key>: <reason>\"]`")
+            placed.append((m.start(), m.end()))
+            line = text.count("\n", 0, m.start()) + 1
+            parts = reason.split(":")
+            key = parts[1].strip() if len(parts) >= 3 and parts[0].strip() == "src gap" else ""
+            if not KEY.match(key):
+                problems.append(f"{rel}:{line}: write `#[ignore = \"src gap: <key>: <reason>\"]`")
                 continue
-            name = next((FN.search(x).group(1) for x in lines[i + 1:i + 8] if FN.search(x)), None)
+            after = text[m.end():].split("\n")[:8]
+            name = next((FN.search(x).group(1) for x in after if FN.search(x)), None)
             if name is None:
-                problems.append(f"{rel}:{i + 1}: no `fn` follows the ignore")
+                problems.append(f"{rel}:{line}: no `fn` follows the ignore")
                 continue
-            found.append((rel, i + 1, m.group(1).strip(), name))
+            found.append((rel, line, key, name))
+        at = text.find("src gap")
+        while at >= 0:
+            if not any(a <= at < b for a, b in placed):
+                line = text.count("\n", 0, at) + 1
+                problems.append(f"{rel}:{line}: `src gap` outside an `#[ignore = \"src gap: <key>: <reason>\"]` attribute")
+            at = text.find("src gap", at + 1)
     return found, problems
 
 
