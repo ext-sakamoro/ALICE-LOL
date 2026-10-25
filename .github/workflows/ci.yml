@@ -116,6 +116,13 @@ jobs:
         shell: bash
         run: python3 scripts/law_tests_from_log.py physics "$RUNNER_TEMP/cargo-test.log"
 
+      # each `src gap` test (docs/wiring-debt.md) run alone with every feature: it must still fail
+      # (a pass means the gap closed and its ignore is stale)
+      - name: Src-gap tests still fail (docs/wiring-debt.md)
+        if: matrix.label == ' physics'
+        working-directory: ALICE-LOL
+        run: python3 scripts/src_gap_check.py --run
+
       # `required-features` 付きの test target は feature が無いと黙ってスキップされるので、
       # roblox の entry では名指しで走らせる (target が消える / 登録が外れるとここで fail する)
       - name: Test (roblox oracle, named)
@@ -573,6 +580,10 @@ jobs:
         run: python scripts/test_wiring_guard.py
       - name: wiring-guard (新規の未配線 / 理由の無い dead_code が無い)
         run: python scripts/wiring_guard.py
+      - name: src-gap oracle (検査器自身の試験)
+        run: python scripts/test_src_gap_check.py
+      - name: src-gap (src gap の ignore と docs/wiring-debt.md の行が対応する)
+        run: python scripts/src_gap_check.py
       - name: parser-no-direct-validating-builders oracle (検査器自身の試験)
         run: python scripts/test_parser_no_direct_validating_builders.py
       - name: parser-no-direct-validating-builders (parser は validate() 付き infallible builder を直接呼ばない)

@@ -103,6 +103,8 @@ step "ci.yml / fmt: Check formatting"
 step "ci.yml / wiring-guard: oracle + 新規の未配線 / 理由の無い dead_code が無い"
 python3 scripts/test_wiring_guard.py
 python3 scripts/wiring_guard.py
+python3 scripts/test_src_gap_check.py
+python3 scripts/src_gap_check.py
 
 step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
 python3 scripts/test_parser_no_direct_validating_builders.py
@@ -437,6 +439,9 @@ fi
 
 step "ci.yml / test: Test"
 ( export CARGO_TERM_COLOR="always"; cargo test )
+
+step "ci.yml / test: Src-gap tests still fail (docs/wiring-debt.md)"
+python3 scripts/src_gap_check.py --run
 
 step "ci.yml / test: Law oracles (each target ran at least one test)"
 ( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default )
