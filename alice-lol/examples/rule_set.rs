@@ -58,4 +58,28 @@ fn main() {
         .evaluate_edition(&first_id, &request)
         .expect("the first edition is kept");
     println!("the first edition, asked today: {answer:?}");
+
+    // a rule set with money reads its editions with the currency table they name
+    let money = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/money-fixture");
+    let table = rule_law_from_file(
+        &std::fs::read_to_string(money.join("currency_minor_units.law"))
+            .expect("the currency table"),
+    )
+    .expect("the currency table reads");
+    let fee = format!(
+        "domain demo-fee\nedition y2025\nsupersedes first\neffective 1735689600\nsemantics {}\n\
+         kind predicate\ncurrencies {}\nx-input fee money\nconst cap money = 1000 JPY\n\
+         require within: fee <= cap\nexample {{\"fee\": \"1 JPY\"}}\n",
+        hex(&alice_lol::rule_law::MONEY_SEMANTICS_ID),
+        hex(&table.law_id())
+    );
+    let fees = RuleSet::from_files_with(&[("fee.law", fee.as_str())], Some(&table))
+        .expect("the money rule set loads");
+    let (answer, _) = fees
+        .evaluate_as_of(
+            &parse_json(r#"{"fee": "1500 JPY"}"#).expect("JSON"),
+            1_767_225_600,
+        )
+        .expect("an edition is in force");
+    println!("a fee of 1500 JPY against a cap of 1000 JPY: {answer:?}");
 }

@@ -286,7 +286,7 @@ class Corpus(unittest.TestCase):
         self.assertEqual(failed, {None, "shape", "tag", "fresh", "current"})
 
 
-SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32}
+SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32, "statute": bytes([5]) * 32}
 RATE = ("kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n")
 HEADER = ("domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
           "semantics " + "00" * 32 + "\n")
@@ -575,6 +575,108 @@ class Money(unittest.TestCase):
                            "require r: not go or a + b > a\nexample {\"a\": \"1 JPY\", \"b\": \"1 JPY\", \"go\": true}\n")
         self.assertEqual(R.respond(law, {"a": "1 JPY", "b": "1 USD", "go": False})[0], "outputs")
         self.assertEqual(R.respond(law, {"a": "1 JPY", "b": "1 USD", "go": True})[0], "rejected")
+
+
+ACT = ("kind statute\ntitle Demo Act\n"
+       "clause pay obligation from 100 until 200: the buyer pays within 30 days\n"
+       "clause waive exception of pay from 150: unless the seller waives payment\n"
+       "clause late penalty of pay from 100: a late payment bears interest\n"
+       "clause term definition: buyer means the person who orders\n")
+
+
+class Statute(unittest.TestCase):
+    """conformance/TASK.md "Statute laws": the clauses in force at a time, in file order"""
+
+    def at(self, law, t):
+        return R.respond(law, {"at": t})
+
+    def test_the_clauses_in_force_at_a_time(self):
+        law = R.parse(ACT)
+        for t, want in ((0, ["term"]), (99, ["term"]), (100, ["pay", "late", "term"]),
+                        (149, ["pay", "late", "term"]), (150, ["pay", "waive", "late", "term"]),
+                        (199, ["pay", "waive", "late", "term"]), (200, ["waive", "late", "term"]),
+                        (-150, []), (100.0, ["pay", "late", "term"])):
+            self.assertEqual(self.at(law, t), ("outputs", {"in_force": want}), t)
+        for v in (1.5, "100", None, True, 2 ** 53):
+            self.assertEqual(self.at(law, v)[0], "rejected", v)
+        self.assertEqual(R.respond(law, {})[0], "request_error")
+
+    def test_what_does_not_read(self):
+        R.parse("kind statute\ntitle T\nclause a obligation: x\n")
+        R.parse("kind statute\ntitle T\nclause initial obligation: x\nclause and_2 exception of initial: y\n")
+        R.parse("kind statute\ntitle T\nclause a obligation from 18446744073 : x\n")
+        for bad in ("kind statute\nclause a obligation: x\n",
+                    "kind statute\ntitle T\ntitle U\nclause a obligation: x\n",
+                    "kind statute\ntitle\nclause a obligation: x\n",
+                    "kind statute\ntitle T\n",
+                    "kind statute\ntitle T\nclause a duty: x\n",
+                    "kind statute\ntitle T\nclause a obligation:\n",
+                    "kind statute\ntitle T\nclause a obligation x\n",
+                    "kind statute\ntitle T\nclause A obligation: x\n",
+                    "kind statute\ntitle T\nclause a obligation: x\nclause a permission: y\n",
+                    "kind statute\ntitle T\nclause e exception: x\n",
+                    "kind statute\ntitle T\nclause e exception of a: x\nclause a obligation: y\n",
+                    "kind statute\ntitle T\nclause a obligation from 5 until 5: x\n",
+                    "kind statute\ntitle T\nclause a obligation until 0: x\n",
+                    "kind statute\ntitle T\nclause a obligation from 18446744074: x\n",
+                    "kind statute\ntitle T\nclause a obligation until 18446744074: x\n",
+                    "kind statute\ntitle T\nclause a obligation from 01: x\n",
+                    "kind statute\ntitle T\nclause a obligation until 9 from 1: x\n",
+                    "kind statute\ntitle T\nclause a obligation from 1 extra: x\n",
+                    "kind statute\ntitle T\nclause a obligation: x\nrequire r: true\n",
+                    f"kind statute\ncurrencies {'0' * 64}\ntitle T\nclause a obligation: x\n"):
+            with self.assertRaises(R.RuleError, msg=bad):
+                R.parse(bad)
+
+    def test_the_identifier_names_every_clause_field(self):
+        base = R.law_id(R.parse(ACT), SEM)
+        for a, b in (("title Demo Act", "title Demo Act 2"), ("clause term definition", "clause terms definition"),
+                     ("clause term definition", "clause term permission"), ("from 100 until 200", "from 100 until 201"),
+                     ("from 100 until 200", "from 101 until 200"), ("from 100 until 200", "from 100"),
+                     ("within 30 days", "within 31 days"), ("clause late penalty of pay", "clause late penalty")):
+            self.assertNotEqual(R.law_id(R.parse(ACT.replace(a, b)), SEM), base, f"{a} -> {b}")
+        moved = ACT.replace("clause waive exception of pay from 150: unless the seller waives payment\n"
+                            "clause late penalty of pay from 100: a late payment bears interest\n",
+                            "clause late penalty of pay from 100: a late payment bears interest\n"
+                            "clause waive exception of late from 150: unless the seller waives payment\n")
+        self.assertNotEqual(R.law_id(R.parse(moved), SEM), base)
+        spaced = ACT.replace("clause term definition:", "clause\tterm  definition :") + "# a comment\n"
+        self.assertEqual(R.law_id(R.parse(spaced), SEM), base)
+        self.assertEqual(R.law_id(R.parse("kind statute\ntitle T\nclause a obligation: x\n"), SEM),
+                         R.law_id(R.parse("kind statute\ntitle T\nclause a obligation from 0: x\n"), SEM))
+
+    def test_an_edition_and_a_delta(self):
+        head = lambda ed, sup, eff: (f"domain demo-act\nedition {ed}\nsupersedes {sup}\neffective {eff}\n"
+                                     f"semantics {SEM['statute'].hex()}\n")
+        first = head("y2025", "first", "100 until 300") + ACT
+        law = R.parse(first, SEM)
+        self.assertEqual(law["clauses"][3]["from"], 100)  # a clause without `from` takes the edition's start
+        with self.assertRaises(R.RuleError):
+            R.parse(first.replace(SEM["statute"].hex(), SEM["rule"].hex()), SEM)
+        resolved = R.resolved_text(first, SEM)
+        delta = (head("y2026", R.law_id(law, SEM).hex(), "300")
+                 + "replace clause pay: clause pay obligation from 300: the buyer pays within 14 days\n"
+                   "remove clause late\nchanges shorter\n")
+        text, changes = R.resolve(resolved, delta, SEM)
+        self.assertEqual(changes, ["shorter"])
+        self.assertEqual(R.respond(R.parse(text, SEM), {"at": 300}), ("outputs", {"in_force": ["pay", "waive", "term"]}))
+        with self.assertRaises(R.RuleError):  # the exception's parent removed
+            R.resolve(resolved, head("y2026", R.law_id(law, SEM).hex(), "300") + "remove clause pay\nchanges gone\n", SEM)
+
+    def test_the_corpus_covers_every_clause_in_and_out_of_force(self):
+        law = R.parse(ACT)
+        vecs = R.vectors(law, "act")
+        self.assertEqual(R.coverage(law, vecs), [])
+        # without the times at which `waive` is in force, the corpus misses it
+        early = [v for v in vecs if not (v["kind"] == "exact" and "waive" in v["expected"]["in_force"])]
+        self.assertIn("a vector with waive in force", R.coverage(law, early))
+        # without the times before 1970, `term` (in force from 0, no end) is never out of force
+        later = [v for v in vecs if not (v["kind"] == "exact" and isinstance(v["inputs"].get("at"), int)
+                                         and v["inputs"]["at"] < 0)]
+        self.assertIn("a vector with term not in force", R.coverage(law, later))
+        # each bound and the time before it
+        no99 = [v for v in vecs if v["inputs"].get("at") != 99]
+        self.assertIn("a vector at 99 (a bound of pay)", R.coverage(law, no99))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+law a demo statute (fixture)
+claim the clauses of a statute in force at a time: a duty with its exception and penalty, a definition
+source a fixture for the statute kind, not a real statute
+kind statute
+title Demo Sale of Goods Act
+clause term definition: the buyer is the person who orders the goods
+clause pay obligation from 1735689600 until 1767225600: the buyer pays within 30 days of delivery
+clause waive exception of pay from 1751328000: unless the seller waives the payment in writing
+clause late penalty of pay from 1735689600: a late payment bears interest of 3 percent a year
+clause resell permission from 1767225600: the seller may resell goods not paid for within 60 days
+clause bait prohibition: a seller does not advertise goods it does not hold
