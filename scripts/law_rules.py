@@ -50,7 +50,7 @@ def rule_kind(text: str):
     lines = [ln.split("#", 1)[0].strip() for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
-    for k in ("machine", "predicate", "table", "statute"):
+    for k in ("machine", "predicate", "table", "statute", "procedure"):
         if f"kind {k}" in lines:
             return k
     return None
@@ -392,8 +392,8 @@ def _time_literal(tok, n):
 
 def _kind_semantics(semantics, kind, money):
     """The semantics identifier a law of `kind`, with or without money, is evaluated under"""
-    if kind == "statute":
-        return semantics["statute"]
+    if kind in ("statute", "procedure"):
+        return semantics[kind]
     return semantics[("money_" if money else "") + ("table" if kind == "table" else "rule")]
 
 
@@ -535,16 +535,47 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
             raise RuleError(f"`{name}` is declared twice")
         law["names"].add(name)
 
-    {"machine": _machine, "predicate": _predicate, "table": _table, "statute": _statute}[kind](law, lines, declare)
+    {"machine": _machine, "predicate": _predicate, "table": _table, "statute": _statute,
+     "procedure": _procedure}[kind](law, lines, declare)
     del law["names"]
-    if kind == "machine" and _uses_money(law):
-        raise RuleError("a machine law has no money")
+    if kind in ("machine", "procedure") and _uses_money(law):
+        raise RuleError(f"a {kind} law has no money")
     if kind == "statute" and clines:
         raise RuleError("a statute law has no money")
     _bind_currencies(law, clines[0] if clines else None, currencies, semantics)
     if kind == "predicate" and respond(law, law["example"]) != ("outputs", {"valid": True, "failed": None}):
         raise RuleError("the example does not hold")
     return law
+
+
+# ALICE-Legal 9490cf2 src/procedure.rs: ProcedureStatus and StepKind, and the status add_step gives
+PROCEDURE_STATUSES = ("pending", "in_progress", "approved", "rejected", "completed")
+STEP_KINDS = ("application", "review", "approval", "rejection", "amendment", "notification", "completion")
+
+
+def next_status(status: str, step: str) -> str:
+    """The status a step leads to (Procedure::add_step): a decision or a completion sets it, any
+    other step moves a pending procedure into progress and leaves the rest"""
+    return {"approval": "approved", "rejection": "rejected", "completion": "completed"}.get(
+        step, "in_progress" if status == "pending" else status)
+
+
+def _procedure(law, lines, declare):
+    """`kind procedure`: a machine whose states are a procedure's statuses (starting `pending`) and
+    whose events are kinds of step, every `on` line going where ALICE-Legal's add_step goes"""
+    _machine(law, lines, declare)
+    for st in law["states"]:
+        if st not in PROCEDURE_STATUSES:
+            raise RuleError(f"`{st}` is not a status of a procedure")
+    if law["initial"] != "pending":
+        raise RuleError("a procedure starts `pending`")
+    for ev in law["events"]:
+        if ev not in STEP_KINDS:
+            raise RuleError(f"`{ev}` is not a kind of step")
+    for ev, frm, to, _ in law["on"]:
+        for f in frm:
+            if next_status(f, ev) != to:
+                raise RuleError(f"`on {ev} from {f} to {to}`: a {ev} step from {f} leads to {next_status(f, ev)}")
 
 
 CLAUSE_KINDS = ("obligation", "prohibition", "permission", "definition", "penalty", "exception")
@@ -1027,7 +1058,7 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
 # "Rule laws" read as alice-lol `rule_law` hashes it; scripts/rule_law_ids.py records the values.
 LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
 LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1",
-             "statute": b"lol.law.statute/v1"}
+             "statute": b"lol.law.statute/v1", "procedure": b"lol.law.procedure/v1"}
 
 
 class _LawId:
@@ -1159,7 +1190,7 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
     h = _hash_consts(h, law)
     if law.get("currencies") is not None:
         h = h.text("currencies").ident(law["currencies"])
-    if kind == "machine":
+    if kind in ("machine", "procedure"):
         h = h.text("modes").u32(int(law["modes"] is not None))
         for m in law["modes"] or []:
             h = h.text(m)
@@ -1214,7 +1245,7 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
 def respond(law, inputs, bug=None):
     """The answer to a request whose `inputs` is the given object (None: no inputs key)"""
     inputs = {} if inputs is None else inputs
-    return {"machine": _machine_step, "predicate": _predicate_answer,
+    return {"machine": _machine_step, "procedure": _machine_step, "predicate": _predicate_answer,
             "table": _table_answer, "statute": _statute_answer}[law["kind"]](law, inputs, bug)
 
 
@@ -1397,7 +1428,7 @@ def _vec(name, inputs, note, answer):
 
 def vectors(law, name):
     """The conformance vectors of a rule law: every answer is computed by `respond`"""
-    return {"machine": _machine_vectors, "predicate": _predicate_vectors,
+    return {"machine": _machine_vectors, "procedure": _machine_vectors, "predicate": _predicate_vectors,
             "table": _table_vectors, "statute": _statute_vectors}[law["kind"]](law, name)
 
 
@@ -1817,7 +1848,7 @@ def coverage(law, vecs):
     """What a corpus must contain for a rule law: the names of the missing items"""
     answered = [v for v in vecs if v["kind"] == "exact"]
     missing = []
-    if law["kind"] == "machine":
+    if law["kind"] in ("machine", "procedure"):
         for mode in law["modes"] or [None]:
             for state in law["states"]:
                 for event, guards in law["events"].items():

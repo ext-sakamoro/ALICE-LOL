@@ -64,7 +64,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 |------|---------|
 | `law <name>` | the law name |
 | `kind research` / `kind audit` | a quantitative law, or an audit of measurements |
-| `kind machine` / `kind predicate` / `kind table` / `kind statute` | a state machine, a predicate over typed inputs, a table of rows tried in order, or the clauses of a statute (see "Rule laws" below) |
+| `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` | a state machine, a predicate over typed inputs, a table of rows tried in order, the clauses of a statute, or the steps of an administrative procedure (see "Rule laws" below) |
 | `claim <text>` | what the law states, in words |
 | `input <name> <unit> [range <lo> <hi>]` | an input. With `range`, the law applies only for `lo <= value <= hi`. Any other value is rejected. |
 | `param <name> <value> <uncertainty> <unit>` | a named constant |
@@ -206,7 +206,7 @@ Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" o
 
 ## Rule laws
 
-A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`), a **predicate** over typed inputs (`kind predicate`) a **table** whose first holding row gives the answer (`kind table`), or the clauses of a **statute** (`kind statute`). Its answer is exact: every output is text, `true` / `false`, `null` or a list of texts, and it is compared exactly.
+A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`), a **predicate** over typed inputs (`kind predicate`) a **table** whose first holding row gives the answer (`kind table`), the clauses of a **statute** (`kind statute`), or the steps of an administrative **procedure** (`kind procedure`). Its answer is exact: every output is text, `true` / `false`, `null` or a list of texts, and it is compared exactly.
 
 ### Reading a rule law file
 
@@ -335,6 +335,16 @@ A statute law has no `x-input`, `const` or `currencies` line.
 
 **Output:** `{"outputs": {"in_force": ["<label>", ...]}}`: the labels of the clauses in force at `at` (the start is at or before `at` and the end, if any, is after it), in file order. A time before 1970 is a time: no clause is in force then. A statute never rejects a request whose `at` is a time.
 
+### Procedure (`kind procedure`)
+
+A procedure law is a state machine (its lines, request and answer are those of "State machine" above) over the steps of an administrative procedure. Its states are statuses of a procedure, its events are kinds of step, and the status a step leads to is fixed:
+
+- the states are among `pending`, `in_progress`, `approved`, `rejected`, `completed`, and the initial state is `pending`;
+- the events are among `application`, `review`, `approval`, `rejection`, `amendment`, `notification`, `completion`;
+- every `on <event> from <state>... to <state>` line goes, from each of its states, where a step of that kind leads: an `approval` to `approved`, a `rejection` to `rejected`, a `completion` to `completed`, and any other step from `pending` to `in_progress` and from any other status to that status.
+
+A file that breaks one of these does not read. The law decides which steps may come in which status (a step with no `on` line for the status is refused); it never decides where a step leads. A procedure law has no `currencies` line.
+
 ### Editions of a rule set (`domain` / `edition`)
 
 A rule law may be one edition of a rule set (a domain such as `legal` or `tax`): the rules in force for a period. Such a file has the five lines below, each exactly once; a file has all five or none of them. They are read before the lines of the kind, in any position of the file, and they are not names of the law.
@@ -377,4 +387,4 @@ The checks do not decide these points, and no rule is given for them yet. A prog
 - **How the reported output of a simulation is linked to its states.** Which `x-state`, at which times (each step of `x-step fixed`, or the times of a list input), forms the `x-output`, when the law does not say it in words, is open.
 - **A rate of change that depends on time.** An `x-ode` expression that uses the time itself (not only the states and inputs) is not used by any law, and its meaning is open.
 - **Whether the closed form of a simulated law must be finite.** The program reports its simulation, and the closed form is the reference it is judged against. Whether a request is rejected when the closed form is not finite there but the simulation is, is open.
-- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit`, `kind machine`, `kind predicate`, `kind table` or `kind statute` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit and rule law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.
+- **Reading a quantitative law file of your own.** A law file of your own without the line `kind audit`, `kind machine`, `kind predicate`, `kind table`, `kind statute` or `kind procedure` is an unknown law (above: a request to it exits with status 2), so today a `reader` reads only the audit and rule law files it is given. What a `reader` would have to read from a quantitative law file of its own, if the checks gave it one (its units, which no rule checks; its `x-` lines; its expressions), is open.
