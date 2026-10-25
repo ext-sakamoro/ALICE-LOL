@@ -286,5 +286,50 @@ class Corpus(unittest.TestCase):
         self.assertEqual(failed, {None, "shape", "tag", "fresh", "current"})
 
 
+SEM = {"rule": bytes(32), "table": bytes(32)}
+RATE = ("kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n")
+HEADER = ("domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
+          "semantics " + "00" * 32 + "\n")
+
+
+class Editions(unittest.TestCase):
+    """conformance/TASK.md "Editions of a rule set": the five header lines"""
+
+    def test_an_edition_reads_and_answers_as_the_file_without_its_header(self):
+        e = R.parse(HEADER + RATE)
+        self.assertEqual(e["edition"], {"domain": "demo-tax", "name": "y2025", "supersedes": None,
+                                        "from": 1735689600, "until": 1767225600, "semantics": bytes(32)})
+        plain = R.parse(RATE)
+        self.assertIsNone(plain["edition"])
+        for n in (3, 11):
+            self.assertEqual(R.respond(e, {"n": n}), R.respond(plain, {"n": n}))
+
+    def test_the_header_is_part_of_the_identity(self):
+        base = R.law_id(R.parse(HEADER + RATE, SEM), SEM)
+        self.assertNotEqual(base, R.law_id(R.parse(RATE, SEM), SEM))
+        for old, new in (("y2025", "y2026"), ("demo-tax", "demo-vat"), ("until 1767225600", "until 1767225601"),
+                         ("until 1767225600", ""), ("supersedes first", "supersedes " + "ab" * 32)):
+            self.assertNotEqual(base, R.law_id(R.parse((HEADER + RATE).replace(old, new), SEM), SEM), new)
+        # layout and position of the header lines are not
+        moved = RATE.replace("kind table\n", "kind table\n" + HEADER.replace("edition", "edition ", 1))
+        self.assertEqual(base, R.law_id(R.parse(moved, SEM), SEM))
+
+    def test_header_files_that_do_not_read(self):
+        bad = [
+            HEADER.replace("domain demo-tax\n", ""),                       # four of the five
+            HEADER + "edition again\n",                                       # twice
+            HEADER.replace("demo-tax", "Demo"),                               # not the alphabet
+            HEADER.replace("supersedes first", "supersedes " + "AB" * 32),   # upper-case hex
+            HEADER.replace("supersedes first", "supersedes 1234"),            # not 64 digits
+            HEADER.replace("until 1767225600", "until 1735689600"),           # not after the start
+            HEADER.replace("effective 1735689600", "effective 01735689600"),  # not an integer literal
+            HEADER.replace("1767225600", str(2 ** 53)),                        # above 2^53 - 1
+            HEADER.replace("semantics " + "00" * 32, "semantics " + "11" * 32),  # another generation
+        ]
+        for text in bad:
+            with self.assertRaises(R.RuleError, msg=text):
+                R.parse(text + RATE, SEM)
+
+
 if __name__ == "__main__":
     unittest.main()

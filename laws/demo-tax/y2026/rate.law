@@ -1,0 +1,12 @@
+law demo-tax rate, 2026 edition
+claim a fixture rule set: the 2026 edition raises the bound of the reduced class
+domain demo-tax
+edition y2026
+supersedes 3634bd55a7e53340a3701cd3020518afc8bffe2fc4322c9c5debc0aea8e6c50e
+effective 1767225600
+semantics ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
+kind table
+x-input amount integer
+value reduced standard
+row small: reduced when amount <= 120000
+otherwise standard

@@ -313,12 +313,67 @@ def _const(ty, lit):
 
 # ------------------------------------------------------------------ reading
 
-def parse(text: str) -> dict:
+HEADER = ("domain", "edition", "supersedes", "effective", "semantics")
+EDITION_NAME = re.compile(r"[a-z][a-z0-9_-]*\Z")
+ID_HEX = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _time_literal(tok, n):
+    if not re.fullmatch(r"0|[1-9][0-9]*", tok) or int(tok) > MAX_INT:
+        raise RuleError(f"line {n}: `{tok}` is not a time (an integer literal, at most 2^53 - 1)")
+    return int(tok)
+
+
+def _edition(lines, semantics, kind):
+    """The five header lines (TASK.md "Editions of a rule set"): (edition or None, the other lines)"""
+    found, rest = {}, []
+    for n, ln in lines:
+        w = ln.split()
+        if w[0] not in HEADER:
+            rest.append((n, ln))
+            continue
+        if w[0] in found:
+            raise RuleError(f"line {n}: a second `{w[0]}` line")
+        found[w[0]] = (n, w[1:])
+    if not found:
+        return None, rest
+    missing = [h for h in HEADER if h not in found]
+    if missing:
+        raise RuleError(f"an edition has all five header lines; `{missing[0]}` is missing")
+    ed = {}
+    for key in ("domain", "edition"):
+        n, w = found[key]
+        if len(w) != 1 or not EDITION_NAME.match(w[0]):
+            raise RuleError(f"line {n}: `{key} <name>` (a lower-case letter, then lower-case letters, digits, `_`, `-`)")
+        ed["domain" if key == "domain" else "name"] = w[0]
+    n, w = found["supersedes"]
+    if len(w) != 1 or not (w[0] == "first" or ID_HEX.match(w[0])):
+        raise RuleError(f"line {n}: `supersedes first` or `supersedes <64 lower-case hex>`")
+    ed["supersedes"] = None if w[0] == "first" else bytes.fromhex(w[0])
+    n, w = found["effective"]
+    if len(w) not in (1, 3) or (len(w) == 3 and w[1] != "until"):
+        raise RuleError(f"line {n}: `effective <time>` or `effective <time> until <time>`")
+    ed["from"] = _time_literal(w[0], n)
+    ed["until"] = _time_literal(w[2], n) if len(w) == 3 else None
+    if ed["until"] is not None and ed["until"] <= ed["from"]:
+        raise RuleError(f"line {n}: `until` is not after the start")
+    n, w = found["semantics"]
+    if len(w) != 1 or not ID_HEX.match(w[0]):
+        raise RuleError(f"line {n}: `semantics <64 lower-case hex>`")
+    ed["semantics"] = bytes.fromhex(w[0])
+    if semantics is not None and ed["semantics"] != semantics["table" if kind == "table" else "rule"]:
+        raise RuleError(f"line {n}: written against the semantics {w[0]}, which this reader does not evaluate")
+    return ed, rest
+
+
+def parse(text: str, semantics: dict[str, bytes] | None = None) -> dict:
+    """A rule law; `semantics` ("rule" / "table" -> identifier), when given, is what this reader
+    evaluates, and an edition written against another semantics does not read"""
     kind = rule_kind(text)
     if kind is None:
         raise RuleError("not a rule law")
     law = {"kind": kind, "consts": {}, "names": set(), "uses": set()}
-    lines = _lines(text)
+    law["edition"], lines = _edition(_lines(text), semantics, kind)
     kinds = [n for n, ln in lines if ln.split()[0] == "kind"]
     if len(kinds) != 1:
         raise RuleError("a rule law file has exactly one `kind` line")
@@ -622,7 +677,7 @@ def _table(law, lines, declare):
 
 # The law identifier v2 of ALICE-Zip (`alice_zip::law_id`), written here from its layout and not
 # from the Rust code: SHA-256 over len(domain) domain len(kind) kind semantics, then each value
-# with a one-byte tag (0x01 bytes, 0x02 u32, 0x03 u64, 0x05 str), every length and integer a
+# with a one-byte tag (0x01 bytes, 0x02 u32, 0x03 u64, 0x05 str, 0x06 id), every length and integer a
 # big-endian u64 / u32. What a rule law hashes, and in which order, is conformance/TASK.md's
 # "Rule laws" read as alice-lol `rule_law` hashes it; scripts/rule_law_ids.py records the values.
 LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
@@ -653,6 +708,12 @@ class _LawId:
 
     def u64(self, v: int) -> "_LawId":
         self._h.update(b"\x03" + v.to_bytes(8, "big"))
+        return self
+
+    def ident(self, v: bytes) -> "_LawId":
+        if len(v) != 32:
+            raise ValueError("an identifier is 32 bytes")
+        self._h.update(b"\x06" + v)
         return self
 
     def text(self, t: str) -> "_LawId":
@@ -726,7 +787,17 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
     """The v2 identifier of a parsed rule law; `semantics` maps "rule" and "table" to the
     semantics identifiers the laws are evaluated under"""
     kind = law["kind"]
-    h = _hash_consts(_LawId(LAW_KINDS[kind], semantics["table" if kind == "table" else "rule"]), law)
+    ed = law.get("edition")
+    tag = LAW_KINDS[kind] if ed is None else f"lol.law.{ed['domain']}.{kind}/v1".encode()
+    h = _LawId(tag, semantics["table" if kind == "table" else "rule"])
+    if ed is not None:
+        h = h.text("edition").text(ed["name"]).u32(int(ed["supersedes"] is not None))
+        if ed["supersedes"] is not None:
+            h = h.ident(ed["supersedes"])
+        h = h.u64(ed["from"]).u32(int(ed["until"] is not None))
+        if ed["until"] is not None:
+            h = h.u64(ed["until"])
+    h = _hash_consts(h, law)
     if kind == "machine":
         h = h.text("modes").u32(int(law["modes"] is not None))
         for m in law["modes"] or []:

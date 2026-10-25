@@ -315,6 +315,20 @@ A table law has at least one `row` line. Every value of the `value` line is give
 
 **Output:** `{"outputs": {"value": "<value>", "row": "<label>"}}`, or `{"outputs": {"value": "<value>", "row": null}}` when no row holds. A table never rejects a request whose inputs have their types.
 
+### Editions of a rule set (`domain` / `edition`)
+
+A rule law may be one edition of a rule set (a domain such as `legal` or `tax`): the rules in force for a period. Such a file has the five lines below, each exactly once; a file has all five or none of them. They are read before the lines of the kind, in any position of the file, and they are not names of the law.
+
+| line | meaning |
+|------|---------|
+| `domain <name>` | the rule set: a lower-case ASCII letter followed by lower-case letters, digits, `_` and `-` |
+| `edition <name>` | this edition's name in its domain (the same alphabet) |
+| `supersedes first` or `supersedes <id>` | the law identifier of the edition this one replaces (64 lower-case hex digits), or `first` for the first edition of the domain |
+| `effective <time>` or `effective <time> until <time>` | the edition is in force from the first time (inclusive) to the second (exclusive); a time is an integer literal as above (seconds since 1970-01-01 00:00:00 UTC, at most 2^53 - 1), and the second is after the first |
+| `semantics <id>` | the semantics identifier the edition was written against (64 lower-case hex digits). A reader reads the file only when it evaluates that semantics; otherwise the file is unreadable and a request to it is an error of the request |
+
+The five lines do not change the answer to a request: a rule law answers as the same file without them. They are part of the law's identity (an edition with another period or another predecessor is another law).
+
 ## Not specified (do not rely on it)
 
 The checks do not decide these points, and no rule is given for them yet. A program may answer them in any way, and nothing here is scored on them; a program that reads law files when it runs (`reader`) should not depend on any particular answer.

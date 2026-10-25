@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The v2 identifiers of the rule laws under laws/, from scripts/law_rules.py (not from the Rust code).
+"""The v2 identifiers of the rule laws under laws/ (any depth), from scripts/law_rules.py (not from the Rust code).
 
 alice-lol's tests compare `rule_law_from_file(..).law_id()` with the values this writes to
 alice-lol/tests/data/rule_law_ids_v2.txt, so the expected values come from a second
@@ -42,11 +42,11 @@ def semantics(rust_src: str) -> dict[str, bytes]:
 
 def render(root: Path, sem: dict[str, bytes]) -> str:
     rows = []
-    for path in sorted(root.glob("laws/*/*.law")):
+    for path in sorted(root.glob("laws/**/*.law")):
         text = path.read_text(encoding="utf-8")
         if law_rules.rule_kind(text) is None:
             continue
-        law = law_rules.parse(text)
+        law = law_rules.parse(text, sem)
         rows.append(f"{path.relative_to(root).as_posix()} {law['kind']} {law_rules.law_id(law, sem).hex()}")
     if not rows:
         raise SystemExit("no rule law under laws/ (compared nothing)")

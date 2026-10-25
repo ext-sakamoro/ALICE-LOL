@@ -569,22 +569,22 @@ fn hex(b: [u8; 32]) -> String {
     })
 }
 
-/// The rule laws under `laws/<dir>/*.law`, as paths relative to the repository root
+/// The rule laws under `laws/` (any depth), as sorted paths relative to the repository root
 fn rule_laws_on_disk(root: &std::path::Path) -> Vec<String> {
-    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("laws"))
-        .expect("laws/")
-        .map(|e| e.expect("entry").path())
-        .filter(|d| d.is_dir())
-        .collect();
-    dirs.sort();
-    let mut out: Vec<String> = dirs
+    fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).expect("a directory under laws/") {
+            let p = e.expect("entry").path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "law") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&root.join("laws"), &mut files);
+    let mut out: Vec<String> = files
         .iter()
-        .flat_map(|d| {
-            std::fs::read_dir(d)
-                .expect("laws/<dir>")
-                .map(|e| e.expect("entry").path())
-        })
-        .filter(|f| f.extension().is_some_and(|e| e == "law"))
         .filter(|f| {
             let text = std::fs::read_to_string(f).expect("law file");
             alice_lol::rule_law::rule_kind(&text).is_some()
@@ -627,5 +627,96 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
         let text = std::fs::read_to_string(root.join(path)).expect("law file");
         let law = rule_law_from_file(&text).expect("reads");
         assert_eq!(hex(law.law_id()), *want, "{path} ({kind})");
+    }
+}
+
+// ------------------------------------------------------------------ editions (TASK.md "Editions of a rule set")
+
+const RATE: &str =
+    "kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n";
+
+fn rate_header() -> String {
+    format!(
+        "domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\nsemantics {}\n",
+        hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+    )
+}
+
+#[test]
+fn an_edition_reads_and_answers_as_the_file_without_its_header() {
+    let e = rule_law_from_file(&(rate_header() + RATE)).expect("reads");
+    let ed = e.edition().expect("an edition");
+    assert_eq!(
+        (
+            ed.domain(),
+            ed.name(),
+            ed.supersedes(),
+            ed.from(),
+            ed.until()
+        ),
+        (
+            "demo-tax",
+            "y2025",
+            None,
+            1_735_689_600,
+            Some(1_767_225_600)
+        )
+    );
+    assert_eq!(ed.semantics(), &alice_lol::rule_law::TABLE_SEMANTICS_ID);
+    let plain = rule_law_from_file(RATE).expect("reads");
+    assert!(plain.edition().is_none());
+    for n in [3, 11] {
+        let req = alice_lol::law_input::parse_json(&format!(r#"{{"n": {n}}}"#)).expect("json");
+        assert_eq!(e.respond(&req), plain.respond(&req), "n = {n}");
+    }
+}
+
+#[test]
+fn the_edition_header_is_part_of_the_identity() {
+    let id = |t: &str| rule_law_from_file(t).expect("reads").law_id();
+    let text = rate_header() + RATE;
+    let base = id(&text);
+    assert_ne!(base, id(RATE));
+    let other = "ab".repeat(32);
+    for (old, new) in [
+        ("y2025", "y2026"),
+        ("demo-tax", "demo-vat"),
+        ("until 1767225600", "until 1767225601"),
+        (" until 1767225600", ""),
+        ("supersedes first", &*format!("supersedes {other}")),
+    ] {
+        assert_ne!(base, id(&text.replace(old, new)), "{new}");
+    }
+    // the position and the spacing of the header lines are not
+    let moved = RATE.replace(
+        "kind table\n",
+        &format!(
+            "kind table\n{}",
+            rate_header().replace("edition", "edition ")
+        ),
+    );
+    assert_eq!(base, id(&moved));
+}
+
+#[test]
+fn edition_headers_that_do_not_read() {
+    let h = rate_header();
+    let sem = hex(alice_lol::rule_law::TABLE_SEMANTICS_ID);
+    let bad = [
+        h.replace("domain demo-tax\n", ""),
+        format!("{h}edition again\n"),
+        h.replace("demo-tax", "Demo"),
+        h.replace(
+            "supersedes first",
+            &format!("supersedes {}", "AB".repeat(32)),
+        ),
+        h.replace("supersedes first", "supersedes 1234"),
+        h.replace("until 1767225600", "until 1735689600"),
+        h.replace("effective 1735689600", "effective 01735689600"),
+        h.replace("1767225600", "9007199254740992"),
+        h.replace(&sem, &"11".repeat(32)),
+    ];
+    for b in bad {
+        assert!(rule_law_from_file(&(b.clone() + RATE)).is_err(), "{b}");
     }
 }

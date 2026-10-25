@@ -867,6 +867,209 @@ fn lines(text: &str) -> Result<Vec<(usize, &str)>, RuleLawError> {
     Ok(out)
 }
 
+/// Where a rule law stands in a rule set: its five header lines (conformance/TASK.md "Editions of a
+/// rule set"). The header does not change an answer; it is part of the law's identifier
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edition {
+    domain: String,
+    name: String,
+    supersedes: Option<[u8; 32]>,
+    from: u64,
+    until: Option<u64>,
+    semantics: [u8; 32],
+}
+
+impl Edition {
+    /// The rule set (`domain <name>`)
+    #[must_use]
+    pub fn domain(&self) -> &str {
+        &self.domain
+    }
+
+    /// This edition's name in its domain (`edition <name>`)
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The law identifier of the edition this one replaces; `None` for the first edition
+    #[must_use]
+    pub const fn supersedes(&self) -> Option<&[u8; 32]> {
+        self.supersedes.as_ref()
+    }
+
+    /// In force from this time (seconds since 1970-01-01 00:00:00 UTC, inclusive)
+    #[must_use]
+    pub const fn from(&self) -> u64 {
+        self.from
+    }
+
+    /// In force until this time (exclusive); `None` when the edition has no end
+    #[must_use]
+    pub const fn until(&self) -> Option<u64> {
+        self.until
+    }
+
+    /// The semantics identifier the edition was written against
+    #[must_use]
+    pub const fn semantics(&self) -> &[u8; 32] {
+        &self.semantics
+    }
+}
+
+/// The five header lines of an edition, in the order the reader reports a missing one
+const EDITION_HEADER: [&str; 5] = ["domain", "edition", "supersedes", "effective", "semantics"];
+
+fn is_edition_name(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.first().is_some_and(u8::is_ascii_lowercase)
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+}
+
+fn id_hex(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 {
+        return None;
+    }
+    hex_bytes(s)?.try_into().ok()
+}
+
+/// A time literal: an integer literal (no sign, no leading zero) of at most [`MAX_INTEGER`]
+fn time_literal(line: usize, s: &str) -> Result<u64, RuleLawError> {
+    let b = s.as_bytes();
+    let ok = !b.is_empty() && b.iter().all(u8::is_ascii_digit) && (b[0] != b'0' || b.len() == 1);
+    match s.parse::<u64>() {
+        Ok(v) if ok && v <= MAX_INTEGER.unsigned_abs() => Ok(v),
+        _ => Err(err(
+            line,
+            format!("`{s}` is not a time (an integer literal, at most 2^53 - 1)"),
+        )),
+    }
+}
+
+/// The lines of a law file that remain after the header: `(line number, text)`
+type Lines<'a> = Vec<(usize, &'a str)>;
+
+/// Splits the header lines off: the edition (or `None` when the file has none) and the other lines
+fn read_edition<'a>(
+    ls: &[(usize, &'a str)],
+    kind: RuleKind,
+) -> Result<(Option<Edition>, Lines<'a>), RuleLawError> {
+    let mut found: Vec<(&str, usize, Vec<&str>)> = Vec::new();
+    let mut rest = Vec::new();
+    for &(n, l) in ls {
+        let w: Vec<&str> = l.split_whitespace().collect();
+        if !EDITION_HEADER.contains(&w[0]) {
+            rest.push((n, l));
+            continue;
+        }
+        if found.iter().any(|(k, _, _)| *k == w[0]) {
+            return Err(err(n, format!("a second `{}` line", w[0])));
+        }
+        found.push((w[0], n, w[1..].to_vec()));
+    }
+    if found.is_empty() {
+        return Ok((None, rest));
+    }
+    let get = |key: &str| found.iter().find(|(k, _, _)| *k == key);
+    if let Some(missing) = EDITION_HEADER.iter().find(|k| get(k).is_none()) {
+        return Err(err(
+            0,
+            format!("an edition has all five header lines; `{missing}` is missing"),
+        ));
+    }
+    let line = |key: &str| get(key).map_or((0, &[][..]), |(_, n, w)| (*n, w.as_slice()));
+    let name = |key: &str| -> Result<String, RuleLawError> {
+        match line(key) {
+            (_, [v]) if is_edition_name(v) => Ok((*v).to_owned()),
+            (n, _) => Err(err(
+                n,
+                format!("`{key} <name>` (a lower-case letter, then lower-case letters, digits, `_`, `-`)"),
+            )),
+        }
+    };
+    let (domain, name) = (name("domain")?, name("edition")?);
+    let supersedes = match line("supersedes") {
+        (_, ["first"]) => None,
+        (n, [v]) => Some(
+            id_hex(v)
+                .ok_or_else(|| err(n, "`supersedes first` or `supersedes <64 lower-case hex>`"))?,
+        ),
+        (n, _) => {
+            return Err(err(
+                n,
+                "`supersedes first` or `supersedes <64 lower-case hex>`",
+            ))
+        }
+    };
+    let (from, until) = match line("effective") {
+        (n, [a]) => (time_literal(n, a)?, None),
+        (n, [a, "until", b]) => {
+            let (a, b) = (time_literal(n, a)?, time_literal(n, b)?);
+            if b <= a {
+                return Err(err(n, "`until` is not after the start"));
+            }
+            (a, Some(b))
+        }
+        (n, _) => {
+            return Err(err(
+                n,
+                "`effective <time>` or `effective <time> until <time>`",
+            ))
+        }
+    };
+    let semantics = match line("semantics") {
+        (n, [v]) => id_hex(v).ok_or_else(|| err(n, "`semantics <64 lower-case hex>`"))?,
+        (n, _) => return Err(err(n, "`semantics <64 lower-case hex>`")),
+    };
+    let evaluated = if kind == RuleKind::Table {
+        TABLE_SEMANTICS_ID
+    } else {
+        RULE_SEMANTICS_ID
+    };
+    if semantics != evaluated {
+        return Err(err(
+            line("semantics").0,
+            "written against a semantics this reader does not evaluate",
+        ));
+    }
+    let edition = Edition {
+        domain,
+        name,
+        supersedes,
+        from,
+        until,
+        semantics,
+    };
+    Ok((Some(edition), rest))
+}
+
+/// The start of a rule law's identifier: the kind tag (a domain's own tag for an edition) and the
+/// semantics, then the edition's name, predecessor and period
+fn law_id_start(
+    kind_tag: &[u8],
+    kind: &str,
+    semantics: &[u8; 32],
+    edition: Option<&Edition>,
+) -> LawIdHasher {
+    let Some(e) = edition else {
+        return LawIdHasher::new(kind_tag, semantics);
+    };
+    let tag = format!("lol.law.{}.{kind}/v1", e.domain);
+    let mut h = LawIdHasher::new(tag.as_bytes(), semantics)
+        .str("edition")
+        .str(&e.name)
+        .u32(u32::from(e.supersedes.is_some()));
+    if let Some(p) = &e.supersedes {
+        h = h.id(p);
+    }
+    h = h.u64(e.from).u32(u32::from(e.until.is_some()));
+    if let Some(u) = e.until {
+        h = h.u64(u);
+    }
+    h
+}
+
 /// A rule law, read from its file
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleLaw {
@@ -881,6 +1084,7 @@ pub enum RuleLaw {
 /// A state machine law
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MachineLaw {
+    edition: Option<Edition>,
     consts: Vec<(String, Ty, Value)>,
     modes: Option<Vec<String>>,
     states: Vec<String>,
@@ -906,6 +1110,7 @@ enum BindAs {
 /// A predicate law
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PredicateLaw {
+    edition: Option<Edition>,
     consts: Vec<(String, Ty, Value)>,
     uses_hmac: bool,
     inputs: Vec<(String, Ty)>,
@@ -916,6 +1121,7 @@ pub struct PredicateLaw {
 /// A table law: rows tried in file order
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TableLaw {
+    edition: Option<Edition>,
     consts: Vec<(String, Ty, Value)>,
     inputs: Vec<(String, Ty)>,
     values: Vec<String>,
@@ -986,11 +1192,21 @@ pub fn rule_law_from_file(text: &str) -> Result<RuleLaw, RuleLawError> {
     if kinds != 1 {
         return Err(err(0, "a rule law file has exactly one `kind` line"));
     }
-    match kind {
-        RuleKind::Machine => read_machine(&ls).map(RuleLaw::Machine),
-        RuleKind::Predicate => read_predicate(&ls).map(RuleLaw::Predicate),
-        RuleKind::Table => read_table(&ls).map(RuleLaw::Table),
-    }
+    let (edition, ls) = read_edition(&ls, kind)?;
+    Ok(match kind {
+        RuleKind::Machine => RuleLaw::Machine(MachineLaw {
+            edition,
+            ..read_machine(&ls)?
+        }),
+        RuleKind::Predicate => RuleLaw::Predicate(PredicateLaw {
+            edition,
+            ..read_predicate(&ls)?
+        }),
+        RuleKind::Table => RuleLaw::Table(TableLaw {
+            edition,
+            ..read_table(&ls)?
+        }),
+    })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1122,6 +1338,7 @@ fn read_machine(ls: &[(usize, &str)]) -> Result<MachineLaw, RuleLawError> {
         return Err(err(0, "a machine law has at least one `on` line"));
     }
     Ok(MachineLaw {
+        edition: None,
         consts,
         modes,
         states,
@@ -1327,6 +1544,7 @@ fn read_predicate(ls: &[(usize, &str)]) -> Result<PredicateLaw, RuleLawError> {
         ));
     }
     let law = PredicateLaw {
+        edition: None,
         consts,
         uses_hmac,
         inputs,
@@ -1456,6 +1674,7 @@ fn read_table(ls: &[(usize, &str)]) -> Result<TableLaw, RuleLawError> {
         return Err(err(0, format!("value `{unused}` is given by no row")));
     }
     Ok(TableLaw {
+        edition: None,
         consts,
         inputs,
         values,
@@ -1493,6 +1712,16 @@ impl RuleLaw {
             Self::Machine(_) => RuleKind::Machine,
             Self::Predicate(_) => RuleKind::Predicate,
             Self::Table(_) => RuleKind::Table,
+        }
+    }
+
+    /// The edition this law is in its rule set; `None` when the file has no edition header
+    #[must_use]
+    pub const fn edition(&self) -> Option<&Edition> {
+        match self {
+            Self::Machine(m) => m.edition.as_ref(),
+            Self::Predicate(p) => p.edition.as_ref(),
+            Self::Table(t) => t.edition.as_ref(),
         }
     }
 
@@ -1584,7 +1813,12 @@ impl MachineLaw {
 
     fn law_id(&self) -> [u8; 32] {
         let mut h = hash_consts(
-            LawIdHasher::new(MACHINE_LAW_KIND, &RULE_SEMANTICS_ID),
+            law_id_start(
+                MACHINE_LAW_KIND,
+                "machine",
+                &RULE_SEMANTICS_ID,
+                self.edition.as_ref(),
+            ),
             &self.consts,
         );
         h = h.str("modes").u32(u32::from(self.modes.is_some()));
@@ -1833,7 +2067,12 @@ impl PredicateLaw {
 
     fn law_id(&self) -> [u8; 32] {
         let mut h = hash_consts(
-            LawIdHasher::new(PREDICATE_LAW_KIND, &RULE_SEMANTICS_ID),
+            law_id_start(
+                PREDICATE_LAW_KIND,
+                "predicate",
+                &RULE_SEMANTICS_ID,
+                self.edition.as_ref(),
+            ),
             &self.consts,
         );
         h = h.str("use hmac_sha256").u32(u32::from(self.uses_hmac));
@@ -1888,7 +2127,12 @@ impl TableLaw {
 
     fn law_id(&self) -> [u8; 32] {
         let mut h = hash_consts(
-            LawIdHasher::new(TABLE_LAW_KIND, &TABLE_SEMANTICS_ID),
+            law_id_start(
+                TABLE_LAW_KIND,
+                "table",
+                &TABLE_SEMANTICS_ID,
+                self.edition.as_ref(),
+            ),
             &self.consts,
         );
         h = hash_inputs(h, &self.inputs);
