@@ -58,7 +58,53 @@ reason = "reads a law file a person or a model writes; its audit block goes thro
 [[entry]]
 path = "alice_lol::rule_law::rule_law_from_file"
 class = "authoring"
-reason = "reads a rule law file a person or a model writes (conformance/TASK.md Rule laws); the law-file layout has no identifier wrapper, so a semantics line is refused as an unknown line, and the rule's identifier is law_id under RULE_SEMANTICS_ID"
+reason = "reads a rule law file a person or a model writes (conformance/TASK.md Rule laws); an edition's header names the semantics it was written against and the file does not read under another (compared when present), and the rule's identifier is law_id under its kind's semantics"
+
+[[entry]]
+path = "alice_lol::rule_law::rule_law_from_file_with"
+class = "authoring"
+reason = "the same as rule_law_from_file for a law with money: the currency table it is given must be the one its currencies line names by identifier (compared)"
+
+[[entry]]
+path = "alice_lol::rule_law::edition_text"
+class = "authoring"
+reason = "the resolved text of an edition file a person writes; it reads the file as rule_law_from_file does (the header's semantics compared)"
+
+[[entry]]
+path = "alice_lol::rule_law::edition_text_with"
+class = "authoring"
+reason = "edition_text for a law with money, with the currency table its currencies line names (compared)"
+
+[[entry]]
+path = "alice_lol::rule_law::resolve_delta"
+class = "authoring"
+reason = "resolves a delta a person writes over the edition it supersedes: the delta names that edition's identifier and the semantics, both compared, and the result reads as rule_law_from_file does"
+
+[[entry]]
+path = "alice_lol::rule_law::resolve_delta_with"
+class = "authoring"
+reason = "resolve_delta for a rule set with money, with the currency table the editions name (compared)"
+
+[[entry]]
+path = "alice_lol::rule_law::RuleSet::from_files"
+class = "authoring"
+reason = "loads the edition files of one rule set a person writes: each delta names the edition it supersedes by identifier (compared) and every edition reads as rule_law_from_file does"
+
+[[entry]]
+path = "alice_lol::rule_law::RuleSet::from_files_with"
+class = "authoring"
+reason = "RuleSet::from_files for a rule set with money, every edition read with the currency table it names (compared)"
+
+[[entry]]
+path = "alice_lol::rule_law::RuleSet::evaluate_edition"
+class = "exchange"
+reason = "answers with the edition an identifier another program stored names: the identifier is required and compared, and one that names no edition is an error, never another edition"
+test = "alice-lol/tests/rule_law_oracle.rs::an_identifier_of_no_edition_is_an_error_not_another_edition"
+
+[[entry]]
+path = "alice_lol::rule_law::next_status"
+class = "local"
+reason = "the status a step kind leads to, a fixed table of words; it carries no Law-bearing value of another crate"
 
 [[entry]]
 path = "alice_lol::rule_law::rule_kind"

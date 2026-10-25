@@ -1505,3 +1505,20 @@ fn an_edition_of_a_table_with_money_names_the_money_table_semantics() {
     assert!(rule_law_from_file_with(&text(MONEY_TABLE_SEMANTICS_ID), Some(&table)).is_ok());
     assert!(rule_law_from_file_with(&text(TABLE_SEMANTICS_ID), Some(&table)).is_err());
 }
+
+#[test]
+fn an_identifier_of_no_edition_is_an_error_not_another_edition() {
+    let set = rule_set("demo-tax");
+    let req = json(r#"{"amount": 110000}"#);
+    for id in set.law_ids() {
+        assert!(set.evaluate_edition(&id, &req).is_ok());
+        for bit in [0, 7, 255] {
+            let mut other = id;
+            other[bit / 8] ^= 1 << (bit % 8);
+            assert!(
+                set.evaluate_edition(&other, &req).is_err(),
+                "an identifier one bit off an edition's names no edition"
+            );
+        }
+    }
+}
