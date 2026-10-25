@@ -788,6 +788,10 @@ jobs:
         run: python scripts/law_ambiguity_lint.py laws/spike
       - name: law_rules oracle (規則の Law の読み・答え・corpus・被覆の試験)
         run: python scripts/test_law_rules.py
+      - name: rule_law_ids oracle (規則の Law の識別子 v2 を独立実装で計算する検査器自身の試験)
+        run: python scripts/rule_law_ids.py --self-test
+      - name: rule_law_ids (laws/ の規則の Law の識別子 v2 が tests/data の記録と一致、0 件は fail)
+        run: python scripts/rule_law_ids.py --check
       - name: law_schema oracle (x-input の型の構文と照合の試験)
         run: python scripts/test_law_schema.py
       - name: law_schema (laws/spike の全 x-input の型を読む、0 件は fail)

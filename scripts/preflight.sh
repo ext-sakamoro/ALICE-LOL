@@ -224,6 +224,8 @@ python3 scripts/test_law_ambiguity_lint.py
 python3 scripts/law_ambiguity_lint.py laws/spike
 step "ci.yml / docs: law_schema (oracle + every x-input type) and probes"
 python3 scripts/test_law_rules.py
+python3 scripts/rule_law_ids.py --self-test
+python3 scripts/rule_law_ids.py --check
 python3 scripts/test_law_schema.py
 python3 scripts/law_schema.py laws/spike
 # the reference implementation needs mpmath (correctly rounded elementary functions):

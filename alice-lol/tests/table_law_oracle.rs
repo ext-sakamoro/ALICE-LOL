@@ -194,19 +194,3 @@ fn the_table_semantics_are_their_own_and_measured() {
         TABLE_SEMANTICS_ID
     );
 }
-
-/// The identifier of `laws/spike/power_mode.law`, recorded when the table kind was added
-const POWER_MODE_ID: &str = "2677511dcf1ef0ba7beea819ea6df7fd2b4a841a714e0e5edcd69932a1bdc7cd";
-
-#[test]
-fn the_power_table_keeps_its_identifier() {
-    let id = rule_law_from_file(&spike("power_mode"))
-        .expect("reads")
-        .law_id();
-    let hex = id.iter().fold(String::new(), |mut s, x| {
-        use std::fmt::Write as _;
-        let _ = write!(s, "{x:02x}");
-        s
-    });
-    assert_eq!(hex, POWER_MODE_ID);
-}

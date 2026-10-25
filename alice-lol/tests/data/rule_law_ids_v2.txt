@@ -1,0 +1,9 @@
+# v2 identifiers of the rule laws under laws/ (alice_zip::law_id layout), written by
+# scripts/rule_law_ids.py from scripts/law_rules.py: do not edit
+semantics rule a1008789ce5000d7c259234df49065b9201427155956eb8de2e7b771730d5f2c
+semantics table ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
+laws/spike/consent_choice.law machine beb1347e9e75a3e6f04f309d584e1e6545c5f008c6cd39d2e6be186307fe4af9
+laws/spike/display_name_valid.law predicate 09961fa6cab91913fd4fe700c5bd34da8914676c3749d0b7fc7bbf55c4d8652c
+laws/spike/power_mode.law table 25b9d4d060ad4046e19a4ef89a41eb27915b56b927635b2f27f3f5db2f28f099
+laws/spike/session_cookie_valid.law predicate b792bd1653721aa9a1cbc9d1e82ef5f1f1633eb6b188e4b999d3e6fb8e9bae22
+laws/spike/turnstile_override.law machine 098d33d25326c6446ace58119971afc565d1dc9485f248a4007fc65f729a4565

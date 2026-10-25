@@ -527,44 +527,105 @@ fn the_rule_semantics_are_their_own_and_measured() {
     );
 }
 
-/// The identifiers of the rule laws of `laws/spike`, recorded when the rule kinds were added
-/// (a change of the rule, of its encoding or of [`RULE_SEMANTICS_ID`] moves them)
-const SPIKE_IDS: &[(&str, &str)] = &[
-    (
-        "consent_choice",
-        "6c399782ba49f09dfd8f67ef4e0e1008d104c002850d3e2298014897f8371380",
-    ),
-    (
-        "display_name_valid",
-        "48832a1e84930b3ea43678016ac50c398c2a139a12111a1ed0cdec37e3060121",
-    ),
-    (
-        "session_cookie_valid",
-        "910089651f52f2488371f9bb4b6531a0a49b0e27fe7786e3be277cce337ac9bf",
-    ),
-    (
-        "turnstile_override",
-        "2b44332d7a08df9fd5523d890329f41877ddd4ff293ee68baca945322294b39c",
-    ),
-];
+/// The v2 identifiers of the rule laws under `laws/`, as `scripts/rule_law_ids.py` writes them from
+/// the second implementation (`scripts/law_rules.py`): `(path, kind, hex id)`, and the semantics
+/// identifiers the file was written under
+/// `(path, kind, hex id)` rows and `(kind, hex semantics)` rows of the recorded file
+type Recorded = (Vec<(String, String, String)>, Vec<(String, String)>);
+
+fn recorded_ids() -> Recorded {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/rule_law_ids_v2.txt");
+    let text = std::fs::read_to_string(p).expect("tests/data/rule_law_ids_v2.txt");
+    let rows: Vec<Vec<&str>> = text
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .map(|l| l.split_whitespace().collect())
+        .collect();
+    let sem = rows
+        .iter()
+        .filter(|w| w.len() == 3 && w[0] == "semantics")
+        .map(|w| (w[1].to_owned(), w[2].to_owned()))
+        .collect();
+    let ids = rows
+        .iter()
+        .filter(|w| w[0] != "semantics")
+        .map(|w| {
+            assert_eq!(
+                w.len(),
+                3,
+                "rule_law_ids_v2.txt: not `<path> <kind> <id>`: {w:?}"
+            );
+            (w[0].to_owned(), w[1].to_owned(), w[2].to_owned())
+        })
+        .collect();
+    (ids, sem)
+}
+
+fn hex(b: [u8; 32]) -> String {
+    b.iter().fold(String::new(), |mut s, x| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{x:02x}");
+        s
+    })
+}
+
+/// The rule laws under `laws/<dir>/*.law`, as paths relative to the repository root
+fn rule_laws_on_disk(root: &std::path::Path) -> Vec<String> {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root.join("laws"))
+        .expect("laws/")
+        .map(|e| e.expect("entry").path())
+        .filter(|d| d.is_dir())
+        .collect();
+    dirs.sort();
+    let mut out: Vec<String> = dirs
+        .iter()
+        .flat_map(|d| {
+            std::fs::read_dir(d)
+                .expect("laws/<dir>")
+                .map(|e| e.expect("entry").path())
+        })
+        .filter(|f| f.extension().is_some_and(|e| e == "law"))
+        .filter(|f| {
+            let text = std::fs::read_to_string(f).expect("law file");
+            alice_lol::rule_law::rule_kind(&text).is_some()
+        })
+        .map(|f| {
+            f.strip_prefix(root)
+                .expect("under the root")
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
+    out.sort();
+    out
+}
 
 #[test]
-fn the_spike_rule_laws_keep_their_identifiers() {
-    let hex = |b: [u8; 32]| {
-        b.iter().fold(String::new(), |mut s, x| {
-            use std::fmt::Write as _;
-            let _ = write!(s, "{x:02x}");
-            s
-        })
-    };
-    let got: Vec<String> = SPIKE_IDS
-        .iter()
-        .map(|(name, _)| hex(rule_law_from_file(&spike(name)).expect("reads").law_id()))
-        .collect();
-    for ((name, _), got) in SPIKE_IDS.iter().zip(&got) {
-        println!("ID {name} {got}");
-    }
-    for ((name, want), got) in SPIKE_IDS.iter().zip(&got) {
-        assert_eq!(got, want, "{name}");
+fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
+    let (ids, sem) = recorded_ids();
+    assert_eq!(
+        sem,
+        vec![
+            ("rule".to_owned(), hex(RULE_SEMANTICS_ID)),
+            (
+                "table".to_owned(),
+                hex(alice_lol::rule_law::TABLE_SEMANTICS_ID)
+            ),
+        ],
+        "the file was written under other semantics identifiers: run scripts/rule_law_ids.py"
+    );
+    // every rule law under laws/ is listed, so a new one cannot go unchecked
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let listed: Vec<String> = ids.iter().map(|(p, _, _)| p.clone()).collect();
+    assert_eq!(
+        listed,
+        rule_laws_on_disk(&root),
+        "run scripts/rule_law_ids.py"
+    );
+    assert!(ids.len() >= 5, "compared {} rule laws", ids.len());
+    for (path, kind, want) in &ids {
+        let text = std::fs::read_to_string(root.join(path)).expect("law file");
+        let law = rule_law_from_file(&text).expect("reads");
+        assert_eq!(hex(law.law_id()), *want, "{path} ({kind})");
     }
 }

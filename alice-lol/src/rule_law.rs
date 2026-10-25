@@ -15,7 +15,10 @@
 //! [`RuleLaw::law_id`] names the rule, not its layout: comments, the lines for people, the
 //! spacing and the `example` of a predicate are not part of it; the declarations, the order
 //! of the `on` lines and of the `require` lines, the labels and every expression are. It is
-//! hashed with its own kind tag ([`MACHINE_LAW_KIND`] / [`PREDICATE_LAW_KIND`]) under
+//! hashed with ALICE-Zip's law identifier v2 (`alice_zip::law_id::LawIdHasher`, the layout every
+//! ALICE crate uses; `scripts/law_rules.py` computes it independently and
+//! `alice-lol/tests/data/rule_law_ids_v2.txt` holds its values for the laws under `laws/`), with its
+//! own kind tag ([`MACHINE_LAW_KIND`] / [`PREDICATE_LAW_KIND`]) under
 //! [`RULE_SEMANTICS_ID`], the fold of [`RULE_SEMANTICS_PINS`], which are measured from the
 //! behaviour of this module (`tests/rule_law_oracle.rs` recomputes them). A table law
 //! ([`TABLE_LAW_KIND`]) is hashed under [`TABLE_SEMANTICS_ID`], the fold of
@@ -34,7 +37,9 @@
 
 use std::fmt;
 
-use crate::law_id::{hex32, LawIdHasher};
+use alice_zip::law_id::LawIdHasher;
+
+use crate::law_id::hex32;
 use crate::law_input::Json;
 
 /// The kind tag of a machine law

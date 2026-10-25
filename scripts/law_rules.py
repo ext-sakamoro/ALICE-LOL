@@ -618,6 +618,165 @@ def _table(law, lines, declare):
         raise RuleError(f"value `{unused[0]}` is given by no row")
 
 
+# ------------------------------------------------------------------ identifier
+
+# The law identifier v2 of ALICE-Zip (`alice_zip::law_id`), written here from its layout and not
+# from the Rust code: SHA-256 over len(domain) domain len(kind) kind semantics, then each value
+# with a one-byte tag (0x01 bytes, 0x02 u32, 0x03 u64, 0x05 str), every length and integer a
+# big-endian u64 / u32. What a rule law hashes, and in which order, is conformance/TASK.md's
+# "Rule laws" read as alice-lol `rule_law` hashes it; scripts/rule_law_ids.py records the values.
+LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
+LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1"}
+
+
+class _LawId:
+    def __init__(self, kind: bytes, semantics: bytes):
+        if len(semantics) != 32:
+            raise ValueError("a semantics identifier is 32 bytes")
+        self._h = hashlib.sha256()
+        self._prefixed(LAW_ID_DOMAIN_V2)
+        self._prefixed(kind)
+        self._h.update(semantics)
+
+    def _prefixed(self, b: bytes) -> None:
+        self._h.update(len(b).to_bytes(8, "big"))
+        self._h.update(b)
+
+    def raw(self, b: bytes) -> "_LawId":
+        self._h.update(b"\x01")
+        self._prefixed(b)
+        return self
+
+    def u32(self, v: int) -> "_LawId":
+        self._h.update(b"\x02" + v.to_bytes(4, "big"))
+        return self
+
+    def u64(self, v: int) -> "_LawId":
+        self._h.update(b"\x03" + v.to_bytes(8, "big"))
+        return self
+
+    def text(self, t: str) -> "_LawId":
+        self._h.update(b"\x05")
+        self._prefixed(t.encode("utf-8"))
+        return self
+
+    def finish(self) -> bytes:
+        return self._h.digest()
+
+
+def _hash_type(h, ty):
+    if isinstance(ty, str):
+        return h.text(ty)
+    h = h.text("record").u64(len(ty[1]))
+    for name, t in ty[1]:
+        h = _hash_type(h.text(name), t)
+    return h
+
+
+def _hash_value(h, v):
+    # bool before int: a Python bool is an int
+    if isinstance(v, bool):
+        return h.text("bool").u32(int(v))
+    if isinstance(v, int):
+        return h.text("int").u64(v % 2 ** 64)  # the two's complement bits of an i64
+    if isinstance(v, str):
+        return h.text("text").text(v)
+    if isinstance(v, bytes):
+        return h.text("bytes").raw(v)
+    raise RuleError(f"no identifier for the value {v!r}")
+
+
+def _hash_expr(h, e):
+    k = e[0]
+    if k in ("lit", "int"):
+        return _hash_value(h.text("lit"), e[2])
+    if k == "ref":
+        return h.text("ref").text(e[2]).text(e[3] or "").u32(int(e[3] is not None))
+    if k in ("state", "mode", "guard"):
+        return h.text(k).text(e[2])
+    if k == "not":
+        return _hash_expr(h.text("not"), e[1])
+    if k in ("and", "or", "++"):
+        return _hash_expr(_hash_expr(h.text(k), e[1]), e[2])
+    if k == "cmp":
+        return _hash_expr(_hash_expr(h.text("cmp").text(e[1]), e[2]), e[3])
+    if k == "call":
+        h = h.text("call").text(e[1]).u64(len(e[2]))
+        for a in e[2]:
+            h = _hash_expr(h, a)
+        return h
+    raise RuleError(f"no identifier for the expression {e!r}")
+
+
+def _hash_consts(h, law):
+    h = h.text("consts").u64(len(law["consts"]))
+    for name, (ty, v) in law["consts"].items():
+        h = _hash_value(_hash_type(h.text(name), ty), v)
+    return h
+
+
+def _hash_inputs(h, law):
+    h = h.text("inputs").u64(len(law["inputs"]))
+    for name, ty in law["inputs"]:
+        h = _hash_type(h.text(name), ty)
+    return h
+
+
+def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
+    """The v2 identifier of a parsed rule law; `semantics` maps "rule" and "table" to the
+    semantics identifiers the laws are evaluated under"""
+    kind = law["kind"]
+    h = _hash_consts(_LawId(LAW_KINDS[kind], semantics["table" if kind == "table" else "rule"]), law)
+    if kind == "machine":
+        h = h.text("modes").u32(int(law["modes"] is not None))
+        for m in law["modes"] or []:
+            h = h.text(m)
+        h = h.text("states").u64(len(law["states"]))
+        for s in law["states"]:
+            h = h.text(s).u32(int(s == law["initial"]))
+        h = h.text("events").u64(len(law["events"]))
+        for ev, guards in law["events"].items():
+            h = h.text(ev).u64(len(guards))
+            for g in guards:
+                h = h.text(g)
+        h = h.text("on").u64(len(law["on"]))
+        for ev, frm, to, when in law["on"]:
+            h = h.text(ev).u64(len(frm))
+            for f in frm:
+                h = h.text(f)
+            h = h.text(to).u32(int(when is not None))
+            if when is not None:
+                h = _hash_expr(h, when)
+        h = h.text("allow").u64(len(law["allow"]))
+        for name, e in law["allow"]:
+            h = _hash_expr(h.text(name), e)
+    elif kind == "predicate":
+        h = _hash_inputs(h.text("use hmac_sha256").u32(int("hmac_sha256" in law["uses"])), law)
+        h = h.text("steps").u64(len(law["steps"]))
+        for step in law["steps"]:
+            if step[0] == "split":
+                _, src, sep, names = step
+                h = h.text("split").text(src).text(sep).u64(len(names))
+                for n in names:
+                    h = h.text(n)
+            else:
+                _, name, part, as_ = step
+                h = h.text("bind").text(name).text(part).text(as_)
+        h = h.text("requires").u64(len(law["requires"]))
+        for label, e in law["requires"]:
+            h = _hash_expr(h.text(label), e)
+    else:
+        h = _hash_inputs(h, law)
+        h = h.text("values").u64(len(law["values"]))
+        for v in law["values"]:
+            h = h.text(v)
+        h = h.text("rows").u64(len(law["rows"]))
+        for label, value, e in law["rows"]:
+            h = _hash_expr(h.text(label).text(value), e)
+        h = h.text("otherwise").text(law["otherwise"])
+    return h.finish()
+
+
 # ------------------------------------------------------------------ answering
 
 def respond(law, inputs, bug=None):
