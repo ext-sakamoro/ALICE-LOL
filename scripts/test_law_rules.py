@@ -818,12 +818,14 @@ class Contract(unittest.TestCase):
 
 
 def _best_of_three(f):
+    """the least CPU time of this process over 3 runs of f: other processes on a loaded machine do
+    not count in it, as they do in wall-clock time"""
     import time
     best = None
     for _ in range(3):
-        t0 = time.perf_counter()
+        t0 = time.process_time()
         f()
-        took = time.perf_counter() - t0
+        took = time.process_time() - t0
         best = took if best is None else min(best, took)
     return best
 
