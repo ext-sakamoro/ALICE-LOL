@@ -2473,16 +2473,19 @@ fn money_of(v: Value) -> (i128, String) {
 }
 
 fn money_op(lhs: Value, rhs: Value, plus: bool) -> Result<Value, Stop> {
-    let ((a, x), (b, y)) = (money_of(lhs), money_of(rhs));
-    if x != y {
-        return Err(Stop::Rejected(format!("money of {x} and of {y} meet")));
+    let ((left, cur), (right, other)) = (money_of(lhs), money_of(rhs));
+    if cur != other {
+        return Err(Stop::Rejected(format!(
+            "money of {cur} and of {other} meet"
+        )));
     }
-    let v = if plus {
-        a.checked_add(b)
+    let amount = if plus {
+        left.checked_add(right)
     } else {
-        a.checked_sub(b)
+        left.checked_sub(right)
     };
-    v.map(|v| Value::Money(v, x))
+    amount
+        .map(|v| Value::Money(v, cur))
         .ok_or_else(|| Stop::Rejected("an amount outside -2^127 to 2^127 - 1".to_owned()))
 }
 
