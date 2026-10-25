@@ -18,6 +18,7 @@ import hashlib
 import hmac
 import json
 import re
+from pathlib import Path
 
 MAX_INT = 2 ** 53 - 1  # every JSON reader holds it exactly (TASK.md "Rule laws")
 NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
@@ -460,9 +461,45 @@ def _bind_currencies(law, cline, currencies, semantics):
     def known(code):
         return bool(EXPONENT.match(respond(currencies, {"code": code})[1]["value"]))
     law["known"] = known
+    # the codes the table lists as known (the values its rows compare `code` with)
+    law["codes"] = sorted(c for c in {inp["code"] for inp in _table_inputs(currencies)}
+                          if MONEY.fullmatch(f"0 {c}") and known(c))
     for name, (ty, v) in law["consts"].items():
         if ty == "money" and not known(v.currency):
             raise RuleError(f"constant `{name}`: the currency table does not know {v.currency}")
+
+
+def currencies_named(text: str):
+    """The identifier a law file's `currencies` line names (bytes), or None without one"""
+    for ln in text.splitlines():
+        w = ln.split("#", 1)[0].split()
+        if w[:1] == ["currencies"] and len(w) == 2 and ID_HEX.match(w[1]):
+            return bytes.fromhex(w[1])
+    return None
+
+
+def parse_file(path, semantics: dict[str, bytes] | None = None) -> dict:
+    """Reads the law file `path`; a law with money is read with its currency table, the rule law
+    file of the same directory whose identifier its `currencies` line names (conformance/TASK.md
+    "The currency table")"""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    want = currencies_named(text)
+    if want is None:
+        return parse(text)
+    if semantics is None:
+        raise RuleError(f"{path.name}: a law with money is read under the semantics identifiers")
+    for f in sorted(path.parent.glob("*.law")):
+        t = f.read_text(encoding="utf-8")
+        if f == path or rule_kind(t) != "table" or currencies_named(t) is not None:
+            continue
+        try:
+            table = parse(t, semantics)
+        except RuleError:
+            continue
+        if law_id(table, semantics) == want:
+            return parse(text, semantics, currencies=table)
+    raise RuleError(f"{path.name}: no rule law file of its directory is the currency table {want.hex()}")
 
 
 def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict | None = None) -> dict:
@@ -1312,6 +1349,36 @@ def _fresh(taken, make):
     return make(k)
 
 
+def _money_json(v):
+    return f"{v.amount} {v.currency}"
+
+
+def _money_variants(law, base):
+    """Each top-level money input of `base` at the ends of the range of an amount and one beyond,
+    in each other currency the table knows, in a currency it does not know, and in forms that are
+    not money (lower-case code, a plus sign, a leading zero, a JSON number)"""
+    out = []
+    codes = law.get("codes") or []
+    for n, ty in law["inputs"]:
+        if ty != "money":
+            continue
+        amount, cur = base[n].split(" ")
+        for v in (MONEY_MAX, MONEY_MIN, MONEY_MAX + 1, MONEY_MIN - 1):
+            out.append(({**base, n: f"{v} {cur}"}, f"{n} = {v} {cur}"))
+        for c in codes:
+            if c != cur:
+                out.append(({**base, n: f"{amount} {c}"}, f"{n} in {c}"))
+        unknown = _fresh(set(codes), lambda k: "Z" * 2 + "ZYXWVUTSRQPONMLKJIHGFEDCBA"[k])
+        out.append(({**base, n: f"{amount} {unknown}"}, f"{n} in {unknown}, a currency the table does not know"))
+        digits = amount.lstrip("-")
+        out += [({**base, n: f"{amount} {cur.lower()}"}, f"{n}: lower-case code"),
+                ({**base, n: f"+{digits} {cur}"}, f"{n}: plus sign"),
+                ({**base, n: f"0{digits} {cur}"}, f"{n}: leading zero"),
+                ({**base, n: f"{amount}  {cur}"}, f"{n}: two spaces"),
+                ({**base, n: int(amount)}, f"{n}: a JSON number")]
+    return out
+
+
 def _table_inputs(law):
     """Every combination of the values the rows compare each input (or field) with
 
@@ -1335,6 +1402,9 @@ def _table_inputs(law):
                     v = _eval(other, {})
                     if side[1] in ("integer", "time"):
                         cand[(side[2], side[3])] |= {x for x in (v - 1, v, v + 1) if abs(x) <= MAX_INT}
+                    elif side[1] == "money":
+                        cand[(side[2], side[3])] |= {Money(x, v.currency) for x in (v.amount - 1, v.amount, v.amount + 1)
+                                                     if MONEY_MIN <= x <= MONEY_MAX}
                     else:
                         cand[(side[2], side[3])].add(v)
                 elif side[0] == "call" and side[1] == "len" and side[2][0][0] == "ref" and _is_constant(other):
@@ -1354,9 +1424,12 @@ def _table_inputs(law):
             c = c | {"", _fresh(c, lambda k: "other" + "_" * k)}
         elif ty == "bytes":
             c = c | {b"", _fresh(c, lambda k: b"\xfe" * (k + 1))}
+        elif ty == "money":
+            c = c or {Money(0, law["codes"][0])}
         else:
             c = {False, True}
-        dims.append((n, f, ty, sorted(c, key=lambda v: (str(type(v)), v))))
+        key = (lambda v: (v.currency, v.amount)) if ty == "money" else (lambda v: (str(type(v)), v))
+        dims.append((n, f, ty, sorted(c, key=key)))
     size = 1
     for d in dims:
         size *= len(d[3])
@@ -1365,7 +1438,7 @@ def _table_inputs(law):
                         f"(more than {TABLE_MAX_COMBINATIONS}): split it")
     out = [{}]
     for n, f, ty, vals in dims:
-        js = [v.hex() if isinstance(v, bytes) else v for v in vals]
+        js = [v.hex() if isinstance(v, bytes) else _money_json(v) if isinstance(v, Money) else v for v in vals]
         nxt = []
         for o in out:
             for v in js:
@@ -1389,7 +1462,9 @@ def _table_vectors(law, name):
             raise RuleError(f"row `{label}` is reached by no combination of the compared values "
                             f"(an earlier row decides every input that makes it hold)")
     base = V[0]["inputs"]
-    other = {"integer": "1", "time": "1", "text": 1, "bytes": "zz", "bool": 1}
+    other = {"integer": "1", "time": "1", "text": 1, "bytes": "zz", "bool": 1, "money": 1}
+    for inp, note in _money_variants(law, base):
+        V.append(_vec(name, inp, note, respond(law, inp)))
     for n, ty in law["inputs"]:
         bad = 1 if isinstance(ty, tuple) else other[ty]
         inp = {**base, n: bad}
@@ -1443,6 +1518,35 @@ def _predicate_vectors(law, name):
                         else:
                             inp[side[2]][side[3]] = val + d
                         cands.append((inp, f"{label}: {side[2]}{'.' + side[3] if side[3] else ''} = {val + d}"))
+    # money: a comparison whose one side is a money input, or a sum / difference with a money
+    # input first, takes the amount that makes the two sides equal, one less and one more
+    for label, e in law["requires"]:
+        for node in _comparisons(e):
+            _, op, a, b = node
+            for side, other in ((a, b), (b, a)):
+                target = None
+                try:
+                    if side[0] == "ref" and side[1] == "money" and side[2] in ex:
+                        ref, target = side, _eval(other, env).amount
+                    elif side[0] in ("+", "-") and side[1][0] == "ref" and side[1][2] in ex:
+                        ref, rest = side[1], _eval(side[2], env).amount
+                        o = _eval(other, env).amount
+                        target = o - rest if side[0] == "+" else o + rest
+                except (_Rejected, AttributeError):
+                    target = None
+                if target is None:
+                    continue
+                cur = (ex[ref[2]] if ref[3] is None else ex[ref[2]][ref[3]]).split(" ")[1]
+                for d in (-1, 0, 1):
+                    if MONEY_MIN <= target + d <= MONEY_MAX:
+                        inp = json.loads(json.dumps(ex))
+                        v = f"{target + d} {cur}"
+                        if ref[3] is None:
+                            inp[ref[2]] = v
+                        else:
+                            inp[ref[2]][ref[3]] = v
+                        cands.append((inp, f"{label}: {ref[2]}{'.' + ref[3] if ref[3] else ''} = {v}"))
+    cands += _money_variants(law, ex)
     # equality with a text, bytes or boolean input: the input takes the value of the other side
     for label, e in law["requires"]:
         for node in _comparisons(e):
@@ -1533,7 +1637,7 @@ def _predicate_vectors(law, name):
         V.append(_vec(name, inp, note, respond(law, inp)))
     # types and missing inputs
     for n, ty in law["inputs"]:
-        wrong = {"integer": 1.5, "time": "1", "text": 1, "bytes": "zz", "bool": 1}.get(_type_name(ty), [])
+        wrong = {"integer": 1.5, "time": "1", "text": 1, "bytes": "zz", "bool": 1, "money": 1}.get(_type_name(ty), [])
         V.append(_vec(name, {**ex, n: wrong}, f"{n} of another type", respond(law, {**ex, n: wrong})))
         if isinstance(ty, tuple):
             f = ty[1][0][0]
@@ -1609,6 +1713,20 @@ def coverage(law, vecs):
                 missing.append(f"a vector failing {label}" if label else "a vector that holds")
     if not any(v["kind"] == "reject" for v in vecs):
         missing.append("a rejection")
+    for n, ty in law.get("inputs", []):
+        if ty != "money":
+            continue
+        texts = [v["inputs"][n] for v in vecs if isinstance(v.get("inputs"), dict)
+                 and isinstance(v["inputs"].get(n), str)]
+        forms = [_money_text(t) for t in texts]
+        if not any(m is not None and not (MONEY_MIN < m.amount < MONEY_MAX) for m in forms):
+            missing.append(f"{n} at an end of the range of an amount")
+        if not any(m is None for m in forms):
+            missing.append(f"{n} in a form that is not money")
+        if len({m.currency for m in forms if m is not None and law["known"](m.currency)}) < 2:
+            missing.append(f"{n} in two currencies the table knows")
+        if not any(m is not None and not law["known"](m.currency) for m in forms):
+            missing.append(f"{n} in a currency the table does not know")
     if not any(v["kind"] == "request_error" for v in vecs):
         missing.append("a request error")
     return missing

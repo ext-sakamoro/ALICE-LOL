@@ -537,12 +537,15 @@ def request_vectors(law):
 
 
 def load_tools(tools):
-    global lc, ls, lr
+    global lc, ls, lr, sem
     sys.path.insert(0, tools)
     import law_corners
     import law_schema
     import law_rules
+    import rule_law_ids
     lc, ls, lr = law_corners, law_schema, law_rules
+    # the semantics identifiers a law with money names its currency table under
+    sem = rule_law_ids.semantics(rule_law_ids.RUST.read_text(encoding="utf-8"))
 
 
 def main():
@@ -564,7 +567,7 @@ def main():
         text = f.read_text(encoding="utf-8")
         if lr.rule_kind(text):
             # a rule law: the vectors and their exact answers come from the law itself
-            V += lr.vectors(lr.parse(text), f.stem)
+            V += lr.vectors(lr.parse_file(f, sem), f.stem)
             continue
         law = lc.load(f)
         law["_file"] = str(f)

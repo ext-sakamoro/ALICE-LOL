@@ -4,6 +4,7 @@
 conformance/**
 laws/**
 scripts/law_*.py
+scripts/rule_law_ids.py
 alice-lol/src/rule_law.rs
 alice-lol/examples/rule_conformance.rs
 .github/workflows/conformance.yml
