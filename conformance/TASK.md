@@ -228,6 +228,20 @@ The characters, the comments, the line ends and the tokens are read as for every
   - A value of another JSON type, or text that is not of the form, does not have the type.
 - **Every expression is typed when the file is read.** A name that is not declared (in a predicate law: on an earlier line; in a machine law: anywhere in the file), a function or operator applied to values of other types, or a `require` / `when` that is not a boolean makes the law file unreadable.
 
+### Limits of a rule law file
+
+A rule law file within these limits reads (when it is otherwise readable); a file past any of them does not read, and a request to it is an error of the request. A reader checks a limit before it builds what the limit bounds; it does not stop with a crash, cut the file short, or read a part of it.
+
+| limit | value | counts |
+|---|---|---|
+| size of the file | 4194304 bytes (4 MiB) | the bytes of its UTF-8 text |
+| lines read | 100000 | the lines that are read: not the empty lines and the comments |
+| tokens of an expression | 256 | the tokens of one `require` / `when` / row / `allow` expression |
+| nesting of an expression | 64 | each parenthesised group, `not` and function call is one level inside the levels around it: `(a)` has 1, `not (a)` has 2 |
+| characters of a numeral | 40 | an integer, a time or an amount of money with its sign (-2^127, the smallest amount, has 40) |
+
+A numeral of more characters is out of the range of every type: in a law file it does not read; in a request, a value with such a numeral does not have its type. The limit on the tokens also bounds a chain: `a and b and c and ...` has at most 128 operands. The other ranges stay as above (integers and times at most 2^53 - 1, amounts from -2^127 to 2^127 - 1, statute times at most 18446744073, JSON input nested at most 512 levels).
+
 ### State machine (`kind machine`)
 
 | line | meaning |
