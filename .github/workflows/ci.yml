@@ -270,6 +270,11 @@ jobs:
       # CHANGELOG.md; the released value is read from the published crate at the newest
       # release tag (scripts/id_move_check.py, shared with the other ALICE crates). A
       # registry that cannot be read fails on main and warns on ci/ branches and PRs
+      # the release compared with is built against the siblings its own tree took by path (0.4.2:
+      # ../ALICE-Zip); scripts/id_move_check.py fetches the commit that tree pins into this clone and
+      # fails, naming the repository, when a sibling it needs is not checked out next to this one
+      - name: Identifier moves (the release's sibling checkouts)
+        run: git clone -q --filter=blob:none https://github.com/ext-sakamoro/ALICE-Zip ALICE-Zip
       - name: Identifier moves (tests)
         working-directory: ALICE-LOL
         run: python3 scripts/test_id_move_check.py
