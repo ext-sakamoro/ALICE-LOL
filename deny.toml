@@ -78,16 +78,8 @@ allow-git = ["https://github.com/ext-sakamoro/ALICE-SDF", "https://github.com/ex
 [sources.allow-org]
 
 # CI (security-audit.yml) and the local preflight both check out the real sibling
-# crates next to this repo; each exception allows the licence its crate declares.
-[[licenses.exceptions]]
-name = "alice-physics"
-allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
-
-# alice-physics 4.0 is a facade over alice-physics-core (same licence)
-[[licenses.exceptions]]
-name = "alice-physics-core"
-allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
-
+# crates next to this repo; each exception allows the licence its crate declares
+# (ALICE-LLM is pinned before its licence became LicenseRef-Proprietary)
 [[licenses.exceptions]]
 name = "alice-llm"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
