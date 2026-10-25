@@ -317,9 +317,10 @@ fn a_statute_has_no_money() {
 #[test]
 fn a_statute_of_many_clauses_reads_in_linear_time() {
     use std::fmt::Write as _;
-    // a label is looked up once per clause (its uniqueness, the clause it is `of`): reading 2n
-    // clauses takes about twice as long as n (a lookup over the earlier clauses makes it four
-    // times); the ratio, not a time, so a slow runner does not fail it
+    // a label is looked up once per clause (its uniqueness, the clause it is `of`): reading 4n
+    // clauses takes about four times as long as n (a lookup over the earlier clauses makes it
+    // sixteen); the ratio, not a time, so a slow runner does not fail it, and a bound of 8 leaves
+    // a factor of 2 either side
     let text_of = |n: usize| {
         let mut text = String::from("kind statute\ntitle T\nclause c0 obligation: x\n");
         for i in 1..n {
@@ -339,11 +340,11 @@ fn a_statute_of_many_clauses_reads_in_linear_time() {
             .min()
             .expect("three runs")
     };
-    let (small, large) = (20_000, 40_000);
+    let (small, large) = (10_000, 40_000);
     let (t_small, t_large) = (best(&text_of(small)), best(&text_of(large)));
     let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
     assert!(
-        ratio < 3.0,
+        ratio < 8.0,
         "{small} clauses in {t_small:?}, {large} in {t_large:?}: ratio {ratio:.2}"
     );
     let RuleLaw::Statute(law) = rule_law_from_file(&text_of(small)).expect("reads") else {

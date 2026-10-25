@@ -376,8 +376,9 @@ fn an_edition_of_a_contract_and_a_delta_over_it() {
 fn a_contract_of_many_obligations_reads_in_linear_time() {
     use std::fmt::Write as _;
     let t = table();
-    // reading 2n obligations takes about twice as long as n (four times if each label were
-    // looked up among the earlier ones); the ratio, not a time, so a slow runner does not fail it
+    // reading 4n obligations takes about four times as long as n (sixteen if each label were
+    // looked up among the earlier ones); the ratio, not a time, so a slow runner does not fail
+    // it, and a bound of 8 leaves a factor of 2 either side
     let text_of = |n: usize| {
         let mut text = format!(
             "kind contract\ncurrencies {}\nparty a\nparty b\ncreated 0\n",
@@ -398,11 +399,11 @@ fn a_contract_of_many_obligations_reads_in_linear_time() {
             .min()
             .expect("three runs")
     };
-    let (small, large) = (20_000, 40_000);
+    let (small, large) = (10_000, 40_000);
     let (t_small, t_large) = (best(&text_of(small)), best(&text_of(large)));
     let ratio = t_large.as_secs_f64() / t_small.as_secs_f64().max(1e-9);
     assert!(
-        ratio < 3.0,
+        ratio < 8.0,
         "{small} obligations in {t_small:?}, {large} in {t_large:?}: ratio {ratio:.2}"
     );
 }

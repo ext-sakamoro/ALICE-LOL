@@ -829,14 +829,15 @@ def _best_of_three(f):
 
 
 class Linear(unittest.TestCase):
-    """a statute or a contract of many lines reads in linear time (each label looked up once): 2n
-    lines take about twice as long as n, four times if each label were looked up among the earlier
-    ones; the ratio, not a time, so a slow runner does not fail it"""
+    """a statute or a contract of many lines reads in linear time (each label looked up once): 4n
+    lines take about four times as long as n, sixteen if each label were looked up among the
+    earlier ones; the ratio, not a time, so a slow runner does not fail it, and a bound of 8 leaves
+    a factor of 2 either side"""
 
     def ratio(self, text_of, read, n=10_000):
         a = _best_of_three(lambda: read(text_of(n)))
-        b = _best_of_three(lambda: read(text_of(2 * n)))
-        self.assertLess(b / max(a, 1e-9), 3.0, f"{n}: {a:.3f} s, {2 * n}: {b:.3f} s")
+        b = _best_of_three(lambda: read(text_of(4 * n)))
+        self.assertLess(b / max(a, 1e-9), 8.0, f"{n}: {a:.3f} s, {4 * n}: {b:.3f} s")
 
     def test_many_clauses(self):
         text_of = lambda n: "kind statute\ntitle T\nclause c0 obligation: x\n" + "".join(
