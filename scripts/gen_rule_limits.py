@@ -93,13 +93,20 @@ def entries(lim):
     return out
 
 
+def rel(p: Path) -> str:
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
 def text_of(entry) -> str:
     return "".join(t * c for t, c in entry["parts"])
 
 
 def render(lim) -> tuple[str, dict[str, bytes]]:
     es = entries(lim)
-    manifest = json.dumps({"table": TABLE.relative_to(ROOT).as_posix(), "limits": lim, "entries": es},
+    manifest = json.dumps({"table": "conformance/rule-limits.toml", "limits": lim, "entries": es},
                           ensure_ascii=True, indent=1) + "\n"
     seeds = {}
     for e in es:
@@ -131,14 +138,14 @@ def main(argv=None) -> int:
                 old.unlink()
         for name, data in seeds.items():
             (SEEDS / name).write_bytes(data)
-        print(f"gen_rule_limits: wrote {MANIFEST.relative_to(ROOT)} and {len(seeds)} seed(s)")
+        print(f"gen_rule_limits: wrote {rel(MANIFEST)} and {len(seeds)} seed(s)")
         return 0
     problems = []
     if not MANIFEST.is_file() or MANIFEST.read_text(encoding="utf-8") != manifest:
-        problems.append(f"{MANIFEST.relative_to(ROOT)} is not what {TABLE.relative_to(ROOT)} generates")
+        problems.append(f"{rel(MANIFEST)} is not what {rel(TABLE)} generates")
     have = {p.name: p.read_bytes() for p in SEEDS.iterdir()} if SEEDS.is_dir() else {}
     if have != seeds:
-        problems.append(f"{SEEDS.relative_to(ROOT)} is not the generated seed set ({len(have)} vs {len(seeds)})")
+        problems.append(f"{rel(SEEDS)} is not the generated seed set ({len(have)} vs {len(seeds)})")
     for p in problems:
         print(f"gen_rule_limits: {p} (run scripts/gen_rule_limits.py --write)", file=sys.stderr)
     print(f"gen_rule_limits: {len(json.loads(manifest)['entries'])} entries, {len(seeds)} seeds compared")

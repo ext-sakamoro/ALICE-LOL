@@ -112,6 +112,8 @@ python3 scripts/test_src_gap_check.py
 python3 scripts/src_gap_check.py
 python3 scripts/test_reader_tokens_check.py
 python3 scripts/reader_tokens_check.py
+python3 scripts/test_gen_rule_limits.py
+python3 scripts/gen_rule_limits.py --check
 
 step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
 python3 scripts/test_parser_no_direct_validating_builders.py
