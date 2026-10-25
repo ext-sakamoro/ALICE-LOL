@@ -53,10 +53,10 @@ is reachable in finite time, so `Violated` never comes from search.
 
 ## Features
 
-| Feature | Default | Pulls in | Licence of what it pulls in |
-|---|---|---|---|
-| (none) | — | `alice-world-auditor-types`, `glam` | — |
-| `physics` | off | `alice-physics` | `alice-physics` is `AGPL-3.0-or-later OR LicenseRef-Commercial` at the pinned version |
+| Feature | Default | Pulls in |
+|---|---|---|
+| (none) | — | `alice-world-auditor-types`, `glam` |
+| `physics` | off | `alice-physics` |
 
 ## License
 

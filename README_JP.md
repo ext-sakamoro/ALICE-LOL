@@ -377,9 +377,9 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `glsl` | 有効 | GLSL への変換 (`to_glsl`、`to_glsl_dynamic`、`to_glsl_full`) |
 | `wgsl` | 無効 | WGSL への変換 |
 | `hlsl` | 無効 | HLSL への変換 |
-| `physics` | 無効 | `Constraint::ThermalField` と `alice-physics` の材料データ (有効にすると `alice-physics` をリンクする pin の版の `alice-physics` は `AGPL-3.0-or-later OR LicenseRef-Commercial`) |
+| `physics` | 無効 | `Constraint::ThermalField` と `alice-physics` の材料データ |
 | `roblox` | 無効 | Roblox のメッシュ上限に収めた OBJ / FBX 出力 (`roblox_export`) |
-| `llm-bridge` | 無効 | `alice-llm` による文法制約つき生成 (`bridge`、有効にすると `alice-llm` をリンクする pin の版の `alice-llm` は `AGPL-3.0-or-later OR LicenseRef-Commercial`) |
+| `llm-bridge` | 無効 | `alice-llm` による文法制約つき生成 (`bridge`) |
 | `crypto-calls` | 無効 | 述語の規則の Law (`rule_law`) で `alice-sign` の `hmac_sha256` を呼ぶ 無効でもその Law は読めて、答えは `Unsupported` |
 
 ## Example
@@ -499,11 +499,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | `wgsl` | 未申告 |  |
 <!-- law-integration:end -->
 
-## ライセンス
-
-`LicenseRef-Proprietary` 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
-
-Enquiries: https://extoria.co.jp/
+## 商標と帰属表示
 
 「ALICE」と「ALICE-*」の名前は商標で、license に依らず [TRADEMARK_NOTICE](TRADEMARK_NOTICE) に従う
 DSL は ALICE-SDF のプリミティブ一式を公開しているので、その crate の帰属表示を引き継ぐ
@@ -511,3 +507,9 @@ DSL は ALICE-SDF のプリミティブ一式を公開しているので、そ�
 Mercury の hg_sdf に、ノイズの勾配表は Ken Perlin に倣っている 実装は ALICE-SDF 自身の
 Rust コードで、一覧は
 [ALICE-SDF/THIRD-PARTY-NOTICES.md](https://github.com/ext-sakamoro/ALICE-SDF/blob/main/THIRD-PARTY-NOTICES.md) にある
+
+## ライセンス
+
+`LicenseRef-Proprietary` 条文は [LICENSE-Proprietary](LICENSE-Proprietary)
+
+Enquiries: https://extoria.co.jp/

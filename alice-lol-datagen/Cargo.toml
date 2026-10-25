@@ -19,7 +19,7 @@ glam = "0.29"
 
 [features]
 default = []
-# `Fsm::accepts_str` で LLM grammar 受理を self-check に含める (alice-llm を引く、pin の版の alice-llm は AGPL-3.0-or-later OR LicenseRef-Commercial)
+# `Fsm::accepts_str` で LLM grammar 受理を self-check に含める (alice-llm を引く)
 grammar-check = ["alice-lol/llm-bridge"]
 
 [[bin]]

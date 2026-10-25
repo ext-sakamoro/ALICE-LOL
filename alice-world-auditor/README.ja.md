@@ -44,10 +44,10 @@ IDA\* (`k = 1`、1 frame に 1 行動) で探索し、得た行動列を呼び�
 
 ## Features
 
-| Feature | Default | 依存 | 依存の License |
-|---|---|---|---|
-| (なし) | — | `alice-world-auditor-types`, `glam` | — |
-| `physics` | off | `alice-physics` | pin の版の `alice-physics` は `AGPL-3.0-or-later OR LicenseRef-Commercial` |
+| Feature | Default | 依存 |
+|---|---|---|
+| (なし) | — | `alice-world-auditor-types`, `glam` |
+| `physics` | off | `alice-physics` |
 
 ## License
 

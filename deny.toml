@@ -1,7 +1,6 @@
 # cargo-deny 設定 (v0.14+ schema)
 # ALICE-* 共通の CI 構成
 # ALICE-LOL の全 crate は LicenseRef-Proprietary (publish = false)
-# optional sibling deps (alice-llm / alice-physics) は AGPL-3.0 (実 crate)
 # allow の MIT 等は依存 crate のための行で、本 crate の license とは別
 
 [graph]
@@ -78,13 +77,13 @@ allow-git = ["https://github.com/ext-sakamoro/ALICE-SDF", "https://github.com/ex
 
 [sources.allow-org]
 
-# Sibling ALICE crates are AGPL-3.0-or-later. CI (security-audit.yml) and the local
-# preflight both check out the real crates next to this repo; allow the AGPL spellings.
+# CI (security-audit.yml) and the local preflight both check out the real sibling
+# crates next to this repo; each exception allows the licence its crate declares.
 [[licenses.exceptions]]
 name = "alice-physics"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]
 
-# alice-physics 4.0 is a facade over alice-physics-core (same dual license)
+# alice-physics 4.0 is a facade over alice-physics-core (same licence)
 [[licenses.exceptions]]
 name = "alice-physics-core"
 allow = ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later"]

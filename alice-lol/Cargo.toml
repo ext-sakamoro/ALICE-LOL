@@ -39,13 +39,11 @@ alice-sign = { path = "../../ALICE-Sign", version = "0.1", default-features = fa
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
 # grammar-constrained decoding without depending on alice-llm directly.
-# alice-llm is AGPL-3.0-or-later OR LicenseRef-Commercial at the pinned version.
 alice-llm = { path = "../../ALICE-LLM", version = ">=2, <4", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
 # Optional; only pulled in when `physics` feature is enabled Provides
 # FilamentDb / fillet_stress / beam_stress / layer_adhesion / thermal_stress
 # access to stdlib::hardsurface primitives so material-backed stress checks
 # can replace hardcoded const fallbacks
-# alice-physics is AGPL-3.0-or-later OR LicenseRef-Commercial at the pinned version.
 alice-physics = { path = "../../ALICE-Physics/crates/alice-physics", version = ">=3.0, <5", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
