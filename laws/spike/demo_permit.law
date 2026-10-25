@@ -1,0 +1,25 @@
+law a demo permit procedure (fixture)
+claim which step of a permit procedure may come in which status; each step leads where the procedure record goes
+source a fixture for the procedure kind, not a real procedure
+kind procedure
+state pending initial
+state in_progress
+state approved
+state rejected
+state completed
+event application
+event review guard complete
+event amendment
+event approval guard checked
+event rejection
+event notification
+event completion
+on application from pending to in_progress
+on review from in_progress to in_progress when complete
+on amendment from in_progress to in_progress
+on approval from in_progress to approved when checked
+on rejection from in_progress to rejected
+on notification from approved to approved
+on notification from rejected to rejected
+on completion from approved rejected to completed
+allow appeal when state == rejected

@@ -286,7 +286,7 @@ class Corpus(unittest.TestCase):
         self.assertEqual(failed, {None, "shape", "tag", "fresh", "current"})
 
 
-SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32, "statute": bytes([5]) * 32}
+SEM = {"rule": bytes(32), "table": bytes(32), "money_rule": bytes([3]) * 32, "money_table": bytes([4]) * 32, "statute": bytes([5]) * 32, "procedure": bytes([6]) * 32}
 RATE = ("kind table\nx-input n integer\nvalue low high\nrow big: high when n > 10\notherwise low\n")
 HEADER = ("domain demo-tax\nedition y2025\nsupersedes first\neffective 1735689600 until 1767225600\n"
           "semantics " + "00" * 32 + "\n")
@@ -677,6 +677,56 @@ class Statute(unittest.TestCase):
         # each bound and the time before it
         no99 = [v for v in vecs if v["inputs"].get("at") != 99]
         self.assertIn("a vector at 99 (a bound of pay)", R.coverage(law, no99))
+
+
+PERMIT = ("kind procedure\nstate pending initial\nstate in_progress\nstate approved\nstate rejected\nstate completed\n"
+          "event application\nevent review guard complete\nevent approval\nevent rejection\nevent notification\n"
+          "event completion\non application from pending to in_progress\n"
+          "on review from in_progress to in_progress when complete\non approval from in_progress to approved\n"
+          "on rejection from in_progress to rejected\non notification from approved to approved\n"
+          "on notification from rejected to rejected\non completion from approved rejected to completed\n")
+
+
+class Procedure(unittest.TestCase):
+    """conformance/TASK.md "Procedure": a machine over a procedure's statuses and step kinds"""
+
+    def test_the_status_table_is_alice_legal_s(self):
+        # ALICE-Legal 9490cf2 src/procedure.rs add_step, written out
+        for st in R.PROCEDURE_STATUSES:
+            for k in R.STEP_KINDS:
+                want = {"approval": "approved", "rejection": "rejected", "completion": "completed"}.get(
+                    k, "in_progress" if st == "pending" else st)
+                self.assertEqual(R.next_status(st, k), want, (st, k))
+
+    def test_a_procedure_answers_as_a_machine(self):
+        law = R.parse(PERMIT)
+        self.assertEqual(R.respond(law, {"state": "pending", "event": "application"})[1]["state"], "in_progress")
+        refused = R.respond(law, {"state": "pending", "event": "approval"})
+        self.assertEqual((refused[1]["state"], refused[1]["transition"]), ("pending", "refused"))
+        same = R.parse(PERMIT.replace("kind procedure", "kind machine"))
+        for inp in ({"state": "in_progress", "event": "rejection"}, {"state": "approved", "event": "notification"}):
+            self.assertEqual(R.respond(law, inp), R.respond(same, inp))
+        self.assertNotEqual(R.law_id(law, SEM), R.law_id(same, SEM))
+
+    def test_what_does_not_read(self):
+        for a, b in (("on approval from in_progress to approved\n", "on approval from in_progress to completed\n"),
+                     ("on application from pending to in_progress\n", "on application from pending to pending\n"),
+                     ("on notification from approved to approved\n", "on notification from approved to in_progress\n"),
+                     ("on completion from approved rejected to completed\n", "on completion from approved rejected to rejected\n"),
+                     ("state pending initial\nstate in_progress\n", "state pending\nstate in_progress initial\n"),
+                     ("state completed\n", "state completed\nstate archived\n"),
+                     ("event completion\n", "event completion\nevent audit\n"),
+                     ("on notification from rejected to rejected\n", "on notification from rejected approved to rejected\n")):
+            with self.assertRaises(R.RuleError, msg=b):
+                R.parse(PERMIT.replace(a, b))
+        R.parse(PERMIT.replace("kind procedure\n", "kind procedure\nconst k integer = 1\n"))
+
+    def test_an_edition_names_the_procedure_semantics(self):
+        head = lambda sem: ("domain demo-permit\nedition y2025\nsupersedes first\neffective 0\n"
+                            f"semantics {sem.hex()}\n")
+        R.parse(head(SEM["procedure"]) + PERMIT, SEM)
+        with self.assertRaises(R.RuleError):
+            R.parse(head(SEM["rule"]) + PERMIT, SEM)
 
 
 if __name__ == "__main__":

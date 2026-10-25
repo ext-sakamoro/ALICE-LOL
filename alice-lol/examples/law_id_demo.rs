@@ -101,6 +101,26 @@ fn money_and_statute_semantics() {
         hex(&fold_semantics_pins(r::STATUTE_SEMANTICS_PINS)),
         hex(&r::STATUTE_SEMANTICS_ID)
     );
+    println!("\n=== 手続の Law (kind procedure) の意味論 ===");
+    for ((name, id), (_, m)) in r::PROCEDURE_SEMANTICS_PINS
+        .iter()
+        .zip(&r::procedure_semantics_fingerprints())
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::PROCEDURE_SEMANTICS_PINS)),
+        hex(&r::PROCEDURE_SEMANTICS_ID)
+    );
+    for k in r::STEP_KINDS {
+        let row: Vec<String> = r::PROCEDURE_STATUSES
+            .iter()
+            .map(|s| format!("{s}→{}", r::next_status(s, k)))
+            .collect();
+        println!("  {k}: {}", row.join(" "));
+    }
     let text = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/spike/demo_statute.law"),
     )

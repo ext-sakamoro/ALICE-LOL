@@ -2,7 +2,8 @@
 //!
 //! A rule law is a state machine (`kind machine`), a predicate over typed inputs
 //! (`kind predicate`), a table whose first holding row gives the answer (`kind table`) or the
-//! clauses of a statute in force at a time (`kind statute`, [`StatuteLaw`]).
+//! clauses of a statute in force at a time (`kind statute`, [`StatuteLaw`]) or a machine over the
+//! steps of an administrative procedure (`kind procedure`, [`next_status`]).
 //!
 //! The layout and the meaning are those of `conformance/TASK.md` § "Rule laws"; this module
 //! is a reader of it ([`rule_law_from_file`]) and answers a request the way the contract says
@@ -46,7 +47,11 @@ use alice_zip::law_id::LawIdHasher;
 use crate::law_id::hex32;
 use crate::law_input::Json;
 
+mod procedure;
 mod statute;
+pub use procedure::{
+    next_status, procedure_semantics_fingerprints, PROCEDURE_STATUSES, STEP_KINDS,
+};
 pub use statute::{
     statute_semantics_fingerprints, ClauseKind, StatuteClause, StatuteLaw, MAX_STATUTE_TIME,
     STATUTE_LAW_KIND,
@@ -60,6 +65,9 @@ pub const PREDICATE_LAW_KIND: &[u8] = b"lol.law.predicate/v1";
 
 /// The kind tag of a table law
 pub const TABLE_LAW_KIND: &[u8] = b"lol.law.table/v1";
+
+/// The kind tag of a procedure law
+pub const PROCEDURE_LAW_KIND: &[u8] = b"lol.law.procedure/v1";
 
 /// The largest integer magnitude a rule law reads (2^53 - 1: every JSON reader holds it exactly)
 pub const MAX_INTEGER: i64 = (1 << 53) - 1;
@@ -154,6 +162,26 @@ pub const STATUTE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[(
     hex32("56e44ff8dd56b62626ccedf1ae1e4c5b2c9ae94f75aed045ecbfa10d5da6a39a"),
 )];
 
+/// The semantics of the procedure kind `(name, fingerprint of that behaviour)`
+///
+/// ⚠️ The first value is measured ([`procedure_semantics_fingerprints`]); the second is
+/// [`RULE_SEMANTICS_ID`] (a procedure answers as a machine). The oracle recomputes both and the
+/// fold.
+pub const PROCEDURE_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "rule procedure: a machine over a procedure's statuses and step kinds, each step leading where ALICE-Legal's add_step leads",
+        hex32("eab233af589e11b641490ef67d257f73d8aa4a2b770b740bb987788a9073545b"),
+    ),
+    (
+        "rule expressions and inputs (RULE_SEMANTICS_ID)",
+        RULE_SEMANTICS_ID,
+    ),
+];
+
+/// The fold of [`PROCEDURE_SEMANTICS_PINS`] (the oracle checks the two agree)
+pub const PROCEDURE_SEMANTICS_ID: [u8; 32] =
+    hex32("b27f457fb2df479530989a2195803bd96708ab939a67af5e50bd641e7d93c8b6");
+
 /// The fold of [`STATUTE_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const STATUTE_SEMANTICS_ID: [u8; 32] =
     hex32("428a5863af343ed0b3c8c67c6e9355a57f2b23ce57a915b6941dd1179281ed6a");
@@ -170,6 +198,8 @@ pub enum RuleKind {
     Table,
     /// `kind statute`
     Statute,
+    /// `kind procedure`
+    Procedure,
 }
 
 /// The kind of a rule law file: `None` when it has the line `kind audit` (an audit law,
@@ -195,6 +225,8 @@ pub fn rule_kind(text: &str) -> Option<RuleKind> {
         Some(RuleKind::Table)
     } else if lines.contains(&"kind statute") {
         Some(RuleKind::Statute)
+    } else if lines.contains(&"kind procedure") {
+        Some(RuleKind::Procedure)
     } else {
         None
     }
@@ -1106,6 +1138,7 @@ const fn kind_semantics(kind: RuleKind, money: bool) -> [u8; 32] {
         (RuleKind::Table, false) => TABLE_SEMANTICS_ID,
         (RuleKind::Table, true) => MONEY_TABLE_SEMANTICS_ID,
         (RuleKind::Statute, _) => STATUTE_SEMANTICS_ID,
+        (RuleKind::Procedure, _) => PROCEDURE_SEMANTICS_ID,
         (_, false) => RULE_SEMANTICS_ID,
         (_, true) => MONEY_SEMANTICS_ID,
     }
@@ -1614,6 +1647,8 @@ pub enum RuleLaw {
     Table(TableLaw),
     /// `kind statute`
     Statute(StatuteLaw),
+    /// `kind procedure`: a machine over a procedure's statuses and step kinds
+    Procedure(MachineLaw),
 }
 
 /// A state machine law
@@ -1782,7 +1817,7 @@ pub fn rule_law_from_file_with(
     let kind = rule_kind(text).ok_or_else(|| {
         err(
             0,
-            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute`)",
+            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure`)",
         )
     })?;
     let ls = lines(text)?;
@@ -1843,6 +1878,14 @@ pub fn rule_law_from_file_with(
                 return Err(err(0, "a machine law has no money"));
             }
             RuleLaw::Machine(MachineLaw { edition, ..m })
+        }
+        RuleKind::Procedure => {
+            let m = read_machine(&ls)?;
+            if cur.is_some() || m.consts.iter().any(|(_, t, _)| *t == Ty::Money) {
+                return Err(err(0, "a procedure law has no money"));
+            }
+            procedure::check_procedure(&m)?;
+            RuleLaw::Procedure(MachineLaw { edition, ..m })
         }
         RuleKind::Predicate => RuleLaw::Predicate(PredicateLaw {
             edition,
@@ -2358,7 +2401,7 @@ impl RuleLaw {
     #[must_use]
     pub fn respond(&self, inputs: &Json) -> Answer {
         match self {
-            Self::Machine(m) => m.respond(inputs),
+            Self::Machine(m) | Self::Procedure(m) => m.respond(inputs),
             Self::Predicate(p) => p.respond(inputs),
             Self::Table(t) => t.respond(inputs),
             Self::Statute(s) => s.respond(inputs),
@@ -2373,6 +2416,7 @@ impl RuleLaw {
             Self::Predicate(_) => RuleKind::Predicate,
             Self::Table(_) => RuleKind::Table,
             Self::Statute(_) => RuleKind::Statute,
+            Self::Procedure(_) => RuleKind::Procedure,
         }
     }
 
@@ -2380,7 +2424,7 @@ impl RuleLaw {
     #[must_use]
     pub const fn edition(&self) -> Option<&Edition> {
         match self {
-            Self::Machine(m) => m.edition.as_ref(),
+            Self::Machine(m) | Self::Procedure(m) => m.edition.as_ref(),
             Self::Predicate(p) => p.edition.as_ref(),
             Self::Table(t) => t.edition.as_ref(),
             Self::Statute(s) => s.edition.as_ref(),
@@ -2391,10 +2435,13 @@ impl RuleLaw {
     #[must_use]
     pub fn law_id(&self) -> [u8; 32] {
         match self {
-            Self::Machine(m) => m.law_id(),
+            Self::Machine(m) => m.law_id(MACHINE_LAW_KIND, "machine", &RULE_SEMANTICS_ID),
             Self::Predicate(p) => p.law_id(),
             Self::Table(t) => t.law_id(),
             Self::Statute(s) => s.law_id(),
+            Self::Procedure(m) => {
+                m.law_id(PROCEDURE_LAW_KIND, "procedure", &PROCEDURE_SEMANTICS_ID)
+            }
         }
     }
 }
@@ -2474,14 +2521,9 @@ impl MachineLaw {
         ]))
     }
 
-    fn law_id(&self) -> [u8; 32] {
+    fn law_id(&self, tag: &[u8], kind: &str, semantics: &[u8; 32]) -> [u8; 32] {
         let mut h = hash_consts(
-            law_id_start(
-                MACHINE_LAW_KIND,
-                "machine",
-                &RULE_SEMANTICS_ID,
-                self.edition.as_ref(),
-            ),
+            law_id_start(tag, kind, semantics, self.edition.as_ref()),
             &self.consts,
         );
         h = h.str("modes").u32(u32::from(self.modes.is_some()));
