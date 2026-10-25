@@ -330,7 +330,7 @@ A rule law may be one edition of a rule set (a domain such as `legal` or `tax`):
 | `edition <name>` | this edition's name in its domain (the same alphabet) |
 | `supersedes first` or `supersedes <id>` | the law identifier of the edition this one replaces (64 lower-case hex digits), or `first` for the first edition of the domain |
 | `effective <time>` or `effective <time> until <time>` | the edition is in force from the first time (inclusive) to the second (exclusive); a time is an integer literal as above (seconds since 1970-01-01 00:00:00 UTC, at most 2^53 - 1), and the second is after the first |
-| `semantics <id>` | the semantics identifier the edition was written against (64 lower-case hex digits). A reader reads the file only when it evaluates that semantics; otherwise the file is unreadable and a request to it is an error of the request |
+| `semantics <id>` | the semantics identifier the edition was written against (64 lower-case hex digits). A reader reads the file only when it evaluates that semantics; otherwise the file is unreadable and a request to it is an error of the request. A law with money (a `currencies` line) is evaluated under a semantics of its own, one for a predicate and one for a table, so its edition names that one |
 
 The five lines do not change the answer to a request: a rule law answers as the same file without them. They are part of the law's identity (an edition with another period or another predecessor is another law).
 
