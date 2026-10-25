@@ -588,6 +588,10 @@ jobs:
         run: python scripts/test_reader_tokens_check.py
       - name: reader-tokens (規則の Law の reader は空白とタブだけで区切る)
         run: python scripts/reader_tokens_check.py
+      - name: check-pipe-grep-q oracle (検査器自身の試験)
+        run: python scripts/test_check_pipe_grep_q.py
+      - name: check-pipe-grep-q (scripts と workflow の pipe が grep -q で終わらない、0 件は fail)
+        run: python scripts/check_pipe_grep_q.py
       - name: g2-sites oracle (検査器自身の試験)
         run: python scripts/test_g2_sites.py
       - name: g2-sites (Law の max / min を呼ぶ library の関数が全て scripts/g2_sites.toml に tie 試験か理由つきで載っている)

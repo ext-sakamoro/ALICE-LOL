@@ -16,7 +16,7 @@ step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 # touching the crate roots invalidates only this repo's fingerprints.
 relint() { git ls-files | grep -E '(^|/)src/(lib|main)\.rs$' | xargs -r touch; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1 ($2)" >&2; exit 1; }; }
-has_toolchain() { rustup toolchain list | grep -q "^$1"; }
+has_toolchain() { rustup toolchain list | grep "^$1" >/dev/null; }
 
 # Steps CI runs that this file cannot reproduce locally (they can only fail remotely):
 #   - ci.yml:gpu-parity:Install Mesa software Vulkan (lavapipe) (needs network / runner-only)
@@ -107,6 +107,8 @@ python3 scripts/test_src_gap_check.py
 python3 scripts/src_gap_check.py
 python3 scripts/test_reader_tokens_check.py
 python3 scripts/reader_tokens_check.py
+python3 scripts/test_check_pipe_grep_q.py
+python3 scripts/check_pipe_grep_q.py
 python3 scripts/test_g2_sites.py
 python3 scripts/g2_sites.py
 
@@ -522,6 +524,9 @@ step "conformance.yml / corpus: score the reference implementation (corpus + pro
 
 step "semver-checks.yml / semver-checks: semver gate (tests)"
 python3 scripts/test_semver_gate.py
+
+step "semver-checks.yml / semver-checks: release baseline (tests, the shared base of a crate under a publication freeze)"
+python3 scripts/test_release_baseline.py
 
 step "semver-checks.yml / semver-checks: semver gate (alice-lol, latest crates.io release, every consumer feature set)"
 need cargo-semver-checks "cargo install cargo-semver-checks --version 0.50.0 --locked"
