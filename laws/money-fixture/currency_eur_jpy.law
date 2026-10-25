@@ -1,0 +1,9 @@
+law currency minor units, another table (fixture)
+claim the number of minor-unit digits of a currency, by its code: an older table of two currencies; no law of this directory names it
+source ISO 4217 (a fixture: a reader must pick the table a law names, not the first one it finds)
+kind table
+x-input code text
+value e0 e2 unknown
+row eur: e2 when code == "EUR"
+row jpy: e0 when code == "JPY"
+otherwise unknown

@@ -472,6 +472,26 @@ class Money(unittest.TestCase):
                 R.parse(text.replace("require t: a == a", f"const k money = 1 {c}\nrequire t: a == a"),
                         SEM, currencies=odd)
 
+    def test_a_law_file_is_read_with_the_table_of_its_directory_it_names(self):
+        import tempfile
+        table = R.parse(CURRENCIES, SEM)
+        other = CURRENCIES.replace("row usd", "row eur: e2 when code == \"EUR\"\nrow usd")
+        law = (f"kind predicate\ncurrencies {R.law_id(table, SEM).hex()}\nx-input a money\n"
+               "require t: a == a\nexample {\"a\": \"1 JPY\"}\n")
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "a_other.law").write_text(other, encoding="utf-8")  # first by name, not the one named
+            (d / "fee.law").write_text(law, encoding="utf-8")
+            with self.assertRaises(R.RuleError):  # the named table is not in the directory
+                R.parse_file(d / "fee.law", SEM)
+            (d / "units.law").write_text(CURRENCIES, encoding="utf-8")
+            got = R.parse_file(d / "fee.law", SEM)
+            self.assertEqual(R.respond(got, {"a": "1 USD"})[0], "outputs")
+            self.assertEqual(R.respond(got, {"a": "1 EUR"})[0], "rejected")
+            with self.assertRaises(R.RuleError):  # a law with money needs the semantics identifiers
+                R.parse_file(d / "fee.law")
+            self.assertEqual(R.parse_file(d / "units.law")["kind"], "table")  # a law without money
+
     def test_currencies_do_not_mix(self):
         law = self.law()
         self.assertEqual(R.respond(law, {"a": "1 USD", "b": "2 JPY"})[0], "rejected")

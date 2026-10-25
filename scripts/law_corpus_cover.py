@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import law_corners as lc  # noqa: E402
 import law_rules as lr  # noqa: E402
+import rule_law_ids  # noqa: E402  (the semantics identifiers a currency table is named under)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -68,9 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     bad = 0
     # a rule law has no range corners: its corpus must hold every step of a machine, and
     # a vector failing each condition of a predicate (scripts/law_rules.py coverage)
+    rule_checked = 0  # rule laws whose vectors were checked against what they must contain
     for f in rule_files:
         vecs = [v for v in corpus if v["law"] == f.stem]
-        missing = lr.coverage(lr.parse(texts[f]), vecs) if vecs else ["any vector"]
+        rule_checked += bool(vecs)
+        sem = rule_law_ids.semantics(rule_law_ids.RUST.read_text(encoding="utf-8"))
+        missing = lr.coverage(lr.parse_file(f, sem), vecs) if vecs else ["any vector"]
         n_laws += 1
         print(f"{f.stem}: rule law, {len(vecs)} vectors  {'ok' if not missing else 'MISSING'}")
         for m in missing:
@@ -87,8 +91,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  missing: {cid}")
         bad += len(missing)
     print(f"{n_laws} laws, {n_corners} corners, {bad} gaps")
-    if n_laws == 0 or n_corners == 0:
-        print("error: compared nothing (0 laws or 0 corners)", file=sys.stderr)
+    if n_laws == 0 or (n_corners == 0 and rule_checked == 0):
+        print("error: compared nothing (0 laws, or 0 corners and no rule law with vectors)", file=sys.stderr)
         return 2
     return 1 if bad else 0
 

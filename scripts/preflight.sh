@@ -246,6 +246,7 @@ python3 conformance/check_probes.py --kind reader --laws gate_compares_nonzero,i
 python3 conformance/law_line_fuzz.py --pairs 150 -- python3 conformance/ref_impl.py -- target/debug/examples/audit_conformance
 cargo build -q -p alice-lol --example rule_conformance --features crypto-calls
 PYTHON="$conf_py" conformance/score_rules.sh target/debug/examples/rule_conformance
+PYTHON="$conf_py" LAWS=laws/money-fixture conformance/score_rules.sh target/debug/examples/rule_conformance
 
 step "ci.yml / msrv: Check (workspace, all features)"
 ( export CARGO_TERM_COLOR="always"; cargo +1.90 check --workspace --all-targets --all-features )

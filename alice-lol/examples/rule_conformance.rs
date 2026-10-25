@@ -1,7 +1,9 @@
 //! The program contract of `conformance/TASK.md` for the rule laws (`kind machine` /
 //! `kind predicate`) of a law directory, built on [`alice_lol::rule_law`]: the request is read
 //! with `law_input::parse_json`, the law file with `rule_law::rule_law_from_file`, and the
-//! answer is `RuleLaw::respond`. Nothing here knows a particular law.
+//! answer is `RuleLaw::respond`. A law with money is read with `rule_law::rule_law_from_file_with`
+//! and its currency table, the rule law file of the directory whose identifier its `currencies`
+//! line names. Nothing here knows a particular law.
 //!
 //! ```text
 //! echo '{"law":"consent_choice","inputs":{"mode":"strict","state":"undecided","event":"accept"}}' \
@@ -20,7 +22,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use alice_lol::law_input::{parse_json, Json};
-use alice_lol::rule_law::{rule_kind, rule_law_from_file, Answer};
+use alice_lol::rule_law::{
+    rule_kind, rule_law_from_file, rule_law_from_file_with, Answer, RuleLaw,
+};
 
 fn request_error(msg: &str) -> ExitCode {
     eprintln!("{msg}");
@@ -35,6 +39,55 @@ fn law_file(name: &str) -> PathBuf {
         std::process::exit(2);
     };
     PathBuf::from(dir).join(format!("{name}.law"))
+}
+
+/// The identifier a law file's `currencies` line names, as written
+fn currencies_named(text: &str) -> Option<&str> {
+    text.lines().find_map(|l| {
+        let w: Vec<&str> = l
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .split_whitespace()
+            .collect();
+        (w.len() == 2 && w[0] == "currencies").then(|| w[1])
+    })
+}
+
+/// The currency table of a law with money: the rule law file of `LOL_LAW_DIR` whose identifier
+/// its `currencies` line names (TASK.md "The currency table"); `None` for a law without one
+fn currency_table(source: &str) -> Result<Option<RuleLaw>, String> {
+    let Some(want) = currencies_named(source) else {
+        return Ok(None);
+    };
+    let dir = law_file("x");
+    let dir = dir.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "law"))
+        .collect();
+    files.sort();
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
+        if currencies_named(&text).is_some() {
+            continue;
+        }
+        if let Ok(t @ RuleLaw::Table(_)) = rule_law_from_file(&text) {
+            let id: String = t.law_id().iter().fold(String::new(), |mut s, b| {
+                let _ = write!(s, "{b:02x}");
+                s
+            });
+            if id == want {
+                return Ok(Some(t));
+            }
+        }
+    }
+    Err(format!(
+        "no rule law file of the law directory is the currency table {want}"
+    ))
 }
 
 fn json_text(s: &str) -> String {
@@ -115,7 +168,11 @@ fn main() -> ExitCode {
     let Some(source) = source else {
         return request_error(&format!("unknown law (not a rule law): {name}"));
     };
-    let law = match rule_law_from_file(&source) {
+    let table = match currency_table(&source) {
+        Ok(t) => t,
+        Err(e) => return request_error(&e),
+    };
+    let law = match rule_law_from_file_with(&source, table.as_ref()) {
         Ok(l) => l,
         Err(e) => return request_error(&e.to_string()),
     };
