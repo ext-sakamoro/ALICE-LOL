@@ -1070,6 +1070,194 @@ fn law_id_start(
     h
 }
 
+/// The lines of a law file that are read, without the header (conformance/TASK.md "A later
+/// edition written as a delta": the body), each without the spaces and tabs at its end
+fn body_lines(ls: &[(usize, &str)]) -> Vec<String> {
+    ls.iter()
+        .filter(|(_, l)| {
+            let head = words(l)[0].0;
+            !EDITION_HEADER.contains(&head) && !PEOPLE.contains(&head)
+        })
+        .map(|(_, l)| l.trim_end_matches([' ', '\t']).to_owned())
+        .collect()
+}
+
+/// The key of a body line (TASK.md "A later edition written as a delta")
+fn line_key(line: &str) -> String {
+    let w: Vec<&str> = line.split_whitespace().collect();
+    match w.as_slice() {
+        [k @ ("row" | "require"), label, ..] if label.ends_with(':') => {
+            format!("{k} {}", &label[..label.len() - 1])
+        }
+        [k @ ("const" | "x-input" | "x-bind" | "allow" | "state" | "event" | "x-split"), name, ..] =>
+        {
+            format!("{k} {name}")
+        }
+        ["on", ..] if w.contains(&"to") => {
+            let to = w.iter().position(|x| *x == "to").unwrap_or(w.len());
+            w[..to].join(" ")
+        }
+        [k, ..] => (*k).to_owned(),
+        [] => String::new(),
+    }
+}
+
+fn header_lines(e: &Edition) -> [String; 5] {
+    let sup = e
+        .supersedes
+        .map_or_else(|| "first".to_owned(), |id| hex_id(&id));
+    let eff = e
+        .until
+        .map_or_else(|| e.from.to_string(), |u| format!("{} until {u}", e.from));
+    [
+        format!("domain {}", e.domain),
+        format!("edition {}", e.name),
+        format!("supersedes {sup}"),
+        format!("effective {eff}"),
+        format!("semantics {}", hex_id(&e.semantics)),
+    ]
+}
+
+fn hex_id(b: &[u8; 32]) -> String {
+    use core::fmt::Write as _;
+    b.iter().fold(String::with_capacity(64), |mut s, x| {
+        // a write to a String does not fail
+        let _ = write!(s, "{x:02x}");
+        s
+    })
+}
+
+fn resolved(e: &Edition, body: &[String]) -> Result<String, RuleLawError> {
+    let keys: Vec<String> = body.iter().map(|b| line_key(b)).collect();
+    if let Some(k) = keys
+        .iter()
+        .enumerate()
+        .find(|(i, k)| keys[..*i].contains(k))
+        .map(|(_, k)| k)
+    {
+        return Err(err(0, format!("two body lines have the key `{k}`")));
+    }
+    let mut out = String::new();
+    for l in header_lines(e).iter().chain(body) {
+        out.push_str(l);
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// The resolved text of a full edition file (conformance/TASK.md "A later edition written as a
+/// delta"): its header in the fixed order, then its body
+///
+/// # Errors
+///
+/// When the file does not read, has no edition header, or has two body lines with one key
+pub fn edition_text(text: &str) -> Result<String, RuleLawError> {
+    let law = rule_law_from_file(text)?;
+    let e = law
+        .edition()
+        .ok_or_else(|| err(0, "not an edition (no header)"))?;
+    resolved(e, &body_lines(&lines(text)?))
+}
+
+/// Resolves a delta over the edition it supersedes (conformance/TASK.md "A later edition written
+/// as a delta")
+///
+/// `previous` is the resolved text of the superseded edition; the result is the resolved text of
+/// `delta` and the names its `changes` lines give
+///
+/// # Errors
+///
+/// When `previous` is not an edition, the delta's domain or predecessor is not that edition's,
+/// an operation names a key the body does not have (or adds one it has), or the result does not
+/// read
+pub fn resolve_delta(previous: &str, delta: &str) -> Result<(String, Vec<String>), RuleLawError> {
+    let prev = rule_law_from_file(previous)?;
+    let pe = prev
+        .edition()
+        .ok_or_else(|| err(0, "the superseded file is not an edition"))?;
+    let (e, ops) = read_edition(&lines(delta)?, prev.kind())?;
+    let e = e.ok_or_else(|| err(0, "a delta has the five header lines"))?;
+    if e.domain != pe.domain {
+        return Err(err(
+            0,
+            format!(
+                "the delta is in domain {}, the superseded edition in {}",
+                e.domain, pe.domain
+            ),
+        ));
+    }
+    if e.supersedes != Some(prev.law_id()) {
+        return Err(err(
+            0,
+            "`supersedes` is not the identifier of the superseded edition",
+        ));
+    }
+    let mut body = body_lines(&lines(previous)?);
+    let mut changes = Vec::new();
+    let find = |body: &[String], key: &str, n: usize| {
+        body.iter()
+            .position(|b| line_key(b) == key)
+            .ok_or_else(|| err(n, format!("no body line has the key `{key}`")))
+    };
+    for (n, raw) in ops {
+        let op = raw.trim_matches([' ', '\t']);
+        let w: Vec<&str> = op.split_whitespace().collect();
+        match w[0] {
+            "changes" if w.len() == 2 => changes.push(w[1].to_owned()),
+            "changes" => return Err(err(n, "`changes <name>`")),
+            "remove" => {
+                let at = find(&body, op["remove".len()..].trim(), n)?;
+                body.remove(at);
+            }
+            "replace" => {
+                let (key, line) = op["replace".len()..]
+                    .split_once(':')
+                    .map_or(("", ""), |(k, l)| (k.trim(), l.trim_matches([' ', '\t'])));
+                if line.is_empty() || line_key(line) != key {
+                    return Err(err(
+                        n,
+                        "`replace <key>: <line>` with a line of the same key",
+                    ));
+                }
+                let at = find(&body, key, n)?;
+                line.clone_into(&mut body[at]);
+            }
+            "add" => {
+                let rest = op["add".len()..].trim();
+                let placed = match rest.split_once(' ') {
+                    Some((side @ ("after" | "before"), tail)) if tail.contains(':') => {
+                        let (key, line) = tail.split_once(':').unwrap_or(("", ""));
+                        let at = find(&body, key.trim(), n)?;
+                        Some((
+                            if side == "after" { at + 1 } else { at },
+                            line.trim_matches([' ', '\t']),
+                        ))
+                    }
+                    _ => None,
+                };
+                let line = placed.map_or(rest, |(_, l)| l);
+                if line.is_empty() || body.iter().any(|b| line_key(b) == line_key(line)) {
+                    return Err(err(n, "`add` of a key the body already has, or of nothing"));
+                }
+                let kw = words(line)[0].0;
+                let at = placed.map_or_else(
+                    || {
+                        body.iter()
+                            .rposition(|b| words(b)[0].0 == kw)
+                            .map_or(body.len(), |i| i + 1)
+                    },
+                    |(at, _)| at,
+                );
+                body.insert(at, line.to_owned());
+            }
+            other => return Err(err(n, format!("`{other}` is not an operation of a delta"))),
+        }
+    }
+    let text = resolved(&e, &body)?;
+    rule_law_from_file(&text)?;
+    Ok((text, changes))
+}
+
 /// A rule law, read from its file
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleLaw {

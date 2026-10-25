@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """The v2 identifiers of the rule laws under laws/ (any depth), from scripts/law_rules.py (not from the Rust code).
 
-alice-lol's tests compare `rule_law_from_file(..).law_id()` with the values this writes to
+A delta (`.delta`, an edition written as operations on the one it supersedes) is recorded with the
+identifier and the SHA-256 of its resolved text. alice-lol's tests compare `rule_law_from_file(..).law_id()`
+(and, for a delta, `resolve_delta`) with the values this writes to
 alice-lol/tests/data/rule_law_ids_v2.txt, so the expected values come from a second
 implementation of the identifier. The semantics identifiers the laws are hashed under are read
 from the definitions of `RULE_SEMANTICS_ID` and `TABLE_SEMANTICS_ID` in alice-lol/src/rule_law.rs
@@ -16,6 +18,7 @@ Fails when no rule law is found (the check compared nothing).
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -42,12 +45,33 @@ def semantics(rust_src: str) -> dict[str, bytes]:
 
 def render(root: Path, sem: dict[str, bytes]) -> str:
     rows = []
+    resolved = {}  # law id -> resolved text of each edition, for the deltas that supersede it
     for path in sorted(root.glob("laws/**/*.law")):
         text = path.read_text(encoding="utf-8")
         if law_rules.rule_kind(text) is None:
             continue
         law = law_rules.parse(text, sem)
-        rows.append(f"{path.relative_to(root).as_posix()} {law['kind']} {law_rules.law_id(law, sem).hex()}")
+        lid = law_rules.law_id(law, sem)
+        rows.append(f"{path.relative_to(root).as_posix()} {law['kind']} {lid.hex()}")
+        if law["edition"] is not None:
+            resolved[lid] = law_rules.resolved_text(text, sem)
+    # a delta is the resolved text over its predecessor; a chain resolves in its own order
+    pending = {p: p.read_text(encoding="utf-8") for p in sorted(root.glob("laws/**/*.delta"))}
+    while pending:
+        ready = [p for p, t in pending.items()
+                 if (sup := law_rules._edition(law_rules._lines(t), None, "table")[0]) and sup["supersedes"] in resolved]
+        if not ready:
+            raise SystemExit(f"{sorted(pending)[0]}: its `supersedes` names no edition under laws/")
+        for path in ready:
+            delta = pending.pop(path)
+            ed = law_rules._edition(law_rules._lines(delta), None, "table")[0]
+            text, _changes = law_rules.resolve(resolved[ed["supersedes"]], delta, sem)
+            law = law_rules.parse(text, sem)
+            lid = law_rules.law_id(law, sem)
+            resolved[lid] = text
+            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            rows.append(f"{path.relative_to(root).as_posix()} {law['kind']} {lid.hex()} {digest}")
+    rows.sort()
     if not rows:
         raise SystemExit("no rule law under laws/ (compared nothing)")
     head = "".join(f"semantics {k} {v.hex()}\n" for k, v in sorted(sem.items()))
@@ -91,7 +115,7 @@ def main(argv: list[str]) -> int:
     if argv == ["--self-test"]:
         return self_test()
     text = render(ROOT, semantics(RUST.read_text(encoding="utf-8")))
-    n = text.count("\n") - text.count("#") - 2
+    n = sum(1 for ln in text.splitlines() if ln and not ln.startswith(("#", "semantics ")))
     if argv == ["--check"]:
         current = OUT.read_text(encoding="utf-8") if OUT.is_file() else ""
         if current != text:

@@ -329,6 +329,25 @@ A rule law may be one edition of a rule set (a domain such as `legal` or `tax`):
 
 The five lines do not change the answer to a request: a rule law answers as the same file without them. They are part of the law's identity (an edition with another period or another predecessor is another law).
 
+### A later edition written as a delta
+
+The first edition of a domain is a full rule law file. A later edition may be a **delta** (a file ending in `.delta`): the five header lines and operations on the edition it supersedes, and no `kind` line. The edition is the **resolved text** below, read as a rule law file; its identifier is that of the resolved text, and it answers as the resolved text does.
+
+- **Body.** The body of a rule law file is the lines that are read: its lines without their comment, without the empty ones, without the five header lines and without the lines for people (`law`, `claim`, `source`, `verdict`, `oracle`), each without the spaces and tabs at its end, in file order.
+- **Resolved text.** The five header lines in the order `domain`, `edition`, `supersedes`, `effective`, `semantics` (the keyword and each value separated by one space), then the body; every line ends with a line feed. For a full file it is built from the file itself; for a delta, from the delta's header and the body of the resolved text of the edition it supersedes after the operations.
+- **Key of a body line.** `row <label>:` and `require <label>:` lines: the keyword, one space and the label. `const`, `x-input`, `x-bind`, `allow`, `state`, `event` lines: the keyword, one space and the second word. `x-split` lines: the keyword, one space and the source. `on` lines: the words before `to`, separated by one space. Any other line: its keyword. A body with two lines of the same key does not resolve.
+- **Operations**, applied in file order (a key never contains `:`, so an operation's key ends at its first `:`):
+
+| line | effect |
+|------|--------|
+| `replace <key>: <line>` | the body line with that key becomes `<line>`, which has the same key |
+| `remove <key>` | the body line with that key is removed |
+| `add <line>` | `<line>`, whose key is not in the body, goes after the last body line with the same keyword, or at the end when there is none |
+| `add after <key>: <line>` / `add before <key>: <line>` | `<line>` goes after / before the body line with that key |
+| `changes <name>` | no change to the body: names an example whose answer this edition changes (see below) |
+
+A delta whose `domain` differs from the superseded edition's, whose `supersedes` is not that edition's identifier, or whose operation names a key that is not in the body (or adds one that is), does not resolve.
+
 ## Not specified (do not rely on it)
 
 The checks do not decide these points, and no rule is given for them yet. A program may answer them in any way, and nothing here is scored on them; a program that reads law files when it runs (`reader`) should not depend on any particular answer.

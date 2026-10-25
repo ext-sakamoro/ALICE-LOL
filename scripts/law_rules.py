@@ -673,6 +673,111 @@ def _table(law, lines, declare):
         raise RuleError(f"value `{unused[0]}` is given by no row")
 
 
+# ------------------------------------------------------------------ editions written as deltas
+
+def _body(lines):
+    """The body (TASK.md "A later edition written as a delta"): the lines that are read (not the header,
+    not the lines for people), ends trimmed"""
+    return [ln.rstrip(" \t") for _, ln in lines if ln.split()[0] not in HEADER and ln.split()[0] not in PEOPLE]
+
+
+KEYED = ("const", "x-input", "x-bind", "allow", "state", "event")
+
+
+def _key(line: str) -> str:
+    w = line.split()
+    if w[0] in ("row", "require") and len(w) > 1 and w[1].endswith(":"):
+        return f"{w[0]} {w[1][:-1]}"
+    if w[0] in KEYED + ("x-split",) and len(w) > 1:
+        return f"{w[0]} {w[1]}"
+    if w[0] == "on" and "to" in w:
+        return " ".join(w[:w.index("to")])
+    return w[0]
+
+
+def _header_lines(ed: dict) -> list[str]:
+    sup = "first" if ed["supersedes"] is None else ed["supersedes"].hex()
+    eff = f"{ed['from']}" + ("" if ed["until"] is None else f" until {ed['until']}")
+    return [f"domain {ed['domain']}", f"edition {ed['name']}", f"supersedes {sup}", f"effective {eff}",
+            f"semantics {ed['semantics'].hex()}"]
+
+
+def _resolved(ed: dict, body: list[str]) -> str:
+    keys = [_key(b) for b in body]
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        raise RuleError(f"two body lines have the key `{dup[0]}`")
+    return "".join(line + "\n" for line in _header_lines(ed) + body)
+
+
+def resolved_text(text: str, semantics: dict[str, bytes] | None = None) -> str:
+    """The resolved text of a full edition file"""
+    law = parse(text, semantics)
+    if law["edition"] is None:
+        raise RuleError("not an edition (no header)")
+    return _resolved(law["edition"], _body(_lines(text)))
+
+
+def resolve(previous: str, delta: str, semantics: dict[str, bytes]) -> tuple[str, list[str]]:
+    """The resolved text of `delta` over the resolved text `previous`, and its `changes` names"""
+    prev = parse(previous, semantics)
+    if prev["edition"] is None:
+        raise RuleError("the superseded file is not an edition")
+    ed, ops = _edition(_lines(delta), semantics, prev["kind"])
+    if ed is None:
+        raise RuleError("a delta has the five header lines")
+    if ed["domain"] != prev["edition"]["domain"]:
+        raise RuleError(f"the delta is in domain {ed['domain']}, the superseded edition in {prev['edition']['domain']}")
+    if ed["supersedes"] != law_id(prev, semantics):
+        raise RuleError("`supersedes` is not the identifier of the superseded edition")
+    body = _body(_lines(previous))
+    changes = []
+
+    def where(key, n):
+        hits = [i for i, b in enumerate(body) if _key(b) == key]
+        if not hits:
+            raise RuleError(f"line {n}: no body line has the key `{key}`")
+        return hits[0]
+
+    for n, raw in ops:
+        op = raw.strip()
+        w = op.split()
+        if w[0] == "changes":
+            if len(w) != 2:
+                raise RuleError(f"line {n}: `changes <name>`")
+            changes.append(w[1])
+        elif w[0] == "remove":
+            del body[where(op.split(None, 1)[1].strip(), n)]
+        elif w[0] == "replace":
+            key, sep, line = op[len("replace"):].partition(":")
+            key, line = key.strip(), line.strip(" \t")
+            if not sep or not line or _key(line) != key:
+                raise RuleError(f"line {n}: `replace <key>: <line>` with a line of the same key")
+            body[where(key, n)] = line
+        elif w[0] == "add":
+            rest = op[len("add"):].strip()
+            pos = None
+            if rest.split()[0] in ("after", "before") and ":" in rest:
+                side, _, tail = rest.partition(" ")
+                key, _, line = tail.partition(":")
+                key, line = key.strip(), line.strip(" \t")
+                at = where(key, n)
+                pos = at + 1 if side == "after" else at
+            else:
+                line = rest
+            if not line or any(_key(b) == _key(line) for b in body):
+                raise RuleError(f"line {n}: `add` of a key the body already has, or of nothing")
+            if pos is None:
+                same = [i for i, b in enumerate(body) if b.split()[0] == line.split()[0]]
+                pos = same[-1] + 1 if same else len(body)
+            body.insert(pos, line)
+        else:
+            raise RuleError(f"line {n}: `{w[0]}` is not an operation of a delta")
+    text = _resolved(ed, body)
+    parse(text, semantics)  # the resolved text reads as a rule law
+    return text, changes
+
+
 # ------------------------------------------------------------------ identifier
 
 # The law identifier v2 of ALICE-Zip (`alice_zip::law_id`), written here from its layout and not

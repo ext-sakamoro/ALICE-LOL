@@ -1,0 +1,7 @@
+# the 2026 edition: the bound of the reduced class moves from 100000 to 120000
+domain demo-tax
+edition y2026
+supersedes 3634bd55a7e53340a3701cd3020518afc8bffe2fc4322c9c5debc0aea8e6c50e
+effective 1767225600 until 1798761600
+semantics ec2652c7436c40f93a923d23eaed410d45636e68a184cb3b1f9ebc9e6e16d3e2
+replace row small: row small: reduced when amount <= 120000
