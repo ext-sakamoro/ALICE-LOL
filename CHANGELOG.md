@@ -124,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 決定論: 本体の glam ベクトルの min / max / min_element / max_element (8 箇所、roblox_export の外形寸法、print_export の格子と余白、mount の peg 半径) を `det_vec` の lane ごとの Law helper に通した ±0 の組で x86_64 と aarch64 の結果が揃う 形状の digest と識別子は変わらない
 - 決定論: 本体の `powi` (pattern_sdf の段の半径、alice-lol-ui の間隔) を `alice_det_math::powi` (掛け算の順序が固定) に置き換えた 段の半径は指数が 0 以上で値は変わらない alice-lol-ui の `golden_ratio_step` / `Theme::spacing` / `Theme::radius` は n <= -2 で逆数を先に取る順 ((1 / x)^|n|) になり、以前の `f32::powi` (x^|n| の後に逆数) から最大 25 ulp 動く (n が -40..40 の 81 値中 39 値) 形状の digest と識別子は動かない jewelry_stand / skadis_peg_compat の node と Theme の段の値を golden で固定した test と example の `powi` / `hypot` は正確な掛け算と `sqrt` に書き換えた
 - `scripts/fneg_fma_ir_check.py`: `CARGO_TARGET_DIR` が無い時、作ったばかりの一時 directory に `cargo clean` を掛けて 失敗していた (cargo は `CACHEDIR.TAG` の無い directory の clean を拒否する) clean は共有の target directory の時だけにした `CARGO_TARGET_DIR` を外した fixture crate で走らせる試験を `scripts/test_fneg_fma_ir_check.py` に足した (旧版では失敗する)
+- CI: 9 本の試験 (`scripts/test_wiring_guard.py` / `test_root_artifacts.py` / `test_docs_lint.py` / `test_g2_sites.py` / `test_history_free_tests.py` / `test_lock_single_version.py` / `test_reader_tokens_check.py` / `test_src_gap_check.py` / `test_readme_sync.py`) が `tempfile.mkdtemp` の fixture を消さずに残していた 1 回の実行で合わせて 300 件余り その module の試験が終わる時に消す (`TemporaryDirectory` と `unittest.addModuleCleanup`)、一時 directory を分けて実行して残りが 0 件
 
 ## [0.4.2] - 2026-10-15
 

@@ -13,6 +13,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import history_free_tests as hf  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 G = "git"
 REV = "8d92276" + "~1" + ":laws/a.law"
 
@@ -59,7 +66,7 @@ class Forms(unittest.TestCase):
             self.assertEqual(hf.main([d]), 1)
 
     def test_an_exempt_line_passes_and_a_stale_exemption_fails(self):
-        d = Path(tempfile.mkdtemp())
+        d = Path(_tmpdir())
         (d / "scripts").mkdir()
         rel = next(iter(hf.EXEMPT))[0]
         lines = "".join(f"{text}\n    capture_output=True)\n" for r, text in hf.EXEMPT if r == rel)

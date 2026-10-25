@@ -14,7 +14,10 @@ import root_artifacts as ra  # noqa: E402
 
 
 def repo(files: dict[str, str]) -> Path:
-    d = Path(tempfile.mkdtemp(prefix="root-artifacts-"))
+    td = tempfile.TemporaryDirectory(prefix="root-artifacts-")
+    # removed when this module's tests end (a fixture repository is read after the call returns)
+    unittest.addModuleCleanup(td.cleanup)
+    d = Path(td.name)
     subprocess.run(["git", "init", "-q", str(d)], check=True)
     for rel, text in files.items():
         (d / rel).parent.mkdir(parents=True, exist_ok=True)

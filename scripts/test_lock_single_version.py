@@ -16,6 +16,13 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lock_single_version as lsv  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -44,7 +51,7 @@ CLEAN = (
 
 
 def run(lock: str, baseline: str | None = None) -> tuple[list[str], dict[str, int]]:
-    d = tempfile.mkdtemp()
+    d = _tmpdir()
     lock_path = os.path.join(d, "Cargo.lock")
     with open(lock_path, "w", encoding="utf-8") as f:
         f.write(lock)
@@ -121,13 +128,13 @@ class NothingCompared(unittest.TestCase):
         self.assertTrue(any("`alice packages` が 1 件も比べていない" in e for e in errs), errs)
 
     def test_a_missing_lock_fails(self):
-        d = tempfile.mkdtemp()
+        d = _tmpdir()
         errs, counts = lsv.check(os.path.join(d, "Cargo.lock"), os.path.join(d, "baseline.txt"))
         self.assertEqual(counts["packages"], 0)
         self.assertTrue(any("text として読めない" in e for e in errs), errs)
 
     def test_a_binary_lock_fails(self):
-        d = tempfile.mkdtemp()
+        d = _tmpdir()
         p = os.path.join(d, "Cargo.lock")
         with open(p, "wb") as f:
             f.write(b"\xff\xfe\x00binary")

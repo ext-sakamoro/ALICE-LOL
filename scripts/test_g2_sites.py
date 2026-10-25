@@ -10,6 +10,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import g2_sites as G  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 SRC = ("pub fn floor(x: f32) -> f32 {\n    crate::det_math::max(x, 0.0)\n}\n\n"
        "fn ranked(a: f32, b: f32) -> f32 {\n    // det_math::min(a, b) in a comment is not a call\n"
        "    crate::det_math::min(a, b) + crate::det_vec::max_element(v)\n}\n")
@@ -22,7 +29,7 @@ TABLE = ('[[site]]\nfile = "alice-lol/src/lib.rs"\nfn = "floor"\ncalls = 1\n'
 
 class G2Sites(unittest.TestCase):
     def tree(self, src=SRC, table=TABLE, test=TEST):
-        d = Path(tempfile.mkdtemp())
+        d = Path(_tmpdir())
         (d / "alice-lol/src").mkdir(parents=True)
         (d / "alice-lol/tests").mkdir(parents=True)
         (d / "scripts").mkdir()

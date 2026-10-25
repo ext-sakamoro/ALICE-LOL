@@ -12,6 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import src_gap_check as G  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 TABLE = ("# Wiring debt\n\n| key | what is not wired | closes when |\n|---|---|---|\n"
          "| `glue-a` | a is not wired | a is wired |\n")
 TEST = ('#[test]\n#[ignore = "src gap: glue-a: a is not wired"]\nfn a_is_wired() {\n    assert!(false);\n}\n')
@@ -31,7 +38,7 @@ def fake(code, passed, failed):
 
 class SrcGap(unittest.TestCase):
     def repo(self, table=TABLE, files=None):
-        d = Path(tempfile.mkdtemp())
+        d = Path(_tmpdir())
         subprocess.run(["git", "init", "-q", str(d)], check=True)
         if table is not None:
             (d / "docs").mkdir()

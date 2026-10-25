@@ -10,6 +10,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reader_tokens_check as C  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 RS = "fn a(l: &str) -> Vec<&str> {\n    words(l).into_iter().map(|(w, _)| w).collect()\n}\n"
 PY = ('def _words(s):\n    """splits like str.split() but on spaces and tabs (\\\\s is not used)"""\n'
       '    return [w for w in re.split(r"[ \\t]+", s) if w]  # not .split()\n')
@@ -17,7 +24,7 @@ PY = ('def _words(s):\n    """splits like str.split() but on spaces and tabs (\\
 
 class ReaderTokens(unittest.TestCase):
     def tree(self, rs=RS, py=PY, extra_rs=None):
-        d = Path(tempfile.mkdtemp())
+        d = Path(_tmpdir())
         (d / "alice-lol/src/rule_law").mkdir(parents=True)
         (d / "scripts").mkdir()
         if rs is not None:

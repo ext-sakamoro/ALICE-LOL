@@ -22,7 +22,10 @@ import wiring_guard as wg  # noqa: E402
 
 
 def crate(files: dict[str, str]) -> Path:
-    root = Path(tempfile.mkdtemp(prefix="wiring-fixture-"))
+    td = tempfile.TemporaryDirectory(prefix="wiring-fixture-")
+    # removed when this module's tests end (a fixture crate is read after the call returns)
+    unittest.addModuleCleanup(td.cleanup)
+    root = Path(td.name)
     for rel, body in files.items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)

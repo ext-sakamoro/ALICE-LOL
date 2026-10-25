@@ -16,6 +16,13 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import docs_lint as dl  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CARGO = '[package]\nname = "demo"\nversion = "1.5.0"\n\n[features]\n'
@@ -57,7 +64,7 @@ def tree(overrides: dict[str, str] | None = None, drop: tuple[str, ...] = ()) ->
         dl.LIB_RS: LIB_RS,
     }
     files.update(overrides or {})
-    d = tempfile.mkdtemp()
+    d = _tmpdir()
     for rel, text in files.items():
         if rel in drop:
             continue

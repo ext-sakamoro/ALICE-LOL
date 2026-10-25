@@ -18,6 +18,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import readme_sync as rs  # noqa: E402
 import workflow_steps as ws  # noqa: E402
 
+
+def _tmpdir(**kwargs) -> str:
+    """A temporary directory removed when this module's tests end (fixtures are read after the call returns)"""
+    td = tempfile.TemporaryDirectory(**kwargs)
+    unittest.addModuleCleanup(td.cleanup)
+    return td.name
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CARGO = """[package]
@@ -185,7 +192,7 @@ def crate(overrides: dict[str, str] | None = None, drop: tuple[str, ...] = ()) -
         "alice-lol/examples/two.rs": "fn main() {}\n",
     }
     files.update(overrides or {})
-    d = tempfile.mkdtemp()
+    d = _tmpdir()
     for rel, text in files.items():
         if rel in drop:
             continue
