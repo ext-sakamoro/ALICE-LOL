@@ -107,6 +107,8 @@ python3 scripts/test_src_gap_check.py
 python3 scripts/src_gap_check.py
 python3 scripts/test_reader_tokens_check.py
 python3 scripts/reader_tokens_check.py
+python3 scripts/test_g2_sites.py
+python3 scripts/g2_sites.py
 
 step "ci.yml / parser-no-direct-validating-builders: oracle + parser は validate() 付き infallible builder を直接呼ばない"
 python3 scripts/test_parser_no_direct_validating_builders.py

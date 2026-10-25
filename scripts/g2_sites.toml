@@ -1,0 +1,139 @@
+# scripts/g2_sites.py (ALICE-Law G2): every library function that calls the Law max / min
+# (det_math::max / min / max64 / min64, det_vec), with the number of calls, and how their ties are
+# settled: `tests` (bit-level tie tests through the public API) and / or `reason` (why the zero
+# sign or a NaN operand cannot be observed there). The Law helpers give +0 from max and -0 from min
+# for an equal pair of zeros in either order and the other operand for a NaN; the platform forms
+# leave both unspecified. `python3 scripts/g2_sites.py --list` prints the sites found.
+
+[[site]]
+file = "alice-lol/src/laser_pattern.rs"
+fn = "density_hatch"
+calls = 2
+tests = ["alice-lol/tests/law_max_min_ties.rs::density_hatch_first_line_takes_the_law_min_of_mixed_zero_projections"]
+reason = "the max fold (proj_max) only bounds the loop `d <= proj_max`, a comparison; the min fold starts from +inf so a NaN is never its first operand, and a NaN second operand gives the other operand under the Law and the platform alike"
+
+[[site]]
+file = "alice-lol/src/laser_pattern.rs"
+fn = "hatch"
+calls = 2
+reason = "proj_min only reaches the lines through d0 = ceil(proj_min / spacing) * spacing and d = i * spacing + d0, where 0 * spacing + d0 is +0 for d0 = ±0; proj_max only counts the lines (an integer); the folds start from ±inf, so a NaN is never the first operand"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "check_non_overlap"
+calls = 2
+reason = "the evidence ranking max(fa, fb) runs only when fa < 0 and fb < 0 (no zero, no NaN); the depth fold min over surface distances takes lengths (never -0) from +inf, and a NaN distance gives the other operand under the Law and the platform alike"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "contact_upper_bound"
+calls = 1
+reason = "radius = max(max_distance, min_distance) + cell_diag with cell_diag a length (>= +0, +0 for a flat box), and x + (+0) is +0 for x = ±0, so the zero sign is erased; a NaN max_distance gives min_distance under the Law and the platform alike"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "material_fraction"
+calls = 1
+reason = "max(1 - z * z, 0) over constant Fibonacci points with |z| < 1: 1 - z * z is > 0 or rounds to +0, never -0 or NaN, and no input reaches it"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "refine_with_lipschitz"
+calls = 2
+reason = "the tightened bounds are only compared (lo > hi, interval_sign, decided_ok's ia.lo >= 0 / io.hi <= 0, tight.lo > 0), where -0 and +0 compare equal; a NaN interval bound gives the enclosure's bound, which lipschitz_enclosure has checked finite"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "solve_peak_temperature"
+calls = 2
+reason = "dt = min(dt_max * 0.5, duration_s): the caller refuses duration_s <= 0 or NaN (law.rs check_thermal_field), and dt_max is finite and > 0; the peak fold max over material cells reaches TemperatureUnbracketed { lo_c, hi_c } only when lo_c <= limit < hi_c, but a zero peak needs no positive source in the material, which makes hi_c equal to lo_c, so a zero peak never reaches it; in the violation residual limit - lo_c the zero sign is erased"
+
+[[site]]
+file = "alice-lol/src/law.rs"
+fn = "surface_distance"
+calls = 4
+reason = "field = |f(p)| and floor (a length) are never -0; cap is floored by f32::EPSILON and r by cap * 1e-3 > 0, so no equal pair of zeros reaches the max / min; a NaN field takes the floor, the documented fallback"
+
+[[site]]
+file = "alice-lol/src/law_input.rs"
+fn = "flash_transitions"
+calls = 1
+reason = "min64(a.1, b.1) is only compared with darker_below; a NaN operand gives the other one under the Law and the platform alike"
+
+[[site]]
+file = "alice-lol/src/print_export.rs"
+fn = "declared_config"
+calls = 4
+reason = "the widest extent is refused when NaN or <= 0 and the box when not finite before the cell is computed from it, so neither an equal pair of zeros nor a NaN reaches the cell; the min / max elements of the box corners are only compared with the search edge"
+
+[[site]]
+file = "alice-lol/src/print_export.rs"
+fn = "node_to_mesh"
+calls = 1
+reason = "the cell only scales the vertex-merge tolerance, which is compared with distances, so the zero sign is not observable"
+
+[[site]]
+file = "alice-lol/src/research_law.rs"
+fn = "ingest"
+calls = 1
+tests = ["alice-lol/tests/analytic_research_law.rs::ingest_with_a_nan_tolerance_keeps_the_residual_band"]
+reason = "the band max64(abs_tolerance, residual rms) is only compared, so its zero sign is not observable; the NaN rule is the tested case"
+
+[[site]]
+file = "alice-lol/src/roblox_export.rs"
+fn = "compute_bounds_studs"
+calls = 2
+tests = [
+    "alice-lol/tests/law_max_min_ties_roblox.rs::roblox_bounds_of_mixed_zeros_in_both_orders_and_a_nan_vertex",
+    "alice-lol/tests/law_max_min_ties_roblox.rs::roblox_bounds_skip_a_trailing_nan_vertex_of_either_sign",
+]
+
+[[site]]
+file = "alice-lol/src/runtime_parser.rs"
+fn = "count"
+calls = 1
+tests = ["alice-lol/tests/law_max_min_ties.rs::parser_count_of_negative_zero_is_the_floor_and_non_finite_is_refused"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/mount.rs"
+fn = "skadis_peg_compat"
+calls = 3
+tests = ["alice-lol/tests/law_max_min_ties.rs::peg_round_radius_with_negative_zero_and_nan_thickness"]
+reason = "the lane order of det_vec::min_element over the half extents is not observable: they are distinct positive finite values, so any fold order gives the same result"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "bearing_seat"
+calls = 2
+reason = "physical_depth = max(min(width, plate_thickness - 1), 1.0): the outer floor is 1.0, so a zero (of either sign) or a NaN from the inner min becomes 1.0"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "drawer_organizer"
+calls = 1
+tests = ["alice-lol/tests/law_max_min_ties.rs::drawer_slot_depth_min_of_mixed_zeros_and_nan"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "l_bracket"
+calls = 3
+tests = ["alice-lol/tests/law_max_min_ties.rs::l_bracket_arm_floor_of_negative_zero_and_nan"]
+reason = "the hole span max(2 * neg_z_margin + depth, 0): neg_z_margin = -head / 2 - plate with the head diameter of a hole size, a positive constant, so the sum is -0 only from two -0 terms, which needs a head of 0; an exact cancellation gives +0, the floor's own sign"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "t_slot_bracket_2020"
+calls = 1
+tests = ["alice-lol/tests/law_max_min_ties.rs::t_slot_bracket_arm_floor_of_negative_zero_and_nan"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/reinforcement.rs"
+fn = "honeycomb_infill"
+calls = 1
+tests = ["alice-lol/tests/law_max_min_ties.rs::honeycomb_cell_radius_floor_of_negative_zero_and_nan"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
+fn = "skadis_panel_sdf"
+calls = 1
+reason = "max(size * 0.5, 0) after the size is checked to be finite and > 0: size * 0.5 is > 0 or rounds to +0, never -0 or NaN"

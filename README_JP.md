@@ -473,7 +473,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `5de698ece34a` と
 | gate | 状態 | 注記 |
 |---|---|---|
 | G1 no-libm-direct | 適合 | the root clippy.toml (every target of every workspace member) bans all 25 banned names of ALICE-Law's G1 list for both f32 and f64 (50 entries, including the … |
-| G2 ieee-max-min | 未確認 | the scalar mechanism and the glam forms are closed: the Law helpers det_math::max/min/max64/min64 with signed-zero lattice tests, the default-deny … |
+| G2 ieee-max-min | 適合 | the scalar mechanism and the glam forms are closed: the Law helpers det_math::max/min/max64/min64 (an equal pair of zeros gives +0 from max and -0 from min in … |
 | G3 no-outer-fneg-of-fma | 適合 | measured on the clean tree: the syntax-tree check reads 181 files, 416 fma-family calls (all mul_add, 346 in src/; measured 2026-10-18 under the current rule … |
 | G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
 | G5 release-profile-test-leg | 適合 | The Law-bearing tests are the Law oracle targets of scripts/law_tests.sh (every file using law:: or research_law must be listed there, and each target must run … |
