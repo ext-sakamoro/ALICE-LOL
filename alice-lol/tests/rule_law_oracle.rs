@@ -619,6 +619,10 @@ fn every_rule_law_has_the_identifier_the_second_implementation_computes() {
                 hex(alice_lol::rule_law::CONTRACT_SEMANTICS_ID)
             ),
             (
+                "memory".to_owned(),
+                hex(alice_lol::rule_law::MEMORY_SEMANTICS_ID)
+            ),
+            (
                 "money_rule".to_owned(),
                 hex(alice_lol::rule_law::MONEY_SEMANTICS_ID)
             ),

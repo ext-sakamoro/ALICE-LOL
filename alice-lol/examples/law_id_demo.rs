@@ -67,6 +67,53 @@ fn rule_semantics() {
     );
 }
 
+/// 記憶の Law (kind memory) の pin、測り直した指紋、fold と宣言、demo の記憶
+fn memory_semantics() {
+    use alice_lol::rule_law as r;
+    println!("\n=== 記憶の Law (kind memory) の意味論 ===");
+    for ((name, id), (_, m)) in r::MEMORY_SEMANTICS_PINS
+        .iter()
+        .zip(&r::memory_semantics_fingerprints())
+    {
+        println!("  pin {name}");
+        println!("      {}  測り直し {}", hex(id), hex(m));
+    }
+    println!(
+        "  fold = {}  宣言 = {}",
+        hex(&fold_semantics_pins(r::MEMORY_SEMANTICS_PINS)),
+        hex(&r::MEMORY_SEMANTICS_ID)
+    );
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/spike/demo_memory.law");
+    let text = std::fs::read_to_string(path).expect("laws/spike/demo_memory.law");
+    let law = r::rule_law_from_file(&text).expect("the demo memory reads");
+    if let r::RuleLaw::Memory(m) = &law {
+        println!(
+            "  {} / formed {} / 識別子 {}",
+            m.category(),
+            m.formed(),
+            short(&law.law_id())
+        );
+        for (axis, w) in m.weights() {
+            println!("    weight {axis} {w}");
+        }
+        println!("    link {}", m.links().len());
+        for (label, text) in m.lines() {
+            println!("    line {label}: {text}");
+        }
+        println!(
+            "  weight の上限 {} / cheer {} / 想起 {:?}",
+            r::MAX_WEIGHT,
+            m.weight("cheer"),
+            law.respond(
+                &alice_lol::law_input::parse_json(r#"{"topic": "festival", "day": 3}"#)
+                    .expect("JSON")
+            )
+        );
+    }
+    let _ = r::MEMORY_LAW_KIND;
+}
+
 /// 契約の Law (kind contract) の pin、測り直した指紋、fold と宣言、demo の契約
 fn contract_semantics() {
     use alice_lol::rule_law as r;
@@ -264,6 +311,7 @@ fn main() -> Result<(), ParseError> {
     table_semantics();
     money_and_statute_semantics();
     contract_semantics();
+    memory_semantics();
 
     println!("\n=== 同じ Law は同じ名前 ===");
     let law: AuditLaw = parse_law(LAW)?;

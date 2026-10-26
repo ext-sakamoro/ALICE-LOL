@@ -1,0 +1,17 @@
+law demo_memory
+claim one memory of a character: its weights on traits, the memory it rests on, and when it comes to mind
+source a fixture for the memory kind, not a real character
+kind memory
+category emotion
+formed 3
+weight cheer 3
+weight curiosity 2
+weight empathy 1
+weight calm -1
+link 4f3b2a10c9d8e7f60514233241506f7e8d9cabbac9d8e7f60514233241506f7e
+x-input topic text
+x-input day integer
+const first_day integer = 2
+recall when (topic == "festival" or topic == "school_event") and day >= first_day
+line paint: my hands were covered in paint while we got ready
+line lights: the lanterns came on all at once

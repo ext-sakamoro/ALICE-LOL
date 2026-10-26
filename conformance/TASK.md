@@ -64,7 +64,7 @@ Each line starts with a keyword. A `#` starts a comment that runs to the end of 
 |------|---------|
 | `law <name>` | the law name |
 | `kind research` / `kind audit` | a quantitative law, or an audit of measurements |
-| `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` | a state machine, a predicate over typed inputs, a table of rows tried in order, the clauses of a statute, the steps of an administrative procedure, or the obligations of a contract (see "Rule laws" below) |
+| `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` / `kind memory` | a state machine, a predicate over typed inputs, a table of rows tried in order, the clauses of a statute, the steps of an administrative procedure, the obligations of a contract, or one memory of a character (see "Rule laws" below) |
 | `claim <text>` | what the law states, in words |
 | `input <name> <unit> [range <lo> <hi>]` | an input. With `range`, the law applies only for `lo <= value <= hi`. Any other value is rejected. |
 | `param <name> <value> <uncertainty> <unit>` | a named constant |
@@ -206,7 +206,7 @@ Output: `{"outputs": {"verdict": "<one of the six words>", "subject": "<name>" o
 
 ## Rule laws
 
-A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`), a **predicate** over typed inputs (`kind predicate`) a **table** whose first holding row gives the answer (`kind table`), the clauses of a **statute** (`kind statute`), the steps of an administrative **procedure** (`kind procedure`), or the obligations of a **contract** (`kind contract`). Its answer is exact: every output is text, `true` / `false`, `null` or a list of texts, and it is compared exactly.
+A rule law states a rule of a product instead of a quantity: a **state machine** (`kind machine`), a **predicate** over typed inputs (`kind predicate`) a **table** whose first holding row gives the answer (`kind table`), the clauses of a **statute** (`kind statute`), the steps of an administrative **procedure** (`kind procedure`), the obligations of a **contract** (`kind contract`), or one **memory** of a character (`kind memory`). Its answer is exact: every output is text, `true` / `false`, `null` or a list of texts, and it is compared exactly.
 
 ### Reading a rule law file
 
@@ -377,6 +377,29 @@ The labels of parties, conditions and obligations are unique together. Every tim
 
 **Output:** `{"outputs": {"status": "<status>", "unfulfilled": ["<label>", ...], "owed": "<amount> <currency>", "conditions_met": true | false}}`. The status is `breached` when an obligation not fulfilled is due before `now` (`now` is after its `due`), otherwise `fulfilled` when every obligation is fulfilled, otherwise `active`. `unfulfilled` is the labels of the obligations not fulfilled, in file order; `owed` is the sum of their amounts (a sum outside -2^127 to 2^127 - 1 rejects the request); `conditions_met` is whether every condition is in `met` (`true` without conditions).
 
+### Memory (`kind memory`)
+
+A memory law is one memory of a character: what kind of memory it is, when it was formed, how it weighs on the character's traits, which other memories it rests on, and when it comes to mind. A program computes the character from the set of memory laws it holds; taking a law out of the set takes its weights out of the computation. Its lines:
+
+| Line | Meaning |
+|---|---|
+| `category <name>` | the kind of memory, exactly once |
+| `formed <integer>` | when it was formed, as an ordinal (an integer literal, at most 2^53 - 1), exactly once |
+| `weight <axis> <weight>` | its weight on a trait: `<axis>` is a name, at most one `weight` line per axis; `<weight>` is an integer literal with an optional `-` before it, from -2147483647 to 2147483647 (`-0` is not a weight) |
+| `link <id>` | the law identifier (64 lower-case hex digits) of a memory it rests on; each identifier at most once |
+| `x-input <name> <type>` | an input of the request, with its type (as in a predicate law, without `money`) |
+| `const ...` | a named constant (above, without `money`) |
+| `recall when <expression>` | when the memory comes to mind, at most once: a boolean over the inputs and the constants declared on earlier lines (the expressions of a table law) |
+| `line <label>: <text>` | a line the character may say when the memory comes to mind: a label (as a row label) unique among the `line` lines, then the text after the first `:`, not empty. Not part of the answer and not part of the identifier |
+
+A memory law has no `currencies` line. A file without `recall` never recalls.
+
+**A request** gives the `x-input` values, read as in a predicate law: a request without one of the `x-input` keys is an error of the request (exit with status 2), decided before any other check; an input value that does not have its type is rejected.
+
+**Output:** `{"outputs": {"recalled": true | false}}`: the value of the `recall` expression (`false` without a `recall` line).
+
+**Identifier.** Every line that changes what a program computes from the law is part of the identifier: the category, `formed`, the weights (in the order of their axis names), the links (in the order of the identifiers), the inputs, the constants and the `recall` expression. The `line` lines are not: rewording what the character says does not make another memory.
+
 ### Editions of a rule set (`domain` / `edition`)
 
 A rule law may be one edition of a rule set (a domain such as `legal` or `tax`): the rules in force for a period. Such a file has the five lines below, each exactly once; a file has all five or none of them. They are read before the lines of the kind, in any position of the file, and they are not names of the law.
@@ -397,7 +420,7 @@ The first edition of a domain is a full rule law file. A later edition may be a 
 
 - **Body.** The body of a rule law file is the lines that are read: its lines without their comment, without the empty ones, without the five header lines and without the lines for people (`law`, `claim`, `source`, `verdict`, `oracle`), each without the spaces and tabs at its end, in file order.
 - **Resolved text.** The five header lines in the order `domain`, `edition`, `supersedes`, `effective`, `semantics` (the keyword and each value separated by one space), then the body; every line ends with a line feed. For a full file it is built from the file itself; for a delta, from the delta's header and the body of the resolved text of the edition it supersedes after the operations.
-- **Key of a body line.** `row <label>:` and `require <label>:` lines: the keyword, one space and the label. `const`, `x-input`, `x-bind`, `allow`, `state`, `event`, `clause`, `party`, `condition`, `obligation` lines: the keyword, one space and the second word. `x-split` lines: the keyword, one space and the source. `on` lines: the words before `to`, separated by one space. Any other line: its keyword. A body with two lines of the same key does not resolve.
+- **Key of a body line.** `row <label>:` and `require <label>:` lines: the keyword, one space and the label. `line <label>:` lines: the keyword, one space and the label. `const`, `x-input`, `x-bind`, `allow`, `state`, `event`, `clause`, `party`, `condition`, `obligation`, `weight`, `link` lines: the keyword, one space and the second word. `x-split` lines: the keyword, one space and the source. `on` lines: the words before `to`, separated by one space. Any other line: its keyword. A body with two lines of the same key does not resolve.
 - **Operations**, applied in file order (a key never contains `:`, so an operation's key ends at its first `:`):
 
 | line | effect |

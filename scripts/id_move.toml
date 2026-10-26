@@ -63,6 +63,12 @@ path = "alice_lol::rule_law::PROCEDURE_SEMANTICS_ID"
 [[id]]
 path = "alice_lol::rule_law::CONTRACT_SEMANTICS_ID"
 
+# the semantics of the memory kind: MEMORY_SEMANTICS_ID (kind memory, recall and the weights, and
+# RULE_SEMANTICS_ID), the fold of its pins measured from the behaviour of rule_law; it is in every
+# memory-law identifier, so it moves only with a breaking version
+[[id]]
+path = "alice_lol::rule_law::MEMORY_SEMANTICS_ID"
+
 # the semantics of the layout laws (kind layout): the fold of LAYOUT_SEMANTICS_PINS, measured from the
 # behaviour of alice-lol-layout and re-exported here; it is in every layout-law identifier, so it moves
 # only with a breaking version

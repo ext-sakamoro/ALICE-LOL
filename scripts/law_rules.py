@@ -60,7 +60,7 @@ def rule_kind(text: str):
     lines = [ln.split("#", 1)[0].strip(" \t\r") for ln in text.split("\n")]
     if "kind audit" in lines:
         return None
-    for k in ("machine", "predicate", "table", "statute", "procedure", "contract"):
+    for k in ("machine", "predicate", "table", "statute", "procedure", "contract", "memory"):
         if f"kind {k}" in lines:
             return k
     return None
@@ -531,7 +531,7 @@ def _time_literal(tok, n):
 
 def _kind_semantics(semantics, kind, money):
     """The semantics identifier a law of `kind`, with or without money, is evaluated under"""
-    if kind in ("statute", "procedure", "contract"):
+    if kind in ("statute", "procedure", "contract", "memory"):
         return semantics[kind]
     return semantics[("money_" if money else "") + ("table" if kind == "table" else "rule")]
 
@@ -686,12 +686,14 @@ def parse(text: str, semantics: dict[str, bytes] | None = None, currencies: dict
         law["names"].add(name)
 
     {"machine": _machine, "predicate": _predicate, "table": _table, "statute": _statute,
-     "procedure": _procedure, "contract": _contract}[kind](law, lines, declare)
+     "procedure": _procedure, "contract": _contract, "memory": _memory}[kind](law, lines, declare)
     del law["names"]
     if kind in ("machine", "procedure") and _uses_money(law):
         raise RuleError(f"a {kind} law has no money")
-    if kind == "statute" and clines:
-        raise RuleError("a statute law has no money")
+    if kind in ("statute", "memory") and clines:
+        raise RuleError(f"a {kind} law has no money")
+    if kind == "memory" and _uses_money(law):
+        raise RuleError("a memory law has no money")
     _bind_currencies(law, clines[0] if clines else None, currencies, semantics)
     if kind == "contract":
         codes = {o["currency"] for o in law["obligations"]}
@@ -845,6 +847,120 @@ def _contract_answer(law, inp, bug):
 CLAUSE_KINDS = ("obligation", "prohibition", "permission", "definition", "penalty", "exception")
 LABEL = re.compile(r"[a-z][a-z0-9_]*\Z")
 MAX_LEGAL_TIME = (2 ** 64 - 1) // 10 ** 9  # the nanoseconds of every statute time fit 64 bits
+
+
+MAX_WEIGHT = 2 ** 31 - 1
+WEIGHT = re.compile(r"(0|-?[1-9][0-9]{0,9})\Z")
+
+
+def _memory(law, lines, declare):
+    """`kind memory` (conformance/TASK.md "Memory"): one `category <name>` and one `formed <integer>`
+    line, `weight <axis> <weight>`, `link <id>`, `x-input`, `const`, at most one `recall when <expression>`
+    and `line <label>: <text>` lines"""
+    law.update(inputs=[], category=None, formed=None, weights={}, links=[], recall=None, said=[])
+    types = {}
+    for n, ln in lines:
+        w = _words(ln)
+        head = w[0]
+        if head in PEOPLE or head == "kind":
+            continue
+        if ln.lstrip(WS).lower().startswith("x-"):
+            m = re.match(r"x-input ([^ \t].*)\Z", ln.rstrip(" \t"))
+            if not m or ln[0] in " \t":
+                raise RuleError(f"line {n}: `{_trim(ln)}` is not an x- line of a memory law")
+            name, ty = (_split1(_trim(m.group(1))) + [""])[:2]
+            declare(name, "input")
+            ty = _parse_type(ty)
+            if ty == "money":
+                raise RuleError(f"line {n}: a memory law has no money")
+            types[name] = ty
+            law["inputs"].append((name, ty))
+        elif head == "const":
+            _const_line(law, _split1(ln)[1] if len(w) > 1 else "", declare)
+            if law["consts"][w[1]][0] == "money":
+                raise RuleError(f"line {n}: a memory law has no money")
+            types[w[1]] = law["consts"][w[1]][0]
+        elif head == "category":
+            if law["category"] is not None or len(w) != 2 or not NAME.match(w[1]) or w[1] in RESERVED:
+                raise RuleError(f"line {n}: one `category <name>` line")
+            law["category"] = w[1]
+        elif head == "formed":
+            if law["formed"] is not None or len(w) != 2:
+                raise RuleError(f"line {n}: one `formed <integer>` line")
+            if not re.fullmatch(r"0|[1-9][0-9]*", w[1]) or _numeral(w[1]) is None or int(w[1]) > MAX_INT:
+                raise RuleError(f"line {n}: `{w[1][:50]}` is not an integer literal")
+            law["formed"] = int(w[1])
+        elif head == "weight":
+            if len(w) != 3:
+                raise RuleError(f"line {n}: `weight <axis> <weight>`")
+            axis, value = w[1], w[2]
+            if not NAME.match(axis) or axis in RESERVED:
+                raise RuleError(f"line {n}: `{axis}` is not a name (axis)")
+            if axis in law["weights"]:
+                raise RuleError(f"line {n}: a second `weight` line for `{axis}`")
+            if not WEIGHT.match(value) or abs(int(value)) > MAX_WEIGHT:
+                raise RuleError(f"line {n}: `{value[:50]}` is not a weight")
+            law["weights"][axis] = int(value)
+        elif head == "link":
+            if len(w) != 2 or not ID_HEX.match(w[1]):
+                raise RuleError(f"line {n}: `link <64 lower-case hex>`")
+            ident = bytes.fromhex(w[1])
+            if ident in law["links"]:
+                raise RuleError(f"line {n}: a second `link` line for the same identifier")
+            law["links"].append(ident)
+        elif head == "recall":
+            m = re.fullmatch(r"recall[ \t]+when[ \t]+(.+?)[ \t]*", _trim(ln))
+            if law["recall"] is not None or not m:
+                raise RuleError(f"line {n}: one `recall when <expression>` line")
+            src = m.group(1)
+
+            def atom(name, field, types=types):
+                if name not in types:
+                    raise RuleError(f"`{name}` is not declared on an earlier line")
+                ty = types[name]
+                if field is None:
+                    if name in law["consts"]:
+                        return ("lit", ty, law["consts"][name][1])
+                    return ("ref", _type_name(ty), name, None)
+                if not isinstance(ty, tuple) or field not in dict(ty[1]):
+                    raise RuleError(f"`{name}.{field}`: no such field")
+                return ("ref", dict(ty[1])[field], name, field)
+            e = _Parser(src, atom).parse()
+            if _typeof(e, set()) != "bool":
+                raise RuleError(f"line {n}: `{src}` is not a boolean")
+            law["recall"] = e
+        elif head == "line":
+            if ":" not in ln:
+                raise RuleError(f"line {n}: `line <label>: <text>`")
+            hd, text = ln.split(":", 1)
+            hw = _words(hd)
+            text = text.strip(" \t")
+            if len(hw) != 2:
+                raise RuleError(f"line {n}: `line <label>: <text>`")
+            if not text:
+                raise RuleError(f"line {n}: a `line` has a text after the `:`")
+            label = hw[1]
+            if not LABEL.match(label) or label in RESERVED or label in (lb for lb, _ in law["said"]):
+                raise RuleError(f"line {n}: label `{label}` is reserved or used twice")
+            law["said"].append((label, text))
+        else:
+            raise RuleError(f"line {n}: `{head}` is not a line of a memory law")
+    if law["category"] is None or law["formed"] is None:
+        raise RuleError("a memory law has one `category` line and one `formed` line")
+    law["links"].sort()
+
+
+def _memory_answer(law, inp, bug):
+    for name, _ in law["inputs"]:
+        if name not in inp:
+            return ("request_error", f"{name} missing")
+    env = {}
+    for name, ty in law["inputs"]:
+        if not _has_type(inp[name], ty):
+            return ("rejected", f"{name} does not have its type")
+        env[name] = _value(inp[name], ty)
+    recalled = law["recall"] is not None and _eval(law["recall"], env, bug) is True
+    return ("outputs", {"recalled": recalled})
 
 
 def _statute_time(tok, n):
@@ -1218,9 +1334,9 @@ KEYED = ("const", "x-input", "x-bind", "allow", "state", "event")
 
 def _key(line: str) -> str:
     w = _words(line)
-    if w[0] in ("row", "require") and len(w) > 1 and w[1].endswith(":"):
+    if w[0] in ("row", "require", "line") and len(w) > 1 and w[1].endswith(":"):
         return f"{w[0]} {w[1][:-1]}"
-    if w[0] in KEYED + ("x-split", "clause", "party", "condition", "obligation") and len(w) > 1:
+    if w[0] in KEYED + ("x-split", "clause", "party", "condition", "obligation", "weight", "link") and len(w) > 1:
         return f"{w[0]} {w[1]}"
     if w[0] == "on" and "to" in w:
         return " ".join(w[:w.index("to")])
@@ -1323,7 +1439,7 @@ def resolve(previous: str, delta: str, semantics: dict[str, bytes],
 LAW_ID_DOMAIN_V2 = b"alice-law-id/v2"
 LAW_KINDS = {"machine": b"lol.law.machine/v1", "predicate": b"lol.law.predicate/v1", "table": b"lol.law.table/v1",
              "statute": b"lol.law.statute/v1", "procedure": b"lol.law.procedure/v1",
-             "contract": b"lol.law.contract/v1"}
+             "contract": b"lol.law.contract/v1", "memory": b"lol.law.memory/v1"}
 
 
 class _LawId:
@@ -1453,6 +1569,19 @@ def law_id(law: dict, semantics: dict[str, bytes]) -> bytes:
             h = h.text(o["label"]).text(o["debtor"]).text(o["creditor"])
             h = h.text("money").raw(o["amount"].to_bytes(16, "big", signed=True)).text(o["currency"]).u64(o["due"])
         return h.finish()
+    if kind == "memory":
+        h = _hash_inputs(_hash_consts(h, law), law)
+        h = h.text("category").text(law["category"]).text("formed").u64(law["formed"])
+        h = h.text("weights").u64(len(law["weights"]))
+        for axis in sorted(law["weights"]):
+            h = h.text(axis).u64(law["weights"][axis] % 2 ** 64)  # the two's complement bits of an i64
+        h = h.text("links").u64(len(law["links"]))
+        for ident in law["links"]:
+            h = h.ident(ident)
+        h = h.text("recall").u32(int(law["recall"] is not None))
+        if law["recall"] is not None:
+            h = _hash_expr(h, law["recall"])
+        return h.finish()
     if kind == "statute":
         h = h.text("title").text(law["title"]).text("clauses").u64(len(law["clauses"]))
         for c in law["clauses"]:
@@ -1523,7 +1652,8 @@ def respond(law, inputs, bug=None):
     """The answer to a request whose `inputs` is the given object (None: no inputs key)"""
     inputs = {} if inputs is None else inputs
     return {"machine": _machine_step, "procedure": _machine_step, "predicate": _predicate_answer,
-            "table": _table_answer, "statute": _statute_answer, "contract": _contract_answer}[law["kind"]](law, inputs, bug)
+            "table": _table_answer, "statute": _statute_answer, "contract": _contract_answer,
+            "memory": _memory_answer}[law["kind"]](law, inputs, bug)
 
 
 def _machine_step(law, inp, bug):
@@ -1707,7 +1837,7 @@ def vectors(law, name):
     """The conformance vectors of a rule law: every answer is computed by `respond`"""
     return {"machine": _machine_vectors, "procedure": _machine_vectors, "predicate": _predicate_vectors,
             "table": _table_vectors, "statute": _statute_vectors,
-            "contract": _contract_vectors}[law["kind"]](law, name)
+            "contract": _contract_vectors, "memory": _memory_vectors}[law["kind"]](law, name)
 
 
 def _contract_vectors(law, name):
@@ -1849,6 +1979,22 @@ def _money_variants(law, base):
                 ({**base, n: f"{amount}  {cur}"}, f"{n}: two spaces"),
                 ({**base, n: int(amount)}, f"{n}: a JSON number")]
     return out
+
+
+def _memory_vectors(law, name):
+    """The combinations of the values the `recall` expression compares each input with (as for a
+    table's rows), each input of another type and each input missing"""
+    as_table = {"inputs": law["inputs"], "rows": [] if law["recall"] is None else [("recall", "true", law["recall"])]}
+    V = [_vec(name, inp, f"combination {json.dumps(inp, sort_keys=True)}", respond(law, inp))
+         for inp in _table_inputs(as_table)]
+    base = V[0]["inputs"]
+    other = {"integer": "1", "time": "1", "text": 1, "bytes": "zz", "bool": 1}
+    for n, ty in law["inputs"]:
+        bad = 1 if isinstance(ty, tuple) else other[ty]
+        V.append(_vec(name, {**base, n: bad}, f"{n} of another type", respond(law, {**base, n: bad})))
+        inp = {k: v for k, v in base.items() if k != n}
+        V.append(_vec(name, inp, f"{n} missing", respond(law, inp)))
+    return V
 
 
 def _table_inputs(law):
@@ -2201,6 +2347,11 @@ def coverage(law, vecs):
                 for x in (t - 1, t):
                     if abs(x) <= MAX_INT and x not in times:
                         missing.append(f"a vector at {x} (a bound of {c['label']})")
+    elif law["kind"] == "memory":
+        got = {v["expected"]["recalled"] for v in answered}
+        for state in ((True, False) if law["recall"] is not None else (False,)):
+            if state not in got:
+                missing.append(f"a vector with recalled {str(state).lower()}")
     elif law["kind"] == "table":
         # every row (and the otherwise) that some combination of the compared values reaches
         want = {respond(law, inp)[1]["row"] for inp in _table_inputs(law)}

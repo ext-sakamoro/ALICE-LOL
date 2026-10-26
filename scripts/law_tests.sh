@@ -38,6 +38,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test rule_law_oracle|"
   "alice-lol|--test table_law_oracle|"
   "alice-lol|--test statute_law_oracle|"
+  "alice-lol|--test memory_law_oracle|"
   "alice-lol|--test procedure_law_oracle|"
   "alice-lol|--test contract_law_oracle|"
   "alice-lol|--test rule_law_limits|"

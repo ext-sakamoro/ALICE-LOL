@@ -49,12 +49,14 @@ use crate::law_id::hex32;
 use crate::law_input::Json;
 
 mod contract;
+mod memory;
 mod procedure;
 pub use contract::{
     contract_semantics_fingerprints, ContractCondition, ContractLaw, ContractObligation,
     CONTRACT_LAW_KIND,
 };
 mod statute;
+pub use memory::{memory_semantics_fingerprints, MemoryLaw, MAX_WEIGHT, MEMORY_LAW_KIND};
 pub use procedure::{
     next_status, procedure_semantics_fingerprints, PROCEDURE_STATUSES, STEP_KINDS,
 };
@@ -270,6 +272,26 @@ pub const CONTRACT_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 pub const CONTRACT_SEMANTICS_ID: [u8; 32] =
     hex32("bb055ca2e92a2b3607464bdb4c3a90026b0c9a9240f73d9e66d9042ee99a6ce3");
 
+/// The semantics of the memory kind `(name, fingerprint of that behaviour)`
+///
+/// ⚠️ The first value is measured ([`memory_semantics_fingerprints`]); the second is
+/// [`RULE_SEMANTICS_ID`], the expressions and inputs a memory's `recall` shares with a predicate.
+/// The oracle recomputes both and the fold.
+pub const MEMORY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
+    (
+        "rule memory: recalled is the recall expression (false without one), weights are signed 32-bit integers by axis",
+        hex32("fc8faa770eeeab454a192feb43b2528c03d9bcde0593d0a144049216a8f9565b"),
+    ),
+    (
+        "rule expressions and inputs (RULE_SEMANTICS_ID)",
+        RULE_SEMANTICS_ID,
+    ),
+];
+
+/// The fold of [`MEMORY_SEMANTICS_PINS`] (the oracle checks the two agree)
+pub const MEMORY_SEMANTICS_ID: [u8; 32] =
+    hex32("bb1c8e2ac909511be35ee85a51244835f6ffa6dc908514311855eb34ea5b4220");
+
 /// The fold of [`STATUTE_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const STATUTE_SEMANTICS_ID: [u8; 32] =
     hex32("428a5863af343ed0b3c8c67c6e9355a57f2b23ce57a915b6941dd1179281ed6a");
@@ -290,6 +312,8 @@ pub enum RuleKind {
     Procedure,
     /// `kind contract`
     Contract,
+    /// `kind memory`
+    Memory,
 }
 
 /// The kind of a rule law file: `None` when it has the line `kind audit` (an audit law,
@@ -319,6 +343,8 @@ pub fn rule_kind(text: &str) -> Option<RuleKind> {
         Some(RuleKind::Procedure)
     } else if lines.contains(&"kind contract") {
         Some(RuleKind::Contract)
+    } else if lines.contains(&"kind memory") {
+        Some(RuleKind::Memory)
     } else {
         None
     }
@@ -1288,6 +1314,7 @@ const fn kind_semantics(kind: RuleKind, money: bool) -> [u8; 32] {
         (RuleKind::Table, true) => MONEY_TABLE_SEMANTICS_ID,
         (RuleKind::Statute, _) => STATUTE_SEMANTICS_ID,
         (RuleKind::Procedure, _) => PROCEDURE_SEMANTICS_ID,
+        (RuleKind::Memory, _) => MEMORY_SEMANTICS_ID,
         (_, false) => RULE_SEMANTICS_ID,
         (_, true) => MONEY_SEMANTICS_ID,
     }
@@ -1423,11 +1450,11 @@ fn body_lines(ls: &[(usize, &str)]) -> Vec<String> {
 fn line_key(line: &str) -> String {
     let w = fields(line);
     match w.as_slice() {
-        [k @ ("row" | "require"), label, ..] if label.ends_with(':') => {
+        [k @ ("row" | "require" | "line"), label, ..] if label.ends_with(':') => {
             format!("{k} {}", &label[..label.len() - 1])
         }
         [k @ ("const" | "x-input" | "x-bind" | "allow" | "state" | "event" | "x-split"
-        | "clause" | "party" | "condition" | "obligation"), name, ..] => {
+        | "clause" | "party" | "condition" | "obligation" | "weight" | "link"), name, ..] => {
             format!("{k} {name}")
         }
         ["on", ..] if w.contains(&"to") => {
@@ -1803,6 +1830,8 @@ pub enum RuleLaw {
     Procedure(MachineLaw),
     /// `kind contract`
     Contract(ContractLaw),
+    /// `kind memory`
+    Memory(MemoryLaw),
 }
 
 /// A state machine law
@@ -1971,7 +2000,7 @@ pub fn rule_law_from_file_with(
     let kind = rule_kind(text).ok_or_else(|| {
         err(
             0,
-            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract`)",
+            "not a rule law (no `kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` / `kind memory`)",
         )
     })?;
     let ls = lines(text)?;
@@ -2057,6 +2086,12 @@ pub fn rule_law_from_file_with(
                 return Err(err(0, "a statute law has no money"));
             }
             RuleLaw::Statute(statute::read_statute(&ls, edition)?)
+        }
+        RuleKind::Memory => {
+            if cur.is_some() {
+                return Err(err(0, "a memory law has no money"));
+            }
+            RuleLaw::Memory(memory::read_memory(&ls, edition)?)
         }
     })
 }
@@ -2598,6 +2633,7 @@ impl RuleLaw {
             Self::Table(t) => t.respond(inputs),
             Self::Statute(s) => s.respond(inputs),
             Self::Contract(c) => c.respond(inputs),
+            Self::Memory(m) => m.respond(inputs),
         }
     }
 
@@ -2611,6 +2647,7 @@ impl RuleLaw {
             Self::Statute(_) => RuleKind::Statute,
             Self::Procedure(_) => RuleKind::Procedure,
             Self::Contract(_) => RuleKind::Contract,
+            Self::Memory(_) => RuleKind::Memory,
         }
     }
 
@@ -2623,6 +2660,7 @@ impl RuleLaw {
             Self::Table(t) => t.edition.as_ref(),
             Self::Statute(s) => s.edition.as_ref(),
             Self::Contract(c) => c.edition.as_ref(),
+            Self::Memory(m) => m.edition.as_ref(),
         }
     }
 
@@ -2635,6 +2673,7 @@ impl RuleLaw {
             Self::Table(t) => t.law_id(),
             Self::Statute(s) => s.law_id(),
             Self::Contract(c) => c.law_id(),
+            Self::Memory(m) => m.law_id(),
             Self::Procedure(m) => {
                 m.law_id(PROCEDURE_LAW_KIND, "procedure", &PROCEDURE_SEMANTICS_ID)
             }

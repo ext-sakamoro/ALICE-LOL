@@ -107,6 +107,11 @@ class = "local"
 reason = "the status a step kind leads to, a fixed table of words; it carries no Law-bearing value of another crate"
 
 [[entry]]
+path = "alice_lol::rule_law::MemoryLaw::weight"
+class = "local"
+reason = "looks up the weight a memory law already read gives one axis name; it carries no Law-bearing value of another crate"
+
+[[entry]]
 path = "alice_lol::rule_law::rule_kind"
 class = "local"
 reason = "only tells which kind a law file is from its kind lines; it carries no Law-bearing value of another crate"
