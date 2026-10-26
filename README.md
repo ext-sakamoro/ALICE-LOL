@@ -406,7 +406,7 @@ the full vocabulary and worked examples against this crate's own
 | `alice-lol-macro` | the `lol!` proc-macro |
 | `alice-lol` | runtime parser, emitter, transpile and export functions, law checkers, intent IR, stdlib shapes |
 | `alice-lol-layout` | byte layout laws: declare a binary format once, decode or check bytes against it (`no_std`, re-exported as `alice_lol::layout`) |
-| `alice-lol-humanoid` | parametric humanoid template (joint FK, VRM / BVH import) |
+| `alice-lol-humanoid` | parametric humanoid template (joint FK, VRM / BVH import), and measuring a body in the units of the proportion laws (feature `fbx` reads binary FBX) |
 | `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law |
 | `alice-lol-datagen` | synthetic (caption, LOL) pair generator with self-check |
 | `alice-world-auditor-types` | goal and verdict types shared by law checkers and planners |

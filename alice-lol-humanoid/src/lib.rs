@@ -55,6 +55,11 @@ use alice_lol::{SdfNode, Vec3};
 use glam::{Mat4, Quat};
 
 pub mod bvh;
+pub mod measure;
+pub mod rig;
+
+#[cfg(feature = "fbx")]
+pub mod fbx;
 
 #[cfg(feature = "vrm")]
 pub mod vrm;

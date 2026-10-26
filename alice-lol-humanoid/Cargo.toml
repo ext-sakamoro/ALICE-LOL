@@ -20,12 +20,20 @@ glam = "0.29"
 
 # Optional (feature vrm)
 serde_json = { version = "1", optional = true }
+# Optional (feature fbx)
+alice-fbx = { git = "https://github.com/ext-sakamoro/ALICE-FBX", rev = "13bc1e320ad055bbd1791e0c43ce1620e71ff131", version = "0.1.0", optional = true }
 
 [features]
 default = []
 # VRM 0.x binary GLB からhumanoid bone を抽出 (自前 GLB JSON parser 使用、gltf crate は不要)
 vrm = ["dep:serde_json"]
+# binary FBX の骨と skin から体を測る (measure の入力を作る)
+fbx = ["dep:alice-fbx"]
 
 [[example]]
 name = "humanoid_from_vrm"
 required-features = ["vrm"]
+
+[[example]]
+name = "measure_fbx"
+required-features = ["fbx"]
