@@ -72,7 +72,7 @@ class Leg(unittest.TestCase):
         dirs = r.required_dirs(self.tmp, self.meta)
         self.assertIn("alice-lol", dirs)
         self.assertIn("alice-lol-layout", dirs, "a path dependency of alice-lol")
-        self.assertNotIn("alice-lol-humanoid", dirs, "no Law test builds it")
+        self.assertIn("alice-lol-humanoid", dirs, "its measure_body is a Law test")
         self.assertNotIn("alice-lol-ui", dirs)
 
     def test_law_tests_must_read_the_release_profile_back(self):

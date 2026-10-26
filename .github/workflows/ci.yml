@@ -130,6 +130,13 @@ jobs:
         working-directory: ALICE-LOL
         run: cargo test ${{ matrix.features }} --test analytic_roblox_export
 
+      # 測定器の FBX 側 (feature fbx) は既定の test では compile されないので名指しで走らせる
+      # (0 件の実行は fail)
+      - name: Test (humanoid fbx measure, named)
+        if: matrix.label == ''
+        working-directory: ALICE-LOL
+        run: scripts/cargo_test_nonzero.sh -p alice-lol-humanoid --features fbx --test measure_fbx
+
       # Phase X.8 B-8: catch example bit-rot. `required-features` on
       # llm-bridge-only examples auto-skips them on the macos default
       # matrix, so a single line covers both configurations.

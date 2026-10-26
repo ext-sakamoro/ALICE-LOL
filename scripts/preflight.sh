@@ -518,6 +518,9 @@ step "ci.yml / test: Test [features=--features roblox]"
 step "ci.yml / test: Test (roblox oracle, named)"
 ( export CARGO_TERM_COLOR="always"; cargo test --features roblox --test analytic_roblox_export )
 
+step "ci.yml / test: Test (humanoid fbx measure, named)"
+( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh -p alice-lol-humanoid --features fbx --test measure_fbx )
+
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
 
