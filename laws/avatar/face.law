@@ -1,0 +1,25 @@
+# The layout of a stylised face, in units of the distance from the chin to the eye line
+law avatar_face
+kind proportion
+claim lengths are in units of e, the height of the eye line above the chin; the chin is at the origin, x to the face's left, y up, z forward from the front of the face
+claim the right side mirrors the left; ranges = rounded envelope of the reference faces (each end rounded outward to 2 decimals, the defaults to 2 decimals)
+param eye_width number = 0.67 range 0.63 0.72
+param eye_height number = 0.28 range 0.24 0.33
+param eye_recess number = 0.58 range 0.48 0.68
+param brow_y number = 1.27 range 1.23 1.32
+param brow_inner number = 0.18 range 0.15 0.22
+param brow_outer number = 0.65 range 0.54 0.76
+param mouth_y number = 0.32 range 0.31 0.34
+param mouth_width number = 0.47 range 0.41 0.54
+param depth number = 1.76 range 1.69 1.84
+# nearly the same in every face fitted: fixed
+let eye_x = 0.53
+let head_width = 2
+point eye_l = (eye_x, 1, 0 - eye_recess)
+point eye_size = (eye_width, eye_height, 0)
+point brow_inner_l = (brow_inner, brow_y, 0)
+point brow_outer_l = (brow_outer, brow_y, 0)
+point mouth = (0, mouth_y, 0)
+out mouth_half_width = mouth_width / 2
+out head_half_width = head_width / 2
+out head_depth = depth
