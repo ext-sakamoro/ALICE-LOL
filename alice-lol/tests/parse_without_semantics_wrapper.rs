@@ -20,7 +20,12 @@ use sha2::{Digest, Sha256};
 include!("data/parse_corpus_bbb6539.rs");
 
 /// SHA-256 over every (entry point, text, result) of the corpus, recorded at bbb6539
-const DIGEST: &str = "17b7a3429b63388c4ee640ff2b51ef81182f39ac1b4821819a441da9ee95ddf5";
+///
+/// The digest was re-recorded once when two constructs of the corpus were renamed (four texts);
+/// that the reading did not change was shown by dumping every result before and after the
+/// rename (`tests/parse_corpus_dump.rs`) and comparing the dumps with `scripts/compare_corpus_dumps.py`
+/// (equal once the old names are put back, error positions moved by the shorter names)
+const DIGEST: &str = "9cc83da96dd6b1b75f7728cd624b0f86efb8222c83e7845f17ed426d40953f00";
 
 fn err(e: &ParseError) -> String {
     format!("Err({:?} @ {})", e.message, e.position)

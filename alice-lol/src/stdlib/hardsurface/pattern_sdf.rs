@@ -2179,12 +2179,12 @@ pub fn hex_bit_holder(spec: &HexBitHolderSpec) -> SdfNode {
 }
 
 // ────────────────────────────────────────────────────────
-// 23. raspi_case (electronics-enclosure § 1 single-board computer cases)
+// 23. sbc_case (electronics-enclosure § 1 single-board computer cases)
 // ────────────────────────────────────────────────────────
 
 /// SBC (シングルボードコンピュータ) ケース spec (4-side walls + 4 corner standoff pegs + port opening、top open)
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RaspiCaseSpec {
+pub struct SbcCaseSpec {
     /// PCB 幅 (mm、85 mm 級 SBC=85 / 小型 SBC=65、default 85)
     pub pcb_width: f32,
     /// PCB 奥行 (mm、85 mm 級 SBC=56 / 小型 SBC=30、default 56)
@@ -2209,10 +2209,10 @@ pub struct RaspiCaseSpec {
     pub port_opening_width: f32,
 }
 
-impl RaspiCaseSpec {
+impl SbcCaseSpec {
     /// 85×56 mm SBC + 冷却ファン 85×56×25mm (electronics-enclosure § 1 default)
     #[must_use]
-    pub const fn rpi5_active_cooler() -> Self {
+    pub const fn sbc_85x56_active_cooler() -> Self {
         Self {
             pcb_width: 85.0,
             pcb_depth: 56.0,
@@ -2241,11 +2241,11 @@ impl RaspiCaseSpec {
 /// # 使用例
 ///
 /// ```
-/// use alice_lol::stdlib::hardsurface::pattern_sdf::{raspi_case, RaspiCaseSpec};
-/// let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sbc_case, SbcCaseSpec};
+/// let c = sbc_case(&SbcCaseSpec::sbc_85x56_active_cooler());
 /// ```
 #[must_use]
-pub fn raspi_case(spec: &RaspiCaseSpec) -> SdfNode {
+pub fn sbc_case(spec: &SbcCaseSpec) -> SdfNode {
     let ext_x = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_width);
     let ext_z = 2.0f32.mul_add(spec.pcb_clearance + spec.wall_thickness, spec.pcb_depth);
     let ext_y = spec.internal_height + spec.floor_thickness;
@@ -4959,7 +4959,7 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
 // 54. outdoor_enclosure (electronics § 5 Outdoor IP54 Enclosure)
 // ────────────────────────────────────────────────────────
 
-/// 屋外用 IP54 密閉筐体 spec (`raspi_case` + gasket groove、lid seam)
+/// 屋外用 IP54 密閉筐体 spec (`sbc_case` + gasket groove、lid seam)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OutdoorEnclosureSpec {
     /// 内部 幅 (mm、default 120、range 80-200)
@@ -4994,7 +4994,7 @@ impl OutdoorEnclosureSpec {
     }
 }
 
-/// 屋外用 IP54 密閉筐体 (`raspi_case` pattern + gasket groove for O-ring seal、`to_z_up` wrap)
+/// 屋外用 IP54 密閉筐体 (`sbc_case` pattern + gasket groove for O-ring seal、`to_z_up` wrap)
 ///
 /// 構造 (electronics § 5 準拠、Y-up 設計):
 /// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
@@ -5920,7 +5920,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
 // 63. led_hub_box (electronics § 6 LED Hub Enclosure)
 // ────────────────────────────────────────────────────────
 
-/// LED hub 筐体 spec (`raspi_case` + front LED window + antenna keep-out)
+/// LED hub 筐体 spec (`sbc_case` + front LED window + antenna keep-out)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LedHubBoxSpec {
     /// 内部 幅 (mm、default 80、range 60-150)
@@ -5958,7 +5958,7 @@ impl LedHubBoxSpec {
     }
 }
 
-/// LED hub 筐体 (`raspi_case` + front LED opening + top antenna hole、multi-component、`to_z_up` wrap)
+/// LED hub 筐体 (`sbc_case` + front LED opening + top antenna hole、multi-component、`to_z_up` wrap)
 ///
 /// 構造 (electronics § 6 準拠、Y-up 設計、3-component composite):
 /// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
@@ -6437,8 +6437,8 @@ pub fn t_slot_bracket_2020(spec: &TSlotBracket2020Spec) -> SdfNode {
 
 /// SBC マウント板 spec (M2.5 mount 穴 + VESA-compat 外周穴)
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RaspiMountPlateSpec {
-    /// Pi model (4=Pi4B、5=Pi5、3=Pi3B+ = 58×49、0=Zero = 58×23)
+pub struct SbcMountPlateSpec {
+    /// 穴の pattern の型 (4 / 5 / 3 = 58×49 mm、0 = 58×23 mm)
     pub model: u32,
     /// 外周 M4 追加穴数 (0-4、VESA-like 4 隅配置、0=なし)
     pub extra_m4_holes: u32,
@@ -6450,10 +6450,10 @@ pub struct RaspiMountPlateSpec {
     pub m25_hole_dia: f32,
 }
 
-impl RaspiMountPlateSpec {
-    /// Pi 4B / Pi 5 標準 (58×49mm 4-hole pattern、板厚 4mm、VESA 4 隅穴)
+impl SbcMountPlateSpec {
+    /// 58×49 mm 4 穴の基板 (4-hole pattern、板厚 4mm、VESA 4 隅穴)
     #[must_use]
-    pub const fn pi_4b_vesa() -> Self {
+    pub const fn holes_58x49_vesa() -> Self {
         Self {
             model: 4,
             extra_m4_holes: 4,
@@ -6463,9 +6463,9 @@ impl RaspiMountPlateSpec {
         }
     }
 
-    /// Pi Zero 標準 (58×23mm 4-hole pattern、板厚 3mm、外周穴なし)
+    /// 58×23 mm 4 穴の基板 (4-hole pattern、板厚 3mm、外周穴なし)
     #[must_use]
-    pub const fn pi_zero_bare() -> Self {
+    pub const fn holes_58x23_bare() -> Self {
         Self {
             model: 0,
             extra_m4_holes: 0,
@@ -6478,18 +6478,18 @@ impl RaspiMountPlateSpec {
 
 /// SBC マウント板 (M2.5 mount pattern + optional M4 VESA 4 隅穴)
 ///
-/// 構造: 板 (`RoundedBox`) から Pi model 別 M2.5 穴 4 個 + optional M4 穴 4 隅を Subtraction
-/// Pi 3B+/4B/5: 58×49mm rectangular pattern
-/// Pi Zero: 58×23mm pattern (原点対称)
+/// 構造: 板 (`RoundedBox`) から基板の型 (model) 別の M2.5 穴 4 個 + optional M4 穴 4 隅を Subtraction
+/// 58×49 mm 基板: 長方形の pattern
+/// 58×23 mm 基板: 原点対称の pattern
 ///
 /// # 使用例
 ///
 /// ```
-/// use alice_lol::stdlib::hardsurface::pattern_sdf::{raspi_mount_plate, RaspiMountPlateSpec};
-/// let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+/// use alice_lol::stdlib::hardsurface::pattern_sdf::{sbc_mount_plate, SbcMountPlateSpec};
+/// let p = sbc_mount_plate(&SbcMountPlateSpec::holes_58x49_vesa());
 /// ```
 #[must_use]
-pub fn raspi_mount_plate(spec: &RaspiMountPlateSpec) -> SdfNode {
+pub fn sbc_mount_plate(spec: &SbcMountPlateSpec) -> SdfNode {
     use crate::stdlib::hardsurface::cavity::{
         subtract_through_cylinder, subtract_through_screw_hole,
     };
@@ -8419,15 +8419,15 @@ mod tests {
     // ── electronics-enclosure.md 3 archetype (Sprint 7) ──
 
     #[test]
-    fn raspi_case_rpi5_is_rotate_wrapped() {
-        let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+    fn sbc_case_85x56_is_rotate_wrapped() {
+        let c = sbc_case(&SbcCaseSpec::sbc_85x56_active_cooler());
         // to_z_up wrap で top-level は Rotate
         assert!(matches!(c, SdfNode::Rotate { .. }));
     }
 
     #[test]
-    fn raspi_case_floor_is_solid() {
-        let c = raspi_case(&RaspiCaseSpec::rpi5_active_cooler());
+    fn sbc_case_floor_is_solid() {
+        let c = sbc_case(&SbcCaseSpec::sbc_85x56_active_cooler());
         // 内部 Y-up: ext_y = 25+3 = 28, outer_hy = 14, floor Y range [-14, -11]
         // to_z_up: world (0, 0, -13) → internal (0, -13, 0), floor 材料
         assert!(eval(&c, Vec3::new(0.0, 0.0, -13.0)) < 0.0);
@@ -8476,7 +8476,7 @@ mod tests {
     #[test]
     fn all_electronics_archetypes_evaluations_finite() {
         let nodes = [
-            raspi_case(&RaspiCaseSpec::rpi5_active_cooler()),
+            sbc_case(&SbcCaseSpec::sbc_85x56_active_cooler()),
             esp32_enclosure(&Esp32EnclosureSpec::esp32_devkit_v1()),
             battery_18650_holder(&Battery18650HolderSpec::row_4_through()),
         ];
@@ -9359,14 +9359,14 @@ mod tests {
     }
 
     #[test]
-    fn raspi_mount_plate_pi_4b_is_rotate_wrapped() {
-        let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+    fn sbc_mount_plate_58x49_is_rotate_wrapped() {
+        let p = sbc_mount_plate(&SbcMountPlateSpec::holes_58x49_vesa());
         assert!(matches!(p, SdfNode::Rotate { .. }));
     }
 
     #[test]
-    fn raspi_mount_plate_center_is_solid() {
-        let p = raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa());
+    fn sbc_mount_plate_center_is_solid() {
+        let p = sbc_mount_plate(&SbcMountPlateSpec::holes_58x49_vesa());
         // 板中心 (原点) は solid (Pi mount 穴は 4 隅、板中心は空きスペース)
         assert!(eval(&p, Vec3::ZERO) < 0.0);
     }
@@ -9424,8 +9424,8 @@ mod tests {
         let nodes = [
             t_slot_bracket_2020(&TSlotBracket2020Spec::standard_20()),
             t_slot_bracket_2020(&TSlotBracket2020Spec::heavy_40()),
-            raspi_mount_plate(&RaspiMountPlateSpec::pi_4b_vesa()),
-            raspi_mount_plate(&RaspiMountPlateSpec::pi_zero_bare()),
+            sbc_mount_plate(&SbcMountPlateSpec::holes_58x49_vesa()),
+            sbc_mount_plate(&SbcMountPlateSpec::holes_58x23_bare()),
             heat_set_array(&HeatSetArraySpec::m3_2x2()),
             heat_set_array(&HeatSetArraySpec::m4_3x3()),
             flange_mount(&FlangeMountSpec::od80_m5_4()),

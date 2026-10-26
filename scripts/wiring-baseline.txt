@@ -114,13 +114,13 @@ unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::p2020_100
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::p3030_100
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::packing_tape_standard
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::phone_default
-unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::pi_4b_vesa
-unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::pi_zero_bare
+unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::holes_58x49_vesa
+unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::holes_58x23_bare
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::poker
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::rectangular_us
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::round_95x5
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::row_4_through
-unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::rpi5_active_cooler
+unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::sbc_85x56_active_cooler
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::sg90_standard
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::small_square
 unwired alice-lol/src/stdlib/hardsurface/pattern_sdf.rs::standard

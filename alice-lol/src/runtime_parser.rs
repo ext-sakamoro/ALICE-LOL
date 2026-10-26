@@ -2113,10 +2113,10 @@ impl<'a> Parser<'a> {
             }
 
             // ── electronics-enclosure.md archetypes (Sprint 7、2026-08-23) ──
-            "raspi_case" => {
-                // raspi_case(pcb_w, pcb_d, internal_h) 3 param、他 default
+            "sbc_case" => {
+                // sbc_case(pcb_w, pcb_d, internal_h) 3 param、他 default
                 let (pcb_w, pcb_d, int_h) = self.parse_3f()?;
-                let spec = crate::stdlib::hardsurface::pattern_sdf::RaspiCaseSpec {
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SbcCaseSpec {
                     pcb_width: pcb_w,
                     pcb_depth: pcb_d,
                     internal_height: int_h,
@@ -2129,7 +2129,7 @@ impl<'a> Parser<'a> {
                     standoff_inset: 3.5,
                     port_opening_width: 60.0,
                 };
-                Ok(crate::stdlib::hardsurface::pattern_sdf::raspi_case(&spec))
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sbc_case(&spec))
             }
             "esp32_enclosure" => {
                 // esp32_enclosure(pcb_w, pcb_d, internal_h) 3 param、他 default (USB-C 想定)
@@ -2772,17 +2772,17 @@ impl<'a> Parser<'a> {
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::t_slot_bracket_2020(&spec))
             }
-            "raspi_mount_plate" => {
-                // raspi_mount_plate(model, extra_m4_holes) 2 param
+            "sbc_mount_plate" => {
+                // sbc_mount_plate(model, extra_m4_holes) 2 param
                 let (model, extras) = self.parse_2f()?;
-                let spec = crate::stdlib::hardsurface::pattern_sdf::RaspiMountPlateSpec {
+                let spec = crate::stdlib::hardsurface::pattern_sdf::SbcMountPlateSpec {
                     model: self.count(model, 0.0)?,
                     extra_m4_holes: self.count(extras, 0.0)?,
                     plate_thickness: 4.0,
                     plate_margin: 15.0,
                     m25_hole_dia: 2.8,
                 };
-                Ok(crate::stdlib::hardsurface::pattern_sdf::raspi_mount_plate(
+                Ok(crate::stdlib::hardsurface::pattern_sdf::sbc_mount_plate(
                     &spec,
                 ))
             }
@@ -5367,8 +5367,8 @@ mod tests {
     // ── Sprint 7: electronics-enclosure.md 3 archetype tests ──
 
     #[test]
-    fn test_raspi_case_rpi5() {
-        let node = parse_lol("raspi_case(85, 56, 25)").unwrap();
+    fn test_sbc_case_85x56() {
+        let node = parse_lol("sbc_case(85, 56, 25)").unwrap();
         assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
@@ -5395,7 +5395,7 @@ mod tests {
         // electronics-enclosure.md 追加 3 archetype の parse + eval sanity
         use alice_sdf::eval;
         for lol in [
-            "raspi_case(85, 56, 25)",
+            "sbc_case(85, 56, 25)",
             "esp32_enclosure(51.6, 28.4, 15)",
             "battery_18650_holder(4, 2.5, 0)",
         ] {
@@ -5907,14 +5907,14 @@ mod tests {
     }
 
     #[test]
-    fn test_raspi_mount_plate_pi4b() {
-        let node = parse_lol("raspi_mount_plate(4, 4)").unwrap();
+    fn test_sbc_mount_plate_58x49() {
+        let node = parse_lol("sbc_mount_plate(4, 4)").unwrap();
         assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
     #[test]
-    fn test_raspi_mount_plate_zero() {
-        let node = parse_lol("raspi_mount_plate(0, 0)").unwrap();
+    fn test_sbc_mount_plate_58x23() {
+        let node = parse_lol("sbc_mount_plate(0, 0)").unwrap();
         assert!(matches!(node, SdfNode::Rotate { .. }));
     }
 
@@ -5972,8 +5972,8 @@ mod tests {
         for lol in [
             "t_slot_bracket_2020(20, 20)",
             "t_slot_bracket_2020(40, 40)",
-            "raspi_mount_plate(4, 4)",
-            "raspi_mount_plate(0, 0)",
+            "sbc_mount_plate(4, 4)",
+            "sbc_mount_plate(0, 0)",
             "heat_set_array(2, 2, 3, 20, 6)",
             "heat_set_array(3, 3, 4, 25, 8)",
             "flange_mount(80, 5, 4)",
@@ -6034,8 +6034,8 @@ mod tests {
     }
 
     #[test]
-    fn test_heat_set_hole_m2_pi() {
-        // M2 Pi Zero mount
+    fn test_heat_set_hole_m2_board_mount() {
+        // M2 の基板の取付
         let node = parse_lol("heat_set_hole(2)").unwrap();
         assert!(matches!(node, SdfNode::Cylinder { .. }));
     }

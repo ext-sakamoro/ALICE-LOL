@@ -1,5 +1,6 @@
 // The frozen corpus of tests/parse_without_semantics_wrapper.rs and tests/emit_unstamped_unchanged.rs,
 // written once at ALICE-LOL bbb6539 and not regenerated (included by both)
+// (four texts later carried the renamed names of two constructs; nothing else was changed)
 
 const CORPUS: &[&str] = &[
     "skadis_hook_l()",
@@ -59,7 +60,7 @@ const CORPUS: &[&str] = &[
     "cable_clip(3.0, 2.0)",
     "led_channel(3.0, 2.0)",
     "t_slot_bracket_2020(3.0, 2.0)",
-    "raspi_mount_plate(3.0, 2.0)",
+    "sbc_mount_plate(3.0, 2.0)",
     "profile_extrusion(3.0, 2.0)",
     "screw_hole(3.0, 2.0)",
     "tap_hole(3.0, 2.0)",
@@ -107,7 +108,7 @@ const CORPUS: &[&str] = &[
     "wrench_holder(3.0, 2.0, 1.0)",
     "socket_rail(3.0, 2.0, 1.0)",
     "hex_bit_holder(3.0, 2.0, 1.0)",
-    "raspi_case(3.0, 2.0, 1.0)",
+    "sbc_case(3.0, 2.0, 1.0)",
     "esp32_enclosure(3.0, 2.0, 1.0)",
     "battery_18650_holder(3.0, 2.0, 1.0)",
     "toothbrush_holder(3.0, 2.0, 1.0)",
@@ -356,7 +357,7 @@ const CORPUS: &[&str] = &[
     "cable_clip",
     "led_channe",
     "t_slot_bracket",
-    "raspi_mount_p",
+    "sbc_mount_p",
     "profile_extru",
     "screw_hole",
     "tap_hole(",
@@ -404,7 +405,7 @@ const CORPUS: &[&str] = &[
     "wrench_holder(",
     "socket_rail(3",
     "hex_bit_holder",
-    "raspi_case(3",
+    "sbc_case(3",
     "esp32_enclosure",
     "battery_18650_hol",
     "toothbrush_holde",

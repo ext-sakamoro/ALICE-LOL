@@ -16,7 +16,12 @@ use sha2::{Digest, Sha256};
 include!("data/parse_corpus_bbb6539.rs");
 
 /// SHA-256 over every (text, node output, program output) of the corpus, recorded at bbb6539
-const DIGEST: &str = "85d779d412c1cc0f4fd5b5357c76ff54d06f5f54550cc33bb56444e53d107bf7";
+///
+/// The digest was re-recorded once when two constructs of the corpus were renamed (four texts);
+/// that the reading did not change was shown by dumping every result before and after the
+/// rename (`tests/parse_corpus_dump.rs`) and comparing the dumps with `scripts/compare_corpus_dumps.py`
+/// (equal once the old names are put back, error positions moved by the shorter names)
+const DIGEST: &str = "ae71911661b784455c5266fbcacae7fd28e2d1688551e752f60c0dbaf665fd9f";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {
