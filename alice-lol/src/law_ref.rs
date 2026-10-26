@@ -20,6 +20,7 @@
 use std::fmt;
 
 use crate::motion_law::{BoundMotion, MotionLaw, SampleError, MOTION_SEMANTICS_ID};
+use crate::proportion_law::{BoundProportion, ProportionLaw, PROPORTION_SEMANTICS_ID};
 
 /// The first four bytes of an encoded reference
 pub const MAGIC: [u8; 4] = *b"LOLR";
@@ -144,6 +145,31 @@ impl LawRef {
         Ok(r)
     }
 
+    /// A reference to a proportion law with the given values (each named one checked as
+    /// [`ProportionLaw::bind`] checks it; the others take their defaults), so the reference
+    /// carries every parameter
+    ///
+    /// # Errors
+    ///
+    /// [`LawRefError::Param`] when the values do not bind, [`LawRefError::TooLarge`] when the
+    /// law has a name or a count the encoding cannot hold
+    pub fn proportion(law: &ProportionLaw, values: &[(&str, f64)]) -> Result<Self, LawRefError> {
+        let bound = law.bind(values).map_err(LawRefError::Param)?;
+        let params: Vec<(String, f64)> = law
+            .params()
+            .iter()
+            .zip(bound.values())
+            .map(|(p, v)| (p.name.clone(), *v))
+            .collect();
+        let r = Self {
+            semantics_id: PROPORTION_SEMANTICS_ID,
+            law_id: law.law_id(),
+            params,
+        };
+        r.check_size()?;
+        Ok(r)
+    }
+
     fn check_size(&self) -> Result<(), LawRefError> {
         if self.params.len() > MAX_PARAMS || self.params.iter().any(|(n, _)| n.len() > MAX_NAME) {
             Err(LawRefError::TooLarge)
@@ -237,6 +263,44 @@ impl LawRef {
         if self.semantics_id != MOTION_SEMANTICS_ID {
             return Err(LawRefError::SemanticsMismatch {
                 ours: MOTION_SEMANTICS_ID,
+                theirs: self.semantics_id,
+            });
+        }
+        let ours = law.law_id();
+        if ours != self.law_id {
+            return Err(LawRefError::LawMismatch {
+                ours,
+                theirs: self.law_id,
+            });
+        }
+        let declared: Vec<String> = law.params().iter().map(|p| p.name.clone()).collect();
+        let given: Vec<String> = self.params.iter().map(|(n, _)| n.clone()).collect();
+        if declared != given {
+            return Err(LawRefError::ParamNames {
+                law: declared,
+                reference: given,
+            });
+        }
+        let values: Vec<(&str, f64)> = self.params.iter().map(|(n, v)| (n.as_str(), *v)).collect();
+        law.bind(&values).map_err(LawRefError::Param)
+    }
+
+    /// The proportion law the reference names, with the reference's values
+    ///
+    /// # Errors
+    ///
+    /// [`LawRefError::SemanticsMismatch`] when the reference was written under other
+    /// proportion semantics (or is a reference to another kind), [`LawRefError::LawMismatch`]
+    /// when `law` is not the law it names, [`LawRefError::ParamNames`] when the names are not
+    /// the law's in its order, [`LawRefError::Param`] when a value is outside its range or an
+    /// output is not finite
+    pub fn resolve_proportion<'a>(
+        &self,
+        law: &'a ProportionLaw,
+    ) -> Result<BoundProportion<'a>, LawRefError> {
+        if self.semantics_id != PROPORTION_SEMANTICS_ID {
+            return Err(LawRefError::SemanticsMismatch {
+                ours: PROPORTION_SEMANTICS_ID,
                 theirs: self.semantics_id,
             });
         }

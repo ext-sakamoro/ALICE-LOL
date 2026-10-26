@@ -10,6 +10,7 @@ use std::path::Path;
 use alice_lol::law_ref::{LawRef, LawRefError, HEADER_LEN, MAGIC, ROW_LEN};
 use alice_lol::layout::{decode, parse, Budget, DecodeError, FieldValue, Layout};
 use alice_lol::motion_law::{MotionLaw, SampleError, MOTION_SEMANTICS_ID};
+use alice_lol::proportion_law::{ProportionLaw, PROPORTION_SEMANTICS_ID};
 
 fn file(rel: &str) -> String {
     std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(rel)).unwrap()
@@ -255,4 +256,64 @@ fn hex(b: &[u8]) -> String {
         let _ = write!(s, "{x:02x}");
         s
     })
+}
+
+const LIMB: &str = "law limb
+kind proportion
+param length number = 0.3 range 0.2 0.4
+param bend number = 0 range -1 1
+out lower = length * 0.45
+point joint = (bend, 0 - length, 0)
+";
+
+/// A proportion reference carries every parameter, survives the bytes and resolves to the
+/// same outputs; a motion reference is not a proportion reference and the other way round
+#[test]
+fn a_proportion_reference_resolves_to_its_law_and_no_other_kind() {
+    let law = ProportionLaw::from_file(LIMB).unwrap();
+    let r = LawRef::proportion(&law, &[("bend", -0.5)]).unwrap();
+    let back = LawRef::from_bytes(&r.to_bytes().unwrap()).unwrap();
+    let bound = back.resolve_proportion(&law).unwrap();
+    assert_eq!(bound.values(), [0.3, -0.5]);
+    assert_eq!(bound.scalar("lower"), Some(0.3 * 0.45));
+    assert_eq!(bound.point("joint"), Some([-0.5, 0.0 - 0.3, 0.0]));
+    // a reference to the heartbeat motion law is refused by a proportion law, naming both
+    let motion = LawRef::motion(&heartbeat(), &[]).unwrap();
+    assert_eq!(
+        motion.resolve_proportion(&law).unwrap_err(),
+        LawRefError::SemanticsMismatch {
+            ours: PROPORTION_SEMANTICS_ID,
+            theirs: MOTION_SEMANTICS_ID,
+        }
+    );
+    assert!(matches!(
+        back.resolve_motion(&heartbeat()),
+        Err(LawRefError::SemanticsMismatch { theirs, .. }) if theirs == PROPORTION_SEMANTICS_ID
+    ));
+    // another proportion law
+    let other = ProportionLaw::from_file(&LIMB.replace("0.45", "0.5")).unwrap();
+    assert!(matches!(
+        back.resolve_proportion(&other),
+        Err(LawRefError::LawMismatch { .. })
+    ));
+    // a value out of range is refused when the reference is made
+    assert_eq!(
+        LawRef::proportion(&law, &[("length", 0.5)]).unwrap_err(),
+        LawRefError::Param(SampleError::ParamOutOfRange {
+            name: "length".into()
+        })
+    );
+    // and when a reference whose bytes carry it is resolved
+    let mut b = r.to_bytes().unwrap();
+    let at = HEADER_LEN + ROW_LEN - 8;
+    b[at..at + 8].copy_from_slice(&0.5f64.to_bits().to_le_bytes());
+    assert_eq!(
+        LawRef::from_bytes(&b)
+            .unwrap()
+            .resolve_proportion(&law)
+            .unwrap_err(),
+        LawRefError::Param(SampleError::ParamOutOfRange {
+            name: "length".into()
+        })
+    );
 }
