@@ -1,0 +1,33 @@
+# The proportions of a stylised humanoid body, as fractions of its eye height
+law avatar_body
+kind proportion
+claim the unit is the height of the eyes above the sole: the sole is at 0 and the eyes at 1; hair, ears and props are not part of the body
+claim the top of the head is a parameter of the law, not a measurement, because hair hides it
+claim the body stands with its arms straight out to the sides, x to its left, y up, z forward; the right side mirrors the left
+claim the ranges span the bodies the law was fitted to; values outside them are other body types
+param hips_y number = 0.656 range 0.645 0.667
+param hip_drop number = 0.044 range 0.016 0.077
+param hip_x number = 0.054 range 0.049 0.058
+param knee number = 0.35 range 0.317 0.393
+param shoulder_x number = 0.064 range 0.057 0.072
+param arm number = 0.295 range 0.24 0.36
+param elbow_split number = 0.56 range 0.49 0.63
+param face_length number = 0.055 range 0.048 0.066
+param head_top number = 1.09 range 1.07 1.12
+# nearly the same in every body fitted: fixed
+let ankle = 0.055
+let shoulder = 0.896
+# the hip joints hang below the hips and the chin sits below the eyes, whatever the values
+let hip_joint = hips_y - hip_drop
+let chin_y = 1 - face_length
+point hips = (0, hips_y, 0)
+point hip_l = (hip_x, hip_joint, 0)
+point knee_l = (hip_x, knee, 0)
+point ankle_l = (hip_x, ankle, 0)
+point shoulder_l = (shoulder_x, shoulder, 0)
+point elbow_l = (shoulder_x + arm * elbow_split, shoulder, 0)
+point wrist_l = (shoulder_x + arm, shoulder, 0)
+point chin = (0, chin_y, 0)
+point eye_line = (0, 1, 0)
+point top = (0, head_top, 0)
+out chin_to_eye = face_length
