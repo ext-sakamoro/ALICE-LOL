@@ -109,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/alice-siblings` の ALICE-Physics の pin を 5327ea42 (`LicenseRef-Proprietary`) に進め、`deny.toml` から `alice-physics` と `alice-physics-core` の license 例外を外した ALICE-LLM の pin と例外はそのまま
 - CI: Security & Hygiene (cargo audit / cargo-deny / cargo-machete / stub-guard / coverage) は ci/** の branch でも走る main だけで走っていたので、依存や `deny.toml` の変更は取り込む前に検査されなかった `changes` job (`scripts/changed_paths.py`、`.github/paths/security-audit.txt`、`.github/alice-siblings` も対象) が実行を決め、`gate` job が飛ばされた job を失敗にする
 - 共有 file の pin (`.github/shared-files-pin` / `.github/g11-table-pin`) を ALICE-Law 0e8c14ec に進め、`scripts/id_move_check.py` とその試験を表の目標の bytes にした
+- CI (ALICE-Law G11): 共有 file の pin を ALICE-Law 9cb423c9 に上げ、ALICE-Law の `scripts/g11_self_check.py` を pin の revision で wiring-guard job (ubuntu / macOS / Windows) と preflight で走らせる (表・行・共有の写し・自前の写しが目標か・manifest) README の ALICE-Law の節を 9cb423c9 から作り直した 共有の写しの bytes は同じ
 
 ### Removed
 
