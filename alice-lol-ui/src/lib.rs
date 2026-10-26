@@ -7,7 +7,7 @@
 //! # 三相原理での位置付け
 //!
 //! Phase 2 Law (parametric UI 数式) → SDF shader / mesh 描画への合流層
-//! Web / UI / UX domain の共通 primitive 抽出、`extoria-website-sdf-v2` 等の実装参考
+//! Web / UI / UX domain の共通 primitive を抽出したもの
 //!
 //! # 3 module 分割
 //!

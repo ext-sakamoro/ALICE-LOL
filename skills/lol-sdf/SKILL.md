@@ -41,7 +41,7 @@ Do **not** use this skill for:
 `references/lol.gbnf` is a **GBNF (Guided Backus-Naur Form)** grammar that covers all <!-- num: syntax.all -->238 runtime-parseable constructs (<!-- num: syntax.core -->126 plus <!-- num: syntax.stdlib -->112 stdlib shortcuts). When loaded into a supported inference stack:
 
 - **llama.cpp**: `--grammar-file references/lol.gbnf`
-- **vLLM / TGI**: pass grammar via OpenAI-compatible `response_format: {"type": "grammar", "grammar": "..."}` API
+- **vLLM / TGI**: pass the grammar in the server's structured-output field `response_format: {"type": "grammar", "grammar": "..."}`
 - **Guidance / Outlines / LMQL**: convert GBNF to native format
 
 The LLM literally cannot emit tokens that violate LOL syntax. Combined with the system prompt in `references/print-guide.md`, the LLM produces production-ready 3D print DSL directly.
