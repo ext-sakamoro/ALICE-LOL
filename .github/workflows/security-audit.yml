@@ -208,7 +208,7 @@ jobs:
             || true)
           if [ -n "$hits" ]; then
             echo "::warning::todo!() / unimplemented!() found (legitimate fail-fast stub, informational, not blocking):"
-            echo "$hits" | head -50
+            head -n 50 <<< "$hits"
           else
             echo "✓ No todo! / unimplemented! in workspace src/"
           fi
@@ -232,7 +232,7 @@ jobs:
             --exclude-dir=target --exclude-dir=fuzz || true)
           if [ -n "$hits" ]; then
             echo "::warning::TODO/FIXME/XXX/HACK found (informational, not blocking):"
-            echo "$hits" | head -50
+            head -n 50 <<< "$hits"
           else
             echo "✓ No TODO/FIXME/XXX/HACK in workspace"
           fi

@@ -315,7 +315,7 @@ step "security-audit.yml / stub-guard: Detect TODO / FIXME / XXX / HACK (informa
     --exclude-dir=target --exclude-dir=fuzz || true)
   if [ -n "$hits" ]; then
     echo "::warning::TODO/FIXME/XXX/HACK found (informational, not blocking):"
-    echo "$hits" | head -50
+    head -n 50 <<< "$hits"
   else
     echo "✓ No TODO/FIXME/XXX/HACK in workspace"
   fi
