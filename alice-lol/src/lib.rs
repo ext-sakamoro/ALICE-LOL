@@ -125,6 +125,10 @@ pub mod motion_law;
 // 式は research と同じ評価器、出力は f64 のまま 何を測るかは知らない (読む側が名前で取る)
 pub mod proportion_law;
 
+// ── 骨格の Law (kind skeleton): 名前付きの param から、親子のある関節の位置を計算する ──
+// 根の点・親からの offset・位置 i を読む鎖・左右の鏡映 式は research と同じ評価器、位置は f64 のまま
+pub mod skeleton_law;
+
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;
 pub mod program_law;

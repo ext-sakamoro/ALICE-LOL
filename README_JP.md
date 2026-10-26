@@ -397,6 +397,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | 動きの Law (`kind motion`) を読み、識別子・timing・指定した時刻の glyph ごとの channel を数値と bit で出す `--semantics` は動きの意味論の pin を計測する |
 | [`proportion_check`](alice-lol/examples/proportion_check.rs) | 比率の Law (`kind proportion`) を読み、識別子と、指定した param の値での出力 (scalar と点) を数値と bit で出す `--get` は名前で 1 つ取り、`--ref` は法則への参照を往復し、`--semantics` は比率の意味論の pin を計測する |
+| [`skeleton_check`](alice-lol/examples/skeleton_check.rs) | 骨格の Law (`kind skeleton`) を読み、識別子と、指定した param の値での全関節 (親と位置を数値と bit で) を出す `--get` は名前で 1 つ取り、`--semantics` は骨格の意味論の pin を計測する |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` / `kind memory`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |
 | [`rule_set`](alice-lol/examples/rule_set.rs) | 版を持つ規則の集合 (`laws/demo-tax`: 最初の版と差分で書いた 2 つの版): `resolve_delta`、日付で効力のある版 (`RuleSet::evaluate_as_of`)、識別子で古い版 (`RuleSet::evaluate_edition`) |
 | [`intent_plan`](alice-lol/examples/intent_plan.rs) | scene の上の intent の計画: `walk` / `grasp` / `release` を `sequence` / `parallel` で組んだ `Program` を LOL の text で出す |
