@@ -121,6 +121,10 @@ pub mod rule_law;
 // 時刻は整数 ms、周期の位置は整数から、式は research と同じ評価器、channel は最後に 1 回だけ f32 へ
 pub mod motion_law;
 
+// ── 比率の Law (kind proportion): 名前付きの param から名前付きの寸法 (scalar と点) を計算する ──
+// 式は research と同じ評価器、出力は f64 のまま 何を測るかは知らない (読む側が名前で取る)
+pub mod proportion_law;
+
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;
 pub mod program_law;

@@ -656,6 +656,31 @@ class = "local"
 reason = "the text is a parameter name, looked up among the names the motion law declares (MotionLaw::bind); the values are Rust f64, range-checked against the declaration"
 
 [[entry]]
+path = "alice_lol::proportion_law::ProportionLaw::from_file"
+class = "authoring"
+reason = "reads proportion law text a person or a model writes; the law's identifier (kind tag, PROPORTION_SEMANTICS_ID, the declaration as a tree) names what was read, and a law received from another program arrives with its identifier to compare"
+
+[[entry]]
+path = "alice_lol::proportion_law::ProportionLaw::bind"
+class = "local"
+reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error); the values are Rust f64, range-checked against the declaration"
+
+[[entry]]
+path = "alice_lol::proportion_law::BoundProportion::scalar"
+class = "local"
+reason = "the text is an output name, looked up among the outputs this law declares (None for any other); nothing is parsed"
+
+[[entry]]
+path = "alice_lol::proportion_law::BoundProportion::point"
+class = "local"
+reason = "the text is an output name, looked up among the outputs this law declares (None for any other); nothing is parsed"
+
+[[entry]]
+path = "alice_lol::law_ref::LawRef::proportion"
+class = "local"
+reason = "the text is a parameter name, looked up among the names the proportion law declares (ProportionLaw::bind); the values are Rust f64, range-checked against the declaration"
+
+[[entry]]
 path = "alice_lol::law_input::SeriesExpr::parse"
 class = "authoring"
 reason = "reads the expression of an x-series line of a law file (source); the law's identifier hashes its canonical form with AUDIT_SERIES_SEMANTICS_ID"

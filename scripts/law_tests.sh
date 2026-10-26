@@ -47,6 +47,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test program_law|"
   "alice-lol|--test motion_frame_oracle|"
   "alice-lol|--test audit_series_oracle|"
+  "alice-lol|--test proportion_law_oracle|"
 )
 PHYSICS_TARGETS=(
   "alice-lol|--test analytic_thermal|physics"
