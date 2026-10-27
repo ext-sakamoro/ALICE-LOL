@@ -57,9 +57,9 @@
 //! `let` values; the fields read those and `u`, `v`, `edge`, `cell0`, `cell1`, `cell2` and the
 //! noises by name. Every name is declared once across parameters, lets and noises; `pi`, `u`,
 //! `v`, `edge` and `cell0` .. `cell2` are reserved. A tile holds a cell period or a noise
-//! frequency a whole number of times when the ratio is within 1e-9 (relative) of an integer of
-//! at least 1; a grid's row shift tiles when the rows of the tile times the shift is a whole
-//! number. The defaults must tile and give an in-range sample at the point `u = v = edge = 0`
+//! frequency a whole number of times when the ratio is within 1e-6 (of a cycle or a cell) of an
+//! integer from 1 to 2^20 (a larger count would let the rounding of the ratio itself hide a seam);
+//! a grid's row shift tiles when the rows of the tile times the shift is such a whole number. The defaults must tile and give an in-range sample at the point `u = v = edge = 0`
 //! with every cell number and noise 0.
 
 use std::fmt;
@@ -79,15 +79,18 @@ pub const MAX_NOISES: usize = 16;
 /// The most lines
 pub const MAX_LINES: usize = 4096;
 
-/// How close (relative) a ratio must be to an integer for a tile to hold it
-pub const TILE_TOLERANCE: f64 = 1e-9;
+/// How close (in cycles, or cells) a ratio must be to a whole number for a tile to hold it
+pub const TILE_TOLERANCE: f64 = 1e-6;
+/// The most times a tile side may hold a cell period or a noise cycle: beyond it the ratio is not
+/// computed finely enough to tell a whole number from one that leaves a seam
+pub const MAX_REPEATS: f64 = 1_048_576.0;
 
 /// What the reading of a material law means, as pins measured from the behaviour of this module
 /// ([`material_semantics_fingerprints`]; the oracle recomputes every one)
 pub const MATERIAL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     (
-        "material: f64 fields of research-law expressions over u, v, edge, cell numbers and noises, tiling by whole-number ratios within 1e-9",
-        hex32("93d07b1c2db74916870e636b924f2228361968b826c31be922a6e847a403237f"),
+        "material: f64 fields of research-law expressions over u, v, edge, cell numbers and noises, tiling by whole-number ratios within 1e-6 of a cycle and at most 2^20 repeats",
+        hex32("fd750c4dbe67af67a704694f04271680a220ccc353a19b5481f3e9402de17dcd"),
     ),
     (
         "material: the expression functions of research laws",
@@ -97,7 +100,7 @@ pub const MATERIAL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 
 /// The fold of [`MATERIAL_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const MATERIAL_SEMANTICS_ID: [u8; 32] =
-    hex32("377a1ff89fd0fc3a24b4f52e2a784a77100bb1c0403bbe2238466803314aa511");
+    hex32("f0696d683a593202d11683c67a6c984a873d4c1f8c16183e6e8c0ce91d9fa3e8");
 
 /// A material law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -376,11 +379,12 @@ fn line_of(
     })
 }
 
-/// The whole number `ratio` is close to, if it is within [`TILE_TOLERANCE`] and at least 1
+/// The whole number `ratio` is close to, if it is within [`TILE_TOLERANCE`] of it and from 1 to
+/// [`MAX_REPEATS`]
 fn whole(ratio: f64) -> Option<f64> {
     let r = ratio.round();
-    // a positive ratio near 0 rounds to 0 and its tolerance is 0, so the whole number is at least 1
-    (ratio.is_finite() && (ratio - r).abs() <= TILE_TOLERANCE * r).then_some(r)
+    (ratio.is_finite() && (1.0..=MAX_REPEATS).contains(&r) && (ratio - r).abs() <= TILE_TOLERANCE)
+        .then_some(r)
 }
 
 impl MaterialLaw {
@@ -1026,6 +1030,25 @@ pub fn material_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
                     h.update(v.to_bits().to_le_bytes());
                 }
             }
+        }
+    }
+    // the tiling rule itself: which ratios a tile holds
+    for ratio in [
+        1.0,
+        16.0,
+        16.000_000_5,
+        16.000_002,
+        0.5,
+        1_048_576.0,
+        1_048_577.0,
+        1e9 + 0.5,
+    ] {
+        match whole(ratio) {
+            Some(r) => {
+                h.update([1]);
+                h.update(r.to_bits().to_le_bytes());
+            }
+            None => h.update([0]),
         }
     }
     vec![
