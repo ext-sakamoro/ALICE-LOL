@@ -111,6 +111,47 @@ fn a_tile_must_hold_every_period_a_whole_number_of_times() {
     );
     let e = MaterialLaw::from_file(&off).unwrap_err();
     assert!(e.message.contains("tile"), "{e}");
+    // a very large repeat count is refused: past 2^20 the ratio cannot tell k + 0.5 from k
+    let fine = PAVERS
+        .replace(
+            "param wear number = 0.3 range 0 1",
+            "param wear number = 0.3 range 0 1\nparam freq number = 16 range 1 10000000000000",
+        )
+        .replace(
+            "noise grain = (16, 0.002, 7)",
+            "noise grain = (freq, 0.002, 7)",
+        );
+    let law_f = MaterialLaw::from_file(&fine).unwrap();
+    for f in [
+        3.5,
+        1e6 + 0.5,
+        1e8 + 0.5,
+        1e9 + 0.5,
+        4e9 + 0.5,
+        1e10 + 0.5,
+        1e12 + 0.5,
+        2e6,
+        1e9,
+    ] {
+        assert!(
+            matches!(
+                law_f.bind(&[("freq", f)]),
+                Err(MaterialError::NotTiling { .. })
+            ),
+            "frequency {f} must not bind"
+        );
+    }
+    assert!(
+        law_f.bind(&[("freq", 1_048_576.0)]).is_ok(),
+        "2^20 cycles tile"
+    );
+    assert!(
+        law_f.bind(&[("freq", 1_048_577.0)]).is_err(),
+        "past 2^20 is refused"
+    );
+    // half a millionth of a cycle off still tiles, two millionths does not
+    assert!(law_f.bind(&[("freq", 16.000_000_5)]).is_ok());
+    assert!(law_f.bind(&[("freq", 16.000_002)]).is_err());
     // a brick row shift: 4 rows of 0.25 in 1 m with half a cell of shift ⇒ 2 cells: tiles
     let brick = PAVERS.replace(
         "cell grid = (size, size, 0)",
