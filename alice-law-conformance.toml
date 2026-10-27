@@ -114,7 +114,7 @@ evidence = [
     "`CHANGELOG.md#依存の alice-det-math を 0.5.1 にした`",
     "`CHANGELOG.md#が alice-det-math の版に追従していなかった`",
     "`CHANGELOG.md#依存を alice-det-math 0.5.2 (git 2d01c63f`",
-    "`CHANGELOG.md#PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS` を空にした`",
+    "`CHANGELOG.md#を空にした alice-det-math 0.5.2 (2d01c63f) は以前の世代を同じ bit として挙げない`",
     "`alice-lol/src/law_id.rs#pub const LOL_SEMANTICS_BY_DET_MATH`",
     "`alice-lol/src/geometry_id.rs#pub const LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`",
     "`alice-lol/src/law_id.rs#pub const PREVIOUS_LOL_SEMANTICS_IDS`",
