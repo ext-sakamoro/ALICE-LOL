@@ -4,9 +4,8 @@ version = 4
 
 [[package]]
 name = "alice-det-math"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2857e06dcc3838a2138f4c8ed7b30cf8515a223eeb6d5fbd068dd13d45cb4ff4"
+version = "0.5.2"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?rev=2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8#2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8"
 dependencies = [
  "bytemuck",
  "wide",
@@ -55,9 +54,10 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=3c7367f09ec50881cd698545aae56700458fc15b#3c7367f09ec50881cd698545aae56700458fc15b"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=19efcf7f3bc30b82679449d3f44d765881949fc4#19efcf7f3bc30b82679449d3f44d765881949fc4"
 dependencies = [
  "alice-det-math",
+ "alice-zip",
  "bincode",
  "bytemuck",
  "crc32fast",
@@ -77,7 +77,7 @@ dependencies = [
 [[package]]
 name = "alice-zip"
 version = "0.11.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?rev=fec22a06eab879153a140b057f53f081876a2ff7#fec22a06eab879153a140b057f53f081876a2ff7"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?rev=19f6f2c1ff5537642cefca006e37e2f00570d6ba#19f6f2c1ff5537642cefca006e37e2f00570d6ba"
 dependencies = [
  "alice-det-math",
  "libm",
