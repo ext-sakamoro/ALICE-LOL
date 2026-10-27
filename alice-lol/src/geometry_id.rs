@@ -474,10 +474,10 @@ pub fn known_geometry_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
 /// [`crate::law_id::PREVIOUS_LOL_SEMANTICS_IDS`] と同じ規則・同じ理由で literal にする
 /// [`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`] からの導出との一致は
 /// `tests/geometry_semantics_per_det_math.rs` が両方向で検査する
-pub const PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS: &[[u8; 32]] = &[
-    // alice-det-math 0.5.0 の世代 (alice-lol 0.4.1 まで)
-    hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d"),
-];
+/// alice-det-math 0.5.2 at 2d01c63f は以前の世代を同じ bit と認めない (`PREVIOUS_SEMANTICS_IDS` が空) ので空
+/// 以前の世代の識別子を戻すのは、その版が書いたものを読み、その版自身の結果と bit で一致する試験
+/// (版をまたぐ oracle) がある時だけ
+pub const PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// 保存された幾何の識別子を分類する ([`crate::law_id::check_lol_semantics`] と同じ形)
 pub fn check_lol_geometry_semantics(id: &[u8; 32]) -> alice_det_math::SemanticsCheck {

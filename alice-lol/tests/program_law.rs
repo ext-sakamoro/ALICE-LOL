@@ -1,8 +1,8 @@
 //! The law of a LOL program's shape as a law reference v2 (`alice_lol::program_law`)
 //!
 //! Oracle: the expected bytes and law identifiers were written by ALICE-Zip's independent
-//! implementation (`scripts/law_ref_v2_reference.py` at fec22a0, standard-library Python) for kind
-//! `lol.law.program/v1`, the geometry semantics identifier of alice-det-math 0.5.1 and one `source`
+//! implementation (`scripts/law_ref_v2_reference.py` at 19f6f2c1, standard-library Python) for kind
+//! `lol.law.program/v1`, the geometry semantics identifier of alice-det-math 0.5.2 at 2d01c63f (8ee0c1a3) and one `source`
 //! row; they are not computed by the code under test.
 
 use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
@@ -20,10 +20,10 @@ fn unhex(s: &str) -> Vec<u8> {
 }
 
 const SPHERE: &str = "sphere(1.0)";
-const SPHERE_LAW_ID: &str = "ae8b46297dc00049065279ca16cfe2be05e0c44b63e22b652dcb8343bbe5c0aa";
-const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f7631d1cbba69a1b33ce7363ac178f16ad0cb062699ff8c9c76af7058c6d006bc8a24ae8b46297dc00049065279ca16cfe2be05e0c44b63e22b652dcb8343bbe5c0aa0106736f7572636505000000000000000b73706865726528312e3029";
+const SPHERE_LAW_ID: &str = "bea43826d3c6c9afb9e1c07cee35fa067b99aba47a1c915502719d58bb96c669";
+const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f76318ee0c1a391b51f78c66e4d6b9db593666a5922f4a706ffffe76e63f975ba48a7bea43826d3c6c9afb9e1c07cee35fa067b99aba47a1c915502719d58bb96c6690106736f7572636505000000000000000b73706865726528312e3029";
 const BOX: &str = "box3d(1.0, 1.0, 1.0)";
-const BOX_LAW_ID: &str = "189840c8b20de5cb11fb0b77b6181b222ffe7960e81e1ab9423d5f625c2d29c9";
+const BOX_LAW_ID: &str = "574278053125f888e39a851c75029eeeb52da7b41683d8db2fe276a51da950c5";
 
 #[test]
 fn the_kind_and_the_semantics_are_the_program_law_s() {
@@ -63,13 +63,15 @@ fn a_reference_from_its_bytes_resolves_to_the_program_s_shape() {
     }
 }
 
-/// The geometry semantics of alice-det-math 0.5.0 (alice-lol up to 0.4.1), which reproduces the same
-/// bits as the current one: a reference written under it resolves to the same shape
+/// The geometry semantics of alice-det-math 0.5.0 (alice-lol up to 0.4.1): not a previous identifier
+/// since alice-det-math 0.5.2 at 2d01c63f, so a reference written under it is refused
 const PREVIOUS_GEOMETRY_SEMANTICS: &str =
     "251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d";
 
 #[test]
-fn a_reference_under_an_earlier_semantics_with_the_same_bits_resolves() {
+fn a_reference_under_the_0_4_1_geometry_semantics_is_refused_naming_both() {
+    // alice-det-math 0.5.2 at 2d01c63f lists no earlier generation as the same bits, so the
+    // geometry identifier alice-lol 0.4.1 stamped is not a previous identifier any more
     let theirs: [u8; 32] = unhex(PREVIOUS_GEOMETRY_SEMANTICS).try_into().unwrap();
     assert_ne!(
         theirs, LOL_GEOMETRY_SEMANTICS_ID,
@@ -83,12 +85,13 @@ fn a_reference_under_an_earlier_semantics_with_the_same_bits_resolves() {
         )
         .unwrap();
         let back = LawRef::from_bytes(&r.to_bytes()).unwrap();
-        let shape = resolve_program(&back).unwrap_or_else(|e| panic!("{src}: {e}"));
-        assert_eq!(
-            format!("{shape:?}"),
-            format!("{:?}", parse_lol(src).unwrap()),
-            "{src}"
-        );
+        match resolve_program(&back) {
+            Err(ProgramLawError::SemanticsMismatch { theirs: t, ours }) => {
+                assert_eq!(t, theirs, "{src}");
+                assert_eq!(ours, LOL_GEOMETRY_SEMANTICS_ID, "{src}");
+            }
+            other => panic!("{src}: the 0.4.1 geometry semantics must be refused, got {other:?}"),
+        }
     }
 }
 

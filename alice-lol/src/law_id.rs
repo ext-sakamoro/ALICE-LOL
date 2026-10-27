@@ -172,10 +172,10 @@ pub fn known_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
 /// 確かめた世代) の LOL 側の識別子 ⚠️ 導出でなく literal で書くのは、識別子の移動の検査
 /// (`scripts/id_move_check.py`) が literal を抜いて `previous-tests` が落ちることを確かめるため
 /// 導出との一致は `tests/semantics_id_per_det_math.rs` が両方向で検査する
-pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[
-    // alice-det-math 0.5.0 の世代 (alice-lol 0.4.1 まで)
-    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421"),
-];
+/// alice-det-math 0.5.2 at 2d01c63f は以前の世代を同じ bit と認めない (`PREVIOUS_SEMANTICS_IDS` が空) ので空
+/// 以前の世代の識別子を戻すのは、その版が書いたものを読み、その版自身の結果と bit で一致する試験
+/// (版をまたぐ oracle) がある時だけ
+pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// 保存された LOL の識別子を分類する ([`LOL_SEMANTICS_ID`] なら `Verified`、
 /// [`PREVIOUS_LOL_SEMANTICS_IDS`] にあれば `VerifiedPrevious`、それ以外は `Mismatch`)
