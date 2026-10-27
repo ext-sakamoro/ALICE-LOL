@@ -676,6 +676,16 @@ class = "local"
 reason = "the text is an output name, looked up among the outputs this law declares (None for any other); nothing is parsed"
 
 [[entry]]
+path = "alice_lol::material_law::MaterialLaw::from_file"
+class = "authoring"
+reason = "reads material law text a person or a model writes; the law's identifier (kind tag, MATERIAL_SEMANTICS_ID, the declaration as a tree) names what was read, and a law received from another program arrives with its identifier to compare"
+
+[[entry]]
+path = "alice_lol::material_law::MaterialLaw::bind"
+class = "local"
+reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error); the values are Rust f64, range-checked against the declaration, and the tile, cells and noises they give are checked to tile"
+
+[[entry]]
 path = "alice_lol::law_ref::LawRef::proportion"
 class = "local"
 reason = "the text is a parameter name, looked up among the names the proportion law declares (ProportionLaw::bind); the values are Rust f64, range-checked against the declaration"

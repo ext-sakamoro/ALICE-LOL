@@ -86,6 +86,12 @@ path = "alice_lol::motion_law::MOTION_SEMANTICS_ID"
 [[id]]
 path = "alice_lol::proportion_law::PROPORTION_SEMANTICS_ID"
 
+# the semantics of the material laws (kind material): the fold of MATERIAL_SEMANTICS_PINS, measured
+# from the behaviour of material_law; it is in every material-law identifier, so it moves only with
+# a breaking version
+[[id]]
+path = "alice_lol::material_law::MATERIAL_SEMANTICS_ID"
+
 # the reference raster of a moving word (motion_frame): the fold of FRAME_SEMANTICS_PINS, measured from
 # the raster; it is the first thing every frame hash hashes, so it moves only with a breaking version
 [[id]]
