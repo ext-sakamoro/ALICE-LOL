@@ -396,6 +396,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`program_law_demo`](alice-lol/examples/program_law_demo.rs) | program を Law の参照にする (`lol.law.program/v1`): byte 列、識別子、そこから作り直した形 |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | 動きの Law (`kind motion`) を読み、識別子・timing・指定した時刻の glyph ごとの channel を数値と bit で出す `--semantics` は動きの意味論の pin を計測する |
+| [`material_check`](alice-lol/examples/material_check.rs) | 材質の Law (`kind material`) を読み、識別子と、指定した param の値での tile・cell・noise・法線の差分の幅を出す (tile しない値は拒否) `--at` を付けると、与えた cell の数と noise の値から、その点の高さ・色・粗さを出す `--semantics` は材質の意味論の pin を計測する |
 | [`proportion_check`](alice-lol/examples/proportion_check.rs) | 比率の Law (`kind proportion`) を読み、識別子と、指定した param の値での出力 (scalar と点) を数値と bit で出す `--get` は名前で 1 つ取り、`--ref` は法則への参照を往復し、`--semantics` は比率の意味論の pin を計測する |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` / `kind memory`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |
 | [`rule_set`](alice-lol/examples/rule_set.rs) | 版を持つ規則の集合 (`laws/demo-tax`: 最初の版と差分で書いた 2 つの版): `resolve_delta`、日付で効力のある版 (`RuleSet::evaluate_as_of`)、識別子で古い版 (`RuleSet::evaluate_edition`) |
