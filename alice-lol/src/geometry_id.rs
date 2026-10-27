@@ -430,6 +430,11 @@ pub const LOL_GEOMETRY_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
         hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
         hex32("d1cbba69a1b33ce7363ac178f16ad0cb062699ff8c9c76af7058c6d006bc8a24"),
     ),
+    // alice-det-math 0.5.2 at 2d01c63f (clamp の G2 の順、`sin` / `cos` の |x| >= 2^13、`powf` の負の底、`powf64` (fdlibm e_pow)、`hypot` の両方 subnormal、`erf` の追加)
+    (
+        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
+        hex32("8ee0c1a391b51f78c66e4d6b9db593666a5922f4a706ffffe76e63f975ba48a7"),
+    ),
 ];
 
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold (build した alice-det-math の行)

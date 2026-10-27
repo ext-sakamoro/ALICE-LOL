@@ -126,6 +126,11 @@ pub const LOL_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
         hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
         hex32("d81c2cbbf7f010b7b3368c461d0a4ba60345fae302e9991fbd992d35dc3a7002"),
     ),
+    // alice-det-math 0.5.2 at 2d01c63f (clamp の G2 の順、`sin` / `cos` の |x| >= 2^13、`powf` の負の底、`powf64` (fdlibm e_pow)、`hypot` の両方 subnormal、`erf` の追加)
+    (
+        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
+        hex32("c71fed08b4a6e4771cf5d375c5dbed1dfc8e368f034e7948a9b093eddc05cd10"),
+    ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold (build した alice-det-math の行) ⚠️ 定数と fold の一致は
