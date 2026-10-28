@@ -1026,6 +1026,18 @@ impl BoundMaterial<'_> {
     /// [`MaterialError::NonFinite`] naming `u` or `v` when it is not finite
     #[allow(clippy::suboptimal_flops)] // unfused: the law's values are f64 without fused multiply-add
     pub fn point_at(&self, u: f64, v: f64) -> Result<MaterialPoint, MaterialError> {
+        self.point_with(u, v, None)
+    }
+
+    /// [`Self::point_at`], the cell from `map` instead of the law's cell line when given
+    #[allow(clippy::suboptimal_flops)] // unfused: the law's values are f64 without fused multiply-add
+    #[allow(clippy::option_if_let_else)] // the table's cells, else the law's own: read in that order
+    fn point_with(
+        &self,
+        u: f64,
+        v: f64,
+        map: Option<&CellMap>,
+    ) -> Result<MaterialPoint, MaterialError> {
         for (name, x) in [("u", u), ("v", v)] {
             if !x.is_finite() {
                 return Err(MaterialError::NonFinite {
@@ -1057,17 +1069,21 @@ impl BoundMaterial<'_> {
             Some([a, b]) => (ur + noise[a], vr + noise[b]),
             None => (ur, vr),
         };
-        let (edge, cell) = match self.cell {
-            None => (0.0, [0.0; 3]),
-            Some(BoundCell::Grid { period, row_shift }) => {
-                let tiles = [count(tu / period[0]), count(tv / period[1])];
-                let c = grid_cell(cu, cv, period, row_shift, tiles, MATERIAL_CELL_SEED);
-                (c.edge, c.numbers)
-            }
-            Some(BoundCell::Voronoi { period, jitter }) => {
-                let tiles = [count(tu / period), count(tv / period)];
-                let c = voronoi_cell(cu, cv, period, jitter, tiles, MATERIAL_CELL_SEED);
-                (c.edge, c.numbers)
+        let (edge, cell) = if let Some(m) = map {
+            m.lookup(cu, cv, self.tile)
+        } else {
+            match self.cell {
+                None => (0.0, [0.0; 3]),
+                Some(BoundCell::Grid { period, row_shift }) => {
+                    let tiles = [count(tu / period[0]), count(tv / period[1])];
+                    let c = grid_cell(cu, cv, period, row_shift, tiles, MATERIAL_CELL_SEED);
+                    (c.edge, c.numbers)
+                }
+                Some(BoundCell::Voronoi { period, jitter }) => {
+                    let tiles = [count(tu / period), count(tv / period)];
+                    let c = voronoi_cell(cu, cv, period, jitter, tiles, MATERIAL_CELL_SEED);
+                    (c.edge, c.numbers)
+                }
             }
         };
         Ok(MaterialPoint {
@@ -1377,11 +1393,17 @@ impl ResidualOwner for BoundMaterial<'_> {
         matches!(name, "height" | "albedo" | "roughness")
     }
     fn accepts_index(&self, domain: &str, words: &[String]) -> bool {
-        domain == "texels"
-            && words.len() == 2
-            && words
-                .iter()
-                .all(|w| w.parse::<usize>().is_ok_and(|n| n > 0))
+        let counts = |n: usize| {
+            words.len() == n
+                && words
+                    .iter()
+                    .all(|w| w.parse::<usize>().is_ok_and(|k| k > 0))
+        };
+        match domain {
+            "texels" => counts(2),
+            "rows" | "stones" => counts(1),
+            _ => false,
+        }
     }
 }
 
@@ -1390,6 +1412,9 @@ impl ResidualOwner for BoundMaterial<'_> {
 #[derive(Debug, Clone)]
 pub struct ResidualMaterial<'r, 'a> {
     bound: &'r BoundMaterial<'a>,
+    /// the cells from the residual's table, if it has one
+    map: Option<CellMap>,
+    /// the texel grid's columns and rows, [0, 0] without one
     size: [usize; 2],
     /// each grid as (hi, lo) per value; a single-f64 grid (with a quantum) has lo 0
     height: (Vec<f64>, Vec<f64>),
@@ -1413,13 +1438,12 @@ impl<'a> BoundMaterial<'a> {
         residual
             .check_belongs(self)
             .map_err(|e| no(e.to_string()))?;
-        let words = residual
-            .index("texels")
-            .ok_or_else(|| no("no `texels` domain".into()))?;
-        let size = [
-            words[0].parse::<usize>().unwrap_or(0),
-            words[1].parse::<usize>().unwrap_or(0),
-        ];
+        let size = residual.index("texels").map_or([0, 0], |w| {
+            [
+                w[0].parse::<usize>().unwrap_or(0),
+                w[1].parse::<usize>().unwrap_or(0),
+            ]
+        });
         let take = |name: &str, comps: usize| -> Result<(Vec<f64>, Vec<f64>), MaterialError> {
             match residual.block(name) {
                 Some(Block::Dense {
@@ -1448,22 +1472,41 @@ impl<'a> BoundMaterial<'a> {
                 None => Err(no(format!("no `{name}` block"))),
             }
         };
-        if let Some(b) = residual
-            .blocks()
-            .iter()
-            .find(|b| !matches!(b.name(), "height" | "albedo" | "roughness"))
-        {
+        if let Some(b) = residual.blocks().iter().find(|b| {
+            !matches!(
+                b.name(),
+                "height" | "albedo" | "roughness" | "row_bounds" | "stones"
+            )
+        }) {
             return Err(no(format!(
                 "a material residual has no block `{}`",
                 b.name()
             )));
         }
+        let map = CellMap::from_residual(residual, self.tile).map_err(no)?;
+        let grids = if size == [0, 0] {
+            if ["height", "albedo", "roughness"]
+                .iter()
+                .any(|n| residual.block(n).is_some())
+            {
+                return Err(no("texel blocks without a `texels` domain".into()));
+            }
+            let none = || (Vec::new(), Vec::new());
+            (none(), none(), none())
+        } else {
+            (
+                take("height", 1)?,
+                take("albedo", 3)?,
+                take("roughness", 1)?,
+            )
+        };
         Ok(ResidualMaterial {
             bound: self,
+            map,
             size,
-            height: take("height", 1)?,
-            albedo: take("albedo", 3)?,
-            roughness: take("roughness", 1)?,
+            height: grids.0,
+            albedo: grids.1,
+            roughness: grids.2,
         })
     }
 }
@@ -1478,7 +1521,12 @@ impl ResidualMaterial<'_, '_> {
     /// out of 0..=1
     #[allow(clippy::suboptimal_flops)] // unfused, as the law's values
     pub fn at(&self, u: f64, v: f64) -> Result<MaterialSample, MaterialError> {
-        let law = self.bound.at(u, v)?;
+        let law = self
+            .bound
+            .sample(&self.bound.point_with(u, v, self.map.as_ref())?)?;
+        if self.size == [0, 0] {
+            return Ok(law);
+        }
         let [tu, tv] = self.bound.tile;
         let (ur, vr) = (u - tu * (u / tu).floor(), v - tv * (v / tv).floor());
         let [cols, rows] = self.size;
@@ -1540,5 +1588,137 @@ impl ResidualMaterial<'_, '_> {
             });
         }
         Ok(out)
+    }
+}
+
+/// A material residual's cell table: rows of stones with rounded corners, replacing the law's
+/// procedural cells (see `with_residual`)
+#[derive(Debug, Clone, PartialEq)]
+struct CellMap {
+    /// (v0, v1) per row
+    rows: Vec<[f64; 2]>,
+    /// (row, u0, u1, cell0, cell1, cell2, radius) per stone
+    stones: Vec<[f64; 7]>,
+}
+
+impl CellMap {
+    /// The table of `row_bounds` (R × 2) and `stones` (N × 7), `None` when the residual has
+    /// neither; refused unless rows are ordered within the tile, every stone is in a row, starts
+    /// before it ends, is no wider than the tile, has a radius within half its smaller side, and
+    /// no two stones of a row overlap (around the tile)
+    #[allow(clippy::suboptimal_flops)] // unfused, as the law's values
+    fn from_residual(r: &LawResidual, tile: [f64; 2]) -> Result<Option<Self>, String> {
+        let table = |name: &str, domain: &str, cols: usize| -> Result<Option<Vec<f64>>, String> {
+            match r.block(name) {
+                None => Ok(None),
+                Some(Block::Dense {
+                    domain: d,
+                    shape,
+                    values,
+                    pairs: false,
+                    when: None,
+                    ..
+                }) if d == domain && shape.len() == 2 && shape[1] == cols => {
+                    Ok(Some(values.clone()))
+                }
+                Some(_) => Err(format!(
+                    "block `{name}` is not a `{domain}` table of {cols} columns"
+                )),
+            }
+        };
+        let (rows, stones) = match (
+            table("row_bounds", "rows", 2)?,
+            table("stones", "stones", 7)?,
+        ) {
+            (None, None) => return Ok(None),
+            (Some(a), Some(b)) => (a, b),
+            _ => return Err("a cell map needs both `row_bounds` and `stones`".into()),
+        };
+        let [tu, tv] = tile;
+        let rows: Vec<[f64; 2]> = rows.as_chunks::<2>().0.to_vec();
+        for (k, r) in rows.iter().enumerate() {
+            let next = rows.get(k + 1).map_or(tv, |n| n[0]);
+            if !(0.0 <= r[0] && r[0] < r[1] && r[1] <= next) {
+                return Err(format!(
+                    "row {k}: ({}, {}) is not ordered within the tile",
+                    r[0], r[1]
+                ));
+            }
+        }
+        let stones: Vec<[f64; 7]> = stones.as_chunks::<7>().0.to_vec();
+        let mut by_row: Vec<Vec<(f64, f64)>> = vec![Vec::new(); rows.len()];
+        for (k, st) in stones.iter().enumerate() {
+            let row = st[0];
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let ri = row as usize;
+            if row.fract() != 0.0 || row < 0.0 || ri >= rows.len() {
+                return Err(format!("stone {k}: row {row} is not a row of the table"));
+            }
+            let (w, h) = (st[2] - st[1], rows[ri][1] - rows[ri][0]);
+            if !(w > 0.0 && w <= tu) {
+                return Err(format!(
+                    "stone {k}: [{}, {}) is not a span within the tile",
+                    st[1], st[2]
+                ));
+            }
+            if !(0.0 <= st[6] && 2.0 * st[6] <= w.min(h)) {
+                return Err(format!(
+                    "stone {k}: radius {} past half its smaller side",
+                    st[6]
+                ));
+            }
+            by_row[ri].push((st[1] - tu * (st[1] / tu).floor(), w));
+        }
+        for (ri, spans) in by_row.iter_mut().enumerate() {
+            spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for k in 0..spans.len() {
+                let (s0, w0) = spans[k];
+                let next = if k + 1 < spans.len() {
+                    spans[k + 1].0
+                } else {
+                    spans[0].0 + tu
+                };
+                if spans.len() > 1 && s0 + w0 > next || spans.len() == 1 && w0 > tu {
+                    return Err(format!("row {ri}: stones overlap"));
+                }
+            }
+        }
+        Ok(Some(Self { rows, stones }))
+    }
+
+    /// The edge distance and cell numbers at the lookup place `(cu, cv)` (any place; reduced into
+    /// the tile): inside a stone's rounded rectangle, the distance to its outline and its numbers;
+    /// elsewhere 0 and 0
+    // unfused, and the square root of the sum (not libm's hypot), so every platform agrees
+    #[allow(clippy::suboptimal_flops, clippy::imprecise_flops)]
+    fn lookup(&self, cu: f64, cv: f64, tile: [f64; 2]) -> (f64, [f64; 3]) {
+        let [tu, tv] = tile;
+        let (u, v) = (cu - tu * (cu / tu).floor(), cv - tv * (cv / tv).floor());
+        let joint = (0.0, [0.0; 3]);
+        let Some(ri) = self.rows.iter().position(|r| r[0] <= v && v < r[1]) else {
+            return joint;
+        };
+        let [v0, v1] = self.rows[ri];
+        // a stone's row was checked to be a whole number below the row count
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        for st in self.stones.iter().filter(|st| st[0] as usize == ri) {
+            let (u0, u1, radius) = (st[1], st[2], st[6]);
+            let du = (u - u0) - tu * ((u - u0) / tu).floor();
+            if du >= u1 - u0 {
+                continue;
+            }
+            let x = u0 + du;
+            let (hx, hy) = ((u1 - u0) / 2.0, (v1 - v0) / 2.0);
+            let qx = (x - (u0 + hx)).abs() - (hx - radius);
+            let qy = (v - (v0 + hy)).abs() - (hy - radius);
+            let (ox, oy) = (qx.max(0.0), qy.max(0.0));
+            let sdf = (ox * ox + oy * oy).sqrt() + qx.max(qy).min(0.0) - radius;
+            return if sdf < 0.0 {
+                (-sdf, [st[3], st[4], st[5]])
+            } else {
+                joint
+            };
+        }
+        joint
     }
 }
