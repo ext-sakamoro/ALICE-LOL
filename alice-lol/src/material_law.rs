@@ -50,6 +50,11 @@
 //! - `noise <name> = (<frequency>, <amplitude>, <seed>)`: a noise of that many cycles per metre
 //!   (positive), scaled by the amplitude, with an integer seed in `0 ..= u32::MAX`; at most 16
 //! - `normal_step = <expr>`: the step (metres, positive) of the central difference, once
+//! - `warp = (<a>, <b>)`: the cell of a point is looked up at `(u + a, v + b)`, `a` and `b`
+//!   two declared noises (the same one may be named twice) — the outlines of the cells follow
+//!   the noises while the fields still read the point's own `u`, `v`; at most once, and only with
+//!   a cell line. The warp's noises are noises like the others, so the tile holds their
+//!   frequencies a whole number of times and a warped pattern repeats with the tile
 //! - `field height = <expr>`, `field albedo = (<expr>, <expr>, <expr>)`,
 //!   `field roughness = <expr>`: each once
 //!
@@ -96,11 +101,15 @@ pub const MATERIAL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         "material: the expression functions of research laws",
         hex32("ee1b39dde2b1e577892f19daee2fb514a7b43f56be7d2211061de1ddac28fad3"),
     ),
+    (
+        "material: warp = the cell of (u, v) looked up at (u + a, v + b) for two declared noises a, b, only with a cell line",
+        hex32("403b0e5130d2a1c7f3ffc3a0ed945cb51bf918b656ffd977b70b644b2dab4ba4"),
+    ),
 ];
 
 /// The fold of [`MATERIAL_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const MATERIAL_SEMANTICS_ID: [u8; 32] =
-    hex32("f0696d683a593202d11683c67a6c984a873d4c1f8c16183e6e8c0ce91d9fa3e8");
+    hex32("d0970fea63ccfdeaa0d057f370f0c427a6093ec5b510db2ddc716ef23f88e33c");
 
 /// A material law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,6 +282,8 @@ pub struct MaterialLaw {
     tile: Line,
     cell: Option<(CellKind, Line)>,
     noises: Vec<Line>,
+    /// the places, in `noises`, of the noises that move the cell lookup along u and v
+    warp: Option<[usize; 2]>,
     normal_step: Line,
     height: Line,
     albedo: Line,
@@ -290,6 +301,7 @@ pub struct BoundMaterial<'a> {
     tile: [f64; 2],
     cell: Option<BoundCell>,
     noises: Vec<(f64, f64, u32)>,
+    warp: Option<[usize; 2]>,
     normal_step: f64,
 }
 
@@ -410,6 +422,8 @@ impl MaterialLaw {
         let mut cell: Option<(CellKind, Line)> = None;
         let mut noises: Vec<Line> = Vec::new();
         let mut normal_step: Option<Line> = None;
+        // the warp's two names and its line, resolved once every noise is known
+        let mut warp: Option<(usize, [String; 2])> = None;
         let mut height: Option<Line> = None;
         let mut albedo: Option<Line> = None;
         let mut roughness: Option<Line> = None;
@@ -576,6 +590,21 @@ impl MaterialLaw {
                     )?;
                     noises.push(line_of(line, n, &texts, &config)?);
                 }
+                "warp" => {
+                    after_lets = true;
+                    let Some(e) = rest.strip_prefix('=') else {
+                        return Err(err(line, "`warp = (<noise>, <noise>)` expected"));
+                    };
+                    if warp.is_some() {
+                        return Err(err(line, "`warp` given twice"));
+                    }
+                    let names = tuple(line, e, 2, "warp = (<noise>, <noise>)")?;
+                    let [a, b] = [names[0].trim(), names[1].trim()];
+                    if !is_name(a) || !is_name(b) {
+                        return Err(err(line, "a warp names two noises"));
+                    }
+                    warp = Some((line, [a.to_owned(), b.to_owned()]));
+                }
                 "field" => {
                     after_lets = true;
                     let Some((f, e)) = rest.split_once('=') else {
@@ -622,6 +651,24 @@ impl MaterialLaw {
         let roughness = roughness.ok_or_else(|| err(0, "no `field roughness` line"))?;
         let tile = tile.ok_or_else(|| err(0, "no `tile` line"))?;
         let normal_step = normal_step.ok_or_else(|| err(0, "no `normal_step` line"))?;
+        let warp = match warp {
+            None => None,
+            Some((line, names)) => {
+                if cell.is_none() {
+                    return Err(err(
+                        line,
+                        "a warp moves the cell lookup: it needs a cell line",
+                    ));
+                }
+                let place = |n: &str| {
+                    noises
+                        .iter()
+                        .position(|l| l.name == n)
+                        .ok_or_else(|| err(line, format!("`{n}` is not a declared noise")))
+                };
+                Some([place(&names[0])?, place(&names[1])?])
+            }
+        };
         let law = Self {
             name,
             params,
@@ -629,6 +676,7 @@ impl MaterialLaw {
             tile,
             cell,
             noises,
+            warp,
             normal_step,
             height,
             albedo,
@@ -702,6 +750,9 @@ impl MaterialLaw {
         h = h.u64(self.noises.len() as u64);
         for l in &self.noises {
             h = hash_line(h, l);
+        }
+        if let Some([a, b]) = self.warp {
+            h = h.str("warp").u64(a as u64).u64(b as u64);
         }
         h = hash_line(h, &self.normal_step);
         h = hash_line(h, &self.height);
@@ -867,6 +918,7 @@ impl MaterialLaw {
             tile,
             cell,
             noises,
+            warp: self.warp,
             normal_step: step,
         })
     }
@@ -904,6 +956,14 @@ impl BoundMaterial<'_> {
     #[must_use]
     pub const fn normal_step(&self) -> f64 {
         self.normal_step
+    }
+
+    /// The places, in [`MaterialPoint::noise`] order, of the two noises that move the cell
+    /// lookup: the cell of `(u, v)` is the cell of `(u + noise[a], v + noise[b])`; `None`
+    /// without a `warp` line (the cell of the point itself)
+    #[must_use]
+    pub const fn warp(&self) -> Option<[usize; 2]> {
+        self.warp
     }
 
     /// The fields at a point
@@ -1051,12 +1111,31 @@ pub fn material_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
             None => h.update([0]),
         }
     }
+    // the warp: which noises a warp line names, and that a warp needs a cell line
+    let mut w = Sha256::new();
+    for line in ["", "warp = (n1, n2)", "warp = (n2, n1)", "warp = (n2, n2)"] {
+        let text = MATERIAL_PROBE_LAW.replace("normal_step", &format!("{line}\nnormal_step"));
+        match MaterialLaw::from_file(&text).map(|l| l.warp) {
+            Ok(None) => w.update([0]),
+            Ok(Some([a, b])) => {
+                w.update([1]);
+                w.update((a as u64).to_le_bytes());
+                w.update((b as u64).to_le_bytes());
+            }
+            Err(_) => w.update([2]),
+        }
+    }
+    let no_cell = MATERIAL_PROBE_LAW
+        .replace("cell grid = (a, a, 0.5)\n", "")
+        .replace("normal_step", "warp = (n1, n2)\nnormal_step");
+    w.update([u8::from(MaterialLaw::from_file(&no_cell).is_err())]);
     vec![
         (MATERIAL_SEMANTICS_PINS[0].0, h.finalize().into()),
         (
             MATERIAL_SEMANTICS_PINS[1].0,
             crate::research_law::expression_functions_fingerprint(),
         ),
+        (MATERIAL_SEMANTICS_PINS[2].0, w.finalize().into()),
     ]
 }
 
