@@ -18,6 +18,8 @@
 //! [quantum <x>]
 //! block <name> f64 <domain> <dims ...> <sha256> [when <param>=<value>]
 //! block <name> sparse <domain> <count> <components> <sha256> [when <param>=<value>]
+//! block <name> f64x2 <domain> <dims ...> <sha256> [when ...]          (pairs, below)
+//! block <name> sparse-f64x2 <domain> <count> <components> <sha256> [when ...]
 //! payload
 //! ```
 //! then the blocks' bytes, little-endian, in block order (`f64` values; a sparse block's `count`
@@ -39,6 +41,16 @@
 //! - The identifier ([`LawResidual::residual_id`]) is the sha256 of the canonical file (the header
 //!   in the order above, single spaces, no comments, and every payload byte); the fitted model is
 //!   the pair (law identifier, residual identifier).
+//!
+//! - A pair type (`f64x2`, `sparse-f64x2`) holds each value as two numbers `(hi, lo)`, made by
+//!   [`two_sum`] of `f` and `-law` (the reference and the law's value); the value at the point is
+//!   [`compensated_add`] of `law`, `hi` and `lo`, exactly `f` whenever `f` is a float. A single `f64`
+//!   difference `f - law` is rounded when the two are more than a factor of 2 apart, and then no
+//!   single float added to `law` gives `f`. So a block the kind adds to its law's values
+//!   ([`ResidualOwner::additive_block`]) must be a pair type unless the residual declares a
+//!   quantum ([`LawResidual::check_belongs`] refuses it otherwise). The law's value must be
+//!   computed in one fixed order on the side that fits the residual and on the side that
+//!   evaluates it.
 //!
 //! The rules a kind's own tests hold its residuals to: a residual of zeros evaluates as the law
 //! alone, bit for bit; at the index points law plus residual is the reference (bit for bit, or
@@ -69,12 +81,31 @@ pub trait ResidualOwner {
     fn index(&self, domain: &str) -> Option<Vec<String>>;
     /// the value of a selector parameter, as text
     fn selector(&self, param: &str) -> Option<String>;
+    /// whether the block of this name is a difference the kind adds to its law's values (then,
+    /// without a quantum, it must be a pair type to be exact)
+    fn additive_block(&self, name: &str) -> bool;
     /// whether the law takes a residual laid out over `domain` with these words; by default the
     /// words must be the law's own ([`Self::index`]), a kind whose residual chooses its own
     /// resolution (a texel grid) checks their form instead
     fn accepts_index(&self, domain: &str, words: &[String]) -> bool {
         self.index(domain).as_deref() == Some(words)
     }
+}
+
+/// `a + b` as the rounded sum and its rounding error: `s + e == a + b` exactly (Knuth's `TwoSum`)
+#[must_use]
+pub fn two_sum(a: f64, b: f64) -> (f64, f64) {
+    let s = a + b;
+    let bb = s - a;
+    (s, (a - (s - bb)) + (b - bb))
+}
+
+/// The law's value `law` with the residual pair `(hi, lo)` added: `s + (e + lo)` where
+/// `(s, e) = two_sum(law, hi)`; for `(hi, lo) = two_sum(f, -law)` this is `f`
+#[must_use]
+pub fn compensated_add(law: f64, hi: f64, lo: f64) -> f64 {
+    let (s, e) = two_sum(law, hi);
+    s + (e + lo)
 }
 
 /// sha256 of a kind's canonical bound law (the `bound` line)
@@ -130,8 +161,10 @@ pub enum Block {
         domain: String,
         /// its dimensions (their product is the number of values)
         shape: Vec<usize>,
-        /// the values, in row-major order
+        /// the values, in row-major order (a pair type: `hi, lo` for each)
         values: Vec<f64>,
+        /// whether each value is a pair `(hi, lo)`
+        pairs: bool,
         /// the selector and value it applies under, if any
         when: Option<(String, String)>,
     },
@@ -145,8 +178,10 @@ pub enum Block {
         indices: Vec<u32>,
         /// the values per element
         components: usize,
-        /// `indices.len() × components` values, element by element
+        /// `indices.len() × components` values, element by element (a pair type: `hi, lo` each)
         values: Vec<f64>,
+        /// whether each value is a pair `(hi, lo)`
+        pairs: bool,
         /// the selector and value it applies under, if any
         when: Option<(String, String)>,
     },
@@ -174,6 +209,13 @@ impl Block {
             Self::Dense { when, .. } | Self::Sparse { when, .. } => {
                 when.as_ref().map(|(p, v)| (p.as_str(), v.as_str()))
             }
+        }
+    }
+    /// Whether each value is a pair `(hi, lo)` ([`compensated_add`])
+    #[must_use]
+    pub const fn pairs(&self) -> bool {
+        match self {
+            Self::Dense { pairs, .. } | Self::Sparse { pairs, .. } => *pairs,
         }
     }
     /// The values (a sparse block's, element by element)
@@ -281,6 +323,7 @@ impl LawResidual {
         type Pending = (
             usize,
             String,
+            bool,
             bool,
             String,
             Vec<usize>,
@@ -441,10 +484,13 @@ impl LawResidual {
                         .map(|s| s.parse::<usize>())
                         .collect::<Result<_, _>>()
                         .map_err(|_| bad(line, "a block's dimensions are whole numbers"))?;
-                    let dense = match body[2] {
-                        "f64" => true,
-                        "sparse" if dims.len() == 2 => false,
-                        "sparse" => {
+                    let (dense, pairs) = match body[2] {
+                        "f64" => (true, false),
+                        "f64x2" => (true, true),
+                        "sparse" | "sparse-f64x2" if dims.len() == 2 => {
+                            (false, body[2] != "sparse")
+                        }
+                        "sparse" | "sparse-f64x2" => {
                             return Err(bad(line, "a sparse block gives <count> <components>"))
                         }
                         other => return Err(bad(line, format!("unknown block type `{other}`"))),
@@ -457,6 +503,7 @@ impl LawResidual {
                         line,
                         body[1].to_owned(),
                         dense,
+                        pairs,
                         body[3].to_owned(),
                         dims,
                         sha,
@@ -489,7 +536,7 @@ impl LawResidual {
             return Err(bad(0, "a `between` line for an undeclared domain"));
         }
         let mut blocks = Vec::with_capacity(pending.len());
-        for (line, bname, dense, domain, dims, sha, when) in pending {
+        for (line, bname, dense, pairs, domain, dims, sha, when) in pending {
             let words = &domains
                 .iter()
                 .find(|(d, _)| *d == domain)
@@ -517,6 +564,7 @@ impl LawResidual {
                     .ok_or_else(|| bad(line, "a block too large"))?;
                 (count, n)
             };
+            let n_val = if pairs { 2 * n_val } else { n_val };
             let len = 4 * n_idx + 8 * n_val;
             if payload.len() < len {
                 return Err(bad(
@@ -557,6 +605,7 @@ impl LawResidual {
                     domain,
                     shape: dims,
                     values,
+                    pairs,
                     when,
                 }
             } else {
@@ -566,6 +615,7 @@ impl LawResidual {
                     indices,
                     components: dims[1],
                     values,
+                    pairs,
                     when,
                 }
             });
@@ -617,8 +667,9 @@ impl LawResidual {
         for b in &self.blocks {
             let bytes = b.bytes();
             let shape = match b {
-                Block::Dense { shape, .. } => format!(
-                    "f64 {} {}",
+                Block::Dense { shape, pairs, .. } => format!(
+                    "{} {} {}",
+                    if *pairs { "f64x2" } else { "f64" },
                     b.domain(),
                     shape
                         .iter()
@@ -629,10 +680,14 @@ impl LawResidual {
                 Block::Sparse {
                     indices,
                     components,
+                    pairs,
                     ..
-                } => {
-                    format!("sparse {} {} {components}", b.domain(), indices.len())
-                }
+                } => format!(
+                    "{} {} {} {components}",
+                    if *pairs { "sparse-f64x2" } else { "sparse" },
+                    b.domain(),
+                    indices.len()
+                ),
             };
             let _ = write!(h, "block {} {shape} {}", b.name(), hex(&bound_hash(&bytes)));
             if let Some((p, v)) = b.when() {
@@ -754,6 +809,18 @@ impl LawResidual {
                     ))
                 }
                 None => return no(format!("the law has no domain `{d}`")),
+            }
+        }
+        if self.quantum.is_none() {
+            if let Some(b) = self
+                .blocks
+                .iter()
+                .find(|b| law.additive_block(b.name()) && !b.pairs())
+            {
+                return no(format!(
+                    "block `{}` is added to the law's values and exact (no quantum): it must be a pair type",
+                    b.name()
+                ));
             }
         }
         for b in &self.blocks {

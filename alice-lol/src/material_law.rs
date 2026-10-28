@@ -76,7 +76,7 @@ use std::fmt;
 use alice_sdf::surface::{grid_cell, hash_noise_2d_periodic, voronoi_cell};
 
 use crate::law_id::{fold_semantics_pins, hex32, LawIdHasher};
-use crate::law_residual::{Block, LawResidual, ResidualOwner};
+use crate::law_residual::{compensated_add, Block, LawResidual, ResidualOwner};
 use crate::research_law::{CompiledExpr, LawExpr};
 
 /// The seed of the cell numbers when a bound law is evaluated on a surface
@@ -1373,6 +1373,9 @@ impl ResidualOwner for BoundMaterial<'_> {
     fn selector(&self, _param: &str) -> Option<String> {
         None
     }
+    fn additive_block(&self, name: &str) -> bool {
+        matches!(name, "height" | "albedo" | "roughness")
+    }
     fn accepts_index(&self, domain: &str, words: &[String]) -> bool {
         domain == "texels"
             && words.len() == 2
@@ -1388,9 +1391,10 @@ impl ResidualOwner for BoundMaterial<'_> {
 pub struct ResidualMaterial<'r, 'a> {
     bound: &'r BoundMaterial<'a>,
     size: [usize; 2],
-    height: Vec<f64>,
-    albedo: Vec<f64>,
-    roughness: Vec<f64>,
+    /// each grid as (hi, lo) per value; a single-f64 grid (with a quantum) has lo 0
+    height: (Vec<f64>, Vec<f64>),
+    albedo: (Vec<f64>, Vec<f64>),
+    roughness: (Vec<f64>, Vec<f64>),
 }
 
 impl<'a> BoundMaterial<'a> {
@@ -1416,19 +1420,27 @@ impl<'a> BoundMaterial<'a> {
             words[0].parse::<usize>().unwrap_or(0),
             words[1].parse::<usize>().unwrap_or(0),
         ];
-        let take = |name: &str, comps: usize| -> Result<Vec<f64>, MaterialError> {
+        let take = |name: &str, comps: usize| -> Result<(Vec<f64>, Vec<f64>), MaterialError> {
             match residual.block(name) {
                 Some(Block::Dense {
                     domain,
                     shape,
                     values,
+                    pairs,
                     when: None,
                     ..
                 }) if domain == "texels"
                     && (shape[..] == [size[0], size[1]] && comps == 1
                         || shape[..] == [size[0], size[1], comps]) =>
                 {
-                    Ok(values.clone())
+                    Ok(if *pairs {
+                        (
+                            values.iter().step_by(2).copied().collect(),
+                            values.iter().skip(1).step_by(2).copied().collect(),
+                        )
+                    } else {
+                        (values.clone(), vec![0.0; values.len()])
+                    })
                 }
                 Some(_) => Err(no(format!(
                     "block `{name}` is not a texel grid of {comps} per texel"
@@ -1484,15 +1496,24 @@ impl ResidualMaterial<'_, '_> {
         let (i1, j1) = (wrap(i0 + 1, cols), wrap(j0 + 1, rows));
         let (i0, j0) = (wrap(i0, cols), wrap(j0, rows));
         let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
-        let at = |grid: &[f64], comps: usize, c: usize| {
-            let g = |i: usize, j: usize| grid[comps * (j * cols + i) + c];
-            lerp(
-                lerp(g(i0, j0), g(i1, j0), fx),
-                lerp(g(i0, j1), g(i1, j1), fx),
-                fy,
-            )
+        let at = |grid: &(Vec<f64>, Vec<f64>), comps: usize, c: usize| {
+            let one = |g: &[f64]| {
+                let v = |i: usize, j: usize| g[comps * (j * cols + i) + c];
+                lerp(
+                    lerp(v(i0, j0), v(i1, j0), fx),
+                    lerp(v(i0, j1), v(i1, j1), fx),
+                    fy,
+                )
+            };
+            (one(&grid.0), one(&grid.1))
         };
-        let add = |field: f64, r: f64| if r == 0.0 { field } else { field + r };
+        let add = |field: f64, (hi, lo): (f64, f64)| {
+            if hi == 0.0 && lo == 0.0 {
+                field
+            } else {
+                compensated_add(field, hi, lo)
+            }
+        };
         let out = MaterialSample {
             height: add(law.height, at(&self.height, 1, 0)),
             albedo: [

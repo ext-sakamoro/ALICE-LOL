@@ -45,6 +45,8 @@ struct Toy {
     part: &'static str,
     grid: [usize; 2],
     verts: usize,
+    /// the blocks that are differences added to the law's values
+    additive: Vec<&'static str>,
 }
 
 impl Toy {
@@ -57,6 +59,7 @@ impl Toy {
             part: "smile",
             grid: [2, 3],
             verts: 10,
+            additive: Vec::new(),
         }
     }
 }
@@ -96,6 +99,9 @@ impl ResidualOwner for Toy {
     }
     fn selector(&self, param: &str) -> Option<String> {
         (param == "part").then(|| self.part.to_owned())
+    }
+    fn additive_block(&self, name: &str) -> bool {
+        self.additive.contains(&name)
     }
 }
 
@@ -456,4 +462,83 @@ fn the_size_in_bits_follows_the_mdl_rule() {
     assert_eq!(q.block_bits("mouth"), Some(37));
     assert_eq!(q.total_bits(), 16 + 78 + 37 + 40);
     assert_eq!(q.block_bits("nope"), None);
+}
+
+#[test]
+fn the_compensated_add_is_exact_where_a_single_f64_is_not() {
+    use alice_lol::law_residual::{compensated_add, two_sum};
+    // law and reference more than 2x apart (outside Sterbenz): f - law is rounded
+    let (law, f) = (3.115e-5_f64, 1.455e-5_f64);
+    let r = f - law;
+    assert_ne!(
+        law + r,
+        f,
+        "the single f64 residual reproduces f here: the case has no teeth"
+    );
+    let (hi, lo) = two_sum(f, -law);
+    assert_eq!(compensated_add(law, hi, lo), f);
+    // two_sum is exact: hi + lo is f - law with no rounding (hi is the rounded sum, lo its error)
+    assert_eq!(hi, r);
+    assert_ne!(lo, 0.0);
+    // many pairs, scales apart: always exact
+    for k in 1..2000u32 {
+        let law = f64::from(k).sqrt() * 1e-5 * if k % 3 == 0 { -1.0 } else { 1.0 };
+        let f = law * (0.01 + f64::from(k % 97) / 13.0) + f64::from(k % 7) * 1e-9;
+        let (hi, lo) = two_sum(f, -law);
+        assert_eq!(compensated_add(law, hi, lo), f, "law {law} f {f}");
+    }
+}
+
+#[test]
+fn a_pair_block_reads_writes_and_counts_both_halves() {
+    let toy = Toy::new();
+    let pairs = [0.5, 1e-17, -0.25, 0.0, 2.0, -3e-18]; // 3 values on the 3-element... grid of 2 x 3
+    let all: Vec<f64> = pairs.iter().copied().chain(pairs).collect(); // 6 pairs = 12 numbers
+    let bytes = f64s(&all);
+    let bound: [u8; 32] = Sha256::digest(toy.canonical_bound(&["cheek", "part"])).into();
+    let mut h = format!(
+        "residual pairs\nfor {KIND} {}\nbound {}\nframe world\nindex grid 2 3\nbetween grid nearest\nquantum 0.125\n",
+        hex(&LAW),
+        hex(&bound)
+    );
+    h += &format!(
+        "block g f64x2 grid 2 3 {}\npayload\n",
+        hex(&Sha256::digest(&bytes))
+    );
+    let mut raw = h.into_bytes();
+    raw.extend(bytes);
+    let r = LawResidual::from_bytes(&raw).unwrap();
+    assert_eq!(r.to_bytes(), raw);
+    assert_eq!(r.block("g").unwrap().values(), all);
+    // q = 0.125: 0.5 -> 3, 1e-17 -> 1, -0.25 -> 2, 0 -> 1, 2 -> 5, -3e-18 -> 1 = 13, twice
+    assert_eq!(r.block_bits("g"), Some(26));
+    // a pair block holds two numbers per value: 6 numbers is 3 values, not the grid's 6
+    let short = f64s(&pairs);
+    let h2 = String::from_utf8_lossy(&raw[..raw.len() - 8 * 12]).replace(
+        &hex(&Sha256::digest(f64s(&all))),
+        &hex(&Sha256::digest(&short)),
+    );
+    let mut bad = h2.into_bytes();
+    bad.extend(short);
+    assert!(
+        LawResidual::from_bytes(&bad).is_err(),
+        "half a pair block read"
+    );
+}
+
+#[test]
+fn an_exact_additive_block_must_be_a_pair() {
+    // the kind says block g is a difference added to the law: without a quantum a single f64 per
+    // value cannot always be exact, so it is refused; with a quantum it is allowed
+    let mut toy = Toy::new();
+    toy.additive = vec!["g"];
+    let exact = LawResidual::from_bytes(&file(&toy, &GRID, None)).unwrap();
+    assert!(
+        exact.check_belongs(&toy).is_err(),
+        "an exact single-f64 additive block accepted"
+    );
+    let quantised = LawResidual::from_bytes(&file(&toy, &GRID, Some("0.125"))).unwrap();
+    assert!(quantised.check_belongs(&toy).is_ok());
+    // the same blocks when the kind says they are data: accepted
+    assert!(exact.check_belongs(&Toy::new()).is_ok());
 }

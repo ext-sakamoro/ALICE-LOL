@@ -34,14 +34,15 @@ fn f64s(v: &[f64]) -> Vec<u8> {
     v.iter().flat_map(|x| x.to_le_bytes()).collect()
 }
 
-/// A texel residual for `law` bound at `values`, W x H = 4 x 2
-fn residual(
+/// The bytes of a residual for `law` bound at `values`, W x H = 4 x 2, with these block payloads
+/// written as type `ty` (`f64x2` pairs or `f64`) and an optional quantum
+fn build(
     law: &MaterialLaw,
     values: &[(&str, f64)],
-    h: &[f64],
-    a: &[f64],
-    r: &[f64],
-) -> LawResidual {
+    payloads: [Vec<u8>; 3],
+    ty: &str,
+    quantum: Option<&str>,
+) -> Vec<u8> {
     let b = law.bind(values).unwrap();
     let bound = bound_hash(&b.canonical_bound(&[]));
     let mut head = format!(
@@ -50,23 +51,45 @@ fn residual(
         hex(&law.law_id()),
         hex(&bound)
     );
-    let blocks = [
-        ("height", f64s(h), "4 2"),
-        ("albedo", f64s(a), "4 2 3"),
-        ("roughness", f64s(r), "4 2"),
-    ];
-    for (n, bytes, shape) in &blocks {
+    if let Some(q) = quantum {
+        head += &format!("quantum {q}\n");
+    }
+    let shapes = ["4 2", "4 2 3", "4 2"];
+    for ((n, bytes), shape) in ["height", "albedo", "roughness"]
+        .iter()
+        .zip(&payloads)
+        .zip(shapes)
+    {
         head += &format!(
-            "block {n} f64 texels {shape} {}\n",
+            "block {n} {ty} texels {shape} {}\n",
             hex(&Sha256::digest(bytes))
         );
     }
     head += "payload\n";
     let mut out = head.into_bytes();
-    for (_, bytes, _) in blocks {
+    for bytes in payloads {
         out.extend(bytes);
     }
-    LawResidual::from_bytes(&out).unwrap()
+    out
+}
+
+/// pairs (hi, lo) as the payload of an `f64x2` block
+fn pairs(v: &[(f64, f64)]) -> Vec<u8> {
+    v.iter()
+        .flat_map(|(h, l)| h.to_le_bytes().into_iter().chain(l.to_le_bytes()))
+        .collect()
+}
+
+/// A texel residual whose values are exact pairs (value, 0)
+fn residual(
+    law: &MaterialLaw,
+    values: &[(&str, f64)],
+    h: &[f64],
+    a: &[f64],
+    r: &[f64],
+) -> LawResidual {
+    let p = |v: &[f64]| pairs(&v.iter().map(|x| (*x, 0.0)).collect::<Vec<_>>());
+    LawResidual::from_bytes(&build(law, values, [p(h), p(a), p(r)], "f64x2", None)).unwrap()
 }
 
 fn grid(f: impl Fn(usize) -> f64, n: usize) -> Vec<f64> {
@@ -217,4 +240,79 @@ fn a_residual_that_leaves_the_range_names_the_field() {
         Err(MaterialError::OutOfRange { field }) => assert_eq!(field, "roughness"),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn a_texel_far_from_the_law_is_still_exact() {
+    use alice_lol::law_residual::two_sum;
+    // the reference is more than 2x from the law at every texel centre (outside Sterbenz): the
+    // pair (hi, lo) = two_sum(f, -law) reproduces f exactly where a single f64 difference cannot
+    let law =
+        MaterialLaw::from_file(&LAW.replace("tilt * u", "3.115e-5 + tilt * u * 1e-3")).unwrap();
+    let b = law.bind(&[]).unwrap();
+    let centre = |t: usize| {
+        (
+            ((t % 4) as f64 + 0.5) / 4.0 * 2.0,
+            ((t / 4) as f64 + 0.5) / 2.0,
+        )
+    };
+    let refs: Vec<f64> = (0..8).map(|t| 1.455e-5 * (1.0 + t as f64 * 0.01)).collect();
+    let hp: Vec<(f64, f64)> = (0..8)
+        .map(|t| {
+            let (u, v) = centre(t);
+            two_sum(refs[t], -b.at(u, v).unwrap().height)
+        })
+        .collect();
+    // at least one texel where the single difference is not exact (the case has teeth)
+    let single_fails = (0..8).filter(|&t| {
+        let (u, v) = centre(t);
+        let l = b.at(u, v).unwrap().height;
+        l + (refs[t] - l) != refs[t]
+    });
+    assert!(
+        single_fails.count() > 0,
+        "every single f64 difference is exact here"
+    );
+    let zero = |n: usize| pairs(&vec![(0.0, 0.0); n]);
+    let r = LawResidual::from_bytes(&build(
+        &law,
+        &[],
+        [pairs(&hp), zero(24), zero(8)],
+        "f64x2",
+        None,
+    ))
+    .unwrap();
+    let with = b.with_residual(&r).unwrap();
+    for t in 0..8 {
+        let (u, v) = centre(t);
+        assert_eq!(with.at(u, v).unwrap().height, refs[t], "texel {t}");
+    }
+}
+
+#[test]
+fn an_exact_single_f64_grid_is_refused_a_quantised_one_is_not() {
+    let law = MaterialLaw::from_file(LAW).unwrap();
+    let b = law.bind(&[]).unwrap();
+    let f = |n: usize| f64s(&vec![0.001; n]);
+    let exact =
+        LawResidual::from_bytes(&build(&law, &[], [f(8), f(24), f(8)], "f64", None)).unwrap();
+    assert!(matches!(
+        b.with_residual(&exact),
+        Err(MaterialError::Residual(_))
+    ));
+    let quantised = LawResidual::from_bytes(&build(
+        &law,
+        &[],
+        [f(8), f(24), f(8)],
+        "f64",
+        Some("0.0001"),
+    ))
+    .unwrap();
+    let with = b.with_residual(&quantised).unwrap();
+    // a single f64 grid adds its value as is
+    let (u, v) = (0.25, 0.25);
+    assert_eq!(
+        with.at(u, v).unwrap().roughness,
+        b.at(u, v).unwrap().roughness + 0.001
+    );
 }
