@@ -76,6 +76,7 @@ use std::fmt;
 use alice_sdf::surface::{grid_cell, hash_noise_2d_periodic, voronoi_cell};
 
 use crate::law_id::{fold_semantics_pins, hex32, LawIdHasher};
+use crate::law_residual::{Block, LawResidual, ResidualOwner};
 use crate::research_law::{CompiledExpr, LawExpr};
 
 /// The seed of the cell numbers when a bound law is evaluated on a surface
@@ -83,7 +84,9 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const MATERIAL_CELL_SEED: u32 = 0;
 
 /// The kind tag of a material law, hashed into its identifier
-pub const MATERIAL_LAW_KIND: &[u8] = b"lol.law.material/v1";
+pub const MATERIAL_LAW_KIND: &[u8] = MATERIAL_LAW_KIND_STR.as_bytes();
+/// [`MATERIAL_LAW_KIND`] as text (the `for` line of a residual)
+pub const MATERIAL_LAW_KIND_STR: &str = "lol.law.material/v1";
 
 /// The most parameters
 pub const MAX_PARAMS: usize = 64;
@@ -156,6 +159,8 @@ fn err(line: usize, message: impl Into<String>) -> MaterialLawError {
 /// Why a material law cannot be bound or sampled
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MaterialError {
+    /// a residual that does not belong to this bound law or does not lay out as a material's
+    Residual(String),
     /// a parameter the law does not declare
     UnknownParam(String),
     /// a parameter given twice
@@ -203,6 +208,7 @@ impl fmt::Display for MaterialError {
             Self::ParamOutOfRange { name } => write!(f, "parameter `{name}` outside its range"),
             Self::NotTiling { what } | Self::InvalidValue { what } => f.write_str(what),
             Self::NonFinite { field } => write!(f, "`{field}` is not finite"),
+            Self::Residual(m) => write!(f, "residual: {m}"),
             Self::OutOfRange { field } => write!(f, "`{field}` is outside 0..=1"),
             Self::NoiseCount { expected, got } => {
                 write!(
@@ -1337,5 +1343,181 @@ mod tests {
         let mut other = MATERIAL_SEMANTICS_ID;
         other[0] ^= 1;
         assert_ne!(law.law_id_under(&other), law.law_id());
+    }
+}
+
+/// A material law's residual: `texels <W> <H>` over the tile (any whole positive W, H), blocks
+/// `height` (W × H), `albedo` (W × H × 3) and `roughness` (W × H), row-major with the column
+/// fastest; the bound hash is the law identifier and every parameter value but the excluded ones
+impl ResidualOwner for BoundMaterial<'_> {
+    fn kind_tag(&self) -> &str {
+        MATERIAL_LAW_KIND_STR
+    }
+    fn law_id(&self) -> [u8; 32] {
+        self.law.law_id()
+    }
+    fn canonical_bound(&self, excluded: &[&str]) -> Vec<u8> {
+        let mut out = self.law.law_id().to_vec();
+        for (p, v) in self.law.params.iter().zip(&self.values) {
+            if !excluded.contains(&p.name.as_str()) {
+                out.extend((p.name.len() as u64).to_le_bytes());
+                out.extend(p.name.as_bytes());
+                out.extend(v.to_bits().to_le_bytes());
+            }
+        }
+        out
+    }
+    fn index(&self, _domain: &str) -> Option<Vec<String>> {
+        None
+    }
+    fn selector(&self, _param: &str) -> Option<String> {
+        None
+    }
+    fn accepts_index(&self, domain: &str, words: &[String]) -> bool {
+        domain == "texels"
+            && words.len() == 2
+            && words
+                .iter()
+                .all(|w| w.parse::<usize>().is_ok_and(|n| n > 0))
+    }
+}
+
+/// A bound material law with its texel residual: the fields of the law plus the residual,
+/// bilinear between texel centres and wrapping around the tile
+#[derive(Debug, Clone)]
+pub struct ResidualMaterial<'r, 'a> {
+    bound: &'r BoundMaterial<'a>,
+    size: [usize; 2],
+    height: Vec<f64>,
+    albedo: Vec<f64>,
+    roughness: Vec<f64>,
+}
+
+impl<'a> BoundMaterial<'a> {
+    /// This bound law with a residual
+    ///
+    /// # Errors
+    ///
+    /// [`MaterialError::Residual`] when the residual belongs to another law or instance, has no
+    /// `texels` domain, or its blocks are not `height`, `albedo` and `roughness` of the texel
+    /// grid's shape
+    pub fn with_residual<'r>(
+        &'r self,
+        residual: &LawResidual,
+    ) -> Result<ResidualMaterial<'r, 'a>, MaterialError> {
+        let no = |m: String| MaterialError::Residual(m);
+        residual
+            .check_belongs(self)
+            .map_err(|e| no(e.to_string()))?;
+        let words = residual
+            .index("texels")
+            .ok_or_else(|| no("no `texels` domain".into()))?;
+        let size = [
+            words[0].parse::<usize>().unwrap_or(0),
+            words[1].parse::<usize>().unwrap_or(0),
+        ];
+        let take = |name: &str, comps: usize| -> Result<Vec<f64>, MaterialError> {
+            match residual.block(name) {
+                Some(Block::Dense {
+                    domain,
+                    shape,
+                    values,
+                    when: None,
+                    ..
+                }) if domain == "texels"
+                    && (shape[..] == [size[0], size[1]] && comps == 1
+                        || shape[..] == [size[0], size[1], comps]) =>
+                {
+                    Ok(values.clone())
+                }
+                Some(_) => Err(no(format!(
+                    "block `{name}` is not a texel grid of {comps} per texel"
+                ))),
+                None => Err(no(format!("no `{name}` block"))),
+            }
+        };
+        if let Some(b) = residual
+            .blocks()
+            .iter()
+            .find(|b| !matches!(b.name(), "height" | "albedo" | "roughness"))
+        {
+            return Err(no(format!(
+                "a material residual has no block `{}`",
+                b.name()
+            )));
+        }
+        Ok(ResidualMaterial {
+            bound: self,
+            size,
+            height: take("height", 1)?,
+            albedo: take("albedo", 3)?,
+            roughness: take("roughness", 1)?,
+        })
+    }
+}
+
+impl ResidualMaterial<'_, '_> {
+    /// The fields at `(u, v)`: the law's ([`BoundMaterial::at`]) plus the residual there, the
+    /// albedo and roughness ranges checked after it (a residual of 0 adds nothing)
+    ///
+    /// # Errors
+    ///
+    /// As [`BoundMaterial::at`], and [`MaterialError::OutOfRange`] for a field the residual takes
+    /// out of 0..=1
+    #[allow(clippy::suboptimal_flops)] // unfused, as the law's values
+    pub fn at(&self, u: f64, v: f64) -> Result<MaterialSample, MaterialError> {
+        let law = self.bound.at(u, v)?;
+        let [tu, tv] = self.bound.tile;
+        let (ur, vr) = (u - tu * (u / tu).floor(), v - tv * (v / tv).floor());
+        let [cols, rows] = self.size;
+        #[allow(clippy::cast_precision_loss)]
+        let (gx, gy) = (ur / tu * cols as f64 - 0.5, vr / tv * rows as f64 - 0.5);
+        let (fx, fy) = (gx - gx.floor(), gy - gy.floor());
+        #[allow(clippy::cast_possible_truncation)]
+        let (i0, j0) = (gx.floor() as i64, gy.floor() as i64);
+        #[allow(
+            clippy::cast_possible_wrap,
+            clippy::cast_sign_loss,
+            clippy::cast_possible_truncation
+        )]
+        let wrap = |k: i64, n: usize| k.rem_euclid(n as i64) as usize;
+        let (i1, j1) = (wrap(i0 + 1, cols), wrap(j0 + 1, rows));
+        let (i0, j0) = (wrap(i0, cols), wrap(j0, rows));
+        let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
+        let at = |grid: &[f64], comps: usize, c: usize| {
+            let g = |i: usize, j: usize| grid[comps * (j * cols + i) + c];
+            lerp(
+                lerp(g(i0, j0), g(i1, j0), fx),
+                lerp(g(i0, j1), g(i1, j1), fx),
+                fy,
+            )
+        };
+        let add = |field: f64, r: f64| if r == 0.0 { field } else { field + r };
+        let out = MaterialSample {
+            height: add(law.height, at(&self.height, 1, 0)),
+            albedo: [
+                add(law.albedo[0], at(&self.albedo, 3, 0)),
+                add(law.albedo[1], at(&self.albedo, 3, 1)),
+                add(law.albedo[2], at(&self.albedo, 3, 2)),
+            ],
+            roughness: add(law.roughness, at(&self.roughness, 1, 0)),
+        };
+        let unit = |x: f64| (0.0..=1.0).contains(&x);
+        if !out.albedo.iter().all(|a| unit(*a)) {
+            return Err(MaterialError::OutOfRange {
+                field: "albedo".to_owned(),
+            });
+        }
+        if !unit(out.roughness) {
+            return Err(MaterialError::OutOfRange {
+                field: "roughness".to_owned(),
+            });
+        }
+        if !out.height.is_finite() {
+            return Err(MaterialError::NonFinite {
+                field: "height".to_owned(),
+            });
+        }
+        Ok(out)
     }
 }

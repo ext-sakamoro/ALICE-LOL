@@ -69,6 +69,12 @@ pub trait ResidualOwner {
     fn index(&self, domain: &str) -> Option<Vec<String>>;
     /// the value of a selector parameter, as text
     fn selector(&self, param: &str) -> Option<String>;
+    /// whether the law takes a residual laid out over `domain` with these words; by default the
+    /// words must be the law's own ([`Self::index`]), a kind whose residual chooses its own
+    /// resolution (a texel grid) checks their form instead
+    fn accepts_index(&self, domain: &str, words: &[String]) -> bool {
+        self.index(domain).as_deref() == Some(words)
+    }
 }
 
 /// sha256 of a kind's canonical bound law (the `bound` line)
@@ -736,8 +742,10 @@ impl LawResidual {
             return no("another instance of the law (bound values or structure)".into());
         }
         for (d, w) in &self.domains {
+            if law.accepts_index(d, w) {
+                continue;
+            }
             match law.index(d) {
-                Some(lw) if lw == *w => {}
                 Some(lw) => {
                     return no(format!(
                         "domain `{d}` is `{}`, the law's `{}`",
