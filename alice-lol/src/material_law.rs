@@ -50,6 +50,10 @@
 //! - `noise <name> = (<frequency>, <amplitude>, <seed>)`: a noise of that many cycles per metre
 //!   (positive), scaled by the amplitude, with an integer seed in `0 ..= u32::MAX`; at most 16
 //! - `normal_step = <expr>`: the step (metres, positive) of the central difference, once
+//! - `point <name> = <expr>`: a named value at the point, read by the later point lines and the
+//!   fields; it reads what a field reads and the point lines before it. Its meaning is exact
+//!   substitution (the law samples bit for bit as with the expression written out where it is
+//!   read), so it names a part of the fields once instead of repeating it
 //! - `warp = (<a>, <b>)`: the cell of a point is looked up at `(u + a, v + b)`, `a` and `b`
 //!   two declared noises (the same one may be named twice) — the outlines of the cells follow
 //!   the noises while the fields still read the point's own `u`, `v`; at most once, and only with
@@ -294,6 +298,8 @@ pub struct MaterialLaw {
     noises: Vec<Line>,
     /// the places, in `noises`, of the noises that move the cell lookup along u and v
     warp: Option<[usize; 2]>,
+    /// the point lines, in file order, read after the noises
+    points: Vec<Line>,
     normal_step: Line,
     height: Line,
     albedo: Line,
@@ -434,6 +440,8 @@ impl MaterialLaw {
         let mut normal_step: Option<Line> = None;
         // the warp's two names and its line, resolved once every noise is known
         let mut warp: Option<(usize, [String; 2])> = None;
+        // the point lines as text until every noise is known
+        let mut point_texts: Vec<(usize, &str, &str)> = Vec::new();
         let mut height: Option<Line> = None;
         let mut albedo: Option<Line> = None;
         let mut roughness: Option<Line> = None;
@@ -600,6 +608,23 @@ impl MaterialLaw {
                     )?;
                     noises.push(line_of(line, n, &texts, &config)?);
                 }
+                "point" => {
+                    after_lets = true;
+                    let Some((n, e)) = rest.split_once('=') else {
+                        return Err(err(line, "`point <name> = <expr>` expected"));
+                    };
+                    let n = n.trim();
+                    if !is_name(n)
+                        || taken(n, &params, &lets, &noises)
+                        || point_texts.iter().any(|(_, m, _)| *m == n)
+                    {
+                        return Err(err(line, format!("`{n}` is reserved or declared twice")));
+                    }
+                    if point_texts.len() == MAX_LETS {
+                        return Err(err(line, format!("more than {MAX_LETS} `point` lines")));
+                    }
+                    point_texts.push((line, n, e));
+                }
                 "warp" => {
                     after_lets = true;
                     let Some(e) = rest.strip_prefix('=') else {
@@ -648,6 +673,16 @@ impl MaterialLaw {
         names.extend(lets.iter().map(|l| l.name.as_str()));
         names.extend(POINT_INPUTS);
         names.extend(noises.iter().map(|l| l.name.as_str()));
+        // each point reads the point lines before it; a noise declared after a point line may not
+        // take its name
+        let mut points: Vec<Line> = Vec::with_capacity(point_texts.len());
+        for (line, n, e) in &point_texts {
+            if noises.iter().any(|l| l.name == *n) {
+                return Err(err(*line, format!("`{n}` is reserved or declared twice")));
+            }
+            points.push(line_of(*line, n, &[e], &names)?);
+            names.push(n);
+        }
         for (line, f, texts) in &fields {
             let l = line_of(*line, f, texts, &names)?;
             match *f {
@@ -687,6 +722,7 @@ impl MaterialLaw {
             cell,
             noises,
             warp,
+            points,
             normal_step,
             height,
             albedo,
@@ -763,6 +799,9 @@ impl MaterialLaw {
         }
         if let Some([a, b]) = self.warp {
             h = h.str("warp").u64(a as u64).u64(b as u64);
+        }
+        for l in &self.points {
+            h = hash_line(h.str("point"), l);
         }
         h = hash_line(h, &self.normal_step);
         h = hash_line(h, &self.height);
@@ -1097,6 +1136,16 @@ impl BoundMaterial<'_> {
                 });
             }
             slots.push(*v);
+        }
+        for l in &self.law.points {
+            let v = l.codes[0]
+                .eval(&slots)
+                .ok()
+                .filter(|v| v.is_finite())
+                .ok_or_else(|| MaterialError::NonFinite {
+                    field: l.name.clone(),
+                })?;
+            slots.push(v);
         }
         let field = |l: &Line| -> Result<Vec<f64>, MaterialError> {
             l.codes
