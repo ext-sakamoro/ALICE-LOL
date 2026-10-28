@@ -33,8 +33,10 @@
 
 use std::collections::BTreeMap;
 
-/// The parts of the body a measurement reads
+/// The parts of the body: the ones a measurement reads, and the trunk, shoulders, toes and breasts
+/// a rig names (read by [`crate::rig::classify`], not by [`measure`])
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Part {
     /// The pelvis (one, on the midline)
     Hips,
@@ -54,6 +56,37 @@ pub enum Part {
     Eye,
     /// The head (one, on the midline)
     Head,
+    /// The spine, the trunk's lowest bone above the hips (one, on the midline)
+    Spine,
+    /// The chest (one, on the midline)
+    Chest,
+    /// The neck (one, on the midline)
+    Neck,
+    /// The shoulder (the clavicle, inside the shoulder joint)
+    Shoulder,
+    /// The toes
+    Toe,
+    /// The breast (its first bone)
+    Breast,
+}
+
+impl Part {
+    /// Whether [`measure`] reads this part (the others are named by a rig but not measured)
+    #[must_use]
+    pub const fn is_measured(self) -> bool {
+        matches!(
+            self,
+            Self::Hips
+                | Self::UpperLeg
+                | Self::LowerLeg
+                | Self::Foot
+                | Self::UpperArm
+                | Self::LowerArm
+                | Self::Hand
+                | Self::Eye
+                | Self::Head
+        )
+    }
 }
 
 /// The side of a paired part

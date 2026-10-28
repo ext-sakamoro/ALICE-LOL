@@ -206,7 +206,7 @@ fn bone_names_of_the_usual_rig_conventions() {
         ("Right_Hand_L", None),
         ("L_Hand_Left", Some((Part::Hand, l))),
         ("UpperLeg", None),
-        ("Spine", None),
+        ("Spine", Some((Part::Spine, None))),
         ("Hair_front", None),
         ("", None),
     ] {

@@ -6,7 +6,9 @@
 //! - **joints** and **eyes**: the bind positions of the bones, named by the usual rig conventions
 //!   ([`classify`]: `LeftUpperLeg`, `UpperLeg_L`, `upper_leg.L`, `J_Bip_L_UpperLeg`,
 //!   `mixamorig:LeftUpLeg`, the VRM humanoid names, ...). Copies (`.001`), helper bones
-//!   (`..._support`) and names with both sides do not match.
+//!   (`..._support`) and names with both sides do not match. [`role`] also reads the trunk,
+//!   shoulders, toes and breasts, and the roots of the hair, the tail and the ears; the marks use
+//!   only the parts a measure reads.
 //! - **sole**: the lowest vertex of the body mesh among those that follow a foot (the foot bone or
 //!   a bone below it). The body mesh is the skinned mesh whose vertices follow the most body parts
 //!   (counted from the bone each vertex follows, not from the bones a skin lists: a file may list
@@ -53,9 +55,23 @@ pub struct Rig {
     pub meshes: Vec<RigMesh>,
 }
 
-/// Read a rig bone's name as a body part and side; `None` for any other bone
-#[must_use]
-pub fn classify(name: &str) -> Option<(Part, Option<Side>)> {
+/// The role of a rig bone: a body part, or the root of a chain that is not the body
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum Role {
+    /// A part of the body
+    Body(Part),
+    /// The root of the hair (one, on the midline): `HairRoot`, `Hair`
+    HairRoot,
+    /// The first bone of the tail (one, on the midline): `Tail_1`, `TailRoot`
+    TailRoot,
+    /// The first bone of an animal ear (paired): `Ear_1.L`, `Kemomimi_R`
+    EarRoot,
+}
+
+/// The words of a bone name, lower case, without the side words and the prefixes of the usual
+/// conventions, and its side; `None` when it names both sides
+fn words(name: &str) -> Option<(Vec<String>, Option<Side>)> {
     let name = name.rsplit(':').next().unwrap_or(name);
     let mut words: Vec<String> = Vec::new();
     for chunk in name.split(|c: char| !c.is_ascii_alphanumeric()) {
@@ -73,14 +89,14 @@ pub fn classify(name: &str) -> Option<(Part, Option<Side>)> {
         }
     }
     let mut side = None;
-    let mut stem = String::new();
-    for w in &words {
+    let mut kept = Vec::new();
+    for w in words {
         let s = match w.as_str() {
             "l" | "left" => Some(Side::Left),
             "r" | "right" => Some(Side::Right),
             "j" | "bip" | "c" | "adj" | "def" | "mixamorig" => continue,
-            w => {
-                stem += w;
+            _ => {
+                kept.extend([w]);
                 None
             }
         };
@@ -91,19 +107,55 @@ pub fn classify(name: &str) -> Option<(Part, Option<Side>)> {
             side = Some(s);
         }
     }
-    let part = match stem.as_str() {
-        "hips" | "pelvis" => return side.is_none().then_some((Part::Hips, None)),
-        "head" => return side.is_none().then_some((Part::Head, None)),
-        "upperleg" | "upleg" | "thigh" => Part::UpperLeg,
-        "lowerleg" | "leg" | "knee" | "shin" | "calf" => Part::LowerLeg,
-        "foot" | "ankle" => Part::Foot,
-        "upperarm" | "arm" => Part::UpperArm,
-        "lowerarm" | "forearm" | "elbow" => Part::LowerArm,
-        "hand" | "wrist" => Part::Hand,
-        "eye" | "faceeye" => Part::Eye,
-        _ => return None,
-    };
-    side.map(|s| (part, Some(s)))
+    Some((kept, side))
+}
+
+/// Read a rig bone's name as a role and side; `None` for any other bone
+///
+/// The words of the name (split at non-alphanumerics and lower-to-upper case changes) without
+/// the side words make a stem that must be one of the known ones exactly: a copy (`Spine.001`),
+/// the next bone of a chain (`Tail_2`, `BreastTip.L` after `Breast.L`), a helper
+/// (`UpperArm_twist.L`) or a prop named after a part as one word (`plushear.L`) is no
+/// role. A midline role takes no side and a paired one needs one. The first bone of a numbered
+/// chain (`Tail_1`, `Ear_1.L`) is its root; a numbered trunk bone is not (`Spine1` of mixamo is
+/// the second spine bone).
+#[must_use]
+pub fn role(name: &str) -> Option<(Role, Option<Side>)> {
+    let (words, side) = words(name)?;
+    let stem: String = words.concat();
+    let midline = |r: Role| side.is_none().then_some((r, None));
+    let paired = |r: Role| side.map(|s| (r, Some(s)));
+    match stem.as_str() {
+        "hips" | "pelvis" => midline(Role::Body(Part::Hips)),
+        "head" => midline(Role::Body(Part::Head)),
+        "spine" => midline(Role::Body(Part::Spine)),
+        "chest" => midline(Role::Body(Part::Chest)),
+        "neck" => midline(Role::Body(Part::Neck)),
+        "upperleg" | "upleg" | "thigh" => paired(Role::Body(Part::UpperLeg)),
+        "lowerleg" | "leg" | "knee" | "shin" | "calf" => paired(Role::Body(Part::LowerLeg)),
+        "foot" | "ankle" => paired(Role::Body(Part::Foot)),
+        "toe" | "toes" | "toebase" => paired(Role::Body(Part::Toe)),
+        "shoulder" | "clavicle" => paired(Role::Body(Part::Shoulder)),
+        "upperarm" | "arm" => paired(Role::Body(Part::UpperArm)),
+        "lowerarm" | "forearm" | "elbow" => paired(Role::Body(Part::LowerArm)),
+        "hand" | "wrist" => paired(Role::Body(Part::Hand)),
+        "eye" | "faceeye" => paired(Role::Body(Part::Eye)),
+        "breast" => paired(Role::Body(Part::Breast)),
+        "hair" | "hairroot" => midline(Role::HairRoot),
+        "tail" | "tail1" | "tailroot" => midline(Role::TailRoot),
+        "ear" | "ear1" | "earroot" | "kemomimi" | "nekomimi" => paired(Role::EarRoot),
+        _ => None,
+    }
+}
+
+/// Read a rig bone's name as a body part and side; `None` for any other bone, and for the roots
+/// [`role`] reads that are not the body
+#[must_use]
+pub fn classify(name: &str) -> Option<(Part, Option<Side>)> {
+    match role(name)? {
+        (Role::Body(p), s) => Some((p, s)),
+        _ => None,
+    }
 }
 
 /// The mean of some values (`None` for none)
@@ -119,7 +171,14 @@ fn mean(v: impl Iterator<Item = f64>) -> Option<f64> {
 /// [`MeasureError::Missing`] when the rig has no bound eye bones, no bound head bone or no
 /// skinned mesh that follows a foot.
 pub fn body_marks(rig: &Rig) -> Result<BodyMarks, MeasureError> {
-    let part = |b: usize| rig.bones.get(b).and_then(|x| classify(&x.name));
+    // only the parts a measure reads: the trunk, shoulders, toes and breasts a rig also names do
+    // not take part in the marks nor in choosing the body mesh
+    let part = |b: usize| {
+        rig.bones
+            .get(b)
+            .and_then(|x| classify(&x.name))
+            .filter(|p| p.0.is_measured())
+    };
     let is_head = |b: usize| part(b) == Some((Part::Head, None));
     // the bind position of every bound bone, by part; the first bone of a part is kept
     let mut marks = BodyMarks::new(0.0, 0.0);
