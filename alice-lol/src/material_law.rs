@@ -69,8 +69,14 @@
 
 use std::fmt;
 
+use alice_sdf::surface::{grid_cell, hash_noise_2d_periodic, voronoi_cell};
+
 use crate::law_id::{fold_semantics_pins, hex32, LawIdHasher};
 use crate::research_law::{CompiledExpr, LawExpr};
+
+/// The seed of the cell numbers when a bound law is evaluated on a surface
+/// ([`BoundMaterial::at`])
+pub const MATERIAL_CELL_SEED: u32 = 0;
 
 /// The kind tag of a material law, hashed into its identifier
 pub const MATERIAL_LAW_KIND: &[u8] = b"lol.law.material/v1";
@@ -105,11 +111,15 @@ pub const MATERIAL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         "material: warp = the cell of (u, v) looked up at (u + a, v + b) for two declared noises a, b, only with a cell line",
         hex32("403b0e5130d2a1c7f3ffc3a0ed945cb51bf918b656ffd977b70b644b2dab4ba4"),
     ),
+    (
+        "material: on a surface (BoundMaterial::at) the point is reduced into the tile, each noise is alice_sdf::surface::hash_noise_2d_periodic with its lattice wrapping once per tile, the cell is alice_sdf::surface grid_cell / voronoi_cell at the warped place with seed 0",
+        hex32("ed464bafbfb25a30f9b3b3382371bf53208bb8f0c254165fabe3e0a15a9c13e4"),
+    ),
 ];
 
 /// The fold of [`MATERIAL_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const MATERIAL_SEMANTICS_ID: [u8; 32] =
-    hex32("d0970fea63ccfdeaa0d057f370f0c427a6093ec5b510db2ddc716ef23f88e33c");
+    hex32("91d9e4d933da982139abfceeaf4af71f980133a69517f244c4b83f1d5aa5f708");
 
 /// A material law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -958,6 +968,95 @@ impl BoundMaterial<'_> {
         self.normal_step
     }
 
+    /// What the surface gives the law at `(u, v)` (metres), from the law's own cells and noises
+    /// (`alice_sdf::surface`): the point is reduced into the tile (`u - tu·floor(u / tu)`, and
+    /// v) for every lookup; each noise `(f, amp, seed)` is
+    /// `amp · hash_noise_2d_periodic(u'·f, v'·f, [tu·f, tv·f], seed)`, its lattice wrapping once
+    /// per tile; the cell is looked up at the reduced point moved by the warp's noises (the point
+    /// itself without a warp), with the tile's cell counts and [`MATERIAL_CELL_SEED`]; `u` and
+    /// `v` stay the point's own, as the fields read them
+    ///
+    /// # Errors
+    ///
+    /// [`MaterialError::NonFinite`] naming `u` or `v` when it is not finite
+    pub fn point_at(&self, u: f64, v: f64) -> Result<MaterialPoint, MaterialError> {
+        for (name, x) in [("u", u), ("v", v)] {
+            if !x.is_finite() {
+                return Err(MaterialError::NonFinite {
+                    field: name.to_owned(),
+                });
+            }
+        }
+        let [tu, tv] = self.tile;
+        let (ur, vr) = (u - tu * (u / tu).floor(), v - tv * (v / tv).floor());
+        // the bind checked that the tile holds every frequency and period a whole number of
+        // times (at most 2^20), so the rounded counts are those whole numbers
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let count = |x: f64| x.round() as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        let noise: Vec<f64> = self
+            .noises
+            .iter()
+            .map(|&(f, amp, seed)| {
+                let n = hash_noise_2d_periodic(
+                    (ur * f) as f32,
+                    (vr * f) as f32,
+                    [count(tu * f), count(tv * f)],
+                    seed,
+                );
+                amp * f64::from(n)
+            })
+            .collect();
+        let (cu, cv) = match self.warp {
+            Some([a, b]) => (ur + noise[a], vr + noise[b]),
+            None => (ur, vr),
+        };
+        let (edge, cell) = match self.cell {
+            None => (0.0, [0.0; 3]),
+            Some(BoundCell::Grid { period, row_shift }) => {
+                let tiles = [count(tu / period[0]), count(tv / period[1])];
+                let c = grid_cell(cu, cv, period, row_shift, tiles, MATERIAL_CELL_SEED);
+                (c.edge, c.numbers)
+            }
+            Some(BoundCell::Voronoi { period, jitter }) => {
+                let tiles = [count(tu / period), count(tv / period)];
+                let c = voronoi_cell(cu, cv, period, jitter, tiles, MATERIAL_CELL_SEED);
+                (c.edge, c.numbers)
+            }
+        };
+        Ok(MaterialPoint {
+            u,
+            v,
+            edge,
+            cell,
+            noise,
+        })
+    }
+
+    /// The fields at `(u, v)` on the surface: [`Self::sample`] of [`Self::point_at`]
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::point_at`] and [`Self::sample`]
+    pub fn at(&self, u: f64, v: f64) -> Result<MaterialSample, MaterialError> {
+        self.sample(&self.point_at(u, v)?)
+    }
+
+    /// The unit normal of the surface at `(u, v)`: `(-∂h/∂u, -∂h/∂v, 1)` normalised, the
+    /// derivatives of `height` by central difference at [`Self::normal_step`]
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::at`] at the four points
+    pub fn normal_at(&self, u: f64, v: f64) -> Result<[f64; 3], MaterialError> {
+        let s = self.normal_step;
+        let h = |x: f64, y: f64| self.at(x, y).map(|p| p.height);
+        let gu = (h(u + s, v)? - h(u - s, v)?) / (2.0 * s);
+        let gv = (h(u, v + s)? - h(u, v - s)?) / (2.0 * s);
+        let len = (gu * gu + gv * gv + 1.0).sqrt();
+        Ok([-gu / len, -gv / len, 1.0 / len])
+    }
+
     /// The places, in [`MaterialPoint::noise`] order, of the two noises that move the cell
     /// lookup: the cell of `(u, v)` is the cell of `(u + noise[a], v + noise[b])`; `None`
     /// without a `warp` line (the cell of the point itself)
@@ -1048,6 +1147,35 @@ field albedo = (0.2 + 0.1 * cell0, max(0, 0.3 - b * n2 * 0.1), min(1, sqrt(cell2
 field roughness = max(0, min(1, 0.5 + atan2(n2, 1 + cell1) * b / pi))
 ";
 
+/// The fields and normals [`BoundMaterial::at`] gives the probe law, with a warp, at points in
+/// and beyond the tile
+fn surface_fingerprint() -> [u8; 32] {
+    use sha2::{Digest as _, Sha256};
+    let text = MATERIAL_PROBE_LAW.replace("normal_step", "warp = (n1, n2)\nnormal_step");
+    let law = MaterialLaw::from_file(&text).expect("the probe law with a warp reads");
+    let bound = law.bind(&[]).expect("the probe binds");
+    let mut h = Sha256::new();
+    for k in 0..12u8 {
+        let x = f64::from(k) * 0.37 - 1.1;
+        let (u, v) = (x, 2.3 - x * 1.7);
+        let s = bound.at(u, v).expect("the probe samples on its surface");
+        let n = bound.normal_at(u, v).expect("the probe has a normal");
+        for y in [
+            s.height,
+            s.albedo[0],
+            s.albedo[1],
+            s.albedo[2],
+            s.roughness,
+            n[0],
+            n[1],
+            n[2],
+        ] {
+            h.update(y.to_bits().to_le_bytes());
+        }
+    }
+    h.finalize().into()
+}
+
 /// The measured value of every pin of [`MATERIAL_SEMANTICS_PINS`]
 ///
 /// # Panics
@@ -1136,6 +1264,7 @@ pub fn material_semantics_fingerprints() -> Vec<(&'static str, [u8; 32])> {
             crate::research_law::expression_functions_fingerprint(),
         ),
         (MATERIAL_SEMANTICS_PINS[2].0, w.finalize().into()),
+        (MATERIAL_SEMANTICS_PINS[3].0, surface_fingerprint()),
     ]
 }
 
