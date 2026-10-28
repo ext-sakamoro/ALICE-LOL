@@ -127,6 +127,7 @@ pub mod proportion_law;
 
 // ── 材質の Law (kind material): 名前付きの param から、面の上の点の高さ・色・粗さを計算する ──
 // 式は research と同じ評価器、tile は周期の整数比で検査、noise と cell の値は評価する側が渡す
+pub mod law_residual;
 pub mod material_law;
 
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout

@@ -1018,6 +1018,7 @@ impl BoundMaterial<'_> {
     /// # Errors
     ///
     /// [`MaterialError::NonFinite`] naming `u` or `v` when it is not finite
+    #[allow(clippy::suboptimal_flops)] // unfused: the law's values are f64 without fused multiply-add
     pub fn point_at(&self, u: f64, v: f64) -> Result<MaterialPoint, MaterialError> {
         for (name, x) in [("u", u), ("v", v)] {
             if !x.is_finite() {
@@ -1198,6 +1199,7 @@ field roughness = max(0, min(1, 0.5 + atan2(n2, 1 + cell1) * b / pi))
 
 /// The fields and normals [`BoundMaterial::at`] gives the probe law, with a warp, at points in
 /// and beyond the tile
+#[allow(clippy::suboptimal_flops)] // unfused, as the values it pins
 fn surface_fingerprint() -> [u8; 32] {
     use sha2::{Digest as _, Sha256};
     let text = MATERIAL_PROBE_LAW.replace("normal_step", "warp = (n1, n2)\nnormal_step");
@@ -1205,21 +1207,21 @@ fn surface_fingerprint() -> [u8; 32] {
     let bound = law.bind(&[]).expect("the probe binds");
     let mut h = Sha256::new();
     for k in 0..12u8 {
-        let x = f64::from(k) * 0.37 - 1.1;
-        let (u, v) = (x, 2.3 - x * 1.7);
-        let s = bound.at(u, v).expect("the probe samples on its surface");
-        let n = bound.normal_at(u, v).expect("the probe has a normal");
-        for y in [
-            s.height,
-            s.albedo[0],
-            s.albedo[1],
-            s.albedo[2],
-            s.roughness,
-            n[0],
-            n[1],
-            n[2],
+        let step = f64::from(k) * 0.37 - 1.1;
+        let (pu, pv) = (step, 2.3 - step * 1.7);
+        let sample = bound.at(pu, pv).expect("the probe samples on its surface");
+        let normal = bound.normal_at(pu, pv).expect("the probe has a normal");
+        for value in [
+            sample.height,
+            sample.albedo[0],
+            sample.albedo[1],
+            sample.albedo[2],
+            sample.roughness,
+            normal[0],
+            normal[1],
+            normal[2],
         ] {
-            h.update(y.to_bits().to_le_bytes());
+            h.update(value.to_bits().to_le_bytes());
         }
     }
     h.finalize().into()
