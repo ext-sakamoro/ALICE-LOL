@@ -100,66 +100,72 @@ fn the_wrapper_with_this_releases_identifier_reads_the_same_value() {
     }
 }
 
-/// the identifier alice-lol 0.4.1 stamped (alice-det-math 0.5.0) reproduces the same bits, so a
-/// text wrapped with it reads as the plain text through the plain and the stamped entry points
+/// The identifiers alice-lol 0.4.1 stamped (alice-det-math 0.5.0): the law identifier and the
+/// geometry identifier
+const LAW_0_4_1: &str = "403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421";
+const GEOMETRY_0_4_1: &str = "251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d";
+
+fn unhex32(s: &str) -> [u8; 32] {
+    let mut o = [0u8; 32];
+    for (i, b) in o.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap();
+    }
+    o
+}
+
+/// the identifier alice-lol 0.4.1 stamped is not an earlier identifier of the same bits since
+/// alice-det-math 0.5.2 at 2d01c63f (the previous lists are empty): a text wrapped with the 0.4.1
+/// identifier of its own kind is the mismatch naming both, through the plain and the stamped
+/// entry points
 #[test]
-fn an_earlier_release_identifier_of_the_same_bits_reads_the_same_value() {
+fn the_0_4_1_identifier_of_the_same_kind_is_a_mismatch() {
     use alice_lol::geometry_id::PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS;
     use alice_lol::law_id::PREVIOUS_LOL_SEMANTICS_IDS;
+    assert!(
+        PREVIOUS_LOL_SEMANTICS_IDS.is_empty() && PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS.is_empty()
+    );
     let mut compared = 0;
     for (name, plain, wrap, parse, stamped, id) in entries() {
-        let previous = if id == LOL_SEMANTICS_ID {
-            PREVIOUS_LOL_SEMANTICS_IDS
+        let theirs = unhex32(if id == LOL_SEMANTICS_ID {
+            LAW_0_4_1
         } else {
-            PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS
-        };
-        let want = parse(plain).unwrap_or_else(|e| panic!("{name}: {e}"));
-        for old in previous {
-            let text = wrap(&hex(old), plain);
+            GEOMETRY_0_4_1
+        });
+        assert_ne!(theirs, id, "{name}: an earlier generation, not this one");
+        let text = wrap(&hex(&theirs), plain);
+        for (entry, e) in [("plain", parse(&text)), ("stamped", stamped(&text))] {
             assert_eq!(
-                parse(&text).unwrap_or_else(|e| panic!("{name}: {e}")),
-                want,
-                "{name}"
+                e.expect_err(name).kind,
+                ParseErrorKind::SemanticsMismatch { ours: id, theirs },
+                "{name} {entry}"
             );
-            assert_eq!(
-                stamped(&text).unwrap_or_else(|e| panic!("{name}: {e}")),
-                want,
-                "{name}"
-            );
-            compared += 1;
         }
+        compared += 1;
     }
     assert_eq!(compared, 4, "one earlier identifier per entry");
 }
 
-/// an earlier identifier of the other list is not this reader's: a law text stamped with the
+/// an earlier identifier of the other kind is not this reader's: a law text stamped with the
 /// 0.4.1 geometry identifier, and a geometry text stamped with the 0.4.1 law identifier, are
 /// each the mismatch naming both
 #[test]
 fn an_earlier_identifier_of_the_other_kind_is_a_mismatch() {
-    use alice_lol::geometry_id::PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS;
-    use alice_lol::law_id::PREVIOUS_LOL_SEMANTICS_IDS;
     let mut compared = 0;
     for (name, plain, wrap, parse, stamped, id) in entries() {
-        let others = if id == LOL_SEMANTICS_ID {
-            PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS
+        let theirs = unhex32(if id == LOL_SEMANTICS_ID {
+            GEOMETRY_0_4_1
         } else {
-            PREVIOUS_LOL_SEMANTICS_IDS
-        };
-        for theirs in others {
-            let text = wrap(&hex(theirs), plain);
-            for (entry, e) in [("plain", parse(&text)), ("stamped", stamped(&text))] {
-                assert_eq!(
-                    e.expect_err(name).kind,
-                    ParseErrorKind::SemanticsMismatch {
-                        ours: id,
-                        theirs: *theirs
-                    },
-                    "{name} {entry}"
-                );
-            }
-            compared += 1;
+            LAW_0_4_1
+        });
+        let text = wrap(&hex(&theirs), plain);
+        for (entry, e) in [("plain", parse(&text)), ("stamped", stamped(&text))] {
+            assert_eq!(
+                e.expect_err(name).kind,
+                ParseErrorKind::SemanticsMismatch { ours: id, theirs },
+                "{name} {entry}"
+            );
         }
+        compared += 1;
     }
     assert_eq!(
         compared, 4,

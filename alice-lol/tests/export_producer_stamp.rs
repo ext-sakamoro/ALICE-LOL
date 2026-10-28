@@ -14,7 +14,7 @@ use alice_lol::print_export::{
 };
 use alice_lol::{lol, SdfNode, Vec3};
 use alice_sdf::io::export_stl;
-use alice_sdf::provenance::{self, Provenance, ProvenanceError};
+use alice_sdf::provenance::{self, Provenance, ProvenanceError, StoredForm, StoredSemantics};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -96,31 +96,31 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "663ddc62fb2e0fe794810a70cdbe62f8a2b442ad0928f83a82c2854d1ac936a5",
+        "c7143e5063a35d01208f06c19617066944778ca094917d99eb36208c462cc2ca",
     ),
     (
         "node_to_3mf",
-        "fb0e4aed519e202cc9c859eba947674c1331f321f21085a18f3d5a337fca7f3c",
+        "4aebab3e8db50056f95d9fae1432bcbdd0a0be5b8f24246f4cdb6ed2618beb36",
     ),
     (
         "node_to_fbx",
-        "1e318cdea7b0f48081046c5e25266807dfa76769032b2af4ceb49ad7c9db1c55",
+        "063d6327e87154c4645c105812cb6c9a64b04a8bc21738e1b8207994528dd3c2",
     ),
     (
         "node_to_stl_dual_contouring",
-        "3f71d2eecb9939e73121465419b8df7e64c5fb53132114b41aafb107e7a6f4c1",
+        "ab87f0ddf2588aea8f065c25c8f698b4365c5da5c6a7a04c2dba093a3b3ffb97",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "1aa24a208de3141f7ddc2686b52a58ec1c7d4c5d731c6b7cb154405042ee9533",
+        "2d3975625145f1923f00e0d5950839ee3fd0dcff0f6e6197ef18b56b363d207e",
     ),
     (
         "node_to_fbx_roblox",
-        "faec2cb8129daa21375e9c5e438736983ab5bace9b1f79cdedc70f444dce512b",
+        "dc1de32e3bd16af6ff47a3fbd7769a86e89f6f04e2680b8174ab649b88eea60b",
     ),
     (
         "node_to_obj_roblox",
-        "a2a6a5dd71c79de96d4772dfd065cb9b4041d7c0b6109db92709be3f329fef2a",
+        "bd045ae96ab9b0ba55e768f7199cf5c00bcb22d315ff314892e78150206b3010",
     ),
 ];
 
@@ -131,11 +131,13 @@ fn every_lol_writer_stores_the_lol_producer_and_it_reads_back() {
     for (name, ext, write) in writers() {
         let path = temp(&format!("{name}.{ext}"));
         write(&node(), &path, &config());
+        let (primary, producer) = provenance::read_with_producer(&path).unwrap();
         assert_eq!(
-            provenance::read_with_producer(&path).unwrap(),
-            (Provenance::sdf(), Some(lol_producer())),
-            "{name}"
+            primary.judge(&Provenance::sdf(), &[]).unwrap(),
+            StoredSemantics::Current,
+            "{name}: the primary is alice-sdf's current meaning ({primary})"
         );
+        assert_eq!(producer, Some(lol_producer()), "{name}");
         provenance::check_producer(&path, &lol_producer()).unwrap();
         match provenance::check_producer(&path, &other) {
             Err(ProvenanceError::ProducerMismatch { stored, expected }) => {
@@ -169,7 +171,11 @@ fn the_stl_header_carries_the_producer_and_nothing_else_moves() {
     let ours = std::fs::read(&path).unwrap();
     assert_eq!(&ours[..8], b"ALICESDF");
     assert_eq!(ours[8], 2, "version 2: a producer is present");
-    assert_eq!(&ours[9..41], &Provenance::sdf().semantics_id);
+    // the primary slot holds the meaning identifier of the binary STL form (ALICE-Law G8)
+    assert_eq!(
+        &ours[9..41],
+        &Provenance::sdf().slot_for(StoredForm::StlBinary)
+    );
     assert_eq!(&ours[41..48], &[0u8; 7]);
     assert_eq!(&ours[48..80], &LOL_GEOMETRY_SEMANTICS_ID);
 
@@ -223,10 +229,8 @@ fn the_3mf_model_metadata_carries_the_producer() {
         stored_entry(&std::fs::read(&path).unwrap(), "3D/3dmodel.model").unwrap(),
     )
     .unwrap();
-    let primary = format!(
-        "<metadata name=\"alice:semantics_id\">{}</metadata>",
-        Provenance::sdf().hex()
-    );
+    let (key, value) = Provenance::sdf().named_for(StoredForm::ThreeMf);
+    let primary = format!("<metadata name=\"{key}\">{value}</metadata>");
     let producer = format!(
         "<metadata name=\"alice:producer_semantics_id\">{}</metadata>",
         lol_producer().hex()
@@ -265,7 +269,10 @@ fn fbxcel_reads_the_producer_beside_the_creator() {
     };
     assert_eq!(
         string_of("Creator"),
-        format!("ALICE-SDF alice:semantics_id={}", Provenance::sdf().hex())
+        format!(
+            "ALICE-SDF {}",
+            Provenance::sdf().tagged_for(StoredForm::FbxBinary)
+        )
     );
     assert_eq!(
         string_of("ProducerSemanticsId"),
@@ -297,7 +304,7 @@ fn the_obj_header_comment_carries_the_producer() {
     assert!(
         header.iter().any(
             |l| l.contains(&format!("alice:producer_semantics_id={hex}"))
-                && l.contains("alice:semantics_id=")
+                && l.contains(&Provenance::sdf().tagged_for(StoredForm::ObjText))
         ),
         "{header:?}"
     );

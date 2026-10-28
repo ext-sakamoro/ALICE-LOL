@@ -126,6 +126,11 @@ pub const LOL_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
         hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
         hex32("d81c2cbbf7f010b7b3368c461d0a4ba60345fae302e9991fbd992d35dc3a7002"),
     ),
+    // alice-det-math 0.5.2 at 2d01c63f (clamp の G2 の順、`sin` / `cos` の |x| >= 2^13、`powf` の負の底、`powf64` (fdlibm e_pow)、`hypot` の両方 subnormal、`erf` の追加)
+    (
+        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
+        hex32("c71fed08b4a6e4771cf5d375c5dbed1dfc8e368f034e7948a9b093eddc05cd10"),
+    ),
 ];
 
 /// [`LOL_SEMANTICS_PINS`] の fold (build した alice-det-math の行) ⚠️ 定数と fold の一致は
@@ -167,10 +172,10 @@ pub fn known_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
 /// 確かめた世代) の LOL 側の識別子 ⚠️ 導出でなく literal で書くのは、識別子の移動の検査
 /// (`scripts/id_move_check.py`) が literal を抜いて `previous-tests` が落ちることを確かめるため
 /// 導出との一致は `tests/semantics_id_per_det_math.rs` が両方向で検査する
-pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[
-    // alice-det-math 0.5.0 の世代 (alice-lol 0.4.1 まで)
-    hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421"),
-];
+/// alice-det-math 0.5.2 at 2d01c63f は以前の世代を同じ bit と認めない (`PREVIOUS_SEMANTICS_IDS` が空) ので空
+/// 以前の世代の識別子を戻すのは、その版が書いたものを読み、その版自身の結果と bit で一致する試験
+/// (版をまたぐ oracle) がある時だけ
+pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// 保存された LOL の識別子を分類する ([`LOL_SEMANTICS_ID`] なら `Verified`、
 /// [`PREVIOUS_LOL_SEMANTICS_IDS`] にあれば `VerifiedPrevious`、それ以外は `Mismatch`)
