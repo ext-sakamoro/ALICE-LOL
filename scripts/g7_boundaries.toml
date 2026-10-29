@@ -704,3 +704,18 @@ reason = "reads the landmarks a model or a detector writes as JSON and builds a 
 path = "alice_lol::three_view::check"
 class = "local"
 reason = "takes the identifiers and ranges of this crate's own proportion laws (avatar_body, avatar_face) to check a record against; it carries no Law-bearing value of another crate"
+
+[[entry]]
+path = "alice_lol::sheet_law::SheetLaw::from_file"
+class = "authoring"
+reason = "reads a sheet law file a person or a model writes; the law's identifier (the kind tag and its canonical lines) names what was read"
+
+[[entry]]
+path = "alice_lol::sheet_law::SheetLaw::check"
+class = "authoring"
+reason = "reads a filled sheet a person or a model writes (JSON `sheet_fill 1` naming this law, both required); it carries no identifier of another crate, and every value is checked against the law's slots"
+
+[[entry]]
+path = "alice_lol::sheet_law::SheetLaw::resolve"
+class = "local"
+reason = "takes this crate's own proportion laws by the aliases the sheet law uses, to read their parameter ranges; it carries no Law-bearing value of another crate"

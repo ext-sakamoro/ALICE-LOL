@@ -40,6 +40,8 @@ use std::fmt::Write as _;
 
 use sha2::{Digest, Sha256};
 
+use crate::json_lite::{get, parse as parse_json, J};
+
 /// The record format this module reads and writes
 pub const RECORD_FORMAT: u32 = 1;
 /// The version of [`Check::to_json`]'s shape (the contract a reader of the JSON relies on)
@@ -1157,143 +1159,6 @@ impl Check {
 
 // ── landmarks as JSON → record ──────────────────────────────────────────────────────────────
 
-/// A small strict JSON value (objects keep their key order)
-#[derive(Debug, Clone, PartialEq)]
-enum J {
-    Null,
-    Num(f64),
-    Str(String),
-    Arr(Vec<Self>),
-    Obj(Vec<(String, Self)>),
-}
-
-struct P<'a> {
-    b: &'a [u8],
-    i: usize,
-}
-
-impl P<'_> {
-    const fn ws(&mut self) {
-        while self.i < self.b.len() && matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r') {
-            self.i += 1;
-        }
-    }
-    fn fail<T>(&self, what: &str) -> Result<T, RecordError> {
-        Err(err(0, format!("JSON at byte {}: {what}", self.i)))
-    }
-    fn eat(&mut self, c: u8) -> Result<(), RecordError> {
-        self.ws();
-        if self.b.get(self.i) == Some(&c) {
-            self.i += 1;
-            Ok(())
-        } else {
-            self.fail(&format!("expected `{}`", c as char))
-        }
-    }
-    fn value(&mut self, depth: usize) -> Result<J, RecordError> {
-        if depth > 16 {
-            return self.fail("nested too deeply");
-        }
-        self.ws();
-        match self.b.get(self.i) {
-            Some(b'{') => {
-                self.i += 1;
-                let mut o = Vec::new();
-                self.ws();
-                if self.b.get(self.i) == Some(&b'}') {
-                    self.i += 1;
-                    return Ok(J::Obj(o));
-                }
-                loop {
-                    self.ws();
-                    let J::Str(k) = self.value(depth + 1)? else {
-                        return self.fail("an object key must be a string");
-                    };
-                    if o.iter().any(|(kk, _)| *kk == k) {
-                        return self.fail(&format!("key `{k}` given twice"));
-                    }
-                    self.eat(b':')?;
-                    o.push((k, self.value(depth + 1)?));
-                    self.ws();
-                    match self.b.get(self.i) {
-                        Some(b',') => self.i += 1,
-                        Some(b'}') => {
-                            self.i += 1;
-                            return Ok(J::Obj(o));
-                        }
-                        _ => return self.fail("expected `,` or `}`"),
-                    }
-                }
-            }
-            Some(b'[') => {
-                self.i += 1;
-                let mut a = Vec::new();
-                self.ws();
-                if self.b.get(self.i) == Some(&b']') {
-                    self.i += 1;
-                    return Ok(J::Arr(a));
-                }
-                loop {
-                    a.push(self.value(depth + 1)?);
-                    self.ws();
-                    match self.b.get(self.i) {
-                        Some(b',') => self.i += 1,
-                        Some(b']') => {
-                            self.i += 1;
-                            return Ok(J::Arr(a));
-                        }
-                        _ => return self.fail("expected `,` or `]`"),
-                    }
-                }
-            }
-            Some(b'"') => {
-                self.i += 1;
-                let start = self.i;
-                while self.i < self.b.len() && self.b[self.i] != b'"' {
-                    if self.b[self.i] == b'\\' || self.b[self.i] < 0x20 {
-                        return self
-                            .fail("escapes and control characters are not accepted in strings");
-                    }
-                    self.i += 1;
-                }
-                if self.i >= self.b.len() {
-                    return self.fail("unterminated string");
-                }
-                let s = std::str::from_utf8(&self.b[start..self.i])
-                    .map_err(|_| err(0, "JSON string is not UTF-8"))?
-                    .to_owned();
-                self.i += 1;
-                Ok(J::Str(s))
-            }
-            Some(b'n') if self.b[self.i..].starts_with(b"null") => {
-                self.i += 4;
-                Ok(J::Null)
-            }
-            Some(c) if c.is_ascii_digit() || *c == b'-' => {
-                let start = self.i;
-                while self.i < self.b.len()
-                    && matches!(
-                        self.b[self.i],
-                        b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E'
-                    )
-                {
-                    self.i += 1;
-                }
-                let t = std::str::from_utf8(&self.b[start..self.i]).unwrap_or("");
-                match t.parse::<f64>() {
-                    Ok(v) if v.is_finite() => Ok(J::Num(v)),
-                    _ => self.fail(&format!("`{t}` is not a finite number")),
-                }
-            }
-            _ => self.fail("expected a value"),
-        }
-    }
-}
-
-fn get<'a>(o: &'a [(String, J)], k: &str) -> Option<&'a J> {
-    o.iter().find(|(kk, _)| kk == k).map(|(_, v)| v)
-}
-
 fn only(o: &[(String, J)], allowed: &[&str], what: &str) -> Result<(), RecordError> {
     match o.iter().find(|(k, _)| !allowed.contains(&k.as_str())) {
         Some((k, _)) => Err(err(
@@ -1347,15 +1212,7 @@ fn jstr<'a>(v: Option<&'a J>, what: &str) -> Result<&'a str, RecordError> {
 #[allow(clippy::many_single_char_names)] // p parser, t record text, o / m / f / v JSON objects
 #[allow(clippy::too_many_lines)] // one block per top-level key, in record order
 pub fn record_from_json(text: &str) -> Result<Record, RecordError> {
-    let mut p = P {
-        b: text.as_bytes(),
-        i: 0,
-    };
-    let root = p.value(0)?;
-    p.ws();
-    if p.i != p.b.len() {
-        return p.fail("trailing characters after the JSON value");
-    }
+    let root = parse_json(text).map_err(|e| err(0, e))?;
     let J::Obj(o) = root else {
         return Err(err(0, "the JSON must be an object"));
     };
