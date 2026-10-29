@@ -463,10 +463,10 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 - [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): `music` intent の 8 byte の中身を定義する
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu レンダラ
 
-<!-- law-integration:begin law=9cb423c95a03bf34b845933190d1b5bce68fbde6 -->
+<!-- law-integration:begin law=7f5f4cbde8343a061051bb1addd30f1f0b3bea1e -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `9cb423c95a03` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `7f5f4cbde834` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
@@ -492,6 +492,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `9cb423c95a03` と
 | G12 public-repo-text-rules | 適合 | the CI job runs ALICE-Law's own scripts/public_text_check.py, fetched at the revision named in .github/public-text-pin and refused unless its SHA-256 is the … |
 | G13 no-unspecified-order | 適合 | Law-bearing output here is the library crates' exports (STL / 3MF / FBX bytes). Hash order: the library code (every member's lib, binaries and examples) may … |
 | G14 float-environment-invariants | 適合 | the static scan covers the files of this repository and the dynamic check covers alice-lol's builds on ubuntu and macOS; the other workspace members' builds … |
+| G15 surface-claims | 未申告 |  |
 
 ### feature と保証の範囲
 
