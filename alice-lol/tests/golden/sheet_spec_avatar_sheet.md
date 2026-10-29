@@ -1,0 +1,192 @@
+# Sheet law `avatar_sheet`: how to fill a character sheet set
+
+law id `1314892f28a2a875c501ed0a4b272854ae0940122154fe9786c84199afed32f0`
+
+## What this is
+
+- a sheet set is several pages: the turnaround, the base body, the face, the hair, each clothing layer, accessories and footwear, the materials and the palette; each page is drawn from these slots and the avatar laws, never from a free drawing
+- lengths are in the units of the avatar laws (the body: the eye height above the sole is 1; the face: the chin-to-eye distance is 1) unless a slot names another unit
+- a slot is filled with a value of its type inside its range or vocabulary; a required slot left empty, a value out of range, a reference to nothing or a file without provenance is listed by the check, and no page is drawn until every required slot of the set is filled
+- pending marks a slot that exists here before the part law that should own it as a knob has it
+
+## How to answer
+
+Answer with one JSON object and nothing else: `{"sheet_fill": 1, "law": "avatar_sheet", "pages": { … }}`. Under `pages`, each page is an object; a slot is a key with its value; a group is a key with a list of items, each item an object of its fields. Use only the keys listed below. Numbers are plain JSON numbers in the slot's unit. Text has no escapes (no `\\` and no `\"`). A value you cannot decide is `null`: it will be listed as missing, which is better than a guess.
+
+Units: `eye_height` = the height of the eyes above the sole is 1; `chin_eye` = the distance from the chin to the eye line is 1; `fraction` = 0 to 1; `m`, `mm`, `deg`, `ratio` as usual.
+
+A file (`asset`) is an object: `{"file": "name.png", "format": "png", "width": 1024, "height": 1024, "colour_space": "srgb", "provenance": {"source": "…", "licence": "…", "author": "…", "terms_sha256": "<64 hex digits of the licence text>"}}`; formats: png, jpg, webp, svg, exr, tga.
+
+Complete means: every required slot (and every field of every item, when its condition holds) has a value of its type inside its range or vocabulary, every name you refer to exists, every rule holds, and every file has its provenance.
+
+## Page `turnaround`
+
+the body from the front, the side and the back at one scale, standing on one ground line, with guide lines at the landmark heights and the joints marked
+
+| slot | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `stature` | number | m | 0.5 – 2.5 | required | height from the sole to the top of the skull, without hair |
+| `pose` | one of T / A |  |  | required | arms straight out (T) or lowered (A) |
+| `arm_angle` | number | deg | 0 – 60 | required when pose = A | angle of the arms below the horizontal |
+| `views` | one of front_side_back |  |  | required | the three views drawn |
+| `joint_marks` | true / false |  |  | required | the elbows, wrists, hip joints, knees and ankles are marked (they cannot be read from a silhouette) |
+
+## Page `base_body`
+
+the body's proportions, in eye heights above the sole
+
+| slot | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `hips_y` | number | eye_height | 0.64 – 0.67 (from avatar_body.hips_y) | required | height of the hips |
+| `hip_drop` | number | eye_height | 0.01 – 0.08 (from avatar_body.hip_drop) | required | the hip joints below the hips |
+| `hip_x` | number | eye_height | 0.04 – 0.06 (from avatar_body.hip_x) | required | the hip joint's distance from the centre line |
+| `knee` | number | eye_height | 0.31 – 0.4 (from avatar_body.knee) | required | height of the knee joint |
+| `shoulder_x` | number | eye_height | 0.05 – 0.08 (from avatar_body.shoulder_x) | required | the shoulder joint's distance from the centre line |
+| `arm` | number | eye_height | 0.24 – 0.36 (from avatar_body.arm) | required | shoulder to wrist |
+| `elbow_split` | number | fraction | 0.49 – 0.63 (from avatar_body.elbow_split) | required | the elbow's place along the arm, from the shoulder |
+| `face_length` | number | eye_height | 0.04 – 0.07 (from avatar_body.face_length) | required | the chin below the eyes |
+| `head_top` | number | eye_height | 1.07 – 1.12 (from avatar_body.head_top) | required | the top of the skull, without hair |
+
+## Page `face`
+
+the face from the front and the side, in chin-to-eye distances, and its expressions
+
+| slot | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `eye_width` | number | chin_eye | 0.63 – 0.72 (from avatar_face.eye_width) | required | width of one eye |
+| `eye_height` | number | chin_eye | 0.24 – 0.33 (from avatar_face.eye_height) | required | height of one eye |
+| `eye_recess` | number | chin_eye | 0.48 – 0.68 (from avatar_face.eye_recess) | required | how far the eyes sit behind the front of the face |
+| `brow_y` | number | chin_eye | 1.23 – 1.32 (from avatar_face.brow_y) | required | height of the brows |
+| `brow_inner` | number | chin_eye | 0.15 – 0.22 (from avatar_face.brow_inner) | required | the inner end of a brow from the centre line |
+| `brow_outer` | number | chin_eye | 0.54 – 0.76 (from avatar_face.brow_outer) | required | the outer end of a brow from the centre line |
+| `mouth_y` | number | chin_eye | 0.31 – 0.34 (from avatar_face.mouth_y) | required | height of the mouth |
+| `mouth_width` | number | chin_eye | 0.41 – 0.54 (from avatar_face.mouth_width) | required | width of the mouth |
+| `depth` | number | chin_eye | 1.69 – 1.84 (from avatar_face.depth) | required | depth of the head, front to back |
+| `eye_colour` | a name from palette.colours.name |  |  | required | the iris colour |
+
+Group `expressions` (1 to 16 items): expressions drawn on the face page
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `name` | one of neutral / smile / laugh / surprise / anger / sad / shy / wink / closed |  |  | required | one expression |
+| `note` | text (≤ 80 characters) |  |  | optional | what is particular about it |
+
+## Page `hair`
+
+the hair's style, where it is tied, its length and its strands
+
+| slot | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `style_class` | one of short / bob / long_straight / long_wavy / ponytail / twin_tails / bun / braid |  |  | required | the kind of hair style |
+| `length` | number | eye_height | 0.05 – 1.2 | required | the longest strands' length below the top of the skull |
+| `parting` | number | deg | -40 – 40 | required | the parting's angle from the centre (0 = centred) |
+| `fringe` | one of none / short / eyebrow / eye_covering |  |  | required | how far the fringe falls (eye_covering hides the brows: the face page then marks them) |
+| `curl_amplitude` | number | mm | 0 – 15 | required | 0 for straight hair |
+| `curl_pitch` | number | mm | 20 – 200 | required when curl_amplitude > 0 | length of one turn of a curl |
+| `colour` | a name from palette.colours.name |  |  | required | the hair's colour |
+
+Group `ties` (0 to 4 items): where bundles are gathered (ponytail, twin tails, bun)
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `height` | number | fraction | 0 – 1 | required | height on the head, from the nape (0) to the crown (1) |
+| `azimuth` | number | deg | -180 – 180 | required | around the head, 0 = the back, positive = the figure's left |
+| `length` | number | eye_height | 0.02 – 1.2 | required | length of the gathered bundle |
+| `accessory` | a name from accessories.items.name |  |  | optional | what ties it |
+
+## Page `clothing`
+
+each clothing layer, from the skin outwards
+
+
+Group `layers` (0 to 8 items): one layer of clothing
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `name` | text (≤ 40 characters) |  |  | required | a name for the layer (unique) |
+| `order` | integer |  | 1 – 8 | required | the layer's place from the skin outwards (1 = on the skin) |
+| `class` | one of skin / loose / chain / rigid |  |  | required | skin = follows the body, loose = drapes, chain = a hem or ribbon that swings, rigid = a hard part |
+| `from` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole |  |  | required | the landmark the layer starts at |
+| `to` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole |  |  | required | the landmark the layer ends at |
+| `hem` | number | fraction | 0 – 1 | required | where the hem falls between from (0) and to (1) |
+| `ease` | number | mm | 0 – 200 | required | the gap between the layer and what is under it |
+| `closure` | one of none / buttons / zip / laces / hooks / wrap |  |  | required | how it is closed |
+| `material` | a name from materials.items.name |  |  | required | what it is made of |
+
+## Page `accessories`
+
+accessories and footwear, at their absolute size, attached to the body
+
+
+Group `items` (0 to 16 items): one accessory or one piece of footwear
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `name` | text (≤ 40 characters) |  |  | required | a name for the item (unique) |
+| `kind` | one of footwear / ribbon / hair_ornament / jewellery / bag / hat / gloves / other |  |  | required | what it is |
+| `attach` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole / hair_tie |  |  | required | the landmark it is attached at |
+| `size` | number | mm | 1 – 1000 | required | its largest dimension |
+| `sole` | number | mm | 0 – 100 | required when kind = footwear | thickness of the sole under the ball of the foot |
+| `heel` | number | mm | 0 – 150 | required when kind = footwear | how far the heel lifts the heel of the foot |
+| `material` | a name from materials.items.name |  |  | required | what it is made of |
+
+## Page `materials`
+
+what every part is made of and how light passes through it
+
+
+Group `items` (1 to 24 items): one material
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `name` | text (≤ 40 characters) |  |  | required | a name for the material (unique) |
+| `class` | one of fabric / leather / metal / skin / hair / plastic / paper / glass / other |  |  | required | the kind of material |
+| `colour` | a name from palette.colours.name |  |  | required | its base colour |
+| `roughness` | number | fraction | 0 – 1 | required | 0 = mirror-smooth, 1 = fully rough |
+| `metallic` | number | fraction | 0 – 1 | required | 0 = not metal, 1 = metal |
+| `shade_shift` | number | fraction | -1 – 1 | required | where the shadow edge falls (toon shading) |
+| `shade_softness` | number | fraction | 0 – 1 | required | 0 = soft shadow edge, 1 = hard |
+| `outline` | number | mm | 0 – 5 | required | outline width (0 = none) |
+| `transmission` | one of opaque / open_weave / diffuse / clear |  |  | required | how light passes through it |
+| `openness` | number | fraction | 0 – 1 | required when transmission = open_weave | share of light passing straight through the weave |
+| `thread_colour` | a name from palette.colours.name |  |  | required when transmission = open_weave | colour of the threads |
+| `thickness` | number | mm | 0.01 – 10 | required when transmission = open_weave | thickness of the cloth |
+| `stretch_sensitivity` | number | fraction | 0 – 1 | optional when transmission = open_weave | how much the weave opens when stretched |
+| `transmittance` | number | fraction | 0 – 1 | required when transmission = diffuse | share of light passing through, scattered |
+| `scattering` | number | fraction | 0 – 1 | required when transmission = diffuse | how much what is behind blurs (1 = only a glow) |
+| `ior` | number | ratio | 1 – 3 | required when transmission = clear | index of refraction |
+| `tint` | a name from palette.colours.name |  |  | optional when transmission = clear | the colour it tints what is behind |
+| `pattern` | one of none / procedural / texture |  |  | required | how its surface varies |
+| `pattern_law` | text (≤ 80 characters) |  |  | required when pattern = procedural | the material law that draws the pattern |
+| `texture` | file (asset object) |  |  | required when pattern = texture | the image file of the pattern or print |
+| `used_by` | text (≤ 200 characters) |  |  | required | which parts use it (layer and accessory names, skin, hair, eyes) |
+
+## Page `palette`
+
+the named colours every page refers to
+
+
+Group `colours` (1 to 32 items): one named colour
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `name` | text (≤ 40 characters) |  |  | required | a name for the colour (unique) |
+| `srgb` | colour #rrggbb (sRGB) |  |  | required | the colour as #rrggbb in sRGB |
+
+## What may be written on a page
+
+- allowed `law_values`: every number, name and unit drawn on a page is a filled slot's value or a value of the laws the sheet uses (with its unit)
+- allowed `page_titles`: the page names of this law and the slots' names as labels
+- forbidden `tool_names`: no tool, product, engine, file format or law name drawn on a page (the sheet shows the character, not how it is made)
+- forbidden `unsourced_claims`: no technical claim that no slot or law states (file size, precision, polygon or point counts, data formats, model kinds)
+- forbidden `other_proportion_units`: no proportion in units the laws do not use (heads tall, a height of 1) and no proportion number that is not a slot's value
+
+## Rules
+
+- `clothing.layers.name` is unique: layer names differ
+- `clothing.layers.order` is unique: no two layers in one place
+- `accessories.items.name` is unique: item names differ
+- `materials.items.name` is unique: material names differ
+- `palette.colours.name` is unique: colour names differ
+- `face.expressions.name` is unique: each expression is drawn once
+- in `clothing.layers`, `from` comes before `to` in the listed order: a layer starts above where it ends (landmarks from the top of the head down)
