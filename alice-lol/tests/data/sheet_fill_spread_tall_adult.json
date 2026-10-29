@@ -9,6 +9,7 @@
       "joint_marks": true
     },
     "base_body": {
+      "family": "reference",
       "hips_y": 0.67,
       "hip_drop": 0.06,
       "hip_x": 0.045,

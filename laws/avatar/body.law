@@ -20,6 +20,10 @@ let shoulder = 0.9
 # the hip joints hang below the hips and the chin sits below the eyes, whatever the values
 let hip_joint = hips_y - hip_drop
 let chin_y = 1 - face_length
+# the landmarks keep their order from the sole up (no margin: plain non-overlap)
+require knee <= hip_joint
+require hip_joint <= shoulder
+require chin_y <= head_top
 point hips = (0, hips_y, 0)
 point hip_l = (hip_x, hip_joint, 0)
 point knee_l = (hip_x, knee, 0)

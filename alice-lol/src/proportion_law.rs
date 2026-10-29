@@ -25,10 +25,19 @@
 //! - `let <name> = <expr>`: a value for the later lines, before any `out` or `point`
 //! - `out <name> = <expr>`: a named output
 //! - `point <name> = (<expr>, <expr>, <expr>)`: a named output of three numbers
+//! - `require <expr> <= <expr>`: a limit between values (parameters and earlier lets): values
+//!   for which it does not hold are refused by [`ProportionLaw::bind`], naming the line
+//! - `derive <law> <file>`, right after `kind`: the law starts as a copy of that law (its
+//!   parameters, lets, requires and outputs, in order) and its own lines then restate a
+//!   parameter with its own default and range, turn a `let` that reads no name into a
+//!   parameter, or add parameters, lets, requires and outputs. Redefining one of the other law's
+//!   lets or outputs is refused, so a derived law has every output of the law it derives from.
+//!   The file is the other law's path relative to this one; it is read by the caller and given
+//!   to [`ProportionLaw::from_file_with`] (the library reads no files)
 //!
 //! Expressions read `pi`, the parameters and the earlier `let` values (not outputs). Every name
 //! is declared once across parameters, lets and outputs. A law has at least one output, and its
-//! defaults must give finite outputs.
+//! defaults must give finite outputs and hold every `require`.
 
 use std::fmt;
 
@@ -113,6 +122,14 @@ struct Line {
     codes: Vec<CompiledExpr>,
 }
 
+/// A `require` line: `left <= right`
+#[derive(Debug, Clone, PartialEq)]
+struct Require {
+    text: String,
+    exprs: [LawExpr; 2],
+    codes: Vec<CompiledExpr>,
+}
+
 /// A proportion law (`kind proportion`)
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProportionLaw {
@@ -121,6 +138,9 @@ pub struct ProportionLaw {
     lets: Vec<Line>,
     /// `out` lines have one expression, `point` lines three, in file order
     outputs: Vec<Line>,
+    requires: Vec<Require>,
+    /// the law this one derives from: its name and its identifier
+    parent: Option<(String, [u8; 32])>,
 }
 
 /// One output of a bound proportion law
@@ -200,13 +220,48 @@ impl ProportionLaw {
     /// after an output, an expression that does not parse or names something not declared
     /// before it, a point without three coordinates, no output, more lines, parameters, lets
     /// or outputs than the limits, or outputs that are not finite with the defaults
-    #[allow(clippy::too_many_lines)] // one arm per kind of line, in file order
+    /// A law with a `derive` line is refused here (it needs the law it derives from): read it
+    /// with [`ProportionLaw::from_file_with`]
     pub fn from_file(text: &str) -> Result<Self, ProportionLawError> {
+        Self::from_file_with(text, &[])
+    }
+
+    /// The law a file derives from, as its `derive` line names it: (law name, file), so a
+    /// caller knows what to read before [`ProportionLaw::from_file_with`]
+    #[must_use]
+    pub fn derives_from(text: &str) -> Option<(String, String)> {
+        let line = text
+            .lines()
+            .map(str::trim)
+            .filter(|t| !t.is_empty() && !t.starts_with('#'))
+            .nth(2)?;
+        let w: Vec<&str> = line.split_whitespace().collect();
+        match w[..] {
+            ["derive", n, f] => Some((n.to_owned(), f.to_owned())),
+            _ => None,
+        }
+    }
+
+    /// Reads a proportion law file, given the laws a `derive` line may name (by name)
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`ProportionLaw::from_file`], and for a derived law: the `derive` line not
+    /// right after `kind`, a law that is not given or has another name, a law deriving from
+    /// itself, a `let` that reads a name turned into a parameter, a redefined `let` or output
+    #[allow(clippy::too_many_lines)] // one arm per kind of line, in file order
+    pub fn from_file_with(text: &str, laws: &[(&str, &Self)]) -> Result<Self, ProportionLawError> {
         let mut name = None;
         let mut kind = false;
         let mut params: Vec<ProportionParam> = Vec::new();
         let mut lets: Vec<(String, LawExpr)> = Vec::new();
         let mut outputs: Vec<(String, Vec<LawExpr>)> = Vec::new();
+        let mut requires: Vec<(String, [LawExpr; 2])> = Vec::new();
+        let mut parent: Option<(String, [u8; 32])> = None;
+        // the derived-from law's names: restated parameters (once each) and lines it owns
+        let mut inherited_params: Vec<String> = Vec::new();
+        let mut inherited_lines: Vec<String> = Vec::new();
+        let mut first_line_after_kind = false;
         let lines: Vec<&str> = text.lines().collect();
         if lines.len() > MAX_LINES {
             return Err(err(0, format!("more than {MAX_LINES} lines")));
@@ -233,6 +288,61 @@ impl ProportionLaw {
                     return Err(err(line, "the second line is `kind proportion`"));
                 }
                 kind = true;
+                first_line_after_kind = true;
+                continue;
+            }
+            let after_kind = std::mem::replace(&mut first_line_after_kind, false);
+            if word == "derive" {
+                let w: Vec<&str> = rest.split_whitespace().collect();
+                let [p, _file] = w[..] else {
+                    return Err(err(line, "`derive <law> <file>` expected"));
+                };
+                if !after_kind {
+                    return Err(err(
+                        line,
+                        "`derive` is the line right after `kind proportion`",
+                    ));
+                }
+                if Some(p) == name.as_deref() {
+                    return Err(err(line, "a law does not derive from itself"));
+                }
+                let Some((_, from)) = laws.iter().find(|(n, _)| *n == p) else {
+                    return Err(err(
+                        line,
+                        format!(
+                            "derives from `{p}`, which is not given (read it with from_file_with)"
+                        ),
+                    ));
+                };
+                if from.name != p {
+                    return Err(err(
+                        line,
+                        format!("the law given as `{p}` is named `{}`", from.name),
+                    ));
+                }
+                params.clone_from(&from.params);
+                lets = from
+                    .lets
+                    .iter()
+                    .map(|l| (l.name.clone(), l.exprs[0].clone()))
+                    .collect();
+                outputs = from
+                    .outputs
+                    .iter()
+                    .map(|o| (o.name.clone(), o.exprs.clone()))
+                    .collect();
+                requires = from
+                    .requires
+                    .iter()
+                    .map(|r| (r.text.clone(), r.exprs.clone()))
+                    .collect();
+                inherited_params = params.iter().map(|q| q.name.clone()).collect();
+                inherited_lines = lets
+                    .iter()
+                    .map(|(n, _)| n.clone())
+                    .chain(outputs.iter().map(|(n, _)| n.clone()))
+                    .collect();
+                parent = Some((p.to_owned(), from.law_id()));
                 continue;
             }
             let taken = |n: &str,
@@ -254,7 +364,16 @@ impl ProportionLaw {
                             "`param <name> number = <default> range <lo> <hi>` expected",
                         ));
                     };
-                    if !is_name(n) || taken(n, &params, &lets, &outputs) {
+                    let restated = inherited_params.iter().position(|q| q == n);
+                    let promoted = lets
+                        .iter()
+                        .position(|(l, _)| l == n)
+                        .filter(|_| inherited_lines.iter().any(|q| q == n));
+                    if !is_name(n)
+                        || (restated.is_none()
+                            && promoted.is_none()
+                            && taken(n, &params, &lets, &outputs))
+                    {
                         return Err(err(line, format!("`{n}` is reserved or declared twice")));
                     }
                     let (Some(d), Some(lo), Some(hi)) = (number(d), number(lo), number(hi)) else {
@@ -263,21 +382,41 @@ impl ProportionLaw {
                     if !(lo <= d && d <= hi) {
                         return Err(err(line, "the default is outside the range"));
                     }
-                    if params.len() == MAX_PARAMS {
-                        return Err(err(line, format!("more than {MAX_PARAMS} parameters")));
-                    }
-                    params.push(ProportionParam {
+                    let param = ProportionParam {
                         name: n.to_owned(),
                         default: d,
                         lo,
                         hi,
-                    });
+                    };
+                    if let Some(k) = restated {
+                        // restated once: its own default and range, in the parameter's place
+                        inherited_params.remove(k);
+                        let at = params.iter().position(|q| q.name == n).unwrap_or_default();
+                        params[at] = param;
+                        continue;
+                    }
+                    if let Some(k) = promoted {
+                        // only a let that reads no name: turning it into a parameter cuts no
+                        // dependency of the law it derives from
+                        if lets[k].1.compile_named(&[]).is_err() {
+                            return Err(err(line, format!("`{n}` is a let that reads other names: it cannot become a parameter")));
+                        }
+                        lets.remove(k);
+                        inherited_lines.retain(|q| q != n);
+                    }
+                    if params.len() == MAX_PARAMS {
+                        return Err(err(line, format!("more than {MAX_PARAMS} parameters")));
+                    }
+                    params.push(param);
                 }
                 "let" | "out" | "point" => {
                     let Some((n, e)) = rest.split_once('=') else {
                         return Err(err(line, format!("`{word} <name> = ...` expected")));
                     };
                     let n = n.trim();
+                    if inherited_lines.iter().any(|q| q == n) {
+                        return Err(err(line, format!("`{n}` is a line of the law this one derives from: it is not redefined")));
+                    }
                     if !is_name(n) || taken(n, &params, &lets, &outputs) {
                         return Err(err(line, format!("`{n}` is reserved or declared twice")));
                     }
@@ -311,6 +450,25 @@ impl ProportionLaw {
                         outputs.push((n.to_owned(), exprs));
                     }
                 }
+                "require" => {
+                    let Some((l, r)) = rest.split_once("<=") else {
+                        return Err(err(line, "`require <expr> <= <expr>` expected"));
+                    };
+                    let mut names: Vec<&str> = RESERVED.to_vec();
+                    names.extend(params.iter().map(|p| p.name.as_str()));
+                    names.extend(lets.iter().map(|(l, _)| l.as_str()));
+                    let (l, r) = (expr(line, l)?, expr(line, r)?);
+                    for e in [&l, &r] {
+                        e.compile_named(&names)
+                            .map_err(|e| err(line, e.to_string()))?;
+                    }
+                    let text = format!(
+                        "{} <= {}",
+                        rest.split_once("<=").map_or("", |x| x.0).trim(),
+                        rest.split_once("<=").map_or("", |x| x.1).trim()
+                    );
+                    requires.push((text, [l, r]));
+                }
                 _ => return Err(err(line, format!("unknown line `{word}`"))),
             }
         }
@@ -341,6 +499,12 @@ impl ProportionLaw {
             });
             names.push(n);
         }
+        let mut compiled_requires = Vec::new();
+        for (text, exprs) in requires {
+            // a require reads the parameters and every let (a let it reads may be a promoted name)
+            let codes = compile(&exprs, &names)?;
+            compiled_requires.push(Require { text, exprs, codes });
+        }
         let mut compiled_outputs = Vec::new();
         for (n, exprs) in outputs {
             let codes = compile(&exprs, &names)?;
@@ -355,6 +519,8 @@ impl ProportionLaw {
             params,
             lets: compiled_lets,
             outputs: compiled_outputs,
+            requires: compiled_requires,
+            parent,
         };
         // the defaults must give finite outputs, so a law that reads always has one instance
         law.bind(&[])
@@ -372,6 +538,18 @@ impl ProportionLaw {
     #[must_use]
     pub fn params(&self) -> &[ProportionParam] {
         &self.params
+    }
+
+    /// The `require` lines, each as `<left> <= <right>` (a derived law's start with those of
+    /// the law it derives from)
+    pub fn requires(&self) -> impl Iterator<Item = &str> {
+        self.requires.iter().map(|r| r.text.as_str())
+    }
+
+    /// The name of the law this one derives from
+    #[must_use]
+    pub fn derived_from(&self) -> Option<&str> {
+        self.parent.as_ref().map(|(n, _)| n.as_str())
     }
 
     /// The names of the outputs, in file order
@@ -405,6 +583,17 @@ impl ProportionLaw {
                 h = e.hash_into(h);
             }
         }
+        // only a law that has them hashes requires and the law it derives from, so the
+        // identifier of a law without them is the one it had before these lines existed
+        if !self.requires.is_empty() {
+            h = h.str("require").u64(self.requires.len() as u64);
+            for r in &self.requires {
+                h = r.exprs[1].hash_into(r.exprs[0].hash_into(h));
+            }
+        }
+        if let Some((n, id)) = &self.parent {
+            h = h.str("derive").str(n).bytes(id);
+        }
         h.finish()
     }
 
@@ -414,8 +603,9 @@ impl ProportionLaw {
     /// # Errors
     ///
     /// [`SampleError::UnknownParam`], [`SampleError::RepeatedParam`],
-    /// [`SampleError::ParamOutOfRange`], or [`SampleError::NonFinite`] naming the `let` or
-    /// output whose value is not finite
+    /// [`SampleError::ParamOutOfRange`], [`SampleError::NonFinite`] naming the `let` or
+    /// output whose value is not finite, or [`SampleError::Refused`] naming the first `require`
+    /// that does not hold
     pub fn bind(&self, values: &[(&str, f64)]) -> Result<BoundProportion<'_>, SampleError> {
         let mut vals: Vec<f64> = self.params.iter().map(|p| p.default).collect();
         let mut seen = vec![false; self.params.len()];
@@ -446,6 +636,16 @@ impl ProportionLaw {
         for l in &self.lets {
             let v = finite(&l.name, l.codes[0].eval(&slots))?;
             slots.push(v);
+        }
+        for r in &self.requires {
+            let a = finite(&r.text, r.codes[0].eval(&slots))?;
+            let b = finite(&r.text, r.codes[1].eval(&slots))?;
+            if a > b {
+                return Err(SampleError::Refused {
+                    require: r.text.clone(),
+                    values: format!("{a} > {b}"),
+                });
+            }
         }
         let mut outputs = Vec::with_capacity(self.outputs.len());
         for o in &self.outputs {

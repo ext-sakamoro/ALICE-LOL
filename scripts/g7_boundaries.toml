@@ -719,3 +719,13 @@ reason = "reads a filled sheet a person or a model writes (JSON `sheet_fill 1` n
 path = "alice_lol::sheet_law::SheetLaw::resolve"
 class = "local"
 reason = "takes this crate's own proportion laws by the aliases the sheet law uses, to read their parameter ranges; it carries no Law-bearing value of another crate"
+
+[[entry]]
+path = "alice_lol::proportion_law::ProportionLaw::from_file_with"
+class = "authoring"
+reason = "reads proportion law text a person or a model writes, given the laws its derive line may name; the law's identifier folds in the identifier of the law it derives from, so a different parent is a different law"
+
+[[entry]]
+path = "alice_lol::proportion_law::ProportionLaw::derives_from"
+class = "authoring"
+reason = "reads the derive line of proportion law text a person or a model writes (the law and file it names), so a caller knows which law to read first; it reads nothing else"
