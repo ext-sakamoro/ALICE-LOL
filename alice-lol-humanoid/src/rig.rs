@@ -67,6 +67,44 @@ pub enum Role {
     TailRoot,
     /// The first bone of an animal ear (paired): `Ear_1.L`, `Kemomimi_R`
     EarRoot,
+    /// A helper bone of the usual mixamo / Unity humanoid rigs: twist and roll bones, hip
+    /// deform helpers, the jaw, and the end bones of the toes and fingers
+    Helper(Helper),
+}
+
+/// A helper bone: it follows the body without being one of its parts
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum Helper {
+    /// The roll (twist) bone of the upper arm (paired): `LeftArmRoll`, `UpperArm_twist.L`
+    ArmRoll,
+    /// The twist bone of the forearm (paired): `LeftForeArmTwist`, `LowerArmTwist.R`
+    ForeArmTwist,
+    /// The roll (twist) bone of the thigh (paired): `LeftUpLegRoll`, `Thigh_twist.L`
+    UpLegRoll,
+    /// A hip deform helper (paired), numbered from 0: `LeftHip` is 0, `LeftHip1` is 1
+    HipHelper(u8),
+    /// The jaw (one, on the midline): `Jaw`
+    Jaw,
+    /// The end bone of the jaw (one, on the midline): `Jaw_END`
+    JawEnd,
+    /// The end bone of the toes (paired): `LeftToe_End`, `LeftToeBase_End`
+    ToeEnd,
+    /// The end bone of a finger (paired): `LeftHandIndex4`
+    FingerTip(Finger),
+    /// The root bone that swinging parts hang from (one, on the midline): `BounceRoot`
+    SwayRoot,
+}
+
+/// A finger
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum Finger {
+    Thumb,
+    Index,
+    Middle,
+    Ring,
+    Pinky,
 }
 
 /// The words of a bone name, lower case, without the side words and the prefixes of the usual
@@ -114,9 +152,12 @@ fn words(name: &str) -> Option<(Vec<String>, Option<Side>)> {
 ///
 /// The words of the name (split at non-alphanumerics and lower-to-upper case changes) without
 /// the side words make a stem that must be one of the known ones exactly: a copy (`Spine.001`),
-/// the next bone of a chain (`Tail_2`, `BreastTip.L` after `Breast.L`), a helper
-/// (`UpperArm_twist.L`) or a prop named after a part as one word (`plushear.L`) is no
-/// role. A midline role takes no side and a paired one needs one. The first bone of a numbered
+/// the next bone of a chain (`Tail_2`, `BreastTip.L` after `Breast.L`), a helper of no known
+/// kind (`Hand_helper.L`) or a prop named after a part as one word (`plushear.L`) is no role.
+/// The helpers of the usual mixamo / Unity humanoid rigs are [`Role::Helper`]: the roll and twist
+/// bones of the arms and thighs, the numbered hip helpers (`LeftHip`, `LeftHip1`, `LeftHip2`), the
+/// jaw and its end bone, the end bones of the toes and of the fingers (`LeftHandIndex4`), and the
+/// root that swinging parts hang from. A midline role takes no side and a paired one needs one. The first bone of a numbered
 /// chain (`Tail_1`, `Ear_1.L`) is its root; a numbered trunk bone is not (`Spine1` of mixamo is
 /// the second spine bone).
 #[must_use]
@@ -144,6 +185,27 @@ pub fn role(name: &str) -> Option<(Role, Option<Side>)> {
         "hair" | "hairroot" => midline(Role::HairRoot),
         "tail" | "tail1" | "tailroot" => midline(Role::TailRoot),
         "ear" | "ear1" | "earroot" | "kemomimi" | "nekomimi" => paired(Role::EarRoot),
+        "armroll" | "upperarmroll" | "armtwist" | "upperarmtwist" => {
+            paired(Role::Helper(Helper::ArmRoll))
+        }
+        "forearmtwist" | "lowerarmtwist" | "forearmroll" | "lowerarmroll" => {
+            paired(Role::Helper(Helper::ForeArmTwist))
+        }
+        "uplegroll" | "upperlegroll" | "thighroll" | "thightwist" | "upperlegtwist" => {
+            paired(Role::Helper(Helper::UpLegRoll))
+        }
+        "hip" | "hiphelper" => paired(Role::Helper(Helper::HipHelper(0))),
+        "hip1" => paired(Role::Helper(Helper::HipHelper(1))),
+        "hip2" => paired(Role::Helper(Helper::HipHelper(2))),
+        "jaw" => midline(Role::Helper(Helper::Jaw)),
+        "jawend" => midline(Role::Helper(Helper::JawEnd)),
+        "toeend" | "toebaseend" => paired(Role::Helper(Helper::ToeEnd)),
+        "handthumb4" => paired(Role::Helper(Helper::FingerTip(Finger::Thumb))),
+        "handindex4" => paired(Role::Helper(Helper::FingerTip(Finger::Index))),
+        "handmiddle4" => paired(Role::Helper(Helper::FingerTip(Finger::Middle))),
+        "handring4" => paired(Role::Helper(Helper::FingerTip(Finger::Ring))),
+        "handpinky4" => paired(Role::Helper(Helper::FingerTip(Finger::Pinky))),
+        "bounceroot" => midline(Role::Helper(Helper::SwayRoot)),
         _ => None,
     }
 }

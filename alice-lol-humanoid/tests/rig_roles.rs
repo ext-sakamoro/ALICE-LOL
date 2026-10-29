@@ -1,16 +1,17 @@
-//! The roles of bones by name: the trunk, shoulders, toes and breasts as body parts, and the roots
-//! of the hair, the tail and the ears as roles that are not body parts
+//! The roles of bones by name: the trunk, shoulders, toes and breasts as body parts, the roots of
+//! the hair, the tail and the ears as roles that are not body parts, and the helper bones of the
+//! usual mixamo / Unity humanoid rigs (twist and roll bones, hip helpers, the jaw, end bones)
 //!
 //! The names follow the usual rig conventions: dotted sides (`upper_leg.L`), underscore sides
 //! (`UpperLeg_L`), `Left` / `Right` prefixes, the VRM (`J_Bip_…`) and mixamo (`mixamorig:…`)
 //! names, numbered chains (`Tail_1`, `Tail_2`) and chains whose first bone is named `…root`, and
 //! copies of a bone (`.001`). The names that must not be read as a role are of the kinds a rig
-//! carries besides the body: the rest of a chain, props and costume, helper bones, and mesh
-//! objects that share the node list.
+//! carries besides the body: the rest of a chain, props and costume, helpers of no known kind,
+//! and mesh objects that share the node list.
 #![allow(clippy::float_cmp)]
 
 use alice_lol_humanoid::measure::{Part, Side};
-use alice_lol_humanoid::rig::{classify, role, Role};
+use alice_lol_humanoid::rig::{classify, role, Finger, Helper, Role};
 
 const L: Option<Side> = Some(Side::Left);
 const R: Option<Side> = Some(Side::Right);
@@ -26,6 +27,7 @@ type Case = (&'static str, Option<(Role, Option<Side>)>, &'static str);
 fn cases() -> Vec<Case> {
     let mut v = body_cases();
     v.extend(root_cases());
+    v.extend(helper_cases());
     v.extend(no_role_cases());
     v
 }
@@ -148,8 +150,112 @@ fn root_cases() -> Vec<Case> {
     ]
 }
 
-/// The names that are no role: the rest of a chain, props, costume and helper bones, mesh objects,
-/// and a side where none belongs
+/// The helper bones of the usual mixamo / Unity humanoid rigs
+fn helper_cases() -> Vec<Case> {
+    let h = |x: Helper, s: Option<Side>| Some((Role::Helper(x), s));
+    vec![
+        (
+            "LeftArmRoll",
+            h(Helper::ArmRoll, L),
+            "mixamo-style arm roll",
+        ),
+        (
+            "mixamorig:RightArmRoll",
+            h(Helper::ArmRoll, R),
+            "with the mixamo prefix",
+        ),
+        ("UpperArmRoll.R", h(Helper::ArmRoll, R), "dotted side"),
+        (
+            "LeftForeArmTwist",
+            h(Helper::ForeArmTwist, L),
+            "forearm twist",
+        ),
+        (
+            "LowerArmTwist_R",
+            h(Helper::ForeArmTwist, R),
+            "lower-arm spelling",
+        ),
+        (
+            "ForeArmRoll.L",
+            h(Helper::ForeArmTwist, L),
+            "forearm roll is the same helper",
+        ),
+        ("RightUpLegRoll", h(Helper::UpLegRoll, R), "thigh roll"),
+        (
+            "UpperLegRoll_L",
+            h(Helper::UpLegRoll, L),
+            "upper-leg spelling",
+        ),
+        ("Thigh_twist.R", h(Helper::UpLegRoll, R), "thigh twist"),
+        (
+            "LeftHip",
+            h(Helper::HipHelper(0), L),
+            "the first hip helper",
+        ),
+        (
+            "LeftHip1",
+            h(Helper::HipHelper(1), L),
+            "the second hip helper",
+        ),
+        (
+            "RightHip2",
+            h(Helper::HipHelper(2), R),
+            "the third hip helper",
+        ),
+        ("Jaw", h(Helper::Jaw, MID), "the jaw"),
+        ("Jaw_END", h(Helper::JawEnd, MID), "the jaw's end bone"),
+        ("LeftToe_End", h(Helper::ToeEnd, L), "mixamo toe end"),
+        ("RightToeBase_End", h(Helper::ToeEnd, R), "toe-base end"),
+        (
+            "LeftHandThumb4",
+            h(Helper::FingerTip(Finger::Thumb), L),
+            "thumb tip",
+        ),
+        (
+            "LeftHandIndex4",
+            h(Helper::FingerTip(Finger::Index), L),
+            "index tip",
+        ),
+        (
+            "RightHandMiddle4",
+            h(Helper::FingerTip(Finger::Middle), R),
+            "middle tip",
+        ),
+        (
+            "mixamorig:RightHandRing4",
+            h(Helper::FingerTip(Finger::Ring), R),
+            "ring tip, prefixed",
+        ),
+        (
+            "LeftHandPinky4",
+            h(Helper::FingerTip(Finger::Pinky), L),
+            "pinky tip",
+        ),
+        (
+            "BounceRoot",
+            h(Helper::SwayRoot, MID),
+            "the root of swinging parts",
+        ),
+        // the side rules hold for helpers too, and the body names are unchanged
+        ("Jaw.L", None, "the jaw has no side"),
+        ("ArmRoll", None, "an arm roll needs a side"),
+        ("BounceRoot_R", None, "the sway root has no side"),
+        ("LeftHip3", None, "a fourth hip helper is not read"),
+        (
+            "LeftHandIndex3",
+            None,
+            "a finger's third bone is not its end",
+        ),
+        (
+            "Hips",
+            Some(body(Part::Hips, MID)),
+            "the pelvis stays the pelvis",
+        ),
+    ]
+}
+
+/// The names that are no role: the rest of a chain, props, costume and helpers of no known kind,
+/// mesh objects, and a side where none belongs
 fn no_role_cases() -> Vec<Case> {
     vec![
         // the rest of a chain is not its root
@@ -182,9 +288,17 @@ fn no_role_cases() -> Vec<Case> {
         ("Hand_helper.L", None, "a hand helper"),
         ("UpperLegbow", None, "a bow on the thigh"),
         ("Collar_1.L", None, "a collar bone of the costume"),
-        ("Hip_helper.L", None, "a helper bone"),
+        (
+            "Hip_helper.L",
+            Some((Role::Helper(Helper::HipHelper(0)), L)),
+            "a hip helper, named as such",
+        ),
         ("Bow_root", None, "a costume root"),
-        ("Upper_arm_twist.L", None, "a twist helper"),
+        (
+            "Upper_arm_twist.L",
+            Some((Role::Helper(Helper::ArmRoll), L)),
+            "the upper arm's twist helper",
+        ),
         ("Pinky1.R", None, "a finger, not read"),
         // mesh objects that share a node list with the bones
         ("Tail_mesh", None, "a tail mesh object"),

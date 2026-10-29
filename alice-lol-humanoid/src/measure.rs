@@ -252,3 +252,54 @@ pub fn measure(marks: &BodyMarks) -> Result<Measured, MeasureError> {
     }
     Ok(Measured { values })
 }
+
+/// The proportion class of a figure, from two ratios: its height in head lengths (`heads` = the
+/// height over the head's length) and the height of its eyes over its height (`eye_ratio`)
+///
+/// A classification policy, not a fit: a figure is [`ProportionClass::Youthful`] when either
+/// ratio is in the youthful band (`heads <= 5` or `eye_ratio <= 0.89`), else
+/// [`ProportionClass::Adult`] when both are in the adult band (`heads >= 6.5` and
+/// `eye_ratio >= 0.92`), else [`ProportionClass::Indeterminate`] (the gap between the bands, or
+/// one adult ratio with the other in the gap). Both ratios must be measured in one space: the
+/// mesh's vertices at bind, or the joints in the world, never one from each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ProportionClass {
+    /// Both ratios in the adult band
+    Adult,
+    /// Either ratio in the youthful band
+    Youthful,
+    /// Neither: between the bands
+    Indeterminate,
+}
+
+impl ProportionClass {
+    /// The fewest head lengths of an adult figure
+    pub const ADULT_MIN_HEADS: f64 = 6.5;
+    /// The lowest eye height over height of an adult figure
+    pub const ADULT_MIN_EYE_RATIO: f64 = 0.92;
+    /// The most head lengths of a youthful figure
+    pub const YOUTHFUL_MAX_HEADS: f64 = 5.0;
+    /// The highest eye height over height of a youthful figure
+    pub const YOUTHFUL_MAX_EYE_RATIO: f64 = 0.89;
+
+    /// The class of a figure with `heads` head lengths and its eyes at `eye_ratio` of its height
+    ///
+    /// # Errors
+    ///
+    /// [`MeasureError::BadUnit`] when a ratio is not finite, not positive, or the eyes are above
+    /// the top (`eye_ratio > 1`).
+    pub fn of(heads: f64, eye_ratio: f64) -> Result<Self, MeasureError> {
+        let ratio = |x: f64| x.is_finite() && x > 0.0;
+        if !ratio(heads) || !ratio(eye_ratio) || eye_ratio > 1.0 {
+            return Err(MeasureError::BadUnit);
+        }
+        if heads <= Self::YOUTHFUL_MAX_HEADS || eye_ratio <= Self::YOUTHFUL_MAX_EYE_RATIO {
+            Ok(Self::Youthful)
+        } else if heads >= Self::ADULT_MIN_HEADS && eye_ratio >= Self::ADULT_MIN_EYE_RATIO {
+            Ok(Self::Adult)
+        } else {
+            Ok(Self::Indeterminate)
+        }
+    }
+}

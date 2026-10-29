@@ -2,8 +2,8 @@
 //!
 //! VRM 0.x binary GLB からhumanoid bone を抽出し [`HumanoidTemplate`] を構築する
 //!
-//! 対応 VRM version: **0.x のみ** (`extensions.VRM.humanoid.humanBones`)
-//! VRM 1.0 (`VRMC_vrm` extension) は future work
+//! 対応 VRM version: [`extract_humanoid_bones`] は **0.x のみ** (`extensions.VRM.humanoid.humanBones`)、
+//! 読み込みの診断 [`diagnose_glb`] は 0.x と 1.0 (`VRMC_vrm`) の両方を読む
 //!
 //! # 依存
 //!
@@ -180,32 +180,28 @@ pub fn extract_humanoid_bones<P: AsRef<Path>>(path: P) -> Result<Option<VrmBoneM
 /// - Chunk 1: 8 byte header (length u32 + type u32 `"JSON"`) + length bytes JSON
 /// - Chunk 2 (optional): binary data
 fn parse_glb_json(path: &Path) -> Result<serde_json::Value, VrmError> {
-    let mut file = File::open(path)?;
-    let mut header = [0_u8; 12];
-    file.read_exact(&mut header)?;
-    if &header[0..4] != b"glTF" {
+    let mut bytes = Vec::new();
+    File::open(path)?.read_to_end(&mut bytes)?;
+    parse_glb_json_bytes(&bytes)
+}
+
+/// The JSON chunk of a GLB held in memory (the same reading as [`parse_glb_json`])
+fn parse_glb_json_bytes(bytes: &[u8]) -> Result<serde_json::Value, VrmError> {
+    if bytes.len() < 20 || &bytes[0..4] != b"glTF" {
         return Err(VrmError::MissingData(
             "not a GLB file (missing glTF magic)".into(),
         ));
     }
-    let mut chunk_header = [0_u8; 8];
-    file.read_exact(&mut chunk_header)?;
-    let chunk_length_u32 = u32::from_le_bytes([
-        chunk_header[0],
-        chunk_header[1],
-        chunk_header[2],
-        chunk_header[3],
-    ]);
-    let chunk_length = chunk_length_u32 as usize;
-    let chunk_type = &chunk_header[4..8];
-    if chunk_type != b"JSON" {
+    let chunk_length = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]) as usize;
+    if &bytes[16..20] != b"JSON" {
         return Err(VrmError::MissingData(
             "first chunk is not JSON in GLB".into(),
         ));
     }
-    let mut json_data = vec![0_u8; chunk_length];
-    file.read_exact(&mut json_data)?;
-    let json_str = std::str::from_utf8(&json_data)
+    let json_data = bytes
+        .get(20..20 + chunk_length)
+        .ok_or_else(|| VrmError::MissingData("JSON chunk runs past the end of the GLB".into()))?;
+    let json_str = std::str::from_utf8(json_data)
         .map_err(|e| VrmError::MissingData(format!("JSON chunk not valid UTF-8: {e}")))?;
     let value: serde_json::Value =
         serde_json::from_str(json_str.trim_end_matches('\x00').trim())
@@ -430,6 +426,434 @@ impl HumanoidTemplate {
 // ============================================================================
 // Tests
 // ============================================================================
+
+// ============================================================================
+// Import diagnostics
+// ============================================================================
+
+/// One finding of [`diagnose_glb`]: a property of the file that general VRM readers handle badly
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum VrmDiagnostic {
+    /// The humanoid `hips` is not the pelvis: not the lowest common ancestor of the two upper legs
+    /// (a grounding root above it in the tree, say), or below the feet
+    HipsNotPelvis {
+        /// The node mapped as `hips`
+        hips_node: usize,
+        /// The lowest common ancestor of the two upper legs, where the pelvis is
+        pelvis_node: Option<usize>,
+    },
+    /// The rig's height (head joint over the lowest foot joint, in metres) is outside the human
+    /// range [`HUMAN_HEIGHT_RANGE`]: usually a unit mix-up at export
+    HeightOutOfRange {
+        /// The measured height
+        height: f32,
+        /// The scale that would bring it to [`NOMINAL_HEIGHT`]
+        scale_to_nominal: f32,
+    },
+    /// The lowest foot joint is not just above the ground (`y = 0`): below it, or floating above
+    /// [`MAX_ANKLE_HEIGHT`]
+    FeetNotOnGround {
+        /// The lowest foot joint's height
+        lowest_foot_y: f32,
+        /// Whether the rig spans the origin (feet below it, head above it)
+        crosses_origin: bool,
+    },
+    /// `POSITION` accessors without `min` / `max` (required by glTF 2.0)
+    PositionBoundsMissing {
+        /// How many lack them
+        missing: usize,
+        /// Of how many
+        of: usize,
+    },
+    /// Materials left at the glTF default `metallicFactor` 1 (fully metallic) with no metallic
+    /// texture and no unlit or toon material extension
+    DefaultMetallicMaterials {
+        /// How many
+        count: usize,
+        /// Of how many
+        of: usize,
+    },
+    /// An extension named in `extensionsUsed` that no object of the file carries
+    DeclaredExtensionUnused {
+        /// Its name
+        name: String,
+    },
+    /// Morph targets present but no expression preset binds any of them (standard VRM readers
+    /// then cannot blink or lip-sync)
+    MorphsWithoutExpressions {
+        /// How many morph targets the meshes carry
+        targets: usize,
+    },
+}
+
+/// What [`diagnose_glb`] compared, per check (a check whose input is absent compares 0)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct VrmCompared {
+    /// Check 1: the hips against the upper legs (1 when both legs and the hips are mapped)
+    pub hips: usize,
+    /// Check 2: the rig's height (1 when the head and a foot are mapped)
+    pub height: usize,
+    /// Check 3: the feet against the ground (1 when a foot is mapped)
+    pub feet: usize,
+    /// Check 4: `POSITION` accessors
+    pub positions: usize,
+    /// Check 5: materials
+    pub materials: usize,
+    /// Check 6: declared extensions
+    pub extensions: usize,
+    /// Check 7: meshes with morph targets
+    pub morphs: usize,
+}
+
+impl VrmCompared {
+    /// The total compared over all checks
+    #[must_use]
+    pub const fn total(&self) -> usize {
+        self.hips
+            + self.height
+            + self.feet
+            + self.positions
+            + self.materials
+            + self.extensions
+            + self.morphs
+    }
+}
+
+/// The result of [`diagnose_glb`]: the findings and what was compared
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VrmReport {
+    /// The findings, in check order
+    pub diagnostics: Vec<VrmDiagnostic>,
+    /// What each check compared
+    pub compared: VrmCompared,
+}
+
+/// The human range of a rig's height (head joint over the lowest foot joint), metres
+pub const HUMAN_HEIGHT_RANGE: (f32, f32) = (0.5, 2.6);
+/// The height [`VrmDiagnostic::HeightOutOfRange`] reports a scale to, metres
+pub const NOMINAL_HEIGHT: f32 = 1.4;
+/// The highest the lowest foot joint (the ankle) may sit above the ground, metres
+pub const MAX_ANKLE_HEIGHT: f32 = 0.2;
+/// How far below the ground the lowest foot joint may sit before it counts as sunk, metres
+pub const GROUND_TOLERANCE: f32 = 0.01;
+
+/// Check a VRM GLB (0.x or 1.0) held in memory for what general VRM readers handle badly
+///
+/// The checks: a `hips` that is not the pelvis, a height outside the human range, feet off the
+/// ground, `POSITION` accessors without bounds, materials left fully metallic, extensions declared
+/// but absent, and morph targets with no expression preset.
+///
+/// # Errors
+///
+/// [`VrmError::MissingData`] when the bytes are not a GLB, the file has no humanoid mapping, or
+/// the checks compared nothing (an empty pass is not a pass).
+pub fn diagnose_glb(bytes: &[u8]) -> Result<VrmReport, VrmError> {
+    let json = parse_glb_json_bytes(bytes)?;
+    let bones = humanoid_nodes(&json).ok_or_else(|| {
+        VrmError::MissingData("no humanoid mapping (neither VRM 0.x nor VRM 1.0)".into())
+    })?;
+    let world = compute_node_world_translations(&json)?;
+    let mut rep = VrmReport::default();
+    check_skeleton(&json, &bones, &world, &mut rep);
+    check_positions(&json, &mut rep);
+    check_materials(&json, &mut rep);
+    check_extensions(&json, &mut rep);
+    check_morphs(&json, &mut rep);
+    if rep.compared.total() == 0 {
+        return Err(VrmError::MissingData(
+            "the diagnostics compared nothing".into(),
+        ));
+    }
+    Ok(rep)
+}
+
+/// Checks 1-3: the hips are the pelvis (the lowest common ancestor of the two upper legs, above the
+/// feet), the height is in the human range, and the feet sit just above the ground
+fn check_skeleton(
+    json: &serde_json::Value,
+    bones: &BTreeMap<String, usize>,
+    world: &[Vec3],
+    rep: &mut VrmReport,
+) {
+    let y = |name: &str| bones.get(name).and_then(|&n| world.get(n)).map(|p| p.y);
+    let lowest_foot = ["leftFoot", "rightFoot"]
+        .iter()
+        .filter_map(|b| y(b))
+        // ordered by comparison, not f32::min (whose zero sign differs between targets)
+        .fold(None, |m: Option<f32>, v| {
+            Some(m.map_or(v, |m| if v < m { v } else { m }))
+        });
+    if let (Some(&hips), Some(&l), Some(&r)) = (
+        bones.get("hips"),
+        bones.get("leftUpperLeg"),
+        bones.get("rightUpperLeg"),
+    ) {
+        rep.compared.hips = 1;
+        let pelvis = lowest_common_ancestor(&node_parents(json), l, r);
+        let below_feet = lowest_foot
+            .zip(world.get(hips))
+            .is_some_and(|(f, h)| h.y < f);
+        if pelvis != Some(hips) || below_feet {
+            rep.diagnostics.push(VrmDiagnostic::HipsNotPelvis {
+                hips_node: hips,
+                pelvis_node: pelvis,
+            });
+        }
+    }
+    if let (Some(head), Some(foot)) = (y("head"), lowest_foot) {
+        rep.compared.height = 1;
+        let height = head - foot;
+        if !(HUMAN_HEIGHT_RANGE.0..=HUMAN_HEIGHT_RANGE.1).contains(&height) {
+            rep.diagnostics.push(VrmDiagnostic::HeightOutOfRange {
+                height,
+                scale_to_nominal: NOMINAL_HEIGHT / height,
+            });
+        }
+    }
+    if let Some(foot) = lowest_foot {
+        rep.compared.feet = 1;
+        if foot < -GROUND_TOLERANCE || foot > MAX_ANKLE_HEIGHT {
+            let crosses_origin =
+                foot < -GROUND_TOLERANCE && y("head").is_some_and(|h| h > GROUND_TOLERANCE);
+            rep.diagnostics.push(VrmDiagnostic::FeetNotOnGround {
+                lowest_foot_y: foot,
+                crosses_origin,
+            });
+        }
+    }
+}
+
+/// Check 4: `POSITION` accessors (the primitives' and their morph targets') carry `min` and `max`
+fn check_positions(json: &serde_json::Value, rep: &mut VrmReport) {
+    let mut positions: Vec<usize> = Vec::new();
+    for prim in json_array(json, &["meshes"])
+        .iter()
+        .flat_map(|m| json_array(m, &["primitives"]))
+    {
+        let sets = std::iter::once(prim.get("attributes"))
+            .chain(json_array(prim, &["targets"]).iter().map(Some));
+        for set in sets.flatten() {
+            if let Some(i) = set
+                .get("POSITION")
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|i| usize::try_from(i).ok())
+            {
+                positions.push(i);
+            }
+        }
+    }
+    positions.sort_unstable();
+    positions.dedup();
+    rep.compared.positions = positions.len();
+    let accessors = json_array(json, &["accessors"]);
+    let missing = positions
+        .iter()
+        .filter(|&&i| {
+            accessors
+                .get(i)
+                .is_none_or(|a| a.get("min").is_none() || a.get("max").is_none())
+        })
+        .count();
+    if missing > 0 {
+        rep.diagnostics.push(VrmDiagnostic::PositionBoundsMissing {
+            missing,
+            of: positions.len(),
+        });
+    }
+}
+
+/// Check 5: materials left at glTF's default `metallicFactor` 1 with no metallic texture and no
+/// unlit or toon extension
+fn check_materials(json: &serde_json::Value, rep: &mut VrmReport) {
+    let materials = json_array(json, &["materials"]);
+    rep.compared.materials = materials.len();
+    let count = materials
+        .iter()
+        .filter(|m| {
+            let pbr = m.get("pbrMetallicRoughness");
+            let metallic = pbr
+                .and_then(|p| p.get("metallicFactor"))
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(1.0);
+            let texture = pbr
+                .and_then(|p| p.get("metallicRoughnessTexture"))
+                .is_some();
+            let shaded = m.get("extensions").is_some_and(|e| {
+                ["KHR_materials_unlit", "VRMC_materials_mtoon"]
+                    .iter()
+                    .any(|k| e.get(k).is_some())
+            });
+            metallic >= 1.0 && !texture && !shaded
+        })
+        .count();
+    if count > 0 {
+        rep.diagnostics
+            .push(VrmDiagnostic::DefaultMetallicMaterials {
+                count,
+                of: materials.len(),
+            });
+    }
+}
+
+/// Check 6: every extension named in `extensionsUsed` has a body somewhere in the file
+fn check_extensions(json: &serde_json::Value, rep: &mut VrmReport) {
+    let used: Vec<&str> = json_array(json, &["extensionsUsed"])
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    rep.compared.extensions = used.len();
+    for name in used {
+        if !extension_body_present(json, name) {
+            rep.diagnostics
+                .push(VrmDiagnostic::DeclaredExtensionUnused {
+                    name: name.to_string(),
+                });
+        }
+    }
+}
+
+/// Check 7: morph targets are bound by some expression preset
+fn check_morphs(json: &serde_json::Value, rep: &mut VrmReport) {
+    let mut targets = 0;
+    for mesh in json_array(json, &["meshes"]) {
+        let n = json_array(mesh, &["primitives"])
+            .iter()
+            .map(|p| json_array(p, &["targets"]).len())
+            .max()
+            .unwrap_or(0);
+        if n > 0 {
+            rep.compared.morphs += 1;
+            targets += n;
+        }
+    }
+    if targets > 0 && expression_binds(json) == 0 {
+        rep.diagnostics
+            .push(VrmDiagnostic::MorphsWithoutExpressions { targets });
+    }
+}
+
+/// The humanoid bone → node map of VRM 1.0 (`VRMC_vrm.humanoid.humanBones`, an object) or 0.x
+/// (`VRM.humanoid.humanBones`, an array of `{bone, node}`); `None` when neither is present
+fn humanoid_nodes(json: &serde_json::Value) -> Option<BTreeMap<String, usize>> {
+    let ext = json.get("extensions")?;
+    let node = |v: &serde_json::Value| {
+        v.get("node")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|n| usize::try_from(n).ok())
+    };
+    let mut map = BTreeMap::new();
+    if let Some(bones) = ext
+        .get("VRMC_vrm")
+        .and_then(|v| v.get("humanoid"))
+        .and_then(|h| h.get("humanBones"))
+        .and_then(|b| b.as_object())
+    {
+        for (name, v) in bones {
+            if let Some(n) = node(v) {
+                map.insert(name.clone(), n);
+            }
+        }
+    } else if let Some(bones) = ext
+        .get("VRM")
+        .and_then(|v| v.get("humanoid"))
+        .and_then(|h| h.get("humanBones"))
+        .and_then(|b| b.as_array())
+    {
+        for v in bones {
+            if let (Some(name), Some(n)) = (v.get("bone").and_then(|b| b.as_str()), node(v)) {
+                map.insert(name.to_string(), n);
+            }
+        }
+    }
+    (!map.is_empty()).then_some(map)
+}
+
+/// The parent of every node (from the `children` lists)
+fn node_parents(json: &serde_json::Value) -> Vec<Option<usize>> {
+    let nodes = json_array(json, &["nodes"]);
+    let mut parents = vec![None; nodes.len()];
+    for (i, n) in nodes.iter().enumerate() {
+        for c in json_array(n, &["children"]) {
+            if let Some(c) = c.as_u64().and_then(|c| usize::try_from(c).ok()) {
+                if c < parents.len() {
+                    parents[c] = Some(i);
+                }
+            }
+        }
+    }
+    parents
+}
+
+/// The lowest node that is an ancestor of (or equal to) both `a` and `b`
+fn lowest_common_ancestor(parents: &[Option<usize>], a: usize, b: usize) -> Option<usize> {
+    let mut up = Vec::new();
+    let mut n = Some(a);
+    while let Some(i) = n {
+        if up.contains(&i) || up.len() > parents.len() {
+            break;
+        }
+        up.push(i);
+        n = parents.get(i).copied().flatten();
+    }
+    let mut n = Some(b);
+    let mut steps = 0;
+    while let Some(i) = n {
+        if up.contains(&i) {
+            return Some(i);
+        }
+        steps += 1;
+        if steps > parents.len() {
+            break;
+        }
+        n = parents.get(i).copied().flatten();
+    }
+    None
+}
+
+/// The array at a key path (empty when absent or not an array)
+fn json_array<'a>(v: &'a serde_json::Value, path: &[&str]) -> &'a [serde_json::Value] {
+    path.iter()
+        .try_fold(v, |v, k| v.get(k))
+        .and_then(serde_json::Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// Whether some `extensions` object anywhere in the file carries `name`
+fn extension_body_present(v: &serde_json::Value, name: &str) -> bool {
+    match v {
+        serde_json::Value::Object(m) => {
+            m.get("extensions").and_then(|e| e.get(name)).is_some()
+                || m.values().any(|x| extension_body_present(x, name))
+        }
+        serde_json::Value::Array(a) => a.iter().any(|x| extension_body_present(x, name)),
+        _ => false,
+    }
+}
+
+/// How many morph-target bindings the expression presets carry (VRM 1.0 `expressions`, preset
+/// and custom; VRM 0.x `blendShapeMaster.blendShapeGroups[].binds`)
+fn expression_binds(json: &serde_json::Value) -> usize {
+    let Some(ext) = json.get("extensions") else {
+        return 0;
+    };
+    let mut n = 0;
+    if let Some(ex) = ext.get("VRMC_vrm").and_then(|v| v.get("expressions")) {
+        for group in ["preset", "custom"] {
+            if let Some(m) = ex.get(group).and_then(|g| g.as_object()) {
+                n += m
+                    .values()
+                    .map(|e| json_array(e, &["morphTargetBinds"]).len())
+                    .sum::<usize>();
+            }
+        }
+    }
+    n += json_array(ext, &["VRM", "blendShapeMaster", "blendShapeGroups"])
+        .iter()
+        .map(|g| json_array(g, &["binds"]).len())
+        .sum::<usize>();
+    n
+}
 
 #[cfg(test)]
 mod tests {
