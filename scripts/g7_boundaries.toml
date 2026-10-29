@@ -689,3 +689,18 @@ reason = "reads the expression of an x-series line of a law file (source); the l
 path = "alice_lol::audit_law::AuditLaw::with_series"
 class = "local"
 reason = "a series name given by the caller"
+
+[[entry]]
+path = "alice_lol::three_view::Record::parse"
+class = "authoring"
+reason = "reads a three-view record a person or a model writes from a character sheet (landmark heights read on the drawing); it carries no identifier of another crate, and its record format line `three_view 1` is required"
+
+[[entry]]
+path = "alice_lol::three_view::record_from_json"
+class = "authoring"
+reason = "reads the landmarks a model or a detector writes as JSON and builds a record from them; it carries no identifier of another crate"
+
+[[entry]]
+path = "alice_lol::three_view::check"
+class = "local"
+reason = "takes the identifiers and ranges of this crate's own proportion laws (avatar_body, avatar_face) to check a record against; it carries no Law-bearing value of another crate"

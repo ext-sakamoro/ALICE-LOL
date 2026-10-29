@@ -49,6 +49,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test audit_series_oracle|"
   "alice-lol|--test proportion_law_oracle|"
   "alice-lol|--test avatar_laws|"
+  "alice-lol|--test three_view|"
   "alice-lol-humanoid|--test measure_body|"
 )
 PHYSICS_TARGETS=(
