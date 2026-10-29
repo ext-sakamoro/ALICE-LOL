@@ -15,6 +15,9 @@ param depth number = 1.76 range 1.69 1.84
 # nearly the same in every face fitted: fixed
 let eye_x = 0.53
 let head_width = 2
+# the eye (centred on the eye line, eye_height tall) lies between the mouth and the brows (no margin: plain non-overlap)
+require 1 + eye_height / 2 <= brow_y
+require mouth_y <= 1 - eye_height / 2
 point eye_l = (eye_x, 1, 0 - eye_recess)
 point eye_size = (eye_width, eye_height, 0)
 point brow_inner_l = (brow_inner, brow_y, 0)

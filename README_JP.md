@@ -396,7 +396,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`program_law_demo`](alice-lol/examples/program_law_demo.rs) | program を Law の参照にする (`lol.law.program/v1`): byte 列、識別子、そこから作り直した形 |
 | [`audit_conformance`](alice-lol/examples/audit_conformance.rs) | `conformance/TASK.md` の契約を監査の law について `law_input` で実装した CLI (`conformance/probes.json` で確かめる) |
 | [`motion_check`](alice-lol/examples/motion_check.rs) | 動きの Law (`kind motion`) を読み、識別子・timing・指定した時刻の glyph ごとの channel を数値と bit で出す `--semantics` は動きの意味論の pin を計測する |
-| [`proportion_check`](alice-lol/examples/proportion_check.rs) | 比率の Law (`kind proportion`) を読み、識別子と、指定した param の値での出力 (scalar と点) を数値と bit で出す `--get` は名前で 1 つ取り、`--ref` は法則への参照を往復し、`--semantics` は比率の意味論の pin を計測する |
+| [`proportion_check`](alice-lol/examples/proportion_check.rs) | 比率の Law (`kind proportion`、`derive` 行が名指す元の law も) を読み、識別子・元の law・`require` 行と、指定した param の値での出力 (scalar と点) を数値と bit で出す `--get` は名前で 1 つ取り、`--ref` は法則への参照を往復し、`--semantics` は比率の意味論の pin を計測する |
 | [`three_view_check`](alice-lol/examples/three_view_check.rs) | 三面図の record (設定画で読んだ目印の高さと ±) を avatar の比率の Law で検査する: 導いた param の範囲、固定の値、同じ目印で食い違う view、目の高さの m `--json` は検査を JSON で出し、`--from-json` は JSON の目印から record を作る |
 | [`three_view_record`](alice-lol/examples/three_view_record.rs) | JSON の目印から三面図の record を正規の順で作る |
 | [`sheet_check`](alice-lol/examples/sheet_check.rs) | 埋めた設定画の組 (JSON) を sheet law (`kind sheet`、既定 `laws/avatar/sheet.law`) で検査し、空・型違い・範囲外・出どころの無い値を page と場所ごとに並べる `--json` は検査を JSON で出し、`--spec` と `--template` は law から作る仕様と空の雛形を出す |

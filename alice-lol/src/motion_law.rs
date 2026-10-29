@@ -148,6 +148,14 @@ pub enum SampleError {
     GlyphIndex,
     /// the glyph's own time is outside the exactly representable range
     TimeOutOfRange,
+    /// a proportion law's `require` line does not hold for these values (the line, then both
+    /// sides' values)
+    Refused {
+        /// the line as `<left> <= <right>`
+        require: String,
+        /// `<left value> > <right value>`
+        values: String,
+    },
 }
 
 impl fmt::Display for SampleError {
@@ -161,6 +169,9 @@ impl fmt::Display for SampleError {
             Self::ScaleNotPositive => write!(f, "`scale` is not positive"),
             Self::GlyphIndex => write!(f, "the glyph index is not below the glyph count"),
             Self::TimeOutOfRange => write!(f, "the glyph's time is out of range"),
+            Self::Refused { require, values } => {
+                write!(f, "`require {require}` does not hold ({values})")
+            }
         }
     }
 }

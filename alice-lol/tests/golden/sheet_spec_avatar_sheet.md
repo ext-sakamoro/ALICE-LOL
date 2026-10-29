@@ -1,6 +1,6 @@
 # Sheet law `avatar_sheet`: how to fill a character sheet set
 
-law id `c179b26d84b575f2c48f210b8bbac1e4e86fb881605c7a4fea051ee75f1aea77`
+law id `1f85ea76e2d64c11f86600caa1c64ad2f14a6be41c0b35db0865725605ec7dbe`
 
 ## What this is
 
@@ -12,6 +12,10 @@ law id `c179b26d84b575f2c48f210b8bbac1e4e86fb881605c7a4fea051ee75f1aea77`
 ## How to answer
 
 Answer with one JSON object and nothing else: `{"sheet_fill": 1, "law": "avatar_sheet", "pages": { … }}`. Under `pages`, each page is an object; a slot is a key with its value; a group is a key with a list of items, each item an object of its fields. Use only the keys listed below. Numbers are plain JSON numbers in the slot's unit. Text has no escapes (no `\\` and no `\"`). A value you cannot decide is `null`: it will be listed as missing, which is better than a guess.
+
+Families: `base_body.family` chooses the laws the ranges come from, and a range column lists each family's range. Choose the family from the idea, then use that family's whole range.
+- `reference`: `body` = `avatar_body`, `face` = `avatar_face`
+- `stylised`: `body` = `avatar_body_stylised`, `face` = `avatar_face_stylised`
 
 Units: `eye_height` = the height of the eyes above the sole is 1; `chin_eye` = the distance from the chin to the eye line is 1; `fraction` = 0 to 1; `m`, `mm`, `deg`, `ratio` as usual.
 
@@ -39,15 +43,17 @@ the body's proportions, in eye heights above the sole
 
 | slot | type | unit | range | need | meaning |
 |---|---|---|---|---|---|
-| `hips_y` | number | eye_height | 0.64 – 0.67 (from avatar_body.hips_y) | required | height of the hips |
-| `hip_drop` | number | eye_height | 0.01 – 0.08 (from avatar_body.hip_drop) | required | the hip joints below the hips |
-| `hip_x` | number | eye_height | 0.04 – 0.06 (from avatar_body.hip_x) | required | the hip joint's distance from the centre line |
-| `knee` | number | eye_height | 0.31 – 0.4 (from avatar_body.knee) | required | height of the knee joint |
-| `shoulder_x` | number | eye_height | 0.05 – 0.08 (from avatar_body.shoulder_x) | required | the shoulder joint's distance from the centre line |
-| `arm` | number | eye_height | 0.24 – 0.36 (from avatar_body.arm) | required | shoulder to wrist |
-| `elbow_split` | number | fraction | 0.49 – 0.63 (from avatar_body.elbow_split) | required | the elbow's place along the arm, from the shoulder |
-| `face_length` | number | eye_height | 0.04 – 0.07 (from avatar_body.face_length) | required | the chin below the eyes |
-| `head_top` | number | eye_height | 1.07 – 1.12 (from avatar_body.head_top) | required | the top of the skull, without hair |
+| `family` | one of reference / stylised |  |  | required | which body and face laws give the ranges: reference = bodies measured in 3D (the proportions of a lifelike figure), stylised = drawn sheets with a large head and large eyes (a lower knee, a lower shoulder, taller eyes and a higher brow) |
+| `hips_y` | number | eye_height | reference: 0.64 – 0.67; stylised: 0.64 – 0.67 (from body.hips_y) | required | height of the hips |
+| `hip_drop` | number | eye_height | reference: 0.01 – 0.08; stylised: 0.01 – 0.08 (from body.hip_drop) | required | the hip joints below the hips |
+| `hip_x` | number | eye_height | reference: 0.04 – 0.06; stylised: 0.04 – 0.06 (from body.hip_x) | required | the hip joint's distance from the centre line |
+| `knee` | number | eye_height | reference: 0.31 – 0.4; stylised: 0.27 – 0.38 (from body.knee) | required | height of the knee joint |
+| `shoulder_x` | number | eye_height | reference: 0.05 – 0.08; stylised: 0.05 – 0.08 (from body.shoulder_x) | required | the shoulder joint's distance from the centre line |
+| `arm` | number | eye_height | reference: 0.24 – 0.36; stylised: 0.24 – 0.36 (from body.arm) | required | shoulder to wrist |
+| `elbow_split` | number | fraction | reference: 0.49 – 0.63; stylised: 0.49 – 0.63 (from body.elbow_split) | required | the elbow's place along the arm, from the shoulder |
+| `face_length` | number | eye_height | reference: 0.04 – 0.07; stylised: 0.06 – 0.08 (from body.face_length) | required | the chin below the eyes |
+| `head_top` | number | eye_height | reference: 1.07 – 1.12; stylised: 1.07 – 1.12 (from body.head_top) | required | the top of the skull, without hair |
+| `shoulder` | number | eye_height | stylised: 0.86 – 0.9 (from body.shoulder) | required when family = stylised | height of the shoulder joints (the reference family fixes it at 0.9) |
 | `skin_material` | a name from materials.items.name |  |  | required | what the skin is made of |
 
 ## Page `face`
@@ -56,15 +62,15 @@ the face from the front and the side, in chin-to-eye distances, and its expressi
 
 | slot | type | unit | range | need | meaning |
 |---|---|---|---|---|---|
-| `eye_width` | number | chin_eye | 0.63 – 0.72 (from avatar_face.eye_width) | required | width of one eye |
-| `eye_height` | number | chin_eye | 0.24 – 0.33 (from avatar_face.eye_height) | required | height of one eye |
-| `eye_recess` | number | chin_eye | 0.48 – 0.68 (from avatar_face.eye_recess) | required | how far the eyes sit behind the front of the face |
-| `brow_y` | number | chin_eye | 1.23 – 1.32 (from avatar_face.brow_y) | required | height of the brows |
-| `brow_inner` | number | chin_eye | 0.15 – 0.22 (from avatar_face.brow_inner) | required | the inner end of a brow from the centre line |
-| `brow_outer` | number | chin_eye | 0.54 – 0.76 (from avatar_face.brow_outer) | required | the outer end of a brow from the centre line |
-| `mouth_y` | number | chin_eye | 0.31 – 0.34 (from avatar_face.mouth_y) | required | height of the mouth |
-| `mouth_width` | number | chin_eye | 0.41 – 0.54 (from avatar_face.mouth_width) | required | width of the mouth |
-| `depth` | number | chin_eye | 1.69 – 1.84 (from avatar_face.depth) | required | depth of the head, front to back |
+| `eye_width` | number | chin_eye | reference: 0.63 – 0.72; stylised: 0.63 – 0.72 (from face.eye_width) | required | width of one eye |
+| `eye_height` | number | chin_eye | reference: 0.24 – 0.33; stylised: 0.45 – 0.59 (from face.eye_height) | required | height of one eye |
+| `eye_recess` | number | chin_eye | reference: 0.48 – 0.68; stylised: 0.48 – 0.68 (from face.eye_recess) | required | how far the eyes sit behind the front of the face |
+| `brow_y` | number | chin_eye | reference: 1.23 – 1.32; stylised: 1.3 – 1.5 (from face.brow_y) | required | height of the brows |
+| `brow_inner` | number | chin_eye | reference: 0.15 – 0.22; stylised: 0.15 – 0.22 (from face.brow_inner) | required | the inner end of a brow from the centre line |
+| `brow_outer` | number | chin_eye | reference: 0.54 – 0.76; stylised: 0.54 – 0.76 (from face.brow_outer) | required | the outer end of a brow from the centre line |
+| `mouth_y` | number | chin_eye | reference: 0.31 – 0.34; stylised: 0.26 – 0.47 (from face.mouth_y) | required | height of the mouth |
+| `mouth_width` | number | chin_eye | reference: 0.41 – 0.54; stylised: 0.41 – 0.54 (from face.mouth_width) | required | width of the mouth |
+| `depth` | number | chin_eye | reference: 1.69 – 1.84; stylised: 1.69 – 1.84 (from face.depth) | required | depth of the head, front to back |
 | `eye_colour` | a name from palette.colours.name |  |  | required | the iris colour |
 | `iris_material` | a name from materials.items.name |  |  | required | what the irises are made of (how they shine) |
 

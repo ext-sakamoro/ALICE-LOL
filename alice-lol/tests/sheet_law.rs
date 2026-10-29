@@ -26,18 +26,26 @@ fn law_text() -> String {
     std::fs::read_to_string(root().join("laws/avatar/sheet.law")).unwrap()
 }
 
+/// A proportion law of `laws/avatar`, with the law it derives from read first
+fn proportion(file: &str) -> ProportionLaw {
+    let text = std::fs::read_to_string(root().join("laws/avatar").join(file)).unwrap();
+    match ProportionLaw::derives_from(&text) {
+        None => ProportionLaw::from_file(&text).unwrap(),
+        Some((name, parent)) => {
+            ProportionLaw::from_file_with(&text, &[(name.as_str(), &proportion(&parent))]).unwrap()
+        }
+    }
+}
+
 fn law() -> SheetLaw {
     let mut l = SheetLaw::from_file(&law_text()).unwrap();
-    let body = ProportionLaw::from_file(
-        &std::fs::read_to_string(root().join("laws/avatar/body.law")).unwrap(),
-    )
-    .unwrap();
-    let face = ProportionLaw::from_file(
-        &std::fs::read_to_string(root().join("laws/avatar/face.law")).unwrap(),
-    )
-    .unwrap();
-    l.resolve(&[("avatar_body", &body), ("avatar_face", &face)])
-        .unwrap();
+    let laws: Vec<(String, ProportionLaw)> = l
+        .uses
+        .iter()
+        .map(|(a, f)| (a.clone(), proportion(f)))
+        .collect();
+    let given: Vec<(&str, &ProportionLaw)> = laws.iter().map(|(a, p)| (a.as_str(), p)).collect();
+    l.resolve(&given).unwrap();
     l
 }
 
@@ -82,7 +90,7 @@ fn the_example_fill_is_complete() {
     let c = law().check(&example()).unwrap();
     assert!(c.findings.is_empty(), "{}", c.report_japanese());
     assert!(c.complete());
-    assert_eq!((c.read, c.asked), (199, 199));
+    assert_eq!((c.read, c.asked), (200, 200));
     assert!(c.pages.iter().all(|(_, ok)| *ok));
     assert_eq!(c.pages.len(), 9);
     assert!(c.warnings.is_empty(), "{}", c.report_japanese());
@@ -91,34 +99,149 @@ fn the_example_fill_is_complete() {
 #[test]
 fn ranges_come_from_the_avatar_laws() {
     let l = law();
-    let body = ProportionLaw::from_file(
-        &std::fs::read_to_string(root().join("laws/avatar/body.law")).unwrap(),
-    )
-    .unwrap();
-    let knee = body.params().iter().find(|p| p.name == "knee").unwrap();
-    let slot = l
-        .slots
-        .iter()
-        .find(|s| s.path() == "base_body.knee")
-        .unwrap();
-    assert_eq!(slot.range, Some((knee.lo, knee.hi)));
+    let range = |file: &str, name: &str| {
+        let p = proportion(file);
+        let q = p.params().iter().find(|q| q.name == name).unwrap();
+        (q.lo, q.hi)
+    };
+    let slot =
+        |l: &SheetLaw, path: &str| l.slots.iter().find(|s| s.path() == path).unwrap().clone();
+    // a range through a family alias is one range per family, from that family's law
+    assert_eq!(
+        slot(&l, "base_body.knee").family_ranges,
+        [
+            ("reference".to_owned(), range("body.law", "knee")),
+            ("stylised".to_owned(), range("body_stylised.law", "knee"))
+        ]
+    );
+    assert_eq!(
+        slot(&l, "face.eye_height").family_ranges,
+        [
+            ("reference".to_owned(), range("face.law", "eye_height")),
+            (
+                "stylised".to_owned(),
+                range("face_stylised.law", "eye_height")
+            )
+        ]
+    );
+    // only the stylised body has a shoulder parameter: the slot is asked only for it
+    assert_eq!(
+        slot(&l, "base_body.shoulder").family_ranges,
+        [(
+            "stylised".to_owned(),
+            range("body_stylised.law", "shoulder")
+        )]
+    );
     // an unresolved law has no range: a fill is then not judged against a guess
     let raw = SheetLaw::from_file(&law_text()).unwrap();
-    assert_eq!(
-        raw.slots
-            .iter()
-            .find(|s| s.path() == "base_body.knee")
-            .unwrap()
-            .range,
-        None
-    );
+    assert!(slot(&raw, "base_body.knee").family_ranges.is_empty());
+    assert_eq!(slot(&raw, "base_body.knee").range, None);
+    let body = proportion("body.law");
     assert!(
         SheetLaw::from_file(&law_text())
             .unwrap()
             .resolve(&[("avatar_body", &body)])
             .is_err(),
-        "avatar_face is used and must be given"
+        "the other used laws must be given"
     );
+}
+
+#[test]
+fn the_family_slot_chooses_the_ranges() {
+    // the same knee: out of the reference range, inside the stylised one
+    only(
+        &with("\"knee\": 0.35,", "\"knee\": 0.29,"),
+        "base_body.knee",
+        "out_of_range",
+    );
+    let stylised = with(
+        "\"family\": \"reference\",",
+        "\"family\": \"stylised\",\n      \"shoulder\": 0.88,",
+    );
+    // the reference face's eyes and brows are out of the stylised ranges
+    let c = law().check(&stylised).unwrap();
+    assert_eq!(
+        findings(&c),
+        [
+            ("face.eye_height".to_owned(), "out_of_range"),
+            ("face.brow_y".to_owned(), "out_of_range")
+        ]
+    );
+    let drawn = stylised
+        .replace("\"eye_height\": 0.28,", "\"eye_height\": 0.5,")
+        .replace("\"brow_y\": 1.27,", "\"brow_y\": 1.35,")
+        .replace("\"mouth_y\": 0.32,", "\"mouth_y\": 0.4,");
+    complete(&drawn.replace("\"knee\": 0.35,", "\"knee\": 0.29,"));
+    // a stylised body is asked its shoulder, a reference body is not
+    only(
+        &drawn.replace("\n      \"shoulder\": 0.88,", ""),
+        "base_body.shoulder",
+        "missing",
+    );
+    warns(
+        &with(
+            "\"family\": \"reference\",",
+            "\"family\": \"reference\",\n      \"shoulder\": 0.88,",
+        ),
+        "base_body.shoulder",
+        "not_used",
+    );
+    // no family: the family slot is missing and no family range is judged (the knee 0.29 is
+    // not listed)
+    let none =
+        with("\"family\": \"reference\",\n", "").replace("\"knee\": 0.35,", "\"knee\": 0.29,");
+    only(&none, "base_body.family", "missing");
+    only(
+        &with("\"family\": \"reference\",", "\"family\": \"chibi\","),
+        "base_body.family",
+        "not_in_vocabulary",
+    );
+    // the spec names both families' ranges
+    let spec = law().spec();
+    assert!(
+        spec.contains("reference: 0.31 – 0.4; stylised: 0.27 – 0.38 (from body.knee)"),
+        "{spec}"
+    );
+}
+
+#[test]
+fn the_family_lines_that_do_not_read_are_refused() {
+    let ok = law_text();
+    let swap = |a: &str, b: &str| {
+        assert_eq!(ok.matches(a).count(), 1, "{a}");
+        ok.replace(a, b)
+    };
+    let cases = [
+        ("a value not in the vocabulary", swap("family base_body.family stylised:", "family base_body.family drawn:")),
+        ("a value without a line", swap("family base_body.family stylised: body=avatar_body_stylised face=avatar_face_stylised\n", "")),
+        ("other aliases", swap("stylised: body=avatar_body_stylised face=avatar_face_stylised", "stylised: body=avatar_body_stylised")),
+        ("a law not used", swap("uses avatar_face_stylised face_stylised.law\n", "")),
+        ("an alias that is a used law", swap("reference: body=avatar_body face=avatar_face", "reference: avatar_body=avatar_body face=avatar_face")),
+        ("a slot that is not an enum", swap("family base_body.family stylised:", "family base_body.knee stylised:")),
+        ("a line twice", format!("{ok}family base_body.family stylised: body=avatar_body face=avatar_face\n")),
+        ("not alias=law", swap("reference: body=avatar_body face=avatar_face", "reference: body avatar_body face=avatar_face")),
+        ("a range alias that is neither", swap("range law body.knee", "range law torso.knee")),
+    ];
+    for (what, text) in &cases {
+        assert!(SheetLaw::from_file(text).is_err(), "{what} was accepted");
+    }
+    assert_eq!(cases.len(), 9);
+    // a slot asked for every family, of a parameter one family lacks, does not resolve
+    let mut l = SheetLaw::from_file(&swap(
+        "required when family=stylised source law:body.shoulder",
+        "required source law:body.shoulder",
+    ))
+    .unwrap();
+    let laws: Vec<(String, ProportionLaw)> = l
+        .uses
+        .iter()
+        .map(|(a, f)| (a.clone(), proportion(f)))
+        .collect();
+    let given: Vec<(&str, &ProportionLaw)> = laws.iter().map(|(a, p)| (a.as_str(), p)).collect();
+    assert!(l
+        .resolve(&given)
+        .unwrap_err()
+        .contains("avatar_body has no parameter `shoulder`"));
 }
 
 #[test]
@@ -770,6 +893,7 @@ fn paths(list: &[(String, &'static str)]) -> Vec<String> {
 /// The places every answer written for the law before these slots misses
 fn new_slots(materials: usize) -> Vec<String> {
     let mut v: Vec<String> = [
+        "base_body.family",
         "base_body.skin_material",
         "face.iris_material",
         "hair.material",
@@ -865,14 +989,11 @@ fn the_spread_examples_use_the_ranges_not_the_defaults() {
         complete(f);
     }
     let mut compared = 0;
+    // the two reference-family examples: off the defaults, and on both sides of each
     for file in ["body.law", "face.law"] {
-        let law = ProportionLaw::from_file(
-            &std::fs::read_to_string(root().join("laws/avatar").join(file)).unwrap(),
-        )
-        .unwrap();
+        let law = proportion(file);
         for p in law.params() {
-            let v: Vec<f64> = fills.iter().map(|f| number_in(f, &p.name)).collect();
-            // no example sits on the default, and the three reach both sides of it
+            let v: Vec<f64> = fills[..2].iter().map(|f| number_in(f, &p.name)).collect();
             assert!(
                 v.iter().all(|x| *x != p.default),
                 "{}: {v:?} at the default {}",
@@ -888,5 +1009,12 @@ fn the_spread_examples_use_the_ranges_not_the_defaults() {
             compared += 1;
         }
     }
+    // the stylised example: off every default of its own family
+    for file in ["body_stylised.law", "face_stylised.law"] {
+        for p in proportion(file).params() {
+            assert_ne!(number_in(&fills[2], &p.name), p.default, "{}", p.name);
+        }
+    }
+    assert!(fills[2].contains("\"family\": \"stylised\""));
     assert_eq!(compared, 18, "every body and face proportion compared");
 }
