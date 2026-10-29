@@ -1,6 +1,6 @@
 # Sheet law `avatar_sheet`: how to fill a character sheet set
 
-law id `1314892f28a2a875c501ed0a4b272854ae0940122154fe9786c84199afed32f0`
+law id `c179b26d84b575f2c48f210b8bbac1e4e86fb881605c7a4fea051ee75f1aea77`
 
 ## What this is
 
@@ -16,6 +16,8 @@ Answer with one JSON object and nothing else: `{"sheet_fill": 1, "law": "avatar_
 Units: `eye_height` = the height of the eyes above the sole is 1; `chin_eye` = the distance from the chin to the eye line is 1; `fraction` = 0 to 1; `m`, `mm`, `deg`, `ratio` as usual.
 
 A file (`asset`) is an object: `{"file": "name.png", "format": "png", "width": 1024, "height": 1024, "colour_space": "srgb", "provenance": {"source": "…", "licence": "…", "author": "…", "terms_sha256": "<64 hex digits of the licence text>"}}`; formats: png, jpg, webp, svg, exr, tga.
+
+Derive every value from the idea and use the whole range: the middle of a range is not a target. When the design wants a number outside a slot's range, put the nearest value inside the range in the slot and add a note at the top level: `"out_of_range_intent": [{"slot": "base_body.knee", "wants": 0.27, "why": "…"}]` (the reason at most 120 characters). The note is listed as a warning, not an error, and tells where the ranges are too narrow.
 
 Complete means: every required slot (and every field of every item, when its condition holds) has a value of its type inside its range or vocabulary, every name you refer to exists, every rule holds, and every file has its provenance.
 
@@ -46,6 +48,7 @@ the body's proportions, in eye heights above the sole
 | `elbow_split` | number | fraction | 0.49 – 0.63 (from avatar_body.elbow_split) | required | the elbow's place along the arm, from the shoulder |
 | `face_length` | number | eye_height | 0.04 – 0.07 (from avatar_body.face_length) | required | the chin below the eyes |
 | `head_top` | number | eye_height | 1.07 – 1.12 (from avatar_body.head_top) | required | the top of the skull, without hair |
+| `skin_material` | a name from materials.items.name |  |  | required | what the skin is made of |
 
 ## Page `face`
 
@@ -63,6 +66,7 @@ the face from the front and the side, in chin-to-eye distances, and its expressi
 | `mouth_width` | number | chin_eye | 0.41 – 0.54 (from avatar_face.mouth_width) | required | width of the mouth |
 | `depth` | number | chin_eye | 1.69 – 1.84 (from avatar_face.depth) | required | depth of the head, front to back |
 | `eye_colour` | a name from palette.colours.name |  |  | required | the iris colour |
+| `iris_material` | a name from materials.items.name |  |  | required | what the irises are made of (how they shine) |
 
 Group `expressions` (1 to 16 items): expressions drawn on the face page
 
@@ -84,6 +88,7 @@ the hair's style, where it is tied, its length and its strands
 | `curl_amplitude` | number | mm | 0 – 15 | required | 0 for straight hair |
 | `curl_pitch` | number | mm | 20 – 200 | required when curl_amplitude > 0 | length of one turn of a curl |
 | `colour` | a name from palette.colours.name |  |  | required | the hair's colour |
+| `material` | a name from materials.items.name |  |  | required | what the hair is made of |
 
 Group `ties` (0 to 4 items): where bundles are gathered (ponytail, twin tails, bun)
 
@@ -105,7 +110,9 @@ Group `layers` (0 to 8 items): one layer of clothing
 |---|---|---|---|---|---|
 | `name` | text (≤ 40 characters) |  |  | required | a name for the layer (unique) |
 | `order` | integer |  | 1 – 8 | required | the layer's place from the skin outwards (1 = on the skin) |
-| `class` | one of skin / loose / chain / rigid |  |  | required | skin = follows the body, loose = drapes, chain = a hem or ribbon that swings, rigid = a hard part |
+| `class` | one of skin / loose / chain / rigid / detached_sleeve |  |  | required | skin = follows the body, loose = drapes, chain = a hem or ribbon that swings, rigid = a hard part, detached_sleeve = a sleeve worn apart from any body garment |
+| `part_of` | a name from clothing.layers.name |  |  | optional | the garment this layer belongs to (a sleeve of a jacket), when it is drawn as its own layer |
+| `sleeves` | one of none / cap / short / elbow / long |  |  | optional | the sleeves of a garment that covers the shoulders |
 | `from` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole |  |  | required | the landmark the layer starts at |
 | `to` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole |  |  | required | the landmark the layer ends at |
 | `hem` | number | fraction | 0 – 1 | required | where the hem falls between from (0) and to (1) |
@@ -123,12 +130,28 @@ Group `items` (0 to 16 items): one accessory or one piece of footwear
 | field | type | unit | range | need | meaning |
 |---|---|---|---|---|---|
 | `name` | text (≤ 40 characters) |  |  | required | a name for the item (unique) |
-| `kind` | one of footwear / ribbon / hair_ornament / jewellery / bag / hat / gloves / other |  |  | required | what it is |
-| `attach` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole / hair_tie |  |  | required | the landmark it is attached at |
+| `kind` | one of footwear / ribbon / hair_ornament / jewellery / bag / hat / gloves / fastener / other |  |  | required | what it is (fastener = buttons, a zip or hooks on a garment) |
+| `attach` | one of head_top / chin / shoulder / elbow / wrist / hips / hip_joint / knee / ankle / sole / hair_tie / closure_line |  |  | required | the landmark it is attached at (closure_line = along a garment's opening) |
+| `on_layer` | a name from clothing.layers.name |  |  | optional | the garment it sits on, for a part of a garment |
 | `size` | number | mm | 1 – 1000 | required | its largest dimension |
 | `sole` | number | mm | 0 – 100 | required when kind = footwear | thickness of the sole under the ball of the foot |
 | `heel` | number | mm | 0 – 150 | required when kind = footwear | how far the heel lifts the heel of the foot |
 | `material` | a name from materials.items.name |  |  | required | what it is made of |
+
+## Page `anatomy`
+
+parts of the body that are not human anatomy (ears, tails, horns, wings), in the ear / tail part law's terms
+
+
+Group `extras` (0 to 6 items): one extra part
+
+| field | type | unit | range | need | meaning |
+|---|---|---|---|---|---|
+| `part` | one of ear / tail / horn / wing |  |  | required | the kind of part |
+| `attach` | one of head_top / hips / shoulder |  |  | required | where it grows from |
+| `pair` | true / false |  |  | required | one on each side (true) or one in the middle (false) |
+| `length` | number | eye_height | 0.02 – 1.5 | required | length from root to tip |
+| `material` | a name from materials.items.name |  |  | required | what it is made of (skin, fur as hair, …) |
 
 ## Page `materials`
 
@@ -144,10 +167,11 @@ Group `items` (1 to 24 items): one material
 | `colour` | a name from palette.colours.name |  |  | required | its base colour |
 | `roughness` | number | fraction | 0 – 1 | required | 0 = mirror-smooth, 1 = fully rough |
 | `metallic` | number | fraction | 0 – 1 | required | 0 = not metal, 1 = metal |
+| `elasticity` | number | fraction | 0 – 1 | required | how far it stretches under a light pull (0 = not at all, 1 = doubles); a layer that follows the skin needs a stretchy material |
 | `shade_shift` | number | fraction | -1 – 1 | required | where the shadow edge falls (toon shading) |
 | `shade_softness` | number | fraction | 0 – 1 | required | 0 = soft shadow edge, 1 = hard |
 | `outline` | number | mm | 0 – 5 | required | outline width (0 = none) |
-| `transmission` | one of opaque / open_weave / diffuse / clear |  |  | required | how light passes through it |
+| `transmission` | one of opaque / open_weave / diffuse / clear |  |  | required | how light passes through it, judged by eye: opaque = nothing behind shows; open_weave = skin or what is behind shows through the gaps of the threads (sheer cloth, lace, chiffon, organza, tulle, mesh); diffuse = light glows through but shapes behind blur away (paper, a shoji screen, frosted plastic, thick gauze); clear = what is behind is seen sharp (glass, clear plastic) |
 | `openness` | number | fraction | 0 – 1 | required when transmission = open_weave | share of light passing straight through the weave |
 | `thread_colour` | a name from palette.colours.name |  |  | required when transmission = open_weave | colour of the threads |
 | `thickness` | number | mm | 0.01 – 10 | required when transmission = open_weave | thickness of the cloth |
@@ -189,4 +213,36 @@ Group `colours` (1 to 32 items): one named colour
 - `materials.items.name` is unique: material names differ
 - `palette.colours.name` is unique: colour names differ
 - `face.expressions.name` is unique: each expression is drawn once
-- in `clothing.layers`, `from` comes before `to` in the listed order: a layer starts above where it ends (landmarks from the top of the head down)
+
+## Chains
+
+Landmarks from top to bottom; a span (`from` → `to`) lies on one chain, `from` above `to`.
+
+- `body`: head_top → chin → shoulder → hips → hip_joint → knee → ankle → sole
+- `arm`: shoulder → elbow → wrist
+
+## Plausibility
+
+An error stops the drawing; a warning is listed and the drawing goes on (check it is meant). `a->b` is field `b` of the item that field `a` names; `~` means the text mentions one of the words.
+
+- error `along clothing.layers.from clothing.layers.to`: a layer covers a span of one chain (the body or an arm), from above to below
+- error `when clothing.layers to=elbow|wrist require class=detached_sleeve or part_of`: a layer ending at the elbow or the wrist is a sleeve: it belongs to a garment (part_of) or is worn apart (detached_sleeve)
+- error `when clothing.layers class=skin require ease<=3`: a layer that follows the skin has at most 3 mm of ease
+- error `when clothing.layers class=skin require material->elasticity>=0.2`: a layer that follows the skin is made of a stretchy material
+- error `when clothing.layers class=loose require ease>=5`: a loose layer has at least 5 mm of ease
+- error `nesting clothing.layers order order ease ease along from to`: where two layers overlap, the outer one is not tighter than the inner one
+- error `when accessories.items kind=fastener require attach=closure_line`: a fastener sits along a garment's opening
+- error `when accessories.items kind=fastener require on_layer`: a fastener names the garment it closes
+- error `when accessories.items kind=fastener require on_layer->closure!=none`: the garment a fastener sits on has a closure
+- error `when accessories.items kind=footwear require attach=sole`: footwear is worn on the sole
+- error `when accessories.items kind=gloves require attach=wrist`: gloves are attached at the wrist
+- error `when accessories.items kind=hat require attach=head_top`: a hat sits on the top of the head
+- error `when accessories.items kind=hair_ornament require attach=hair_tie|head_top`: a hair ornament sits on a tie or on the head
+- error `when materials.items transmission=open_weave require class=fabric`: only cloth has an open weave
+- error `when materials.items transmission=clear require class=glass|plastic`: only glass or plastic is clear
+- error `when materials.items transmission=diffuse require class=paper|fabric|plastic`: light is scattered through paper, cloth or plastic
+- warning `warn when clothing.layers name~sheer|lace|chiffon|organza|tulle|voile|mesh|gauze|see-through|see_through require material->transmission!=opaque`: a layer named as a see-through cloth is made of a material light passes through
+- warning `warn when materials.items name~sheer|lace|chiffon|organza|tulle|voile|mesh|gauze|see-through|see_through require transmission!=opaque`: a material named as a see-through cloth lets light through
+- warning `warn used palette.colours.name`: every colour of the palette is used somewhere
+- warning `warn used materials.items.name`: every material is used by some part
+- warning `warn when accessories.items kind=footwear require sole+heel<=turnaround.stature*80`: a style convention, not a measured bound: a sole and heel together above about 8 % of the stature lift the body further than the body law's upright stance describes

@@ -6,6 +6,11 @@
 //! test then changes one value and the check must name exactly that place and that reason.
 //! The spec, the blank template and the check JSON are pinned byte for byte, so what an author
 //! is told and what a reader parses cannot drift without a visible change.
+//!
+//! The plausibility rules are tested one change at a time the same way, each against the
+//! clause of the law that names it. Two answers written by an outside model from the
+//! specification alone (`tests/data/sheet_fill_outside_answer_{1,2}.json`) are kept as they
+//! came: the rules must name the same places in them (what the rules were added for).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 
 use std::path::{Path, PathBuf};
@@ -77,9 +82,10 @@ fn the_example_fill_is_complete() {
     let c = law().check(&example()).unwrap();
     assert!(c.findings.is_empty(), "{}", c.report_japanese());
     assert!(c.complete());
-    assert_eq!((c.read, c.asked), (175, 175));
+    assert_eq!((c.read, c.asked), (199, 199));
     assert!(c.pages.iter().all(|(_, ok)| *ok));
-    assert_eq!(c.pages.len(), 8);
+    assert_eq!(c.pages.len(), 9);
+    assert!(c.warnings.is_empty(), "{}", c.report_japanese());
 }
 
 #[test]
@@ -116,6 +122,7 @@ fn ranges_come_from_the_avatar_laws() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // one change per kind of problem, in the order of the codes
 fn each_problem_is_named_at_its_place() {
     only(
         &with("\"stature\": 1.52,", "\"stature\": null,"),
@@ -322,11 +329,21 @@ fn the_law_reader_refuses_malformed_laws() {
         ("text twice", format!("{ok}text forbid tool_names : again\n")),
         ("text policy unknown", format!("{ok}text prefer logos : x\n")),
         ("text without a reason", format!("{ok}text forbid logos\n")),
+        ("rule without a reason", format!("{ok}rule when clothing.layers class=skin require ease<=3\n")),
+        ("word not in the vocabulary", format!("{ok}rule when clothing.layers class=skn require ease<=3 : x\n")),
+        ("deref of a field nobody has", format!("{ok}rule when clothing.layers class=skin require material->elastcity>=0.2 : x\n")),
+        ("deref of a non-reference", format!("{ok}rule when clothing.layers class=skin require ease->x>=0.2 : x\n")),
+        ("bound on no slot", format!("{ok}rule warn when accessories.items kind=footwear require sole+heel<=turnaround.statur*80 : x\n")),
+        ("along over two groups", format!("{ok}rule along clothing.layers.from accessories.items.attach : x\n")),
+        ("along as a warning", format!("{ok}rule warn along clothing.layers.from clothing.layers.to : x\n")),
+        ("require ending in or", format!("{ok}rule when clothing.layers class=skin require ease<=3 or : x\n")),
+        ("chain twice", format!("{ok}chain arm shoulder wrist\n")),
+        ("ordered is gone", format!("{ok}rule ordered clothing.layers.from clothing.layers.to : x\n")),
     ];
     for (what, text) in &cases {
         assert!(SheetLaw::from_file(text).is_err(), "{what} was accepted");
     }
-    assert_eq!(cases.len(), 15);
+    assert_eq!(cases.len(), 25);
     assert!(SheetLaw::from_file(&ok).is_ok());
 }
 
@@ -395,11 +412,16 @@ fn the_generated_spec_and_template_are_pinned() {
 #[test]
 fn the_check_json_is_pinned() {
     let fill = with("\"knee\": 0.35,", "\"knee\": 0.5,")
-        .replace("\"stature\": 1.52,", "\"stature\": null,");
+        .replace("\"stature\": 1.52,", "\"stature\": null,")
+        .replace("\"law\": \"avatar_sheet\",", "\"law\": \"avatar_sheet\",\n  \"out_of_range_intent\": [{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"the knee is drawn low\"}],");
     let c = law().check(&fill).unwrap();
     let json = c.to_json();
     assert!(json.starts_with(&format!("{{\"sheet_check\":{SHEET_CHECK_JSON_VERSION},")));
-    golden("sheet_check_v1.json", &format!("{json}\n"));
+    assert!(
+        json.contains("\"warnings\":[{"),
+        "the note is listed as a warning"
+    );
+    golden("sheet_check_v2.json", &format!("{json}\n"));
 }
 
 #[test]
@@ -421,4 +443,450 @@ fn what_may_be_written_on_a_page_is_part_of_the_law() {
     for (_, n, _) in &l.texts {
         assert!(spec.contains(&format!("`{n}`")), "{n} not in the spec");
     }
+}
+
+fn warnings(c: &SheetCheck) -> Vec<(String, &'static str)> {
+    c.warnings
+        .iter()
+        .map(|f| (f.path.clone(), f.problem.code()))
+        .collect()
+}
+
+/// The fill checks complete, with exactly this warning
+fn warns(fill: &str, path: &str, code: &str) {
+    let c = law().check(fill).unwrap();
+    assert!(c.findings.is_empty(), "{}", c.report_japanese());
+    assert!(c.complete(), "a warning does not stop the drawing");
+    assert_eq!(
+        warnings(&c),
+        [(path.to_owned(), code)],
+        "{}",
+        c.report_japanese()
+    );
+}
+
+fn complete(fill: &str) {
+    let c = law().check(fill).unwrap();
+    assert!(
+        c.complete() && c.warnings.is_empty(),
+        "{}",
+        c.report_japanese()
+    );
+}
+
+#[test]
+fn a_layer_spans_one_chain_from_above() {
+    // knee is on the body chain, elbow on the arm chain: no span
+    only(
+        &with(
+            "\"from\": \"shoulder\", \"to\": \"wrist\"",
+            "\"from\": \"elbow\", \"to\": \"knee\"",
+        ),
+        "clothing.layers[1]",
+        "implausible",
+    );
+    // a sleeve: on the arm chain from the shoulder, so shoulder is on two chains
+    complete(&with(
+        "\"from\": \"shoulder\", \"to\": \"wrist\"",
+        "\"from\": \"shoulder\", \"to\": \"elbow\"",
+    ));
+    only(
+        &with(
+            "\"from\": \"shoulder\", \"to\": \"wrist\"",
+            "\"from\": \"wrist\", \"to\": \"shoulder\"",
+        ),
+        "clothing.layers[1]",
+        "not_ordered",
+    );
+}
+
+#[test]
+fn a_sleeve_belongs_to_a_garment_or_is_worn_apart() {
+    only(
+        &with("\"part_of\": \"blouse\", ", ""),
+        "clothing.layers[1]",
+        "implausible",
+    );
+    complete(&with(
+        "\"class\": \"loose\", \"part_of\": \"blouse\"",
+        "\"class\": \"detached_sleeve\"",
+    ));
+    only(
+        &with("\"part_of\": \"blouse\"", "\"part_of\": \"cape\""),
+        "clothing.layers[1].part_of",
+        "no_such_name",
+    );
+}
+
+#[test]
+fn the_ease_follows_the_class() {
+    // skin: at most 3 mm, and a stretchy material
+    only(
+        &with("\"ease\": 2,", "\"ease\": 4,"),
+        "clothing.layers[0]",
+        "implausible",
+    );
+    complete(&with("\"ease\": 2,", "\"ease\": 3,"));
+    only(
+        &with("\"elasticity\": 0.25,", "\"elasticity\": 0.1,"),
+        "clothing.layers[0]",
+        "implausible",
+    );
+    complete(&with("\"elasticity\": 0.25,", "\"elasticity\": 0.2,"));
+    // loose: at least 5 mm
+    only(
+        &with("\"ease\": 40,", "\"ease\": 4,"),
+        "clothing.layers[2]",
+        "implausible",
+    );
+    complete(&with("\"ease\": 40,", "\"ease\": 5,"));
+}
+
+#[test]
+fn an_outer_layer_is_not_tighter_than_the_inner_one() {
+    // the skirt from the shoulder overlaps the blouse; the blouse put outside it is tighter
+    let dress = with(
+        "\"from\": \"hips\", \"to\": \"knee\"",
+        "\"from\": \"shoulder\", \"to\": \"knee\"",
+    );
+    complete(&dress);
+    let outside = dress.replace(
+        "\"name\": \"blouse\", \"order\": 1,",
+        "\"name\": \"blouse\", \"order\": 4,",
+    );
+    only(&outside, "clothing.layers[0]", "implausible");
+    // spans that only touch (the blouse ends at the hips, the skirt starts there) do not overlap
+    complete(&with(
+        "\"name\": \"blouse\", \"order\": 1,",
+        "\"name\": \"blouse\", \"order\": 4,",
+    ));
+}
+
+#[test]
+fn accessories_sit_where_their_kind_is_worn() {
+    let add = |item: &str| {
+        with(
+            "\"material\": \"satin\"}\n      ]",
+            &format!("\"material\": \"satin\"}},\n        {item}\n      ]"),
+        )
+    };
+    let fastener = "{\"name\": \"buttons\", \"kind\": \"fastener\", \"attach\": \"closure_line\", \"on_layer\": \"blouse\", \"size\": 10, \"material\": \"leather\"}";
+    complete(&add(fastener));
+    only(
+        &add(&fastener.replace("closure_line", "hips")),
+        "accessories.items[2]",
+        "implausible",
+    );
+    only(
+        &add(&fastener.replace("\"on_layer\": \"blouse\", ", "")),
+        "accessories.items[2]",
+        "implausible",
+    );
+    // the sleeves have no closure
+    only(
+        &add(&fastener.replace("blouse", "sleeves")),
+        "accessories.items[2]",
+        "implausible",
+    );
+    only(
+        &with("\"attach\": \"sole\"", "\"attach\": \"ankle\""),
+        "accessories.items[0]",
+        "implausible",
+    );
+    let gloves = "{\"name\": \"gloves\", \"kind\": \"gloves\", \"attach\": \"wrist\", \"size\": 180, \"material\": \"leather\"}";
+    complete(&add(gloves));
+    only(
+        &add(&gloves.replace("wrist", "elbow")),
+        "accessories.items[2]",
+        "implausible",
+    );
+    let hat = "{\"name\": \"hat\", \"kind\": \"hat\", \"attach\": \"head_top\", \"size\": 300, \"material\": \"wool\"}";
+    complete(&add(hat));
+    only(
+        &add(&hat.replace("head_top", "chin")),
+        "accessories.items[2]",
+        "implausible",
+    );
+    complete(&with(
+        "\"kind\": \"ribbon\", \"attach\": \"hair_tie\"",
+        "\"kind\": \"hair_ornament\", \"attach\": \"hair_tie\"",
+    ));
+    complete(&with(
+        "\"kind\": \"ribbon\", \"attach\": \"hair_tie\"",
+        "\"kind\": \"hair_ornament\", \"attach\": \"head_top\"",
+    ));
+    only(
+        &with(
+            "\"kind\": \"ribbon\", \"attach\": \"hair_tie\"",
+            "\"kind\": \"hair_ornament\", \"attach\": \"hips\"",
+        ),
+        "accessories.items[1]",
+        "implausible",
+    );
+}
+
+#[test]
+fn the_transmission_fits_the_material() {
+    only(
+        &with(
+            "{\"name\": \"voile\", \"class\": \"fabric\"",
+            "{\"name\": \"voile\", \"class\": \"leather\"",
+        ),
+        "materials.items[2]",
+        "implausible",
+    );
+    let clear = "\"transmission\": \"opaque\", \"pattern\": \"none\", \"used_by\": \"eyes\"";
+    complete(&with(
+        clear,
+        "\"transmission\": \"clear\", \"ior\": 1.4, \"pattern\": \"none\", \"used_by\": \"eyes\"",
+    ));
+    let cotton = "\"transmission\": \"opaque\", \"pattern\": \"none\", \"used_by\": \"blouse\"";
+    only(&with(cotton, "\"transmission\": \"clear\", \"ior\": 1.4, \"pattern\": \"none\", \"used_by\": \"blouse\""), "materials.items[1]", "implausible");
+    complete(&with(cotton, "\"transmission\": \"diffuse\", \"transmittance\": 0.3, \"scattering\": 0.8, \"pattern\": \"none\", \"used_by\": \"blouse\""));
+}
+
+#[test]
+fn warnings_are_listed_and_do_not_stop_the_drawing() {
+    // a colour nobody uses
+    warns(
+        &with("{\"name\": \"amber\", \"srgb\": \"#c98a2e\"}", "{\"name\": \"amber\", \"srgb\": \"#c98a2e\"},\n        {\"name\": \"spare\", \"srgb\": \"#000000\"}"),
+        "palette.colours[7].name",
+        "not_used",
+    );
+    // a material nobody uses: the skirt made of satin leaves the wool unused
+    warns(
+        &with(
+            "\"closure\": \"zip\", \"material\": \"wool\"",
+            "\"closure\": \"zip\", \"material\": \"satin\"",
+        ),
+        "materials.items[3].name",
+        "not_used",
+    );
+    // a sole and heel of 128 mm on a 1.52 m figure (the convention allows 121.6 mm)
+    warns(
+        &with("\"heel\": 20,", "\"heel\": 120,"),
+        "accessories.items[0]",
+        "implausible",
+    );
+    complete(&with("\"heel\": 20,", "\"heel\": 113,"));
+    // see-through names on an opaque material, in a layer's name or a material's name
+    warns(
+        &with("{\"name\": \"skirt\",", "{\"name\": \"Lace skirt\","),
+        "clothing.layers[2]",
+        "implausible",
+    );
+    let tulle = example().replace("\"wool\"", "\"tulle wool\"");
+    let c = law().check(&tulle).unwrap();
+    assert!(c.complete(), "{}", c.report_japanese());
+    assert_eq!(
+        warnings(&c),
+        [("materials.items[3]".to_owned(), "implausible")]
+    );
+    // the voile is see-through already: no warning
+    complete(&with(
+        "{\"name\": \"sleeves\",",
+        "{\"name\": \"sheer sleeves\",",
+    ));
+}
+
+#[test]
+fn a_value_outside_the_range_is_noted_not_hidden() {
+    let note = |n: &str| {
+        with(
+            "\"law\": \"avatar_sheet\",",
+            &format!("\"law\": \"avatar_sheet\",\n  \"out_of_range_intent\": {n},"),
+        )
+    };
+    let ok = note(
+        "[{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"the knee is drawn low\"}]",
+    );
+    warns(&ok, "out_of_range_intent[0]", "design_wants_out_of_range");
+    let c = law().check(&ok).unwrap();
+    assert!(c.report_japanese().contains("base_body.knee = 0.27"));
+    complete(&note("[]"));
+    only(
+        &note("[{\"slot\": \"base_body.knee\", \"wants\": 0.33, \"why\": \"x\"}]"),
+        "out_of_range_intent[0]",
+        "implausible",
+    );
+    only(
+        &note("[{\"slot\": \"base_body.ankle_bone\", \"wants\": 0.1, \"why\": \"x\"}]"),
+        "out_of_range_intent[0]",
+        "no_such_name",
+    );
+    // a slot without a range
+    only(
+        &note("[{\"slot\": \"face.eye_colour\", \"wants\": 0.1, \"why\": \"x\"}]"),
+        "out_of_range_intent[0]",
+        "no_such_name",
+    );
+    only(
+        &note("[{\"slot\": \"base_body.knee\", \"wants\": \"low\", \"why\": \"x\"}]"),
+        "out_of_range_intent[0]",
+        "wrong_type",
+    );
+    only(
+        &note("[{\"slot\": \"base_body.knee\", \"wants\": 0.27}]"),
+        "out_of_range_intent[0]",
+        "wrong_type",
+    );
+    only(
+        &note(&format!(
+            "[{{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"{}\"}}]",
+            "x".repeat(121)
+        )),
+        "out_of_range_intent[0]",
+        "too_long",
+    );
+    warns(
+        &note(&format!(
+            "[{{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"{}\"}}]",
+            "x".repeat(120)
+        )),
+        "out_of_range_intent[0]",
+        "design_wants_out_of_range",
+    );
+    only(
+        &note("[{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"x\", \"by\": 1}]"),
+        "out_of_range_intent[0]",
+        "unknown_key",
+    );
+    only(&note("{}"), "out_of_range_intent", "wrong_type");
+}
+
+fn outside(n: u32) -> SheetCheck {
+    let text = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("tests/data/sheet_fill_outside_answer_{n}.json")),
+    )
+    .unwrap();
+    law().check(&text).unwrap()
+}
+
+fn paths(list: &[(String, &'static str)]) -> Vec<String> {
+    list.iter().map(|(p, c)| format!("{p} {c}")).collect()
+}
+
+/// The places every answer written for the law before these slots misses
+fn new_slots(materials: usize) -> Vec<String> {
+    let mut v: Vec<String> = [
+        "base_body.skin_material",
+        "face.iris_material",
+        "hair.material",
+    ]
+    .iter()
+    .map(|p| format!("{p} missing"))
+    .collect();
+    v.extend((0..materials).map(|i| format!("materials.items[{i}].elasticity missing")));
+    v
+}
+
+#[test]
+fn the_rules_name_what_the_outside_answers_got_wrong() {
+    // answer 1: wide sleeves drawn as their own layer, neither part of the jacket nor apart
+    let c = outside(1);
+    let mut want = new_slots(12);
+    want.push("clothing.layers[4] implausible".into());
+    assert_eq!(paths(&findings(&c)), want, "{}", c.report_japanese());
+    assert_eq!(
+        paths(&warnings(&c)),
+        [
+            "palette.colours[8].name not_used",
+            "palette.colours[9].name not_used",
+            "materials.items[0].name not_used",
+            "materials.items[1].name not_used",
+            "materials.items[2].name not_used",
+        ]
+    );
+    // answer 2: detached puff sleeves as a loose layer; a bodice that follows the skin with
+    // 6 mm of ease; a corset outside a looser bodice; lace filled as opaque
+    let c = outside(2);
+    let mut want = new_slots(11);
+    want.extend(
+        [
+            "clothing.layers[2] implausible",
+            "clothing.layers[1] implausible",
+            "clothing.layers[5] implausible",
+        ]
+        .map(String::from),
+    );
+    assert_eq!(paths(&findings(&c)), want, "{}", c.report_japanese());
+    assert_eq!(
+        paths(&warnings(&c)),
+        [
+            "clothing.layers[5] implausible",
+            "materials.items[5] implausible",
+            "palette.colours[7].name not_used",
+            "materials.items[0].name not_used",
+            "materials.items[1].name not_used",
+            "materials.items[2].name not_used",
+        ]
+    );
+}
+
+#[test]
+fn the_spec_tells_the_rules_and_the_note() {
+    let spec = law().spec();
+    for (r, text) in law().item_rules.iter().zip(&law().item_rule_texts) {
+        let _ = r;
+        assert!(
+            spec.contains(&format!("`{text}`")),
+            "{text} not in the spec"
+        );
+    }
+    assert_eq!(law().item_rules.len(), law().item_rule_texts.len());
+    assert!(spec.contains("- `body`: head_top → chin → shoulder"));
+    assert!(spec.contains("\"out_of_range_intent\""));
+    assert!(spec.contains("the middle of a range is not a target"));
+    assert!(spec.contains("skin or what is behind shows through"));
+}
+
+/// The value of `"name": <number>` in a fill (each proportion name occurs once)
+fn number_in(fill: &str, name: &str) -> f64 {
+    let key = format!("\"{name}\": ");
+    assert_eq!(fill.matches(&key).count(), 1, "{name}");
+    let rest = &fill[fill.find(&key).unwrap() + key.len()..];
+    rest[..rest.find([',', '\n']).unwrap()].parse().unwrap()
+}
+
+#[test]
+fn the_spread_examples_use_the_ranges_not_the_defaults() {
+    let fills: Vec<String> = ["tall_adult", "small_young", "stylised"]
+        .iter()
+        .map(|n| {
+            std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(format!("tests/data/sheet_fill_spread_{n}.json")),
+            )
+            .unwrap()
+        })
+        .collect();
+    for f in &fills {
+        complete(f);
+    }
+    let mut compared = 0;
+    for file in ["body.law", "face.law"] {
+        let law = ProportionLaw::from_file(
+            &std::fs::read_to_string(root().join("laws/avatar").join(file)).unwrap(),
+        )
+        .unwrap();
+        for p in law.params() {
+            let v: Vec<f64> = fills.iter().map(|f| number_in(f, &p.name)).collect();
+            // no example sits on the default, and the three reach both sides of it
+            assert!(
+                v.iter().all(|x| *x != p.default),
+                "{}: {v:?} at the default {}",
+                p.name,
+                p.default
+            );
+            assert!(
+                v.iter().any(|x| *x < p.default) && v.iter().any(|x| *x > p.default),
+                "{}: {v:?} on one side of {}",
+                p.name,
+                p.default
+            );
+            compared += 1;
+        }
+    }
+    assert_eq!(compared, 18, "every body and face proportion compared");
 }

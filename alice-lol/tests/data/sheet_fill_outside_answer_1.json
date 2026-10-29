@@ -1,0 +1,429 @@
+{
+  "sheet_fill": 1,
+  "law": "avatar_sheet",
+  "pages": {
+    "turnaround": {
+      "stature": 1.55,
+      "pose": "A",
+      "arm_angle": 25,
+      "views": "front_side_back",
+      "joint_marks": true
+    },
+    "base_body": {
+      "hips_y": 0.655,
+      "hip_drop": 0.035,
+      "hip_x": 0.052,
+      "knee": 0.352,
+      "shoulder_x": 0.063,
+      "arm": 0.315,
+      "elbow_split": 0.55,
+      "face_length": 0.058,
+      "head_top": 1.095
+    },
+    "face": {
+      "eye_width": 0.68,
+      "eye_height": 0.29,
+      "eye_recess": 0.57,
+      "brow_y": 1.275,
+      "brow_inner": 0.18,
+      "brow_outer": 0.66,
+      "mouth_y": 0.325,
+      "mouth_width": 0.46,
+      "depth": 1.75,
+      "eye_colour": "mist_blue",
+      "expressions": [
+        {
+          "name": "neutral",
+          "note": "Quiet gaze with a slightly curious expression"
+        },
+        {
+          "name": "smile",
+          "note": "Gentle smile with softened eyes"
+        },
+        {
+          "name": "laugh",
+          "note": "Eyes closed and cheeks raised"
+        },
+        {
+          "name": "surprise",
+          "note": "Wide eyes and a small open mouth"
+        },
+        {
+          "name": "sad",
+          "note": "Lowered brows and a trembling mouth"
+        },
+        {
+          "name": "shy",
+          "note": "Faint blush and averted gaze"
+        },
+        {
+          "name": "wink",
+          "note": "One eye closed with a playful smile"
+        },
+        {
+          "name": "anger",
+          "note": "Narrowed eyes and knitted brows"
+        }
+      ]
+    },
+    "hair": {
+      "style_class": "braid",
+      "length": 0.74,
+      "parting": -8,
+      "fringe": "eyebrow",
+      "curl_amplitude": 3.5,
+      "curl_pitch": 110,
+      "colour": "silver_ash",
+      "ties": [
+        {
+          "height": 0.42,
+          "azimuth": 75,
+          "length": 0.38,
+          "accessory": "left_braid_ribbon"
+        },
+        {
+          "height": 0.42,
+          "azimuth": -75,
+          "length": 0.38,
+          "accessory": "right_braid_ribbon"
+        }
+      ]
+    },
+    "clothing": {
+      "layers": [
+        {
+          "name": "black_inner",
+          "order": 1,
+          "class": "skin",
+          "from": "shoulder",
+          "to": "hips",
+          "hem": 0.95,
+          "ease": 3,
+          "closure": "none",
+          "material": "black_knit"
+        },
+        {
+          "name": "black_leggings",
+          "order": 2,
+          "class": "skin",
+          "from": "hips",
+          "to": "ankle",
+          "hem": 1,
+          "ease": 2,
+          "closure": "none",
+          "material": "legging_fabric"
+        },
+        {
+          "name": "pleated_skirt",
+          "order": 3,
+          "class": "loose",
+          "from": "hips",
+          "to": "knee",
+          "hem": 0.56,
+          "ease": 24,
+          "closure": "zip",
+          "material": "ivory_twill"
+        },
+        {
+          "name": "oversized_jacket",
+          "order": 4,
+          "class": "loose",
+          "from": "shoulder",
+          "to": "hip_joint",
+          "hem": 0.92,
+          "ease": 52,
+          "closure": "buttons",
+          "material": "ivory_cotton"
+        },
+        {
+          "name": "wide_sleeves",
+          "order": 5,
+          "class": "loose",
+          "from": "shoulder",
+          "to": "wrist",
+          "hem": 0.98,
+          "ease": 58,
+          "closure": "none",
+          "material": "ivory_cotton"
+        },
+        {
+          "name": "collar_ribbon",
+          "order": 6,
+          "class": "chain",
+          "from": "chin",
+          "to": "shoulder",
+          "hem": 0.85,
+          "ease": 8,
+          "closure": "wrap",
+          "material": "black_satin"
+        }
+      ]
+    },
+    "accessories": {
+      "items": [
+        {
+          "name": "left_braid_ribbon",
+          "kind": "ribbon",
+          "attach": "hair_tie",
+          "size": 75,
+          "material": "black_satin"
+        },
+        {
+          "name": "right_braid_ribbon",
+          "kind": "ribbon",
+          "attach": "hair_tie",
+          "size": 75,
+          "material": "black_satin"
+        },
+        {
+          "name": "back_hair_bow",
+          "kind": "hair_ornament",
+          "attach": "head_top",
+          "size": 145,
+          "material": "black_satin"
+        },
+        {
+          "name": "left_cat_ear",
+          "kind": "other",
+          "attach": "head_top",
+          "size": 112,
+          "material": "ear_fur"
+        },
+        {
+          "name": "right_cat_ear",
+          "kind": "other",
+          "attach": "head_top",
+          "size": 112,
+          "material": "ear_fur"
+        },
+        {
+          "name": "cat_tail",
+          "kind": "other",
+          "attach": "hips",
+          "size": 690,
+          "material": "tail_fur"
+        },
+        {
+          "name": "ankle_boots",
+          "kind": "footwear",
+          "attach": "sole",
+          "size": 245,
+          "sole": 12,
+          "heel": 28,
+          "material": "tan_leather"
+        },
+        {
+          "name": "jacket_buttons",
+          "kind": "other",
+          "attach": "shoulder",
+          "size": 14,
+          "material": "gold_metal"
+        }
+      ]
+    },
+    "materials": {
+      "items": [
+        {
+          "name": "skin_surface",
+          "class": "skin",
+          "colour": "porcelain_skin",
+          "roughness": 0.62,
+          "metallic": 0,
+          "shade_shift": 0.08,
+          "shade_softness": 0.48,
+          "outline": 0.35,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "skin"
+        },
+        {
+          "name": "hair_surface",
+          "class": "hair",
+          "colour": "silver_ash",
+          "roughness": 0.43,
+          "metallic": 0,
+          "shade_shift": 0.06,
+          "shade_softness": 0.5,
+          "outline": 0.35,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "hair"
+        },
+        {
+          "name": "iris_surface",
+          "class": "other",
+          "colour": "mist_blue",
+          "roughness": 0.18,
+          "metallic": 0,
+          "shade_shift": 0.12,
+          "shade_softness": 0.4,
+          "outline": 0.2,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "eyes"
+        },
+        {
+          "name": "black_knit",
+          "class": "fabric",
+          "colour": "charcoal_black",
+          "roughness": 0.82,
+          "metallic": 0,
+          "shade_shift": -0.05,
+          "shade_softness": 0.62,
+          "outline": 0.4,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "black_inner"
+        },
+        {
+          "name": "legging_fabric",
+          "class": "fabric",
+          "colour": "charcoal_black",
+          "roughness": 0.65,
+          "metallic": 0,
+          "shade_shift": -0.04,
+          "shade_softness": 0.55,
+          "outline": 0.3,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "black_leggings"
+        },
+        {
+          "name": "ivory_twill",
+          "class": "fabric",
+          "colour": "warm_ivory",
+          "roughness": 0.84,
+          "metallic": 0,
+          "shade_shift": 0.02,
+          "shade_softness": 0.58,
+          "outline": 0.45,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "pleated_skirt"
+        },
+        {
+          "name": "ivory_cotton",
+          "class": "fabric",
+          "colour": "soft_cream",
+          "roughness": 0.88,
+          "metallic": 0,
+          "shade_shift": 0.04,
+          "shade_softness": 0.52,
+          "outline": 0.48,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "oversized_jacket, wide_sleeves"
+        },
+        {
+          "name": "black_satin",
+          "class": "fabric",
+          "colour": "charcoal_black",
+          "roughness": 0.29,
+          "metallic": 0,
+          "shade_shift": 0.06,
+          "shade_softness": 0.76,
+          "outline": 0.35,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "collar_ribbon, left_braid_ribbon, right_braid_ribbon, back_hair_bow"
+        },
+        {
+          "name": "ear_fur",
+          "class": "hair",
+          "colour": "silver_ash",
+          "roughness": 0.9,
+          "metallic": 0,
+          "shade_shift": 0.04,
+          "shade_softness": 0.36,
+          "outline": 0.3,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "left_cat_ear, right_cat_ear"
+        },
+        {
+          "name": "tail_fur",
+          "class": "hair",
+          "colour": "silver_ash",
+          "roughness": 0.92,
+          "metallic": 0,
+          "shade_shift": 0.03,
+          "shade_softness": 0.38,
+          "outline": 0.35,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "cat_tail"
+        },
+        {
+          "name": "tan_leather",
+          "class": "leather",
+          "colour": "caramel_tan",
+          "roughness": 0.57,
+          "metallic": 0,
+          "shade_shift": -0.03,
+          "shade_softness": 0.64,
+          "outline": 0.5,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "ankle_boots"
+        },
+        {
+          "name": "gold_metal",
+          "class": "metal",
+          "colour": "muted_gold",
+          "roughness": 0.32,
+          "metallic": 0.92,
+          "shade_shift": 0.08,
+          "shade_softness": 0.72,
+          "outline": 0.25,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "jacket_buttons"
+        }
+      ]
+    },
+    "palette": {
+      "colours": [
+        {
+          "name": "porcelain_skin",
+          "srgb": "#f4ddd5"
+        },
+        {
+          "name": "silver_ash",
+          "srgb": "#c9bbb9"
+        },
+        {
+          "name": "mist_blue",
+          "srgb": "#8da9cb"
+        },
+        {
+          "name": "charcoal_black",
+          "srgb": "#29272d"
+        },
+        {
+          "name": "warm_ivory",
+          "srgb": "#e9e1d9"
+        },
+        {
+          "name": "soft_cream",
+          "srgb": "#f4eee7"
+        },
+        {
+          "name": "caramel_tan",
+          "srgb": "#b98b69"
+        },
+        {
+          "name": "muted_gold",
+          "srgb": "#c7a46c"
+        },
+        {
+          "name": "blush_pink",
+          "srgb": "#eab5b4"
+        },
+        {
+          "name": "shadow_mauve",
+          "srgb": "#998b9c"
+        }
+      ]
+    }
+  }
+}
