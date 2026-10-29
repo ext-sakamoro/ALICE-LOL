@@ -133,6 +133,7 @@ mod json_lite;
 
 // 設定画の組の Law (kind sheet): 埋めるべき情報を slot として宣言し、記入を検査する
 pub mod sheet_law;
+pub mod sheet_render;
 
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;

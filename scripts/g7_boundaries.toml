@@ -721,6 +721,16 @@ class = "local"
 reason = "takes this crate's own proportion laws by the aliases the sheet law uses, to read their parameter ranges; it carries no Law-bearing value of another crate"
 
 [[entry]]
+path = "alice_lol::sheet_law::SheetLaw::render"
+class = "authoring"
+reason = "reads the same filled sheet SheetLaw::check reads (JSON `sheet_fill 1` a person or a model writes) and draws nothing unless that check has no error; the proportion laws are this crate's own, taken by the sheet law's aliases. The pages it returns carry their page and set identifiers"
+
+[[entry]]
+path = "alice_lol::sheet_render::hex"
+class = "local"
+reason = "formats an identifier this crate computed (a page or set identifier) as lower-case hex for a log or a file name; it reads no value another program wrote"
+
+[[entry]]
 path = "alice_lol::proportion_law::ProportionLaw::from_file_with"
 class = "authoring"
 reason = "reads proportion law text a person or a model writes, given the laws its derive line may name; the law's identifier folds in the identifier of the law it derives from, so a different parent is a different law"

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="turnaround" data-scale="1:10.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">turnaround</text>
+<text x="12.000" y="22.000" font-size="3.000">stature 1.18 m</text>
+<text x="12.000" y="26.200" font-size="3.000">pose A</text>
+<text x="12.000" y="30.400" font-size="3.000">arm_angle 18 deg</text>
+<text x="12.000" y="34.600" font-size="3.000">views front_side_back</text>
+<text x="12.000" y="38.800" font-size="3.000">joint_marks false</text>
+<line class="guide" x1="60.000" y1="150.800" x2="360.000" y2="150.800"/>
+<text x="361.000" y="151.800" font-size="2.500">head_top</text>
+<line class="guide" x1="60.000" y1="163.443" x2="360.000" y2="163.443"/>
+<text x="361.000" y="164.443" font-size="2.500">eye_line</text>
+<line class="guide" x1="60.000" y1="170.818" x2="360.000" y2="170.818"/>
+<text x="361.000" y="171.818" font-size="2.500">chin</text>
+<line class="guide" x1="60.000" y1="173.979" x2="360.000" y2="173.979"/>
+<text x="361.000" y="174.979" font-size="2.500">shoulder</text>
+<line class="guide" x1="60.000" y1="201.371" x2="360.000" y2="201.371"/>
+<text x="361.000" y="202.371" font-size="2.500">hips</text>
+<line class="guide" x1="60.000" y1="203.479" x2="360.000" y2="203.479"/>
+<text x="361.000" y="204.479" font-size="2.500">hip_joint</text>
+<line class="guide" x1="60.000" y1="235.086" x2="360.000" y2="235.086"/>
+<text x="361.000" y="236.086" font-size="2.500">knee</text>
+<line class="guide" x1="60.000" y1="262.479" x2="360.000" y2="262.479"/>
+<text x="361.000" y="263.479" font-size="2.500">ankle</text>
+<line class="guide" x1="60.000" y1="268.800" x2="360.000" y2="268.800"/>
+<text x="361.000" y="269.800" font-size="2.500">sole</text>
+<polyline class="bone" points="115.479,173.979 128.765,178.296 141.531,182.443"/>
+<polyline class="bone" points="115.795,203.479 115.795,235.086 115.795,262.479 115.795,268.800"/>
+<polyline class="bone" points="104.521,173.979 91.235,178.296 78.469,182.443"/>
+<polyline class="bone" points="104.205,203.479 104.205,235.086 104.205,262.479 104.205,268.800"/>
+<rect class="box" x="102.625" y="150.800" width="14.750" height="20.018"/>
+<line class="bone" x1="104.205" y1="203.479" x2="115.795" y2="203.479"/>
+<polyline class="bone" points="110.000,201.371 110.000,173.979 110.000,170.818 110.000,150.800"/>
+<line class="bone" x1="104.521" y1="173.979" x2="115.479" y2="173.979"/>
+<rect class="box" x="114.795" y="268.300" width="2.000" height="1.700"/>
+<rect class="box" x="103.205" y="268.300" width="2.000" height="1.700"/>
+<text x="104.000" y="282.000" font-size="3.000">front</text>
+<polyline class="bone" points="210.000,173.979 210.000,178.296 210.000,182.443"/>
+<polyline class="bone" points="210.000,203.479 210.000,235.086 210.000,262.479 210.000,268.800"/>
+<polyline class="bone" points="210.000,173.979 210.000,178.296 210.000,182.443"/>
+<polyline class="bone" points="210.000,203.479 210.000,235.086 210.000,262.479 210.000,268.800"/>
+<rect class="box" x="202.625" y="150.800" width="14.750" height="20.018"/>
+<line class="bone" x1="210.000" y1="203.479" x2="210.000" y2="203.479"/>
+<polyline class="bone" points="210.000,201.371 210.000,173.979 210.000,170.818 210.000,150.800"/>
+<line class="bone" x1="210.000" y1="173.979" x2="210.000" y2="173.979"/>
+<rect class="box" x="209.000" y="268.300" width="2.000" height="1.700"/>
+<rect class="box" x="209.000" y="268.300" width="2.000" height="1.700"/>
+<text x="204.000" y="282.000" font-size="3.000">side</text>
+<polyline class="bone" points="304.521,173.979 291.235,178.296 278.469,182.443"/>
+<polyline class="bone" points="304.205,203.479 304.205,235.086 304.205,262.479 304.205,268.800"/>
+<polyline class="bone" points="315.479,173.979 328.765,178.296 341.531,182.443"/>
+<polyline class="bone" points="315.795,203.479 315.795,235.086 315.795,262.479 315.795,268.800"/>
+<rect class="box" x="302.625" y="150.800" width="14.750" height="20.018"/>
+<line class="bone" x1="315.795" y1="203.479" x2="304.205" y2="203.479"/>
+<polyline class="bone" points="310.000,201.371 310.000,173.979 310.000,170.818 310.000,150.800"/>
+<line class="bone" x1="315.479" y1="173.979" x2="304.521" y2="173.979"/>
+<rect class="box" x="303.205" y="268.300" width="2.000" height="1.700"/>
+<rect class="box" x="314.795" y="268.300" width="2.000" height="1.700"/>
+<text x="304.000" y="282.000" font-size="3.000">back</text>
+<line class="bone" x1="60.000" y1="270.000" x2="360.000" y2="270.000"/>
+</svg>

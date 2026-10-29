@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="hair" data-scale="1:5.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">hair</text>
+<text x="12.000" y="22.000" font-size="3.000">style_class twin_tails</text>
+<text x="12.000" y="26.200" font-size="3.000">length 0.42 eye_height</text>
+<text x="12.000" y="30.400" font-size="3.000">parting 0 deg</text>
+<text x="12.000" y="34.600" font-size="3.000">fringe short</text>
+<text x="12.000" y="38.800" font-size="3.000">curl_amplitude 9 mm</text>
+<text x="12.000" y="43.000" font-size="3.000">curl_pitch 35 mm</text>
+<text x="12.000" y="47.200" font-size="3.000">colour copper</text>
+<text x="12.000" y="51.400" font-size="3.000">material hair</text>
+<circle class="box" cx="130.000" cy="120.000" r="14.750"/>
+<text x="115.250" y="102.250" font-size="2.500">top</text>
+<line class="hem" x1="130.000" y1="120.000" x2="130.000" y2="134.750"/>
+<circle class="box" cx="300.000" cy="130.000" r="14.750"/>
+<circle class="joint" cx="143.860" cy="114.955" r="1.200"/>
+<circle class="joint" cx="303.443" cy="116.065" r="1.200"/>
+<line class="bone" x1="303.443" y1="116.065" x2="303.443" y2="179.279"/>
+<text x="12.000" y="200.000" font-size="2.500">height 0.85 fraction</text>
+<text x="54.000" y="200.000" font-size="2.500">azimuth 70 deg</text>
+<text x="96.000" y="200.000" font-size="2.500">length 0.3 eye_height</text>
+<text x="138.000" y="200.000" font-size="2.500">accessory left bobble</text>
+<circle class="joint" cx="116.140" cy="114.955" r="1.200"/>
+<circle class="joint" cx="303.443" cy="116.065" r="1.200"/>
+<line class="bone" x1="303.443" y1="116.065" x2="303.443" y2="179.279"/>
+<text x="12.000" y="204.000" font-size="2.500">height 0.85 fraction</text>
+<text x="54.000" y="204.000" font-size="2.500">azimuth -70 deg</text>
+<text x="96.000" y="204.000" font-size="2.500">length 0.3 eye_height</text>
+<text x="138.000" y="204.000" font-size="2.500">accessory right bobble</text>
+<polyline class="bone" points="220.000,60.000 221.703,61.383 221.102,62.766 219.010,64.148 218.257,65.531 219.861,66.914 221.653,68.297 221.209,69.680 219.129,71.063 218.228,72.445 219.723,73.828 221.593,75.211 221.308,76.594 219.253,77.977 218.209,79.359 219.587,80.742 221.524,82.125 221.399,83.508 219.382,84.891 218.200,86.273 219.453,87.656 221.446,89.039 221.482,90.422 219.514,91.805 218.203,93.188 219.323,94.570 221.359,95.953 221.557,97.336 219.649,98.719 218.216,100.102 219.196,101.484 221.264,102.867 221.622,104.250 219.786,105.633 218.240,107.016 219.075,108.398 221.161,109.781 221.677,111.164 219.924,112.547 218.274,113.930 218.958,115.313 221.052,116.695 221.722,118.078 220.063,119.461 218.318,120.844 218.848,122.227 220.936,123.609 221.758,124.992 220.202,126.375 218.373,127.758 218.745,129.141 220.815,130.523 221.782,131.906 220.339,133.289 218.437,134.672 218.649,136.055 220.689,137.438 221.796,138.820 220.474,140.203 218.510,141.586 218.562,142.969 220.559,144.352 221.800,145.734 220.606,147.117 218.593,148.500"/>
+<rect class="swatch" x="12.000" y="170.000" width="20.000" height="12.000" fill="#b5582a"/>
+</svg>

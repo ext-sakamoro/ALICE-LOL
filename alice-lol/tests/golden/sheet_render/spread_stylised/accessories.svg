@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="accessories" data-scale="1:10.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">accessories</text>
+<polyline class="bone" points="108.627,154.527 122.842,172.721 137.636,191.657"/>
+<polyline class="bone" points="107.964,194.345 107.964,231.509 107.964,262.036 107.964,270.000"/>
+<polyline class="bone" points="91.373,154.527 77.158,172.721 62.364,191.657"/>
+<polyline class="bone" points="92.036,194.345 92.036,231.509 92.036,262.036 92.036,270.000"/>
+<rect class="box" x="90.045" y="124.000" width="19.909" height="23.227"/>
+<line class="bone" x1="92.036" y1="194.345" x2="107.964" y2="194.345"/>
+<polyline class="bone" points="100.000,184.391 100.000,154.527 100.000,147.227 100.000,124.000"/>
+<line class="bone" x1="91.373" y1="154.527" x2="108.627" y2="154.527"/>
+<circle class="mark" cx="100.000" cy="124.000" r="1.000"/>
+<rect class="box" x="180.000" y="40.000" width="8.000" height="3.000"/>
+<text x="320.000" y="38.000" font-size="2.200">name braid cuff</text>
+<text x="320.000" y="40.600" font-size="2.200">kind hair_ornament</text>
+<text x="320.000" y="43.200" font-size="2.200">attach hair_tie</text>
+<text x="320.000" y="45.800" font-size="2.200">size 40 mm</text>
+<text x="320.000" y="48.400" font-size="2.200">material bronze</text>
+<circle class="mark" cx="100.000" cy="270.000" r="1.000"/>
+<rect class="box" x="180.000" y="62.000" width="42.000" height="3.000"/>
+<text x="320.000" y="60.000" font-size="2.200">name sandals</text>
+<text x="320.000" y="62.600" font-size="2.200">kind footwear</text>
+<text x="320.000" y="65.200" font-size="2.200">attach sole</text>
+<text x="320.000" y="67.800" font-size="2.200">size 210 mm</text>
+<text x="320.000" y="70.400" font-size="2.200">sole 6 mm</text>
+<text x="320.000" y="73.000" font-size="2.200">heel 0 mm</text>
+<text x="320.000" y="75.600" font-size="2.200">material leather</text>
+<line class="bone" x1="180.000" y1="285.000" x2="240.000" y2="285.000"/>
+<rect class="box" x="185.000" y="282.600" width="30.000" height="2.400"/>
+<rect class="box" x="215.000" y="282.600" width="10.000" height="2.400"/>
+<text x="245.000" y="279.000" font-size="2.500">sole 6 mm</text>
+<text x="245.000" y="283.000" font-size="2.500">heel 0 mm</text>
+<circle class="mark" cx="100.000" cy="184.391" r="1.000"/>
+<rect class="box" x="180.000" y="84.000" width="12.000" height="3.000"/>
+<text x="320.000" y="82.000" font-size="2.200">name lantern charm</text>
+<text x="320.000" y="84.600" font-size="2.200">kind jewellery</text>
+<text x="320.000" y="87.200" font-size="2.200">attach hips</text>
+<text x="320.000" y="89.800" font-size="2.200">size 60 mm</text>
+<text x="320.000" y="92.400" font-size="2.200">material lantern paper</text>
+</svg>

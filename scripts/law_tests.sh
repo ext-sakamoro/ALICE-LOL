@@ -51,6 +51,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test avatar_laws|"
   "alice-lol|--test sheet_law|"
   "alice-lol|--test three_view|"
+  "alice-lol|--test sheet_render|"
   "alice-lol-humanoid|--test measure_body|"
 )
 PHYSICS_TARGETS=(

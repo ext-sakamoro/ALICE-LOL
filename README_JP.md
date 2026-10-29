@@ -400,6 +400,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`three_view_check`](alice-lol/examples/three_view_check.rs) | 三面図の record (設定画で読んだ目印の高さと ±) を avatar の比率の Law で検査する: 導いた param の範囲、固定の値、同じ目印で食い違う view、目の高さの m `--json` は検査を JSON で出し、`--from-json` は JSON の目印から record を作る |
 | [`three_view_record`](alice-lol/examples/three_view_record.rs) | JSON の目印から三面図の record を正規の順で作る |
 | [`sheet_check`](alice-lol/examples/sheet_check.rs) | 埋めた設定画の組 (JSON) を sheet law (`kind sheet`、既定 `laws/avatar/sheet.law`) で検査し、空・型違い・範囲外・出どころの無い値を page と場所ごとに並べる `--json` は検査を JSON で出し、`--spec` と `--template` は law から作る仕様と空の雛形を出す |
+| [`sheet_render`](alice-lol/examples/sheet_render.rs) | 検査で error の無い設定画の組の記入を、page ごとの決定論の SVG (`<page>.svg`) と page・組の識別子 (`ids.txt`) に描く error があれば 1 枚も描かずに一覧を出し、warning は描いた上で出す |
 | [`rule_conformance`](alice-lol/examples/rule_conformance.rs) | `conformance/TASK.md` の契約を規則の Law (`kind machine` / `kind predicate` / `kind table` / `kind statute` / `kind procedure` / `kind contract` / `kind memory`) について `rule_law` で実装した CLI (生成した corpus で `conformance/score_rules.sh` が採点する) |
 | [`rule_set`](alice-lol/examples/rule_set.rs) | 版を持つ規則の集合 (`laws/demo-tax`: 最初の版と差分で書いた 2 つの版): `resolve_delta`、日付で効力のある版 (`RuleSet::evaluate_as_of`)、識別子で古い版 (`RuleSet::evaluate_edition`) |
 | [`intent_plan`](alice-lol/examples/intent_plan.rs) | scene の上の intent の計画: `walk` / `grasp` / `release` を `sequence` / `parallel` で組んだ `Program` を LOL の text で出す |

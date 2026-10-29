@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="hair" data-scale="1:5.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">hair</text>
+<text x="12.000" y="22.000" font-size="3.000">style_class short</text>
+<text x="12.000" y="26.200" font-size="3.000">length 0.12 eye_height</text>
+<text x="12.000" y="30.400" font-size="3.000">parting -25 deg</text>
+<text x="12.000" y="34.600" font-size="3.000">fringe none</text>
+<text x="12.000" y="38.800" font-size="3.000">curl_amplitude 0 mm</text>
+<text x="12.000" y="43.000" font-size="3.000">colour ash black</text>
+<text x="12.000" y="47.200" font-size="3.000">material hair</text>
+<circle class="box" cx="130.000" cy="120.000" r="15.237"/>
+<text x="114.763" y="101.763" font-size="2.500">top</text>
+<line class="hem" x1="130.000" y1="120.000" x2="123.560" y2="133.810"/>
+<circle class="box" cx="300.000" cy="130.000" r="15.237"/>
+<polyline class="bone" points="220.000,60.000 220.000,60.635 220.000,61.270 220.000,61.905 220.000,62.540 220.000,63.174 220.000,63.809 220.000,64.444 220.000,65.079 220.000,65.714 220.000,66.349 220.000,66.984 220.000,67.619 220.000,68.253 220.000,68.888 220.000,69.523 220.000,70.158 220.000,70.793 220.000,71.428 220.000,72.063 220.000,72.698 220.000,73.333 220.000,73.967 220.000,74.602 220.000,75.237 220.000,75.872 220.000,76.507 220.000,77.142 220.000,77.777 220.000,78.412 220.000,79.047 220.000,79.681 220.000,80.316 220.000,80.951 220.000,81.586 220.000,82.221 220.000,82.856 220.000,83.491 220.000,84.126 220.000,84.760 220.000,85.395 220.000,86.030 220.000,86.665 220.000,87.300 220.000,87.935 220.000,88.570 220.000,89.205 220.000,89.840 220.000,90.474 220.000,91.109 220.000,91.744 220.000,92.379 220.000,93.014 220.000,93.649 220.000,94.284 220.000,94.919 220.000,95.553 220.000,96.188 220.000,96.823 220.000,97.458 220.000,98.093 220.000,98.728 220.000,99.363 220.000,99.998 220.000,100.633"/>
+<rect class="swatch" x="12.000" y="170.000" width="20.000" height="12.000" fill="#26262a"/>
+</svg>

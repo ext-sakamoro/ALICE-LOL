@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="base_body" data-scale="1:10.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">base_body</text>
+<text x="12.000" y="22.000" font-size="3.000">family stylised</text>
+<text x="12.000" y="26.200" font-size="3.000">hips_y 0.645 eye_height</text>
+<text x="12.000" y="30.400" font-size="3.000">hip_drop 0.075 eye_height</text>
+<text x="12.000" y="34.600" font-size="3.000">hip_x 0.06 eye_height</text>
+<text x="12.000" y="38.800" font-size="3.000">knee 0.29 eye_height</text>
+<text x="12.000" y="43.000" font-size="3.000">shoulder_x 0.065 eye_height</text>
+<text x="12.000" y="47.200" font-size="3.000">arm 0.355 eye_height</text>
+<text x="12.000" y="51.400" font-size="3.000">elbow_split 0.49 fraction</text>
+<text x="12.000" y="55.600" font-size="3.000">face_length 0.075 eye_height</text>
+<text x="12.000" y="59.800" font-size="3.000">head_top 1.1 eye_height</text>
+<text x="12.000" y="64.000" font-size="3.000">shoulder 0.87 eye_height</text>
+<text x="12.000" y="68.200" font-size="3.000">skin_material fur</text>
+<line class="guide" x1="150.000" y1="124.000" x2="330.000" y2="124.000"/>
+<text x="331.000" y="125.000" font-size="2.500">head_top</text>
+<line class="guide" x1="150.000" y1="137.273" x2="330.000" y2="137.273"/>
+<text x="331.000" y="138.273" font-size="2.500">eye_line</text>
+<line class="guide" x1="150.000" y1="147.227" x2="330.000" y2="147.227"/>
+<text x="331.000" y="148.227" font-size="2.500">chin</text>
+<line class="guide" x1="150.000" y1="154.527" x2="330.000" y2="154.527"/>
+<text x="331.000" y="155.527" font-size="2.500">shoulder</text>
+<line class="guide" x1="150.000" y1="184.391" x2="330.000" y2="184.391"/>
+<text x="331.000" y="185.391" font-size="2.500">hips</text>
+<line class="guide" x1="150.000" y1="194.345" x2="330.000" y2="194.345"/>
+<text x="331.000" y="195.345" font-size="2.500">hip_joint</text>
+<line class="guide" x1="150.000" y1="231.509" x2="330.000" y2="231.509"/>
+<text x="331.000" y="232.509" font-size="2.500">knee</text>
+<line class="guide" x1="150.000" y1="262.036" x2="330.000" y2="262.036"/>
+<text x="331.000" y="263.036" font-size="2.500">ankle</text>
+<line class="guide" x1="150.000" y1="270.000" x2="330.000" y2="270.000"/>
+<text x="331.000" y="271.000" font-size="2.500">sole</text>
+<polyline class="bone" points="238.627,154.527 261.715,154.527 285.745,154.527"/>
+<polyline class="bone" points="237.964,194.345 237.964,231.509 237.964,262.036 237.964,270.000"/>
+<circle class="joint" cx="261.715" cy="154.527" r="1.200"/>
+<circle class="joint" cx="285.745" cy="154.527" r="1.200"/>
+<circle class="joint" cx="237.964" cy="194.345" r="1.200"/>
+<circle class="joint" cx="237.964" cy="231.509" r="1.200"/>
+<circle class="joint" cx="237.964" cy="262.036" r="1.200"/>
+<polyline class="bone" points="221.373,154.527 198.285,154.527 174.255,154.527"/>
+<polyline class="bone" points="222.036,194.345 222.036,231.509 222.036,262.036 222.036,270.000"/>
+<circle class="joint" cx="198.285" cy="154.527" r="1.200"/>
+<circle class="joint" cx="174.255" cy="154.527" r="1.200"/>
+<circle class="joint" cx="222.036" cy="194.345" r="1.200"/>
+<circle class="joint" cx="222.036" cy="231.509" r="1.200"/>
+<circle class="joint" cx="222.036" cy="262.036" r="1.200"/>
+<rect class="box" x="220.045" y="124.000" width="19.909" height="23.227"/>
+<line class="bone" x1="222.036" y1="194.345" x2="237.964" y2="194.345"/>
+<polyline class="bone" points="230.000,184.391 230.000,154.527 230.000,147.227 230.000,124.000"/>
+<line class="bone" x1="221.373" y1="154.527" x2="238.627" y2="154.527"/>
+<rect class="box" x="140.000" y="184.391" width="3.000" height="85.609"/>
+<text x="138.000" y="182.891" font-size="2.500">hips_y 0.645 eye_height</text>
+<rect class="box" x="126.000" y="231.509" width="3.000" height="38.491"/>
+<text x="124.000" y="230.009" font-size="2.500">knee 0.29 eye_height</text>
+<rect class="box" x="112.000" y="124.000" width="3.000" height="146.000"/>
+<text x="110.000" y="122.500" font-size="2.500">head_top 1.1 eye_height</text>
+<rect class="box" x="98.000" y="137.273" width="3.000" height="9.955"/>
+<text x="96.000" y="135.773" font-size="2.500">face_length 0.075 eye_height</text>
+<rect class="box" x="230.000" y="192.845" width="7.964" height="3.000"/>
+<text x="230.000" y="200.345" font-size="2.500">hip_x 0.06 eye_height</text>
+<rect class="box" x="230.000" y="153.027" width="8.627" height="3.000"/>
+<text x="230.000" y="160.527" font-size="2.500">shoulder_x 0.065 eye_height</text>
+</svg>

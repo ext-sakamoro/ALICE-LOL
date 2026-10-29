@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="anatomy" data-scale="1:10.000">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">anatomy</text>
+<polyline class="bone" points="118.627,154.527 132.842,172.721 147.636,191.657"/>
+<polyline class="bone" points="117.964,194.345 117.964,231.509 117.964,262.036 117.964,270.000"/>
+<polyline class="bone" points="101.373,154.527 87.158,172.721 72.364,191.657"/>
+<polyline class="bone" points="102.036,194.345 102.036,231.509 102.036,262.036 102.036,270.000"/>
+<rect class="box" x="100.045" y="124.000" width="19.909" height="23.227"/>
+<line class="bone" x1="102.036" y1="194.345" x2="117.964" y2="194.345"/>
+<polyline class="bone" points="110.000,184.391 110.000,154.527 110.000,147.227 110.000,124.000"/>
+<line class="bone" x1="101.373" y1="154.527" x2="118.627" y2="154.527"/>
+<line class="extra" x1="115.973" y1="124.000" x2="123.140" y2="114.444"/>
+<circle class="mark" cx="123.140" cy="114.444" r="0.800"/>
+<line class="extra" x1="104.027" y1="124.000" x2="96.860" y2="114.444"/>
+<circle class="mark" cx="96.860" cy="114.444" r="0.800"/>
+<text x="240.000" y="40.000" font-size="2.400">part ear</text>
+<text x="240.000" y="42.800" font-size="2.400">attach head_top</text>
+<text x="240.000" y="45.600" font-size="2.400">pair true</text>
+<text x="240.000" y="48.400" font-size="2.400">length 0.09 eye_height</text>
+<text x="240.000" y="51.200" font-size="2.400">material fur</text>
+<line class="extra" x1="110.000" y1="184.391" x2="159.375" y2="250.224"/>
+<circle class="mark" cx="159.375" cy="250.224" r="0.800"/>
+<text x="240.000" y="62.000" font-size="2.400">part tail</text>
+<text x="240.000" y="64.800" font-size="2.400">attach hips</text>
+<text x="240.000" y="67.600" font-size="2.400">pair false</text>
+<text x="240.000" y="70.400" font-size="2.400">length 0.62 eye_height</text>
+<text x="240.000" y="73.200" font-size="2.400">material fur</text>
+</svg>

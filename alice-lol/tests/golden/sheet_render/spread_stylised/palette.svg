@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420.000mm" height="297.000mm" viewBox="0 0 420.000 297.000" data-page="palette">
+<style>line,polyline{stroke:#222;stroke-width:0.35;fill:none}.guide{stroke:#999;stroke-width:0.2;stroke-dasharray:2 1.5}.bone{stroke:#222;stroke-width:0.6}.hem{stroke:#b04;stroke-width:0.5}.sleeve{stroke:#b04;stroke-width:1.6;stroke-opacity:0.5}.extra{stroke:#063;stroke-width:0.8}.joint{fill:#fff;stroke:#222;stroke-width:0.35}.box{fill:none;stroke:#444;stroke-width:0.3}.swatch{stroke:#222;stroke-width:0.3}.weave{stroke-width:0.4}.mark{fill:#222}text{font-family:sans-serif;fill:#222}</style>
+<text x="12.000" y="14.000" font-size="6.000">palette</text>
+<rect class="swatch" x="20.000" y="40.000" width="40.000" height="25.000" fill="#5f6b3a"/>
+<text x="20.000" y="70.000" font-size="2.500">moss</text>
+<text x="20.000" y="73.000" font-size="2.500">#5f6b3a</text>
+<rect class="swatch" x="85.000" y="40.000" width="40.000" height="25.000" fill="#e0b23a"/>
+<text x="85.000" y="70.000" font-size="2.500">gold</text>
+<text x="85.000" y="73.000" font-size="2.500">#e0b23a</text>
+<rect class="swatch" x="150.000" y="40.000" width="40.000" height="25.000" fill="#e8e0cc"/>
+<text x="150.000" y="70.000" font-size="2.500">bone</text>
+<text x="150.000" y="73.000" font-size="2.500">#e8e0cc</text>
+<rect class="swatch" x="215.000" y="40.000" width="40.000" height="25.000" fill="#5a3e2b"/>
+<text x="215.000" y="70.000" font-size="2.500">umber</text>
+<text x="215.000" y="73.000" font-size="2.500">#5a3e2b</text>
+<rect class="swatch" x="280.000" y="40.000" width="40.000" height="25.000" fill="#f08a3c"/>
+<text x="280.000" y="70.000" font-size="2.500">lantern</text>
+<text x="280.000" y="73.000" font-size="2.500">#f08a3c</text>
+</svg>
