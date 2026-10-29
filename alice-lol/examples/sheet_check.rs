@@ -25,16 +25,25 @@ fn load(path: &Path) -> Result<SheetLaw, String> {
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     let mut laws = Vec::new();
     for (alias, file) in &law.uses {
-        let p = dir.join(file);
-        let t = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-        laws.push((
-            alias.clone(),
-            ProportionLaw::from_file(&t).map_err(|e| format!("{}: {e}", p.display()))?,
-        ));
+        laws.push((alias.clone(), proportion(&dir.join(file))?));
     }
     let refs: Vec<(&str, &ProportionLaw)> = laws.iter().map(|(a, l)| (a.as_str(), l)).collect();
     law.resolve(&refs)?;
     Ok(law)
+}
+
+/// A proportion law file, with the law it derives from read first (relative to it)
+fn proportion(path: &Path) -> Result<ProportionLaw, String> {
+    let t = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let parent = match ProportionLaw::derives_from(&t) {
+        None => None,
+        Some((name, file)) => {
+            let dir = path.parent().unwrap_or_else(|| Path::new("."));
+            Some((name, proportion(&dir.join(file))?))
+        }
+    };
+    let given: Vec<(&str, &ProportionLaw)> = parent.iter().map(|(n, l)| (n.as_str(), l)).collect();
+    ProportionLaw::from_file_with(&t, &given).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn main() -> ExitCode {

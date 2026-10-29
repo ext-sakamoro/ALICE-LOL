@@ -1,18 +1,52 @@
 //! The avatar proportion laws of `laws/avatar`: they read, their outputs are the hand-computed
 //! values of their text, every corner of their parameter ranges keeps the body and the face in
-//! order, and together they hold at most 300 numbers.
+//! order or is refused by a `require` (counted per line and pinned), and together they hold at
+//! most 300 numbers. The stylised family derives from them: it holds the values measured on the
+//! drawn sheets that the reference family refuses, and keeps every output of the reference.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 #![allow(clippy::suboptimal_flops)]
 
 use std::path::Path;
 
+use alice_lol::motion_law::SampleError;
 use alice_lol::proportion_law::ProportionLaw;
 
+/// A law of `laws/avatar`, with the law it derives from read first (its file is relative)
 fn law(name: &str) -> ProportionLaw {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../laws/avatar")
         .join(name);
-    ProportionLaw::from_file(&std::fs::read_to_string(path).unwrap()).unwrap()
+    let text = std::fs::read_to_string(path).unwrap();
+    match ProportionLaw::derives_from(&text) {
+        None => ProportionLaw::from_file(&text).unwrap(),
+        Some((parent, file)) => {
+            let p = law(&file);
+            ProportionLaw::from_file_with(&text, &[(parent.as_str(), &p)]).unwrap()
+        }
+    }
+}
+
+/// Parameter values by name
+type Values = Vec<(String, f64)>;
+
+/// Binds every corner; returns the bound corners' values and how many each `require` refused
+/// (any other error fails)
+fn bind_corners(law: &ProportionLaw) -> (Vec<Values>, Vec<(String, usize)>) {
+    let mut refused: Vec<(String, usize)> = law.requires().map(|r| (r.to_owned(), 0)).collect();
+    let mut bound = Vec::new();
+    let cs = corners(law);
+    assert_eq!(cs.len(), 1 << law.params().len());
+    for c in cs {
+        let named: Vec<(&str, f64)> = c.iter().map(|(n, v)| (n.as_str(), *v)).collect();
+        match law.bind(&named) {
+            Ok(_) => bound.push(c),
+            Err(SampleError::Refused { require, .. }) => {
+                refused.iter_mut().find(|(r, _)| *r == require).unwrap().1 += 1;
+            }
+            Err(e) => panic!("{c:?}: {e}"),
+        }
+    }
+    (bound, refused)
 }
 
 fn hex(b: &[u8]) -> String {
@@ -58,7 +92,7 @@ fn the_body_law_reads_and_its_defaults_are_its_text() {
     assert_eq!(b.scalar("chin_to_eye"), Some(0.06));
     assert_eq!(
         hex(&law.law_id()),
-        "3bfd32c4577968e68c4cb643059f76e0221ba79bc0b9e8a17550f08026a81293"
+        "a8a66de2beb482bd5ff9aa682da92a1e274930be148b889be3b2afaa9dd960be"
     );
 }
 
@@ -73,15 +107,37 @@ fn the_face_law_reads_and_its_defaults_are_its_text() {
     assert_eq!(b.scalar("head_half_width"), Some(1.0));
     assert_eq!(
         hex(&law.law_id()),
-        "f13643d4aaf95441feb9bc8927365688e6e85593b765df49f06f4649439596b4"
+        "d4fc684c6bcb6b52dea6d09bf7bdf2e249cf17a0f92e7f9851b22f1f47b504bf"
     );
 }
 
 #[test]
 fn every_corner_of_the_body_keeps_the_body_in_order() {
-    let law = law("body.law");
-    let cs = corners(&law);
-    assert_eq!(cs.len(), 1 << law.params().len());
+    for (file, refused) in [("body.law", [0, 0, 0]), ("body_stylised.law", [0, 0, 0])] {
+        let law = law(file);
+        let (cs, r) = bind_corners(&law);
+        assert_eq!(
+            r,
+            [
+                "knee <= hip_joint",
+                "hip_joint <= shoulder",
+                "chin_y <= head_top"
+            ]
+            .iter()
+            .zip(refused)
+            .map(|(n, k)| ((*n).to_owned(), k))
+            .collect::<Vec<_>>(),
+            "{file}"
+        );
+        assert_eq!(
+            cs.len(),
+            (1 << law.params().len()) - refused.iter().sum::<usize>()
+        );
+        every_body_corner_in_order(&law, cs);
+    }
+}
+
+fn every_body_corner_in_order(law: &ProportionLaw, cs: Vec<Vec<(String, f64)>>) {
     for c in cs {
         let named: Vec<(&str, f64)> = c.iter().map(|(n, v)| (n.as_str(), *v)).collect();
         let b = law.bind(&named).unwrap();
@@ -108,9 +164,30 @@ fn every_corner_of_the_body_keeps_the_body_in_order() {
 
 #[test]
 fn every_corner_of_the_face_keeps_the_face_in_order() {
-    let law = law("face.law");
-    let cs = corners(&law);
-    assert_eq!(cs.len(), 1 << law.params().len());
+    for (file, refused) in [("face.law", [0, 0]), ("face_stylised.law", [0, 0])] {
+        let law = law(file);
+        let (cs, r) = bind_corners(&law);
+        assert_eq!(
+            r,
+            [
+                "1 + eye_height / 2 <= brow_y",
+                "mouth_y <= 1 - eye_height / 2"
+            ]
+            .iter()
+            .zip(refused)
+            .map(|(n, k)| ((*n).to_owned(), k))
+            .collect::<Vec<_>>(),
+            "{file}"
+        );
+        assert_eq!(
+            cs.len(),
+            (1 << law.params().len()) - refused.iter().sum::<usize>()
+        );
+        every_face_corner_in_order(&law, cs);
+    }
+}
+
+fn every_face_corner_in_order(law: &ProportionLaw, cs: Vec<Vec<(String, f64)>>) {
     for c in cs {
         let named: Vec<(&str, f64)> = c.iter().map(|(n, v)| (n.as_str(), *v)).collect();
         let b = law.bind(&named).unwrap();
@@ -156,4 +233,83 @@ fn the_avatar_laws_hold_at_most_300_numbers() {
     }
     assert!(files >= 2, "{files} law files read");
     assert!(numbers > 0 && numbers <= 300, "{numbers} numbers");
+}
+
+/// The values measured on the two drawn sheets (eye heights for the body, chin-to-eye
+/// distances for the face; the knee with its +0.021 correction)
+const SHEET_BODY: [&[(&str, f64)]; 2] = [
+    &[("knee", 0.293), ("face_length", 0.068)],
+    &[("knee", 0.352), ("face_length", 0.069), ("shoulder", 0.878)],
+];
+const SHEET_FACE: [&[(&str, f64)]; 2] = [
+    &[("eye_height", 0.52), ("brow_y", 1.4), ("mouth_y", 0.42)],
+    &[("mouth_y", 0.316)],
+];
+
+#[test]
+fn the_stylised_family_holds_the_drawn_sheets_the_reference_refuses() {
+    let (body, body_s) = (law("body.law"), law("body_stylised.law"));
+    let (face, face_s) = (law("face.law"), law("face_stylised.law"));
+    assert_eq!(body_s.derived_from(), Some("avatar_body"));
+    assert_eq!(face_s.derived_from(), Some("avatar_face"));
+    for v in SHEET_BODY {
+        assert!(body_s.bind(v).is_ok(), "{v:?}");
+    }
+    for v in SHEET_FACE {
+        assert!(face_s.bind(v).is_ok(), "{v:?}");
+    }
+    // the reference family refuses sheet A's knee by its range, and has no shoulder parameter
+    assert!(
+        matches!(body.bind(SHEET_BODY[0]), Err(SampleError::ParamOutOfRange { name }) if name == "knee")
+    );
+    assert!(matches!(
+        body.bind(&[("shoulder", 0.878)]),
+        Err(SampleError::UnknownParam(_))
+    ));
+    assert!(
+        matches!(face.bind(SHEET_FACE[0]), Err(SampleError::ParamOutOfRange { name }) if name == "eye_height")
+    );
+    // sheet B's mouth is inside both
+    assert!(face.bind(SHEET_FACE[1]).is_ok());
+    // the shoulder of a drawn body moves the arm's points; the reference keeps 0.9
+    let b = body_s.bind(&[("shoulder", 0.878)]).unwrap();
+    assert_eq!(b.point("wrist_l").unwrap()[1], 0.878);
+    assert_eq!(body.bind(&[]).unwrap().point("wrist_l").unwrap()[1], 0.9);
+    // the parameters the sheets did not measure keep the reference's range and default
+    for (r, s) in [(&body, &body_s), (&face, &face_s)] {
+        for p in r.params() {
+            let q = s.params().iter().find(|q| q.name == p.name).unwrap();
+            let measured = ["knee", "face_length", "eye_height", "brow_y", "mouth_y"]
+                .contains(&p.name.as_str());
+            assert_eq!(q == p, !measured, "{}", p.name);
+        }
+    }
+}
+
+#[test]
+#[allow(clippy::many_single_char_names)] // r reference, s / d derived, a / b bound, f face
+fn a_derived_law_has_every_output_of_its_reference() {
+    for (r, s) in [
+        ("body.law", "body_stylised.law"),
+        ("face.law", "face_stylised.law"),
+    ] {
+        let (r, s) = (law(r), law(s));
+        let (ro, so): (Vec<&str>, Vec<&str>) =
+            (r.output_names().collect(), s.output_names().collect());
+        assert_eq!(so[..ro.len()], ro[..]);
+        assert!(r.requires().eq(s.requires().take(r.requires().count())));
+    }
+    // where the ranges overlap the two bodies are the same body: the values below are inside
+    // both (knee 0.345, face_length 0.065), the drawn shoulder set to the reference's 0.9
+    let (r, d) = (law("body.law"), law("body_stylised.law"));
+    let both = [("knee", 0.345), ("face_length", 0.065)];
+    let a = r.bind(&both).unwrap();
+    let b = d.bind(&[both[0], both[1], ("shoulder", 0.9)]).unwrap();
+    assert!(a.outputs().eq(b.outputs()));
+    // the faces do not overlap in eye_height: the drawn face's own defaults, by hand
+    let face_s = law("face_stylised.law");
+    let f = face_s.bind(&[]).unwrap();
+    assert_eq!(f.point("eye_size"), Some([0.67, 0.52, 0.0]));
+    assert_eq!(f.point("brow_outer_l"), Some([0.65, 1.4, 0.0]));
+    assert_eq!(f.point("mouth"), Some([0.0, 0.37, 0.0]));
 }

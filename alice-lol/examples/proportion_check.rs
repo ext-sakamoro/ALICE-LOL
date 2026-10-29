@@ -1,4 +1,5 @@
-//! Read a proportion law and print its outputs for the given parameter values
+//! Read a proportion law and print its outputs for the given parameter values (a law with a
+//! `derive` line is read with the law it derives from, its file relative to the law's)
 //!
 //! ```text
 //! proportion_check <law file> [--param name=value]...         # the outputs, as numbers and bits
@@ -66,6 +67,20 @@ fn bind<'a>(
         .map_err(|e| e.to_string())
 }
 
+/// A proportion law file, with the law it derives from read first (relative to it)
+fn read_law(path: &std::path::Path) -> Result<ProportionLaw, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let parent = match ProportionLaw::derives_from(&text) {
+        None => None,
+        Some((name, file)) => {
+            let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+            Some((name, read_law(&dir.join(file))?))
+        }
+    };
+    let given: Vec<(&str, &ProportionLaw)> = parent.iter().map(|(n, l)| (n.as_str(), l)).collect();
+    ProportionLaw::from_file_with(&text, &given).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 fn usage() -> ExitCode {
     eprintln!("usage: proportion_check <law file> [--ref] [--param name=value]... | --semantics");
     ExitCode::from(2)
@@ -102,14 +117,11 @@ fn main() -> ExitCode {
             _ => return usage(),
         }
     }
-    let text = match std::fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("{path}: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    let law = match ProportionLaw::from_file(&text) {
+    if let Err(e) = std::fs::metadata(path) {
+        eprintln!("{path}: {e}");
+        return ExitCode::from(2);
+    }
+    let law = match read_law(std::path::Path::new(path)) {
         Ok(l) => l,
         Err(e) => {
             println!("{e}");
@@ -118,6 +130,12 @@ fn main() -> ExitCode {
     };
     let named: Vec<(&str, f64)> = values.iter().map(|(n, v)| (n.as_str(), *v)).collect();
     println!("law {} id {}", law.name(), hex(&law.law_id()));
+    if let Some(p) = law.derived_from() {
+        println!("derives from {p}");
+    }
+    for r in law.requires() {
+        println!("require {r}");
+    }
     println!(
         "outputs {}",
         law.output_names().collect::<Vec<_>>().join(" ")

@@ -10,6 +10,7 @@
       "joint_marks": null
     },
     "base_body": {
+      "family": null,
       "hips_y": null,
       "hip_drop": null,
       "hip_x": null,
@@ -19,6 +20,7 @@
       "elbow_split": null,
       "face_length": null,
       "head_top": null,
+      "shoulder": null,
       "skin_material": null
     },
     "face": {

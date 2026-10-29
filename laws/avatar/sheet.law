@@ -7,6 +7,10 @@ claim a slot is filled with a value of its type inside its range or vocabulary; 
 claim pending marks a slot that exists here before the part law that should own it as a knob has it
 uses avatar_body body.law
 uses avatar_face face.law
+uses avatar_body_stylised body_stylised.law
+uses avatar_face_stylised face_stylised.law
+family base_body.family reference: body=avatar_body face=avatar_face
+family base_body.family stylised: body=avatar_body_stylised face=avatar_face_stylised
 chain body head_top chin shoulder hips hip_joint knee ankle sole
 chain arm shoulder elbow wrist
 
@@ -18,27 +22,29 @@ slot turnaround.views enum vocab front_side_back required source authored : the 
 slot turnaround.joint_marks bool required source authored : the elbows, wrists, hip joints, knees and ankles are marked (they cannot be read from a silhouette)
 
 page base_body: the body's proportions, in eye heights above the sole
-slot base_body.hips_y number unit eye_height range law avatar_body.hips_y required source law:avatar_body.hips_y : height of the hips
-slot base_body.hip_drop number unit eye_height range law avatar_body.hip_drop required source law:avatar_body.hip_drop : the hip joints below the hips
-slot base_body.hip_x number unit eye_height range law avatar_body.hip_x required source law:avatar_body.hip_x : the hip joint's distance from the centre line
-slot base_body.knee number unit eye_height range law avatar_body.knee required source law:avatar_body.knee : height of the knee joint
-slot base_body.shoulder_x number unit eye_height range law avatar_body.shoulder_x required source law:avatar_body.shoulder_x : the shoulder joint's distance from the centre line
-slot base_body.arm number unit eye_height range law avatar_body.arm required source law:avatar_body.arm : shoulder to wrist
-slot base_body.elbow_split number unit fraction range law avatar_body.elbow_split required source law:avatar_body.elbow_split : the elbow's place along the arm, from the shoulder
-slot base_body.face_length number unit eye_height range law avatar_body.face_length required source law:avatar_body.face_length : the chin below the eyes
-slot base_body.head_top number unit eye_height range law avatar_body.head_top required source law:avatar_body.head_top : the top of the skull, without hair
+slot base_body.family enum vocab reference|stylised required source authored : which body and face laws give the ranges: reference = bodies measured in 3D (the proportions of a lifelike figure), stylised = drawn sheets with a large head and large eyes (a lower knee, a lower shoulder, taller eyes and a higher brow)
+slot base_body.hips_y number unit eye_height range law body.hips_y required source law:body.hips_y : height of the hips
+slot base_body.hip_drop number unit eye_height range law body.hip_drop required source law:body.hip_drop : the hip joints below the hips
+slot base_body.hip_x number unit eye_height range law body.hip_x required source law:body.hip_x : the hip joint's distance from the centre line
+slot base_body.knee number unit eye_height range law body.knee required source law:body.knee : height of the knee joint
+slot base_body.shoulder_x number unit eye_height range law body.shoulder_x required source law:body.shoulder_x : the shoulder joint's distance from the centre line
+slot base_body.arm number unit eye_height range law body.arm required source law:body.arm : shoulder to wrist
+slot base_body.elbow_split number unit fraction range law body.elbow_split required source law:body.elbow_split : the elbow's place along the arm, from the shoulder
+slot base_body.face_length number unit eye_height range law body.face_length required source law:body.face_length : the chin below the eyes
+slot base_body.head_top number unit eye_height range law body.head_top required source law:body.head_top : the top of the skull, without hair
+slot base_body.shoulder number unit eye_height range law body.shoulder required when family=stylised source law:body.shoulder : height of the shoulder joints (the reference family fixes it at 0.9)
 slot base_body.skin_material ref materials.items.name required source authored : what the skin is made of
 
 page face: the face from the front and the side, in chin-to-eye distances, and its expressions
-slot face.eye_width number unit chin_eye range law avatar_face.eye_width required source law:avatar_face.eye_width : width of one eye
-slot face.eye_height number unit chin_eye range law avatar_face.eye_height required source law:avatar_face.eye_height : height of one eye
-slot face.eye_recess number unit chin_eye range law avatar_face.eye_recess required source law:avatar_face.eye_recess : how far the eyes sit behind the front of the face
-slot face.brow_y number unit chin_eye range law avatar_face.brow_y required source law:avatar_face.brow_y : height of the brows
-slot face.brow_inner number unit chin_eye range law avatar_face.brow_inner required source law:avatar_face.brow_inner : the inner end of a brow from the centre line
-slot face.brow_outer number unit chin_eye range law avatar_face.brow_outer required source law:avatar_face.brow_outer : the outer end of a brow from the centre line
-slot face.mouth_y number unit chin_eye range law avatar_face.mouth_y required source law:avatar_face.mouth_y : height of the mouth
-slot face.mouth_width number unit chin_eye range law avatar_face.mouth_width required source law:avatar_face.mouth_width : width of the mouth
-slot face.depth number unit chin_eye range law avatar_face.depth required source law:avatar_face.depth : depth of the head, front to back
+slot face.eye_width number unit chin_eye range law face.eye_width required source law:face.eye_width : width of one eye
+slot face.eye_height number unit chin_eye range law face.eye_height required source law:face.eye_height : height of one eye
+slot face.eye_recess number unit chin_eye range law face.eye_recess required source law:face.eye_recess : how far the eyes sit behind the front of the face
+slot face.brow_y number unit chin_eye range law face.brow_y required source law:face.brow_y : height of the brows
+slot face.brow_inner number unit chin_eye range law face.brow_inner required source law:face.brow_inner : the inner end of a brow from the centre line
+slot face.brow_outer number unit chin_eye range law face.brow_outer required source law:face.brow_outer : the outer end of a brow from the centre line
+slot face.mouth_y number unit chin_eye range law face.mouth_y required source law:face.mouth_y : height of the mouth
+slot face.mouth_width number unit chin_eye range law face.mouth_width required source law:face.mouth_width : width of the mouth
+slot face.depth number unit chin_eye range law face.depth required source law:face.depth : depth of the head, front to back
 slot face.eye_colour ref palette.colours.name required source authored : the iris colour
 slot face.iris_material ref materials.items.name required source authored : what the irises are made of (how they shine)
 group face.expressions min 1 max 16 : expressions drawn on the face page

@@ -96,6 +96,9 @@ pub struct Slot {
     pub range: Option<(f64, f64)>,
     /// `range law <alias>.<param>`: where the range comes from
     pub range_law: Option<(String, String)>,
+    /// For a `range law` through a family alias: the range of each family (value of the family
+    /// slot, range), once resolved; the check takes the one the fill names
+    pub family_ranges: Vec<(String, (f64, f64))>,
     pub required: bool,
     pub when: Option<When>,
     pub source: String,
@@ -131,6 +134,16 @@ pub enum Rule {
     Unique(String, String, String, String),
 }
 
+/// A `family` line: when the fill's family slot has `value`, each alias names that used law
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Family {
+    /// the enum slot that names the family (`page.slot`)
+    pub slot: String,
+    pub value: String,
+    /// (alias, used law)
+    pub laws: Vec<(String, String)>,
+}
+
 /// A page of the set
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page {
@@ -144,6 +157,9 @@ pub struct SheetLaw {
     pub name: String,
     pub claims: Vec<String>,
     pub uses: Vec<(String, String)>,
+    /// `family <page.slot> <value>: <alias>=<law> …`: which used law each alias names when
+    /// the fill's family slot has that value
+    pub families: Vec<Family>,
     pub pages: Vec<Page>,
     pub slots: Vec<Slot>,
     pub groups: Vec<Group>,
@@ -227,6 +243,7 @@ fn options(
         unit: None,
         range: None,
         range_law: None,
+        family_ranges: Vec::new(),
         required: false,
         when: None,
         source: String::new(),
@@ -373,6 +390,7 @@ impl SheetLaw {
             name,
             claims: Vec::new(),
             uses: Vec::new(),
+            families: Vec::new(),
             pages: Vec::new(),
             slots: Vec::new(),
             groups: Vec::new(),
@@ -402,6 +420,39 @@ impl SheetLaw {
                 }
                 "uses" if w.len() == 3 && ident(w[1]) => {
                     law.uses.push((w[1].to_owned(), w[2].to_owned()));
+                }
+                "family" => {
+                    let (head, map) = l[7..]
+                        .split_once(':')
+                        .ok_or_else(|| lerr(n, "family <page.slot> <value>: <alias>=<law> …"))?;
+                    let head: Vec<&str> = head.split_whitespace().collect();
+                    let [slot, value] = head[..] else {
+                        return Err(lerr(n, "family <page.slot> <value>: <alias>=<law> …"));
+                    };
+                    let mut laws = Vec::new();
+                    for pair in map.split_whitespace() {
+                        let Some((a, l)) =
+                            pair.split_once('=').filter(|(a, l)| ident(a) && ident(l))
+                        else {
+                            return Err(lerr(n, format!("family: `{pair}` is not <alias>=<law>")));
+                        };
+                        laws.push((a.to_owned(), l.to_owned()));
+                    }
+                    if laws.is_empty() {
+                        return Err(lerr(n, "family: at least one <alias>=<law>"));
+                    }
+                    if law
+                        .families
+                        .iter()
+                        .any(|f| f.slot == slot && f.value == value)
+                    {
+                        return Err(lerr(n, format!("family {slot} {value} given twice")));
+                    }
+                    law.families.push(Family {
+                        slot: slot.to_owned(),
+                        value: value.to_owned(),
+                        laws,
+                    });
                 }
                 "page" => {
                     let (pname, purpose) = l[5..]
@@ -537,16 +588,96 @@ impl SheetLaw {
                 }
             }
             if let Some((a, _)) = &s.range_law {
-                if !law.uses.iter().any(|(u, _)| u == a) {
+                if !law.uses.iter().any(|(u, _)| u == a) && !law.family_aliases().any(|x| x == a) {
                     return Err(lerr(
                         0,
-                        format!("{}: range law `{a}` is not in uses", s.path()),
+                        format!(
+                            "{}: range law `{a}` is neither in uses nor a family alias",
+                            s.path()
+                        ),
                     ));
                 }
             }
         }
+        law.check_families()?;
         law.check_rule_names()?;
         Ok(law)
+    }
+
+    fn family_aliases(&self) -> impl Iterator<Item = &str> {
+        self.families
+            .first()
+            .into_iter()
+            .flat_map(|f| f.laws.iter().map(|(a, _)| a.as_str()))
+    }
+
+    /// The families name one enum slot, cover its vocabulary once, map the same aliases, and
+    /// name used laws; an alias is not also a used law's name
+    fn check_families(&self) -> Result<(), SheetLawError> {
+        let Some(first) = self.families.first() else {
+            return Ok(());
+        };
+        let bad = |why: String| Err(lerr(0, format!("family: {why}")));
+        let Some(slot) = self
+            .slots
+            .iter()
+            .find(|s| s.path() == first.slot && s.group.is_none())
+        else {
+            return bad(format!("`{}` is not a slot of a page", first.slot));
+        };
+        let SlotType::Enum(vocab) = &slot.ty else {
+            return bad(format!("`{}` is not an enum", first.slot));
+        };
+        let aliases: Vec<&str> = first.laws.iter().map(|(a, _)| a.as_str()).collect();
+        for f in &self.families {
+            if f.slot != first.slot {
+                return bad(format!(
+                    "every family line names the same slot (`{}`, `{}`)",
+                    first.slot, f.slot
+                ));
+            }
+            if !vocab.contains(&f.value) {
+                return bad(format!(
+                    "`{}` is not in the vocabulary of `{}`",
+                    f.value, f.slot
+                ));
+            }
+            if f.laws.iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>() != aliases {
+                return bad(format!(
+                    "`{}` maps other aliases than `{}`",
+                    f.value, first.value
+                ));
+            }
+            for (a, l) in &f.laws {
+                if !self.uses.iter().any(|(u, _)| u == l) {
+                    return bad(format!("`{a}={l}`: `{l}` is not in uses"));
+                }
+                if self.uses.iter().any(|(u, _)| u == a) {
+                    return bad(format!("`{a}` is both a family alias and a used law"));
+                }
+            }
+        }
+        if let Some(v) = vocab
+            .iter()
+            .find(|v| !self.families.iter().any(|f| f.value == **v))
+        {
+            return bad(format!("`{v}` of `{}` has no family line", first.slot));
+        }
+        Ok(())
+    }
+
+    /// The law as the check reads it for one family (`None`: the fill names none, and no
+    /// family range is applied)
+    fn for_family(&self, value: Option<&str>) -> Self {
+        let mut l = self.clone();
+        for s in &mut l.slots {
+            if !s.family_ranges.is_empty() {
+                s.range = value
+                    .and_then(|v| s.family_ranges.iter().find(|(x, _)| x == v))
+                    .map(|(_, r)| *r);
+            }
+        }
+        l
     }
 
     /// Every name a plausibility rule reads exists, with the type the rule reads it as: a
@@ -611,7 +742,38 @@ impl SheetLaw {
     ///
     /// When an alias has no law, or the law has no such parameter.
     pub fn resolve(&mut self, laws: &[(&str, &ProportionLaw)]) -> Result<(), String> {
+        let families = self.families.clone();
         for s in &mut self.slots {
+            if let Some((a, p)) = s
+                .range_law
+                .clone()
+                .filter(|(a, _)| families.iter().any(|f| f.laws.iter().any(|(x, _)| x == a)))
+            {
+                s.family_ranges.clear();
+                for f in &families {
+                    let l = f.laws.iter().find(|(x, _)| *x == a).map_or(&a, |(_, l)| l);
+                    let law = laws
+                        .iter()
+                        .find(|(x, _)| x == l)
+                        .ok_or_else(|| format!("{}: no law given for `{l}`", s.path()))?
+                        .1;
+                    if let Some(q) = law.params().iter().find(|q| q.name == p) {
+                        s.family_ranges.push((f.value.clone(), (q.lo, q.hi)));
+                    } else {
+                        // a parameter only some families have: the slot is asked only for them
+                        {
+                            let field = f.slot.rsplit_once('.').map_or("", |(_, x)| x);
+                            let only_others = s.page
+                                == f.slot.split('.').next().unwrap_or_default()
+                                && matches!(&s.when, Some(When::Eq(w, v)) if w == field && *v != f.value);
+                            if !only_others {
+                                return Err(format!("{}: {l} has no parameter `{p}` (ask it only when {} is not {})", s.path(), f.slot, f.value));
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
             if let Some((a, p)) = &s.range_law {
                 let law = laws
                     .iter()
@@ -884,9 +1046,60 @@ impl SheetLaw {
     /// # Errors
     ///
     /// When the text is not JSON in the accepted subset, or not a `sheet_fill 1` for this law.
+    pub fn check(&self, fill: &str) -> Result<SheetCheck, String> {
+        let Some(family) = self.families.first() else {
+            return self.check_for_family(fill);
+        };
+        // the ranges of the family the fill names (none when it names none: the family slot
+        // is then listed as missing or wrong, and no family range is judged)
+        let J::Obj(root) = parse_json(fill)? else {
+            return Err("the fill must be a JSON object".into());
+        };
+        let (page, field) = family.slot.split_once('.').unwrap_or_default();
+        let value = match get(&root, "pages") {
+            Some(J::Obj(p)) => match get(p, page) {
+                Some(J::Obj(o)) => match get(o, field) {
+                    Some(J::Str(v)) => Some(v.clone()),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+        let mut c = self.for_family(value.as_deref()).check_for_family(fill)?;
+        // a value for a slot this family's laws have no parameter for is not used: listed
+        if let Some(v) = &value {
+            for slot in self
+                .slots
+                .iter()
+                .filter(|s| s.group.is_none() && !s.family_ranges.is_empty())
+            {
+                let given = match get(&root, "pages") {
+                    Some(J::Obj(p)) => {
+                        matches!(get(p, &slot.page), Some(J::Obj(o)) if get(o, &slot.name).is_some_and(|x| !matches!(x, J::Null)))
+                    }
+                    _ => false,
+                };
+                if given && !slot.family_ranges.iter().any(|(f, _)| f == v) {
+                    c.warnings.push(Finding {
+                        page: slot.page.clone(),
+                        path: slot.path(),
+                        problem: Problem::NotUsed(format!(
+                            "{} ({}: {v})",
+                            slot.path(),
+                            family.slot
+                        )),
+                        slot: None,
+                    });
+                }
+            }
+        }
+        Ok(c)
+    }
+
     #[allow(clippy::too_many_lines)] // pages, then groups, then references, then rules
     #[allow(clippy::many_single_char_names)] // f findings, p page, g group, o item, s slot, v value, r rule
-    pub fn check(&self, fill: &str) -> Result<SheetCheck, String> {
+    fn check_for_family(&self, fill: &str) -> Result<SheetCheck, String> {
         let J::Obj(root) = parse_json(fill)? else {
             return Err("the fill must be a JSON object".into());
         };
@@ -1957,6 +2170,15 @@ fn page_of(group: &str) -> String {
 // ── generated documents ─────────────────────────────────────────────────────────────────────
 
 fn range_text(s: &Slot) -> String {
+    if let (false, Some((a, p))) = (s.family_ranges.is_empty(), &s.range_law) {
+        return s
+            .family_ranges
+            .iter()
+            .map(|(v, (lo, hi))| format!("{v}: {lo} – {hi}"))
+            .collect::<Vec<_>>()
+            .join("; ")
+            + &format!(" (from {a}.{p})");
+    }
     match (s.range, &s.range_law) {
         (Some((lo, hi)), Some((a, p))) => format!("{lo} – {hi} (from {a}.{p})"),
         (Some((lo, hi)), None) => format!("{lo} – {hi}"),
@@ -2000,6 +2222,22 @@ impl SheetLaw {
              A value you cannot decide is `null`: it will be listed as missing, which is better than a guess.\n",
             self.name
         );
+        if let Some(first) = self.families.first() {
+            let _ = writeln!(
+                s,
+                "Families: `{}` chooses the laws the ranges come from, and a range column lists each family's range. Choose the family from the idea, then use that family's whole range.",
+                first.slot
+            );
+            for f in &self.families {
+                let laws: Vec<String> = f
+                    .laws
+                    .iter()
+                    .map(|(a, l)| format!("`{a}` = `{l}`"))
+                    .collect();
+                let _ = writeln!(s, "- `{}`: {}", f.value, laws.join(", "));
+            }
+            s.push('\n');
+        }
         s.push_str("Units: `eye_height` = the height of the eyes above the sole is 1; `chin_eye` = the distance from the chin to the eye line is 1; `fraction` = 0 to 1; `m`, `mm`, `deg`, `ratio` as usual.\n\n");
         s.push_str("A file (`asset`) is an object: `{\"file\": \"name.png\", \"format\": \"png\", \"width\": 1024, \"height\": 1024, \"colour_space\": \"srgb\", \"provenance\": {\"source\": \"…\", \"licence\": \"…\", \"author\": \"…\", \"terms_sha256\": \"<64 hex digits of the licence text>\"}}`; formats: ");
         let _ = writeln!(s, "{}.\n", ASSET_FORMATS.join(", "));
