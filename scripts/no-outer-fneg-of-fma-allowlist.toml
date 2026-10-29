@@ -5,8 +5,8 @@
 # check finds in every scanned file / in the library code of src/ (items under #[test] or
 # a cfg that holds only under test are not library code). Both must equal what it finds:
 # update them in the commit that adds or removes a call (a repository without any declares 0).
-expected-fma-calls = 416
-expected-src-fma-calls = 323
+expected-fma-calls = 418
+expected-src-fma-calls = 325
 
 # [[ir]]: per target and package, the floor of fma-family calls in the optimised IR
 # (scripts/fneg_fma_ir_check.py --write-floor, run on the CI host class). Fewer fails,
