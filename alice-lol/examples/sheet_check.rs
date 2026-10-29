@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! sheet_check <filled.json>                  # the Japanese report (default law: laws/avatar/sheet.law)
-//! sheet_check <filled.json> --json           # the JSON contract (sheet_check version 1)
+//! sheet_check <filled.json> --json           # the JSON contract (sheet_check version 2)
 //! sheet_check --spec                         # the specification an author follows (Markdown)
 //! sheet_check --template                     # a blank fill (JSON)
 //! sheet_check ... --law <sheet.law>          # another sheet law; its `uses` are relative to it
