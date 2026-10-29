@@ -1,0 +1,383 @@
+{
+  "sheet_fill": 1,
+  "law": "avatar_sheet",
+  "pages": {
+    "turnaround": {
+      "stature": 1.48,
+      "pose": "A",
+      "arm_angle": 18,
+      "views": "front_side_back",
+      "joint_marks": true
+    },
+    "base_body": {
+      "hips_y": 0.65,
+      "hip_drop": 0.038,
+      "hip_x": 0.05,
+      "knee": 0.35,
+      "shoulder_x": 0.058,
+      "arm": 0.31,
+      "elbow_split": 0.55,
+      "face_length": 0.056,
+      "head_top": 1.095
+    },
+    "face": {
+      "eye_width": 0.7,
+      "eye_height": 0.31,
+      "eye_recess": 0.56,
+      "brow_y": 1.27,
+      "brow_inner": 0.18,
+      "brow_outer": 0.67,
+      "mouth_y": 0.32,
+      "mouth_width": 0.44,
+      "depth": 1.75,
+      "eye_colour": "dusty_rose",
+      "expressions": [
+        {
+          "name": "neutral",
+          "note": "Soft curious gaze and faintly blushed cheeks"
+        },
+        {
+          "name": "smile",
+          "note": "Closed eyes and a gentle cheerful smile"
+        },
+        {
+          "name": "surprise",
+          "note": "Round pink eyes and a tiny open mouth"
+        },
+        {
+          "name": "shy",
+          "note": "Rosy cheeks and a hesitant expression"
+        }
+      ]
+    },
+    "hair": {
+      "style_class": "long_wavy",
+      "length": 0.74,
+      "parting": -6,
+      "fringe": "eyebrow",
+      "curl_amplitude": 5,
+      "curl_pitch": 145,
+      "colour": "silver_lavender",
+      "ties": []
+    },
+    "clothing": {
+      "layers": [
+        {
+          "name": "ivory_thigh_high_stockings",
+          "order": 1,
+          "class": "skin",
+          "from": "hip_joint",
+          "to": "ankle",
+          "hem": 1,
+          "ease": 1,
+          "closure": "none",
+          "material": "ivory_stocking_knit"
+        },
+        {
+          "name": "off_shoulder_bodice",
+          "order": 2,
+          "class": "skin",
+          "from": "shoulder",
+          "to": "hips",
+          "hem": 0.94,
+          "ease": 7,
+          "closure": "buttons",
+          "material": "pearl_satin"
+        },
+        {
+          "name": "detached_puff_sleeves",
+          "order": 3,
+          "class": "loose",
+          "from": "shoulder",
+          "to": "wrist",
+          "hem": 0.98,
+          "ease": 40,
+          "closure": "none",
+          "material": "pearl_satin"
+        },
+        {
+          "name": "ivory_ruffle_underskirt",
+          "order": 4,
+          "class": "loose",
+          "from": "hips",
+          "to": "knee",
+          "hem": 0.65,
+          "ease": 24,
+          "closure": "zip",
+          "material": "ivory_lace"
+        },
+        {
+          "name": "black_layered_overskirt",
+          "order": 5,
+          "class": "loose",
+          "from": "hips",
+          "to": "knee",
+          "hem": 0.54,
+          "ease": 30,
+          "closure": "hooks",
+          "material": "charcoal_satin"
+        },
+        {
+          "name": "black_laced_waist_corset",
+          "order": 6,
+          "class": "rigid",
+          "from": "shoulder",
+          "to": "hips",
+          "hem": 0.99,
+          "ease": 4,
+          "closure": "laces",
+          "material": "matte_black_leather"
+        },
+        {
+          "name": "neck_ribbon",
+          "order": 7,
+          "class": "chain",
+          "from": "chin",
+          "to": "shoulder",
+          "hem": 0.86,
+          "ease": 5,
+          "closure": "wrap",
+          "material": "black_ribbon_satin"
+        }
+      ]
+    },
+    "accessories": {
+      "items": [
+        {
+          "name": "white_five_petal_hair_flower",
+          "kind": "hair_ornament",
+          "attach": "head_top",
+          "size": 42,
+          "material": "flower_petals"
+        },
+        {
+          "name": "left_black_hair_bow",
+          "kind": "ribbon",
+          "attach": "head_top",
+          "size": 82,
+          "material": "black_ribbon_satin"
+        },
+        {
+          "name": "right_black_hair_bow",
+          "kind": "ribbon",
+          "attach": "head_top",
+          "size": 82,
+          "material": "black_ribbon_satin"
+        },
+        {
+          "name": "large_back_waist_bow",
+          "kind": "ribbon",
+          "attach": "hips",
+          "size": 220,
+          "material": "black_ribbon_satin"
+        },
+        {
+          "name": "gold_corset_buckles",
+          "kind": "other",
+          "attach": "hips",
+          "size": 35,
+          "material": "antique_gold_metal"
+        },
+        {
+          "name": "gold_skirt_ornaments",
+          "kind": "other",
+          "attach": "hips",
+          "size": 85,
+          "material": "antique_gold_metal"
+        },
+        {
+          "name": "black_buckled_ankle_boots",
+          "kind": "footwear",
+          "attach": "sole",
+          "size": 235,
+          "sole": 14,
+          "heel": 35,
+          "material": "matte_black_leather"
+        }
+      ]
+    },
+    "materials": {
+      "items": [
+        {
+          "name": "skin_surface",
+          "class": "skin",
+          "colour": "porcelain_skin",
+          "roughness": 0.6,
+          "metallic": 0,
+          "shade_shift": 0.06,
+          "shade_softness": 0.45,
+          "outline": 0.3,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "skin"
+        },
+        {
+          "name": "hair_surface",
+          "class": "hair",
+          "colour": "silver_lavender",
+          "roughness": 0.44,
+          "metallic": 0,
+          "shade_shift": 0.05,
+          "shade_softness": 0.48,
+          "outline": 0.34,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "hair"
+        },
+        {
+          "name": "iris_surface",
+          "class": "other",
+          "colour": "dusty_rose",
+          "roughness": 0.2,
+          "metallic": 0,
+          "shade_shift": 0.08,
+          "shade_softness": 0.55,
+          "outline": 0.24,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "eyes"
+        },
+        {
+          "name": "ivory_stocking_knit",
+          "class": "fabric",
+          "colour": "pearl_white",
+          "roughness": 0.72,
+          "metallic": 0,
+          "shade_shift": 0,
+          "shade_softness": 0.5,
+          "outline": 0.25,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "ivory_thigh_high_stockings"
+        },
+        {
+          "name": "pearl_satin",
+          "class": "fabric",
+          "colour": "pearl_white",
+          "roughness": 0.49,
+          "metallic": 0,
+          "shade_shift": 0.03,
+          "shade_softness": 0.62,
+          "outline": 0.36,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "off_shoulder_bodice, detached_puff_sleeves"
+        },
+        {
+          "name": "ivory_lace",
+          "class": "fabric",
+          "colour": "soft_ivory",
+          "roughness": 0.8,
+          "metallic": 0,
+          "shade_shift": 0.02,
+          "shade_softness": 0.56,
+          "outline": 0.36,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "ivory_ruffle_underskirt"
+        },
+        {
+          "name": "charcoal_satin",
+          "class": "fabric",
+          "colour": "charcoal_black",
+          "roughness": 0.4,
+          "metallic": 0,
+          "shade_shift": -0.03,
+          "shade_softness": 0.7,
+          "outline": 0.42,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "black_layered_overskirt"
+        },
+        {
+          "name": "matte_black_leather",
+          "class": "leather",
+          "colour": "charcoal_black",
+          "roughness": 0.48,
+          "metallic": 0,
+          "shade_shift": 0,
+          "shade_softness": 0.7,
+          "outline": 0.48,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "black_laced_waist_corset, black_buckled_ankle_boots"
+        },
+        {
+          "name": "black_ribbon_satin",
+          "class": "fabric",
+          "colour": "charcoal_black",
+          "roughness": 0.28,
+          "metallic": 0,
+          "shade_shift": 0.04,
+          "shade_softness": 0.74,
+          "outline": 0.34,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "neck_ribbon, left_black_hair_bow, right_black_hair_bow, large_back_waist_bow"
+        },
+        {
+          "name": "flower_petals",
+          "class": "fabric",
+          "colour": "pearl_white",
+          "roughness": 0.73,
+          "metallic": 0,
+          "shade_shift": 0.03,
+          "shade_softness": 0.52,
+          "outline": 0.22,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "white_five_petal_hair_flower"
+        },
+        {
+          "name": "antique_gold_metal",
+          "class": "metal",
+          "colour": "antique_gold",
+          "roughness": 0.38,
+          "metallic": 0.87,
+          "shade_shift": 0.04,
+          "shade_softness": 0.72,
+          "outline": 0.23,
+          "transmission": "opaque",
+          "pattern": "none",
+          "used_by": "gold_corset_buckles, gold_skirt_ornaments"
+        }
+      ]
+    },
+    "palette": {
+      "colours": [
+        {
+          "name": "porcelain_skin",
+          "srgb": "#F5DCD8"
+        },
+        {
+          "name": "silver_lavender",
+          "srgb": "#E5DCEB"
+        },
+        {
+          "name": "dusty_rose",
+          "srgb": "#C97DAB"
+        },
+        {
+          "name": "pearl_white",
+          "srgb": "#F6F0F4"
+        },
+        {
+          "name": "soft_ivory",
+          "srgb": "#F3E7E7"
+        },
+        {
+          "name": "charcoal_black",
+          "srgb": "#302C35"
+        },
+        {
+          "name": "antique_gold",
+          "srgb": "#B89A69"
+        },
+        {
+          "name": "blush_pink",
+          "srgb": "#EAB2C4"
+        }
+      ]
+    }
+  }
+}

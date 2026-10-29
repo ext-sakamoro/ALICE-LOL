@@ -5,7 +5,8 @@
 //! fields). A slot or field has a type, a unit, a range (fixed, or taken from a proportion law
 //! the sheet `uses`), a vocabulary, whether it is required, a condition under which it is
 //! required (`when`), where its value comes from (`source`) and, when no part law owns it yet
-//! as a knob, `pending <part>`. Rules (`unique`, `ordered`) relate values across a group.
+//! as a knob, `pending <part>`. Rules (`unique`) relate values across a group;
+//! plausibility rules (`along`, `when`, `nesting`, `used`) relate a value to its neighbours.
 //!
 //! ```text
 //! law avatar_sheet
@@ -37,8 +38,10 @@ use crate::proportion_law::ProportionLaw;
 pub const SHEET_LAW_KIND: &[u8] = b"lol.law.sheet/v1";
 /// The fill format [`SheetLaw::check`] reads (`"sheet_fill": 1`)
 pub const SHEET_FILL_FORMAT: u32 = 1;
+/// The longest reason an `out_of_range_intent` note may give
+const INTENT_WHY_MAX: usize = 120;
 /// The version of [`SheetCheck::to_json`]'s shape
-pub const SHEET_CHECK_JSON_VERSION: u32 = 1;
+pub const SHEET_CHECK_JSON_VERSION: u32 = 2;
 
 /// A slot's type
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,8 +129,6 @@ pub struct Group {
 pub enum Rule {
     /// The field's values differ between the items (`page.group.field`)
     Unique(String, String, String, String),
-    /// In every item, field `from` comes before field `to` in `from`'s vocabulary
-    Ordered(String, String, String, String, String),
 }
 
 /// A page of the set
@@ -149,6 +150,12 @@ pub struct SheetLaw {
     pub rules: Vec<Rule>,
     /// What may be written on a page: (allow, name, description)
     pub texts: Vec<(bool, String, String)>,
+    /// Named landmark chains, top to bottom (`chain body head_top chin …`)
+    pub chains: Vec<(String, Vec<String>)>,
+    /// Plausibility rules over a group's items
+    pub item_rules: Vec<ItemRule>,
+    /// Each plausibility rule as written, without its reason (for the specification)
+    pub item_rule_texts: Vec<String>,
     canonical: String,
 }
 
@@ -371,6 +378,9 @@ impl SheetLaw {
             groups: Vec::new(),
             rules: Vec::new(),
             texts: Vec::new(),
+            chains: Vec::new(),
+            item_rules: Vec::new(),
+            item_rule_texts: Vec::new(),
             canonical,
         };
         for (n, l) in it {
@@ -458,6 +468,31 @@ impl SheetLaw {
                         description: desc.trim().to_owned(),
                     });
                 }
+                "chain" if w.len() >= 4 && ident(w[1]) && w[2..].iter().all(|x| ident(x)) => {
+                    if law.chains.iter().any(|(c, _)| c == w[1]) {
+                        return Err(lerr(n, format!("chain `{}` given twice", w[1])));
+                    }
+                    law.chains.push((
+                        w[1].to_owned(),
+                        w[2..].iter().map(|x| (*x).to_owned()).collect(),
+                    ));
+                }
+                "rule"
+                    if w.len() >= 3
+                        && matches!(w[1], "along" | "when" | "warn" | "nesting" | "used") =>
+                {
+                    let r = parse_item_rule(n, &w[1..], desc.trim())?;
+                    for f in r.fields() {
+                        if !law.slots.iter().any(|s| s.path() == f) {
+                            return Err(lerr(
+                                n,
+                                format!("rule on `{f}`, which is not a field above this line"),
+                            ));
+                        }
+                    }
+                    law.item_rules.push(r);
+                    law.item_rule_texts.push(w[1..].join(" "));
+                }
                 "rule" if w.len() >= 3 => {
                     let split = |t: &str| -> Result<(String, String, String), SheetLawError> {
                         let p: Vec<&str> = t.split('.').collect();
@@ -471,21 +506,10 @@ impl SheetLaw {
                             let (p, g, f) = split(w[2])?;
                             Rule::Unique(p, g, f, desc.trim().to_owned())
                         }
-                        ("ordered", 4) => {
-                            let (p, g, f) = split(w[2])?;
-                            let (p2, g2, t) = split(w[3])?;
-                            if (p2.as_str(), g2.as_str()) != (p.as_str(), g.as_str()) {
-                                return Err(lerr(n, "ordered: two fields of one group"));
-                            }
-                            Rule::Ordered(p, g, f, t, desc.trim().to_owned())
-                        }
-                        _ => return Err(lerr(n, "rule unique page.group.field / rule ordered page.group.from page.group.to")),
+                        _ => return Err(lerr(n, "rule unique page.group.field")),
                     };
                     let fields: Vec<String> = match &rule {
                         Rule::Unique(p, g, f, _) => vec![format!("{p}.{g}.{f}")],
-                        Rule::Ordered(p, g, f, t, _) => {
-                            vec![format!("{p}.{g}.{f}"), format!("{p}.{g}.{t}")]
-                        }
                     };
                     for f in fields {
                         if !law.slots.iter().any(|s| s.path() == f) {
@@ -521,7 +545,64 @@ impl SheetLaw {
                 }
             }
         }
+        law.check_rule_names()?;
         Ok(law)
+    }
+
+    /// Every name a plausibility rule reads exists, with the type the rule reads it as: a
+    /// misspelt name would leave the rule silently never applying
+    fn check_rule_names(&self) -> Result<(), SheetLawError> {
+        let field = |path: &str| self.slots.iter().find(|s| s.path() == path);
+        for (r, text) in self.item_rules.iter().zip(&self.item_rule_texts) {
+            let bad = |why: String| Err(lerr(0, format!("rule `{text}`: {why}")));
+            let ItemRule::When {
+                group,
+                cond,
+                require,
+                ..
+            } = r
+            else {
+                continue;
+            };
+            for c in std::iter::once(cond).chain(require) {
+                let slot = match &c.side {
+                    Side::Field(f) => field(&format!("{group}.{f}")),
+                    Side::Sum(_) => None,
+                    Side::Deref(r, f) => {
+                        let Some(SlotType::Ref(target)) =
+                            field(&format!("{group}.{r}")).map(|s| &s.ty)
+                        else {
+                            return bad(format!("`{r}` is not a reference"));
+                        };
+                        let target_group = target.rsplit_once('.').map_or("", |(g, _)| g);
+                        let Some(s) = field(&format!("{target_group}.{f}")) else {
+                            return bad(format!("`{target_group}` has no field `{f}`"));
+                        };
+                        Some(s)
+                    }
+                };
+                if let (Some(s), Test::In(words) | Test::NotIn(words)) = (slot, &c.test) {
+                    if let SlotType::Enum(vocab) = &s.ty {
+                        if let Some(w) = words.iter().find(|w| !vocab.contains(w)) {
+                            return bad(format!(
+                                "`{w}` is not in the vocabulary of `{}`",
+                                s.path()
+                            ));
+                        }
+                    }
+                }
+                if let Test::AtMost(Bound::Scaled(p, _)) | Test::AtLeast(Bound::Scaled(p, _)) =
+                    &c.test
+                {
+                    if !matches!(field(p).map(|s| &s.ty), Some(SlotType::Number))
+                        || field(p).is_some_and(|s| s.group.is_some())
+                    {
+                        return bad(format!("`{p}` is not a number slot of a page"));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Take the `range law` ranges from the proportion laws the sheet uses (alias, law)
@@ -583,15 +664,36 @@ impl SheetLaw {
 pub enum Problem {
     Missing,
     WrongType(String),
-    OutOfRange { value: f64, lo: f64, hi: f64 },
+    OutOfRange {
+        value: f64,
+        lo: f64,
+        hi: f64,
+    },
     NotInVocabulary(String),
     TooLong(usize),
     NoSuchName(String),
     AssetIncomplete(String),
-    TooFew { have: usize, min: usize },
-    TooMany { have: usize, max: usize },
+    TooFew {
+        have: usize,
+        min: usize,
+    },
+    TooMany {
+        have: usize,
+        max: usize,
+    },
     NotUnique(String),
     NotOrdered(String, String),
+    /// A plausibility rule does not hold (its description)
+    Implausible(String),
+    /// A name no reference uses
+    NotUsed(String),
+    /// The design wants a value outside the slot's range (`out_of_range_intent`)
+    DesignWants {
+        slot: String,
+        value: f64,
+        lo: f64,
+        hi: f64,
+    },
     UnknownKey,
     NothingRead,
 }
@@ -612,6 +714,9 @@ impl Problem {
             Self::TooMany { .. } => "too_many",
             Self::NotUnique(_) => "not_unique",
             Self::NotOrdered(..) => "not_ordered",
+            Self::Implausible(_) => "implausible",
+            Self::NotUsed(_) => "not_used",
+            Self::DesignWants { .. } => "design_wants_out_of_range",
             Self::UnknownKey => "unknown_key",
             Self::NothingRead => "nothing_read",
         }
@@ -638,6 +743,9 @@ impl Problem {
             Self::TooMany { have, max } => format!("多すぎる ({have} 個、{max} 個まで)"),
             Self::NotUnique(v) => format!("`{v}` が重複している"),
             Self::NotOrdered(a, b) => format!("順序が逆: {a} が {b} より上にあるべき"),
+            Self::Implausible(why) => format!("あり得ない組み合わせ: {why}"),
+            Self::NotUsed(name) => format!("`{name}` はどこからも使われていない"),
+            Self::DesignWants { slot, value, lo, hi } => format!("デザインは {slot} = {value} を求めている (範囲 {lo}〜{hi} の外、slot には範囲内の値)"),
             Self::UnknownKey => "この law に無い項目".to_owned(),
             Self::NothingRead => "値が 1 つも読めなかった (空の記入は完成ではない)".to_owned(),
         }
@@ -661,6 +769,8 @@ pub struct SheetCheck {
     pub law: String,
     pub law_id: [u8; 32],
     pub findings: Vec<Finding>,
+    /// Plausibility warnings (listed, not blocking)
+    pub warnings: Vec<Finding>,
     /// Values read (present and not null)
     pub read: usize,
     /// Slots and fields that ask for a value, counted over the items present
@@ -780,12 +890,11 @@ impl SheetLaw {
         let J::Obj(root) = parse_json(fill)? else {
             return Err("the fill must be a JSON object".into());
         };
-        if let Some((k, _)) = root
-            .iter()
-            .find(|(k, _)| !["sheet_fill", "law", "pages"].contains(&k.as_str()))
-        {
+        if let Some((k, _)) = root.iter().find(|(k, _)| {
+            !["sheet_fill", "law", "pages", "out_of_range_intent"].contains(&k.as_str())
+        }) {
             return Err(format!(
-                "unknown top-level key `{k}` (sheet_fill, law, pages)"
+                "unknown top-level key `{k}` (sheet_fill, law, pages, out_of_range_intent)"
             ));
         }
         if !matches!(get(&root, "sheet_fill"), Some(J::Num(v)) if v.to_bits() == f64::from(SHEET_FILL_FORMAT).to_bits())
@@ -1008,7 +1117,7 @@ impl SheetLaw {
         // rules
         for r in &self.rules {
             let (p, g) = match r {
-                Rule::Unique(p, g, ..) | Rule::Ordered(p, g, ..) => (p, g),
+                Rule::Unique(p, g, ..) => (p, g),
             };
             let Some(J::Obj(obj)) = get(pages, p) else {
                 continue;
@@ -1038,34 +1147,19 @@ impl SheetLaw {
                         }
                     }
                 }
-                Rule::Ordered(_, _, from, to, _) => {
-                    let Some(SlotType::Enum(vocab)) = self
-                        .group_fields(p, g)
-                        .find(|s| s.name == *from)
-                        .map(|s| s.ty.clone())
-                    else {
-                        continue;
-                    };
-                    for (i, item) in items.iter().enumerate() {
-                        let J::Obj(o) = item else { continue };
-                        if let (Some(J::Str(a)), Some(J::Str(b))) = (get(o, from), get(o, to)) {
-                            if let (Some(ia), Some(ib)) = (
-                                vocab.iter().position(|w| w == a),
-                                vocab.iter().position(|w| w == b),
-                            ) {
-                                if ia >= ib {
-                                    f.push(Finding {
-                                        page: p.clone(),
-                                        path: format!("{p}.{g}[{i}]"),
-                                        problem: Problem::NotOrdered(a.clone(), b.clone()),
-                                        slot: None,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
             }
+        }
+        let mut warnings = Vec::new();
+        self.check_item_rules(pages, &mut f, &mut warnings);
+        match get(&root, "out_of_range_intent") {
+            None | Some(J::Null) => {}
+            Some(J::Arr(notes)) => self.check_intent(notes, &mut f, &mut warnings),
+            Some(_) => f.push(Finding {
+                page: String::new(),
+                path: "out_of_range_intent".into(),
+                problem: Problem::WrongType("list".into()),
+                slot: None,
+            }),
         }
         if read == 0 {
             f.push(Finding {
@@ -1089,6 +1183,7 @@ impl SheetLaw {
             law: self.name.clone(),
             law_id: self.law_id(),
             findings: f,
+            warnings,
             read,
             asked,
             pages: pages_done,
@@ -1166,6 +1261,16 @@ impl SheetCheck {
                 x.problem.japanese(None)
             );
         }
+        if !self.warnings.is_empty() {
+            let _ = writeln!(
+                s,
+                "注意 {} 件 (描画は止めない、意図どおりか確かめる)",
+                self.warnings.len()
+            );
+            for x in &self.warnings {
+                let _ = writeln!(s, "  - {}: {}", x.path, x.problem.japanese(None));
+            }
+        }
         let _ = writeln!(
             s,
             "{}",
@@ -1195,20 +1300,22 @@ impl SheetCheck {
             }
             let _ = write!(s, "{{\"page\":{},\"complete\":{ok}}}", json_str(p));
         }
-        s.push_str("],\"findings\":[");
-        for (i, x) in self.findings.iter().enumerate() {
-            if i > 0 {
-                s.push(',');
+        for (key, list) in [("findings", &self.findings), ("warnings", &self.warnings)] {
+            let _ = write!(s, "],\"{key}\":[");
+            for (i, x) in list.iter().enumerate() {
+                if i > 0 {
+                    s.push(',');
+                }
+                let slot = x.slot.and_then(|i| self.slot_info.get(i));
+                let _ = write!(
+                    s,
+                    "{{\"page\":{},\"path\":{},\"code\":\"{}\",\"reason\":{}}}",
+                    json_str(&x.page),
+                    json_str(&x.path),
+                    x.problem.code(),
+                    json_str(&x.problem.japanese(slot))
+                );
             }
-            let slot = x.slot.and_then(|i| self.slot_info.get(i));
-            let _ = write!(
-                s,
-                "{{\"page\":{},\"path\":{},\"code\":\"{}\",\"reason\":{}}}",
-                json_str(&x.page),
-                json_str(&x.path),
-                x.problem.code(),
-                json_str(&x.problem.japanese(slot))
-            );
         }
         s.push_str("],\"pending\":[");
         for (i, (p, part)) in self.pending.iter().enumerate() {
@@ -1225,6 +1332,626 @@ impl SheetCheck {
         s.push_str("]}");
         s
     }
+}
+
+// ── plausibility rules ──────────────────────────────────────────────────────────────────────
+
+/// The left side of a condition: a field of the item, a field of the item another field names
+/// (`material->elasticity`), or the sum of fields (`sole+heel`)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Side {
+    Field(String),
+    Deref(String, String),
+    Sum(Vec<String>),
+}
+
+/// How a condition compares
+#[derive(Debug, Clone, PartialEq)]
+pub enum Test {
+    /// The value is present
+    Present,
+    /// One of the words
+    In(Vec<String>),
+    /// None of the words
+    NotIn(Vec<String>),
+    /// The text mentions one of the words (any case, as a part of a word too)
+    Mentions(Vec<String>),
+    /// At most the bound
+    AtMost(Bound),
+    /// At least the bound
+    AtLeast(Bound),
+}
+
+/// A number, or a page slot's value times a factor (`turnaround.stature*80`)
+#[derive(Debug, Clone, PartialEq)]
+pub enum Bound {
+    Num(f64),
+    Scaled(String, f64),
+}
+
+/// One condition on an item
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cond {
+    pub side: Side,
+    pub test: Test,
+}
+
+/// A rule over the items of one group (`page.group`)
+#[derive(Debug, Clone, PartialEq)]
+pub enum ItemRule {
+    /// `from` and `to` lie on one chain, `from` above `to`
+    Along {
+        group: String,
+        from: String,
+        to: String,
+        description: String,
+    },
+    /// When `cond` holds for an item, one of `require` holds too
+    When {
+        warn: bool,
+        group: String,
+        cond: Cond,
+        require: Vec<Cond>,
+        description: String,
+    },
+    /// Where two items' spans (`from`..`to` on one chain) overlap, the one with the higher
+    /// `order` has at least the other's `ease`
+    Nesting {
+        group: String,
+        order: String,
+        ease: String,
+        from: String,
+        to: String,
+        description: String,
+    },
+    /// Every value of the field is named by some reference to it
+    Used {
+        warn: bool,
+        field: String,
+        description: String,
+    },
+}
+
+fn parse_cond(n: usize, t: &str) -> Result<Cond, SheetLawError> {
+    let (lhs, test) = if let Some((a, b)) = t.split_once('~') {
+        (
+            a,
+            Test::Mentions(b.split('|').map(str::to_lowercase).collect()),
+        )
+    } else if let Some((a, b)) = t.split_once("!=") {
+        (a, Test::NotIn(b.split('|').map(str::to_owned).collect()))
+    } else if let Some((a, b)) = t.split_once("<=") {
+        (a, Test::AtMost(parse_bound(n, b)?))
+    } else if let Some((a, b)) = t.split_once(">=") {
+        (a, Test::AtLeast(parse_bound(n, b)?))
+    } else if let Some((a, b)) = t.split_once('=') {
+        (a, Test::In(b.split('|').map(str::to_owned).collect()))
+    } else {
+        (t, Test::Present)
+    };
+    let side = if let Some((r, f)) = lhs.split_once("->") {
+        Side::Deref(r.to_owned(), f.to_owned())
+    } else if lhs.contains('+') {
+        Side::Sum(lhs.split('+').map(str::to_owned).collect())
+    } else {
+        Side::Field(lhs.to_owned())
+    };
+    let names: Vec<&str> = match &side {
+        Side::Field(f) => vec![f],
+        Side::Deref(r, f) => vec![r, f],
+        Side::Sum(v) => v.iter().map(String::as_str).collect(),
+    };
+    if !names.iter().all(|x| ident(x)) {
+        return Err(lerr(n, format!("condition `{t}`: field names")));
+    }
+    Ok(Cond { side, test })
+}
+
+fn parse_bound(n: usize, b: &str) -> Result<Bound, SheetLawError> {
+    if let Some((slot, k)) = b.split_once('*') {
+        let k = k
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite())
+            .ok_or_else(|| lerr(n, format!("bound `{b}`: a factor")))?;
+        return Ok(Bound::Scaled(slot.to_owned(), k));
+    }
+    b.parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .map(Bound::Num)
+        .ok_or_else(|| lerr(n, format!("bound `{b}`: a number or page.slot*factor")))
+}
+
+/// The words of a `rule` line after `rule`
+#[allow(clippy::many_single_char_names)] // n line number, w words, g / p page.group, as in `from_file`
+fn parse_item_rule(n: usize, w: &[&str], description: &str) -> Result<ItemRule, SheetLawError> {
+    let description = description.to_owned();
+    if description.is_empty() {
+        return Err(lerr(n, "a plausibility rule needs a reason after ` : `"));
+    }
+    let group_of = |t: &str| -> Result<(String, String), SheetLawError> {
+        let p: Vec<&str> = t.split('.').collect();
+        match p.as_slice() {
+            [a, b, c] => Ok((format!("{a}.{b}"), (*c).to_owned())),
+            _ => Err(lerr(n, format!("`{t}`: page.group.field"))),
+        }
+    };
+    let (warn, w) = if w.first() == Some(&"warn") {
+        (true, &w[1..])
+    } else {
+        (false, w)
+    };
+    match w {
+        ["along", from_field, to_field] if !warn => {
+            let (g, from) = group_of(from_field)?;
+            let (g2, to) = group_of(to_field)?;
+            if g != g2 {
+                return Err(lerr(n, "along: two fields of one group"));
+            }
+            Ok(ItemRule::Along {
+                group: g,
+                from,
+                to,
+                description,
+            })
+        }
+        ["when", group, cond, "require", rest @ ..] if !rest.is_empty() => {
+            if group.split('.').count() != 2 {
+                return Err(lerr(n, "when: page.group"));
+            }
+            let mut require = Vec::new();
+            for (i, word) in rest.iter().enumerate() {
+                if i % 2 == 1 {
+                    if *word != "or" {
+                        return Err(lerr(n, "require: conditions joined by `or`"));
+                    }
+                } else {
+                    require.push(parse_cond(n, word)?);
+                }
+            }
+            if rest.len() % 2 == 0 {
+                return Err(lerr(n, "require: a condition after `or`"));
+            }
+            Ok(ItemRule::When {
+                warn,
+                group: (*group).to_owned(),
+                cond: parse_cond(n, cond)?,
+                require,
+                description,
+            })
+        }
+        ["nesting", group, "order", order, "ease", ease, "along", from, to] if !warn => {
+            if group.split('.').count() != 2 {
+                return Err(lerr(n, "nesting: page.group"));
+            }
+            Ok(ItemRule::Nesting {
+                group: (*group).to_owned(),
+                order: (*order).to_owned(),
+                ease: (*ease).to_owned(),
+                from: (*from).to_owned(),
+                to: (*to).to_owned(),
+                description,
+            })
+        }
+        ["used", f] => {
+            group_of(f)?;
+            Ok(ItemRule::Used {
+                warn,
+                field: (*f).to_owned(),
+                description,
+            })
+        }
+        _ => Err(lerr(
+            n,
+            "rule along / [warn] when … require … / nesting … / [warn] used page.group.field",
+        )),
+    }
+}
+
+impl Cond {
+    fn names(&self) -> Vec<String> {
+        match &self.side {
+            Side::Field(f) => vec![f.clone()],
+            Side::Deref(r, _) => vec![r.clone()],
+            Side::Sum(v) => v.clone(),
+        }
+    }
+}
+
+impl ItemRule {
+    /// The fields (`page.group.field`) the rule reads in its own group
+    fn fields(&self) -> Vec<String> {
+        match self {
+            Self::Along {
+                group, from, to, ..
+            } => vec![format!("{group}.{from}"), format!("{group}.{to}")],
+            Self::When {
+                group,
+                cond,
+                require,
+                ..
+            } => cond
+                .names()
+                .into_iter()
+                .chain(require.iter().flat_map(Cond::names))
+                .map(|f| format!("{group}.{f}"))
+                .collect(),
+            Self::Nesting {
+                group,
+                order,
+                ease,
+                from,
+                to,
+                ..
+            } => [order, ease, from, to]
+                .iter()
+                .map(|f| format!("{group}.{f}"))
+                .collect(),
+            Self::Used { field, .. } => vec![field.clone()],
+        }
+    }
+}
+
+const fn num(v: Option<&J>) -> Option<f64> {
+    match v {
+        Some(J::Num(x)) => Some(*x),
+        _ => None,
+    }
+}
+
+impl SheetLaw {
+    fn chain_span(&self, a: &str, b: &str) -> Option<(usize, usize, usize)> {
+        self.chains.iter().enumerate().find_map(|(c, (_, marks))| {
+            let ia = marks.iter().position(|m| m == a)?;
+            let ib = marks.iter().position(|m| m == b)?;
+            Some((c, ia, ib))
+        })
+    }
+
+    /// The value a condition's side reads in an item (`None`: not there, the rule does not apply)
+    fn side_value<'a>(
+        &self,
+        pages: &'a [(String, J)],
+        group: &str,
+        item: &'a [(String, J)],
+        side: &Side,
+    ) -> Option<J> {
+        match side {
+            Side::Field(f) => get(item, f).filter(|v| !matches!(v, J::Null)).cloned(),
+            Side::Sum(fs) => {
+                let mut t = 0.0;
+                for f in fs {
+                    t += num(get(item, f))?;
+                }
+                Some(J::Num(t))
+            }
+            Side::Deref(r, f) => {
+                let J::Str(name) = get(item, r)? else {
+                    return None;
+                };
+                let target = self
+                    .slots
+                    .iter()
+                    .find(|s| s.path() == format!("{group}.{r}"))
+                    .and_then(|s| match &s.ty {
+                        SlotType::Ref(t) => Some(t.clone()),
+                        _ => None,
+                    })?;
+                let mut parts = target.split('.');
+                let (tp, tg, tf) = (parts.next()?, parts.next()?, parts.next()?);
+                let Some(J::Obj(page)) = get(pages, tp) else {
+                    return None;
+                };
+                let Some(J::Arr(items)) = get(page, tg) else {
+                    return None;
+                };
+                items.iter().find_map(|it| match it {
+                    J::Obj(o) if matches!(get(o, tf), Some(J::Str(x)) if x == name) => {
+                        get(o, f).cloned()
+                    }
+                    _ => None,
+                })
+            }
+        }
+    }
+
+    fn bound_value(pages: &[(String, J)], b: &Bound) -> Option<f64> {
+        match b {
+            Bound::Num(x) => Some(*x),
+            Bound::Scaled(slot, k) => {
+                let (p, name) = slot.split_once('.')?;
+                let Some(J::Obj(o)) = get(pages, p) else {
+                    return None;
+                };
+                num(get(o, name)).map(|v| v * k)
+            }
+        }
+    }
+
+    /// Whether a condition holds (`None`: its value is not there)
+    fn holds(
+        &self,
+        pages: &[(String, J)],
+        group: &str,
+        item: &[(String, J)],
+        c: &Cond,
+    ) -> Option<bool> {
+        let v = self.side_value(pages, group, item, &c.side);
+        Some(match &c.test {
+            Test::Present => v.is_some(),
+            Test::In(words) => matches!(v?, J::Str(x) if words.contains(&x)),
+            Test::NotIn(words) => !matches!(v?, J::Str(x) if words.contains(&x)),
+            Test::Mentions(words) => {
+                matches!(v?, J::Str(x) if { let x = x.to_lowercase(); words.iter().any(|w| x.contains(w.as_str())) })
+            }
+            Test::AtMost(b) => num(v.as_ref())? <= Self::bound_value(pages, b)?,
+            Test::AtLeast(b) => num(v.as_ref())? >= Self::bound_value(pages, b)?,
+        })
+    }
+
+    fn items<'a>(pages: &'a [(String, J)], group: &str) -> &'a [J] {
+        let Some((p, g)) = group.split_once('.') else {
+            return &[];
+        };
+        match get(pages, p) {
+            Some(J::Obj(o)) => match get(o, g) {
+                Some(J::Arr(a)) => a,
+                _ => &[],
+            },
+            _ => &[],
+        }
+    }
+
+    /// The design's values the ranges do not hold: each is listed as a warning (the slot keeps
+    /// a value inside its range), a malformed note is an error
+    fn check_intent(&self, notes: &[J], errors: &mut Vec<Finding>, warnings: &mut Vec<Finding>) {
+        for (i, note) in notes.iter().enumerate() {
+            let path = format!("out_of_range_intent[{i}]");
+            let mut err = |page: &str, problem| {
+                errors.push(Finding {
+                    page: page.to_owned(),
+                    path: path.clone(),
+                    problem,
+                    slot: None,
+                });
+            };
+            let J::Obj(o) = note else {
+                err("", Problem::WrongType("object {slot, wants, why}".into()));
+                continue;
+            };
+            if o.iter()
+                .any(|(k, _)| !["slot", "wants", "why"].contains(&k.as_str()))
+            {
+                err("", Problem::UnknownKey);
+                continue;
+            }
+            let Some(J::Str(name)) = get(o, "slot") else {
+                err("", Problem::WrongType("slot: page.slot".into()));
+                continue;
+            };
+            let page = name.split('.').next().unwrap_or_default();
+            let Some((lo, hi)) = self
+                .slots
+                .iter()
+                .find(|s| s.path() == *name)
+                .and_then(|s| s.range)
+            else {
+                err(page, Problem::NoSuchName("a slot with a range".into()));
+                continue;
+            };
+            let Some(J::Num(value)) = get(o, "wants") else {
+                err(page, Problem::WrongType("wants: number".into()));
+                continue;
+            };
+            match get(o, "why") {
+                Some(J::Str(w)) if w.chars().count() <= INTENT_WHY_MAX => {}
+                Some(J::Str(_)) => {
+                    err(page, Problem::TooLong(INTENT_WHY_MAX));
+                    continue;
+                }
+                _ => {
+                    err(page, Problem::WrongType("why: text".into()));
+                    continue;
+                }
+            }
+            let value = *value;
+            if (lo..=hi).contains(&value) {
+                err(
+                    page,
+                    Problem::Implausible(format!(
+                        "{name} = {value} is inside its range: write it in the slot"
+                    )),
+                );
+                continue;
+            }
+            warnings.push(Finding {
+                page: page.to_owned(),
+                path,
+                problem: Problem::DesignWants {
+                    slot: name.clone(),
+                    value,
+                    lo,
+                    hi,
+                },
+                slot: None,
+            });
+        }
+    }
+
+    #[allow(clippy::too_many_lines)] // one block per rule kind
+    fn check_item_rules(
+        &self,
+        pages: &[(String, J)],
+        errors: &mut Vec<Finding>,
+        warnings: &mut Vec<Finding>,
+    ) {
+        for rule in &self.item_rules {
+            match rule {
+                ItemRule::Along {
+                    group,
+                    from,
+                    to,
+                    description,
+                } => {
+                    for (i, it) in Self::items(pages, group).iter().enumerate() {
+                        let J::Obj(o) = it else { continue };
+                        if let (Some(J::Str(a)), Some(J::Str(b))) = (get(o, from), get(o, to)) {
+                            let problem = match self.chain_span(a, b) {
+                                Some((_, ia, ib)) if ia < ib => continue,
+                                Some(_) => Problem::NotOrdered(a.clone(), b.clone()),
+                                None => Problem::Implausible(format!("{description} ({a} → {b})")),
+                            };
+                            errors.push(Finding {
+                                page: page_of(group),
+                                path: format!("{group}[{i}]"),
+                                problem,
+                                slot: None,
+                            });
+                        }
+                    }
+                }
+                ItemRule::When {
+                    warn,
+                    group,
+                    cond,
+                    require,
+                    description,
+                } => {
+                    for (i, it) in Self::items(pages, group).iter().enumerate() {
+                        let J::Obj(o) = it else { continue };
+                        if self.holds(pages, group, o, cond) != Some(true) {
+                            continue;
+                        }
+                        let results: Vec<Option<bool>> = require
+                            .iter()
+                            .map(|c| self.holds(pages, group, o, c))
+                            .collect();
+                        // an absent value is the missing-slot check's business, unless presence is what is asked
+                        let broken = results.iter().all(|r| *r == Some(false))
+                            || (results.iter().all(Option::is_none)
+                                && require.iter().all(|c| matches!(c.test, Test::Present)));
+                        if broken {
+                            let x = Finding {
+                                page: page_of(group),
+                                path: format!("{group}[{i}]"),
+                                problem: Problem::Implausible(description.clone()),
+                                slot: None,
+                            };
+                            if *warn {
+                                warnings.push(x);
+                            } else {
+                                errors.push(x);
+                            }
+                        }
+                    }
+                }
+                ItemRule::Nesting {
+                    group,
+                    order,
+                    ease,
+                    from,
+                    to,
+                    description,
+                } => {
+                    let items = Self::items(pages, group);
+                    let span = |o: &[(String, J)]| -> Option<(usize, usize, usize, f64, f64)> {
+                        let (J::Str(a), J::Str(b)) = (get(o, from)?, get(o, to)?) else {
+                            return None;
+                        };
+                        let (c, ia, ib) = self.chain_span(a, b)?;
+                        Some((
+                            c,
+                            ia.min(ib),
+                            ia.max(ib),
+                            num(get(o, order))?,
+                            num(get(o, ease))?,
+                        ))
+                    };
+                    for (i, a) in items.iter().enumerate() {
+                        let J::Obj(oa) = a else { continue };
+                        let Some((ca, la, ha, ord_a, ease_a)) = span(oa) else {
+                            continue;
+                        };
+                        for b in items {
+                            let J::Obj(ob) = b else { continue };
+                            let Some((cb, lb, hb, ord_b, ease_b)) = span(ob) else {
+                                continue;
+                            };
+                            if ca == cb && la < hb && lb < ha && ord_a > ord_b && ease_a < ease_b {
+                                errors.push(Finding {
+                                    page: page_of(group),
+                                    path: format!("{group}[{i}]"),
+                                    problem: Problem::Implausible(description.clone()),
+                                    slot: None,
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+                ItemRule::Used {
+                    warn,
+                    field,
+                    description: _,
+                } => {
+                    let (group, f) = field.rsplit_once('.').unwrap_or((field, ""));
+                    let referrers: Vec<&Slot> = self
+                        .slots
+                        .iter()
+                        .filter(|s| matches!(&s.ty, SlotType::Ref(t) if t == field))
+                        .collect();
+                    let mut used: Vec<String> = Vec::new();
+                    for s in &referrers {
+                        let Some(J::Obj(page)) = get(pages, &s.page) else {
+                            continue;
+                        };
+                        match &s.group {
+                            None => {
+                                if let Some(J::Str(x)) = get(page, &s.name) {
+                                    used.push(x.clone());
+                                }
+                            }
+                            Some(g) => {
+                                if let Some(J::Arr(items)) = get(page, g) {
+                                    for it in items {
+                                        if let J::Obj(o) = it {
+                                            if let Some(J::Str(x)) = get(o, &s.name) {
+                                                used.push(x.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    for (i, it) in Self::items(pages, group).iter().enumerate() {
+                        if let J::Obj(o) = it {
+                            if let Some(J::Str(name)) = get(o, f) {
+                                if !used.contains(name) {
+                                    let x = Finding {
+                                        page: page_of(group),
+                                        path: format!("{group}[{i}].{f}"),
+                                        problem: Problem::NotUsed(name.clone()),
+                                        slot: None,
+                                    };
+                                    if *warn {
+                                        warnings.push(x);
+                                    } else {
+                                        errors.push(x);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn page_of(group: &str) -> String {
+    group.split('.').next().unwrap_or_default().to_owned()
 }
 
 // ── generated documents ─────────────────────────────────────────────────────────────────────
@@ -1253,6 +1980,7 @@ impl SheetLaw {
     /// format and what complete means (Markdown)
     #[must_use]
     #[allow(clippy::many_single_char_names)] // s text, g group, x slot, d description, p / a / b names
+    #[allow(clippy::too_many_lines)] // one block per section of the document, in its order
     pub fn spec(&self) -> String {
         let mut s = format!(
             "# Sheet law `{}`: how to fill a character sheet set\n\n",
@@ -1275,6 +2003,13 @@ impl SheetLaw {
         s.push_str("Units: `eye_height` = the height of the eyes above the sole is 1; `chin_eye` = the distance from the chin to the eye line is 1; `fraction` = 0 to 1; `m`, `mm`, `deg`, `ratio` as usual.\n\n");
         s.push_str("A file (`asset`) is an object: `{\"file\": \"name.png\", \"format\": \"png\", \"width\": 1024, \"height\": 1024, \"colour_space\": \"srgb\", \"provenance\": {\"source\": \"…\", \"licence\": \"…\", \"author\": \"…\", \"terms_sha256\": \"<64 hex digits of the licence text>\"}}`; formats: ");
         let _ = writeln!(s, "{}.\n", ASSET_FORMATS.join(", "));
+        let _ = writeln!(
+            s,
+            "Derive every value from the idea and use the whole range: the middle of a range is not a target. \
+             When the design wants a number outside a slot's range, put the nearest value inside the range in the slot and add a note at the top level: \
+             `\"out_of_range_intent\": [{{\"slot\": \"base_body.knee\", \"wants\": 0.27, \"why\": \"…\"}}]` (the reason at most {INTENT_WHY_MAX} characters). \
+             The note is listed as a warning, not an error, and tells where the ranges are too narrow.\n"
+        );
         s.push_str("Complete means: every required slot (and every field of every item, when its condition holds) has a value of its type inside its range or vocabulary, every name you refer to exists, every rule holds, and every file has its provenance.\n");
         for page in &self.pages {
             let _ = writeln!(s, "\n## Page `{}`\n\n{}\n", page.name, page.purpose);
@@ -1336,13 +2071,34 @@ impl SheetLaw {
                     Rule::Unique(p, g, f, d) => {
                         let _ = writeln!(s, "- `{p}.{g}.{f}` is unique: {d}");
                     }
-                    Rule::Ordered(p, g, a, b, d) => {
-                        let _ = writeln!(
-                            s,
-                            "- in `{p}.{g}`, `{a}` comes before `{b}` in the listed order: {d}"
-                        );
-                    }
                 }
+            }
+        }
+        if !self.chains.is_empty() {
+            s.push_str("\n## Chains\n\nLandmarks from top to bottom; a span (`from` → `to`) lies on one chain, `from` above `to`.\n\n");
+            for (name, marks) in &self.chains {
+                let _ = writeln!(s, "- `{name}`: {}", marks.join(" → "));
+            }
+        }
+        if !self.item_rules.is_empty() {
+            s.push_str("\n## Plausibility\n\nAn error stops the drawing; a warning is listed and the drawing goes on (check it is meant). `a->b` is field `b` of the item that field `a` names; `~` means the text mentions one of the words.\n\n");
+            for (r, text) in self.item_rules.iter().zip(&self.item_rule_texts) {
+                let (warn, d) = match r {
+                    ItemRule::When {
+                        warn, description, ..
+                    }
+                    | ItemRule::Used {
+                        warn, description, ..
+                    } => (*warn, description),
+                    ItemRule::Along { description, .. } | ItemRule::Nesting { description, .. } => {
+                        (false, description)
+                    }
+                };
+                let _ = writeln!(
+                    s,
+                    "- {} `{text}`: {d}",
+                    if warn { "warning" } else { "error" }
+                );
             }
         }
         s
