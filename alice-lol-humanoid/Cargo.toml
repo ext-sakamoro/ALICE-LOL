@@ -37,3 +37,7 @@ required-features = ["vrm"]
 [[example]]
 name = "measure_fbx"
 required-features = ["fbx"]
+
+[[example]]
+name = "vrm_diagnose"
+required-features = ["vrm"]
