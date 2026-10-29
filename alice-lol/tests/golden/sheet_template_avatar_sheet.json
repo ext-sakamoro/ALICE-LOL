@@ -1,0 +1,59 @@
+{
+  "sheet_fill": 1,
+  "law": "avatar_sheet",
+  "pages": {
+    "turnaround": {
+      "stature": null,
+      "pose": null,
+      "arm_angle": null,
+      "views": null,
+      "joint_marks": null
+    },
+    "base_body": {
+      "hips_y": null,
+      "hip_drop": null,
+      "hip_x": null,
+      "knee": null,
+      "shoulder_x": null,
+      "arm": null,
+      "elbow_split": null,
+      "face_length": null,
+      "head_top": null
+    },
+    "face": {
+      "eye_width": null,
+      "eye_height": null,
+      "eye_recess": null,
+      "brow_y": null,
+      "brow_inner": null,
+      "brow_outer": null,
+      "mouth_y": null,
+      "mouth_width": null,
+      "depth": null,
+      "eye_colour": null,
+      "expressions": [{"name": null, "note": null}]
+    },
+    "hair": {
+      "style_class": null,
+      "length": null,
+      "parting": null,
+      "fringe": null,
+      "curl_amplitude": null,
+      "curl_pitch": null,
+      "colour": null,
+      "ties": [{"height": null, "azimuth": null, "length": null, "accessory": null}]
+    },
+    "clothing": {
+      "layers": [{"name": null, "order": null, "class": null, "from": null, "to": null, "hem": null, "ease": null, "closure": null, "material": null}]
+    },
+    "accessories": {
+      "items": [{"name": null, "kind": null, "attach": null, "size": null, "sole": null, "heel": null, "material": null}]
+    },
+    "materials": {
+      "items": [{"name": null, "class": null, "colour": null, "roughness": null, "metallic": null, "shade_shift": null, "shade_softness": null, "outline": null, "transmission": null, "openness": null, "thread_colour": null, "thickness": null, "stretch_sensitivity": null, "transmittance": null, "scattering": null, "ior": null, "tint": null, "pattern": null, "pattern_law": null, "texture": null, "used_by": null}]
+    },
+    "palette": {
+      "colours": [{"name": null, "srgb": null}]
+    }
+  }
+}

@@ -128,6 +128,12 @@ pub mod proportion_law;
 // 三面図の測定の record (Data) と、比率の Law (avatar_body / avatar_face) への導出
 pub mod three_view;
 
+// law の道具が読む小さな厳密な JSON (record / sheet の記入)
+mod json_lite;
+
+// 設定画の組の Law (kind sheet): 埋めるべき情報を slot として宣言し、記入を検査する
+pub mod sheet_law;
+
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;
 pub mod program_law;
