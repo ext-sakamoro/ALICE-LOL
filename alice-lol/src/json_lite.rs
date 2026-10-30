@@ -1,7 +1,8 @@
-//! A small strict JSON reader for the law tools' inputs: objects (keys kept in order, a key
-//! given twice is refused), arrays, strings without escapes, finite numbers, `true` / `false`
-//! and null; no nesting deeper than 16. Inputs outside this subset are refused, not
-//! guessed.
+//! A small strict JSON reader for the law tools' inputs
+//!
+//! Objects (keys kept in order, a key given twice is refused), arrays, strings without
+//! escapes, finite numbers, `true` / `false` and null; no nesting deeper than 16. Inputs
+//! outside this subset are refused, not guessed.
 
 /// A small strict JSON value (objects keep their key order)
 #[derive(Debug, Clone, PartialEq)]
@@ -165,6 +166,7 @@ pub fn parse(text: &str) -> Result<J, String> {
 }
 
 /// The value of key `k` in an object
+#[must_use]
 pub fn get<'a>(o: &'a [(String, J)], k: &str) -> Option<&'a J> {
     o.iter().find(|(kk, _)| kk == k).map(|(_, v)| v)
 }
