@@ -2,7 +2,7 @@ name: Security & Hygiene
 
 # ALICE-* 共通の CI 構成
 # ALICE-SDF v1.7.7 (commit 5a6056a) を base に ALICE-LOL 用に調整
-# ALICE-LOL は workspace (alice-lol / alice-lol-macro / alice-lol-humanoid)
+# ALICE-LOL は workspace (alice-lol / alice-lol-macro / alice-lol-layout and others)
 # 公開 API の crates.io 最新版に対する検査は semver-checks.yml (失敗させる)
 
 on:

@@ -59,9 +59,6 @@ ALLOWED: list[tuple[str, str, int, str]] = [
     ("deny.toml", "1f357a16a4708e089d0ef8a455a36aa8c2a2dd73ffc127d5b826dd013d0d2c2a", 1, "states that the allow list is for dependencies"),
     ("deny.toml", "f776c7c98bcbd52f8a6cede872b0ca38f9fd04516b954a5a1379cd00d0f8b2ad", 1, "a licence allowed for dependencies"),
     ("deny.toml", "fab278bf6bdd6a44a300ed01bf8e7d3e7ffc539139b92aac83e42c54aa044438", 1, "the licence expression of the dependency ring"),
-    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "1a1bf2065efc9506e455999b982f6a666c1c96f0df44cb0f37b83ab47e4b4f2e", 1, "the licence of the dependency glam"),
-    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "c0948e26f4509eb964e6c151bbf55604995546adb847a9d6ba36e1b76ce0436b", 1, "the licence of the dependency gltf"),
-    ("docs/HUMANOID_TEMPLATE_DESIGN.md", "cd0e344fc6c99e3e83d85739efa4d53b161a7b870d3415b6ab63766d3d98ee61", 1, "the licence of the dependency serde_json"),
 ]
 
 

@@ -308,7 +308,7 @@ class CfgCoverage(unittest.TestCase):
         self.assertEqual(self.found('// #[cfg(windows)]\n/// #[cfg(not(clippy))]\nconst S: &str = "#[cfg(unix)]";\n'), ([], 0))
 
     def test_the_default_of_another_member_does_not_apply(self):
-        self.assertEqual(self.found('#[cfg(not(feature = "glsl"))]\nfn w() {}\n', rel="alice-lol-humanoid/src/x.rs")[0], [])
+        self.assertEqual(self.found('#[cfg(not(feature = "glsl"))]\nfn w() {}\n', rel="alice-lol-ui/src/x.rs")[0], [])
 
 
 class DepInfo(unittest.TestCase):

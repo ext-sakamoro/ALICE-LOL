@@ -5,7 +5,6 @@
 alice-lol/**
 alice-lol-macro/**
 alice-lol-layout/**
-alice-lol-humanoid/**
 Cargo.toml
 Cargo.lock
 rust-toolchain.toml

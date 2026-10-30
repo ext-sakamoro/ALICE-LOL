@@ -206,7 +206,7 @@ class WorkspaceScope(unittest.TestCase):
 
     def test_the_real_workspace_covers_more_than_alice_lol(self):
         dirs = g.workspace_src_dirs(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.assertIn("alice-lol-humanoid/src", dirs)
+        self.assertIn("alice-lol-layout/src", dirs)
 
 
 if __name__ == "__main__":

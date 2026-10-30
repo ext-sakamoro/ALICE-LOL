@@ -72,8 +72,11 @@ class Leg(unittest.TestCase):
         dirs = r.required_dirs(self.tmp, self.meta)
         self.assertIn("alice-lol", dirs)
         self.assertIn("alice-lol-layout", dirs, "a path dependency of alice-lol")
-        self.assertIn("alice-lol-humanoid", dirs, "its measure_body is a Law test")
         self.assertNotIn("alice-lol-ui", dirs)
+        # a member scripts/law_tests.sh names itself, not only as a path dependency of alice-lol
+        self.edit("scripts/law_tests.sh", '  "alice-lol|--test law_tests|"\n',
+                  '  "alice-lol|--test law_tests|"\n  "alice-lol-ui|--test some_law|"\n')
+        self.assertIn("alice-lol-ui", r.required_dirs(self.tmp, self.meta), "a member law_tests.sh names")
 
     def test_law_tests_must_read_the_release_profile_back(self):
         self.edit("scripts/law_tests.sh", "Finished `release` profile", "Finished something")

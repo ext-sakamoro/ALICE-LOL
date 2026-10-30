@@ -253,7 +253,6 @@ Slice → G-code → Print
 
 ## 9. 除外項目 (Phase 5 scope 外)
 
-- alice-lol-humanoid の既存 compile error 修正 (別 crate)
 - SKADIS 追加設計 (新 accessory)、pipeline Python `generate.py` の deprecate 完全実施
 - text-to-print CI (ALICE_ECO_TOKEN 未設定、Bambu private repo access): user 側 secret 登録要
 - 実プリント検証 (user 側で 3D プリンタ実行、Phase 5.6 手順書に従う)
