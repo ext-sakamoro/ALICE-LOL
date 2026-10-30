@@ -1,4 +1,4 @@
-//! Measure a body in the units of the avatar body law (`laws/avatar/body.law`)
+//! Measure a body in the units of a body proportion law (`kind proportion`): eye heights
 //!
 //! The unit is the height of the eyes above the sole: the sole is at 0 and the eyes at 1. Only
 //! points that every rig has and that hair, ears and props cannot move are read: the sole (the

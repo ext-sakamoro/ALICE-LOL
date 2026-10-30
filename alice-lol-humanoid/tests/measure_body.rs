@@ -6,8 +6,6 @@
 // the expected values spell the mean as (a + b) / 2, the arithmetic of the hand computation
 #![allow(clippy::manual_midpoint)]
 
-use std::path::Path;
-
 use alice_lol::proportion_law::ProportionLaw;
 use alice_lol_humanoid::measure::{measure, BodyMarks, MeasureError, Part, Side};
 
@@ -144,13 +142,40 @@ fn a_body_that_cannot_be_measured_says_why() {
     assert_eq!(measure(&m).unwrap_err(), MeasureError::Degenerate("arm"));
 }
 
+/// A plain stick-figure body law in eye-height units with round numbers: the parameters the
+/// measurement names, wide ranges, shoulders at 0.9 and ankles at 0.05
+const STICK_BODY: &str = "law stick_body
+kind proportion
+claim a stick figure in eye heights: the sole at 0, the eyes at 1, arms straight out, x to its left
+param hips_y number = 0.65 range 0.5 0.8
+param hip_drop number = 0.05 range 0 0.1
+param hip_x number = 0.05 range 0 0.1
+param knee number = 0.35 range 0.2 0.5
+param shoulder_x number = 0.05 range 0 0.1
+param arm number = 0.3 range 0.2 0.4
+param elbow_split number = 0.5 range 0.4 0.7
+param face_length number = 0.05 range 0 0.1
+param head_top number = 1.1 range 1 1.2
+let ankle = 0.05
+let shoulder = 0.9
+let hip_joint = hips_y - hip_drop
+let chin_y = 1 - face_length
+require knee <= hip_joint
+require hip_joint <= shoulder
+require chin_y <= head_top
+point hips = (0, hips_y, 0)
+point hip_l = (hip_x, hip_joint, 0)
+point knee_l = (hip_x, knee, 0)
+point ankle_l = (hip_x, ankle, 0)
+point shoulder_l = (shoulder_x, shoulder, 0)
+point elbow_l = (shoulder_x + arm * elbow_split, shoulder, 0)
+point wrist_l = (shoulder_x + arm, shoulder, 0)
+point chin = (0, chin_y, 0)
+";
+
 #[test]
-fn the_measured_values_bind_the_body_law() {
-    let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../laws/avatar/body.law"),
-    )
-    .unwrap();
-    let law = ProportionLaw::from_file(&text).unwrap();
+fn the_measured_values_bind_a_body_law() {
+    let law = ProportionLaw::from_file(STICK_BODY).unwrap();
     // every measured name is a parameter of the law
     let got = measure(&marks()).unwrap();
     for (n, _) in got.values() {

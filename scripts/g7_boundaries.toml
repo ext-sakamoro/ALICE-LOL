@@ -691,11 +691,6 @@ class = "local"
 reason = "a series name given by the caller"
 
 [[entry]]
-path = "alice_lol::three_view::Record::parse"
-class = "authoring"
-reason = "reads a three-view record a person or a model writes from a character sheet (landmark heights read on the drawing); it carries no identifier of another crate, and its record format line `three_view 1` is required"
-
-[[entry]]
 path = "alice_lol::json_lite::parse"
 class = "authoring"
 reason = "reads JSON a person or a model writes, in a strict subset (no escapes, no duplicate keys, finite numbers, depth at most 16); it builds plain values and carries no identifier of another crate"
@@ -704,56 +699,6 @@ reason = "reads JSON a person or a model writes, in a strict subset (no escapes,
 path = "alice_lol::json_lite::get"
 class = "local"
 reason = "looks up a key of an object json_lite::parse already built; the key is a name the caller chose"
-
-[[entry]]
-path = "alice_lol::three_view::record_from_json"
-class = "authoring"
-reason = "reads the landmarks a model or a detector writes as JSON and builds a record from them; it carries no identifier of another crate"
-
-[[entry]]
-path = "alice_lol::three_view::check"
-class = "local"
-reason = "takes the identifiers and ranges of this crate's own proportion laws (avatar_body, avatar_face) to check a record against; it carries no Law-bearing value of another crate"
-
-[[entry]]
-path = "alice_lol::variant::KnobTable::variant"
-class = "local"
-reason = "takes knob names of this crate's knob law (each checked against the table) with integer steps, and the identifiers of part laws, hashed into the variant identifier as given and never read"
-
-[[entry]]
-path = "alice_lol::variant::sample"
-class = "local"
-reason = "takes the identifiers of part laws, hashed into each sampled variant's identifier as given and never read"
-
-[[entry]]
-path = "alice_lol::variant::uniformity"
-class = "local"
-reason = "takes the name of a knob of this crate's knob table to report on"
-
-[[entry]]
-path = "alice_lol::sheet_law::SheetLaw::from_file"
-class = "authoring"
-reason = "reads a sheet law file a person or a model writes; the law's identifier (the kind tag and its canonical lines) names what was read"
-
-[[entry]]
-path = "alice_lol::sheet_law::SheetLaw::check"
-class = "authoring"
-reason = "reads a filled sheet a person or a model writes (JSON `sheet_fill 1` naming this law, both required); it carries no identifier of another crate, and every value is checked against the law's slots"
-
-[[entry]]
-path = "alice_lol::sheet_law::SheetLaw::resolve"
-class = "local"
-reason = "takes this crate's own proportion laws by the aliases the sheet law uses, to read their parameter ranges; it carries no Law-bearing value of another crate"
-
-[[entry]]
-path = "alice_lol::sheet_law::SheetLaw::render"
-class = "authoring"
-reason = "reads the same filled sheet SheetLaw::check reads (JSON `sheet_fill 1` a person or a model writes) and draws nothing unless that check has no error; the proportion laws are this crate's own, taken by the sheet law's aliases. The pages it returns carry their page and set identifiers"
-
-[[entry]]
-path = "alice_lol::sheet_render::hex"
-class = "local"
-reason = "formats an identifier this crate computed (a page or set identifier) as lower-case hex for a log or a file name; it reads no value another program wrote"
 
 [[entry]]
 path = "alice_lol::proportion_law::ProportionLaw::from_file_with"

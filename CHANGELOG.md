@@ -142,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - 破壊的変更: `alice_lol_humanoid::vrm::extract_humanoid_bones` を外した (検査しない公開の読み口だった: grounding root を `hips` にした file からも黙って bone を返していた) VRM file の bone は検査を通す `HumanoidTemplate::from_vrm` だけが読む 自分で組んだ `VrmBoneMap` は従来どおり `HumanoidTemplate::from_vrm_bones` に渡せる
 
+- 破壊的変更: module `sheet_law` / `sheet_render` / `three_view` / `variant` と、それを使う例 (`sheet_check` / `sheet_render` / `three_view_check` / `three_view_record` / `variant_sample`)、`laws/avatar` の law を削除した 比率の Law の文法 (`kind proportion`、`derive` / `require` / `group`) と `json_lite` / `rng` / `law_id` は残る `alice-lol-humanoid` の測定の試験は、中立の棒人形の比率の law で同じ assert を行う
 - `print_export` からの alice-sdf の `export_stl` / `export_stl_ascii` / `export_3mf` / `export_fbx` の再公開 (破壊的変更) これらは LOL の producer の識別子を書かない (ALICE-Law G8) LOL の書き出しは `node_to_stl` / `node_to_3mf` / `node_to_fbx` (と `lol_to_*`) を使う alice-sdf の形のまま書きたい時は alice-sdf から直接使う 戻らないことを compile_fail の試験 `unstamped_writers_are_not_reexported` が固定する
 
 ### Fixed

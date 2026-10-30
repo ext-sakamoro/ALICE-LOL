@@ -125,17 +125,11 @@ pub mod motion_law;
 // 式は research と同じ評価器、出力は f64 のまま 何を測るかは知らない (読む側が名前で取る)
 pub mod proportion_law;
 
-// 三面図の測定の record (Data) と、比率の Law (avatar_body / avatar_face) への導出
-pub mod three_view;
-
-// law の道具が読む小さな厳密な JSON (record / sheet の記入)
+// law の道具が読む小さな厳密な JSON (escape なし、重複 key は拒否、入れ子 16 段まで)
 pub mod json_lite;
 
-// 設定画の組の Law (kind sheet): 埋めるべき情報を slot として宣言し、記入を検査する
+// seed から決まる乱数列 (xorshift64*) と、その上の一様な引き方
 pub mod rng;
-pub mod sheet_law;
-pub mod sheet_render;
-pub mod variant;
 
 // 法則への参照 (law id + 書いた時の意味論 + param の値) の byte 列 配置は laws/layout/law_ref.layout
 pub mod law_ref;

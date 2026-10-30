@@ -440,6 +440,14 @@ fn the_identifier_covers_requires_and_the_law_derived_from() {
     let without =
         ProportionLaw::from_file(&ARM.replace("require upper <= reach * split\n", "")).unwrap();
     assert_ne!(without.law_id(), arm.law_id());
+    // so does the text of a require, with the same number of them and every other line alike
+    let other_bound = ProportionLaw::from_file(&ARM.replace(
+        "require 0.1 <= length - upper",
+        "require 0.05 <= length - upper",
+    ))
+    .unwrap();
+    assert_eq!(other_bound.requires().count(), arm.requires().count());
+    assert_ne!(other_bound.law_id(), arm.law_id());
     let swapped = ProportionLaw::from_file(
         &ARM.replace("upper <= reach * split", "reach * split <= upper")
             .replace("= 0.3 range 0.2 0.4", "= 0.4 range 0.2 0.4"),
@@ -481,4 +489,52 @@ fn the_identifier_covers_requires_and_the_law_derived_from() {
     )
     .unwrap();
     assert_eq!(spaced.law_id(), long.law_id());
+}
+
+/// A small law with an unordered group of two spokes, each a (radius, angle) pair
+const SPOKES: &str = "law test_spokes
+kind proportion
+param s0_radius number = 0.5 range 0 1
+param s0_angle number = 0 range -180 180
+param s1_radius number = 0.5 range 0 1
+param s1_angle number = 0 range -180 180
+param length number = 1 range 0.5 2
+group spoke: s0_radius s0_angle
+group spoke: s1_radius s1_angle
+out reach = length
+";
+
+#[test]
+fn the_group_grammar_refuses_what_it_cannot_canonicalise() {
+    let with = |extra: &str| {
+        ProportionLaw::from_file(&SPOKES.replace(
+            "out reach = length\n",
+            &format!("{extra}\nout reach = length\n"),
+        ))
+    };
+    for (extra, why) in [
+        ("group other: s0_radius", "is in two group members"),
+        ("group spoke: length", "differ in length"),
+        ("group extra: nothing", "is not a declared parameter"),
+        ("group extra:", "an empty member"),
+        ("group 9bad: length", "is not a group name"),
+        ("group extra: length length", "is in two group members"),
+    ] {
+        let e = with(extra).unwrap_err().to_string();
+        assert!(e.contains(why), "{extra}: {e}");
+    }
+    let base = ProportionLaw::from_file(SPOKES).unwrap();
+    assert_eq!(base.groups().len(), 1);
+    assert_eq!(base.groups()[0].name, "spoke");
+    assert_eq!(
+        base.groups()[0].members,
+        [vec!["s0_radius", "s0_angle"], vec!["s1_radius", "s1_angle"]]
+    );
+    // the groups are part of the law: the same law without them has another identifier
+    let plain = ProportionLaw::from_file(&SPOKES.replace(
+        "group spoke: s0_radius s0_angle\ngroup spoke: s1_radius s1_angle\n",
+        "",
+    ))
+    .unwrap();
+    assert_ne!(plain.law_id(), base.law_id());
 }
