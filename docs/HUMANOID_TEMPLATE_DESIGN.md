@@ -100,7 +100,8 @@ impl HumanoidTemplate {
 
     // H.3
     #[cfg(feature = "vrm")]
-    pub fn from_vrm(path: impl AsRef<Path>) -> Result<Self, VrmImportError>;
+    // the file is checked first: findings that make the template wrong refuse it, the others come back as warnings
+    pub fn from_vrm(path: impl AsRef<Path>) -> Result<(Option<Self>, Vec<VrmDiagnostic>), VrmError>;
 
     // H.4
     pub fn apply_pose(&mut self, pose: &BvhFrame);
@@ -130,11 +131,11 @@ let template = HumanoidTemplate::builder()
 
 // H.3 VRM
 #[cfg(feature = "vrm")]
-let template = HumanoidTemplate::from_vrm("alice.vrm")?;
+let (template, warnings) = HumanoidTemplate::from_vrm("alice.vrm")?;
 
 // H.4 BVH pose
 let bvh = BvhFile::load("walk.bvh")?;
-let mut template = HumanoidTemplate::from_vrm("alice.vrm")?;
+let mut template = HumanoidTemplate::from_vrm("alice.vrm")?.0.expect("a humanoid VRM");
 template.apply_pose(&bvh.frame(30));
 let sdf = template.to_sdf(0.15);
 

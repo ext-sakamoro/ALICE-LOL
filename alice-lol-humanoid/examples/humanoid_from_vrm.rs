@@ -20,7 +20,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("VRM path: {path}");
-    let Some(template) = HumanoidTemplate::from_vrm(&path)? else {
+    let (template, warnings) = HumanoidTemplate::from_vrm(&path)?;
+    for w in &warnings {
+        println!("warning: {w:?}");
+    }
+    let Some(template) = template else {
         println!("VRM に humanoid bones が見つかりません");
         println!("(VRM 1.0 の可能性、または VRM extension 不在)");
         return Ok(());

@@ -144,6 +144,14 @@ jobs:
         working-directory: ALICE-LOL
         run: scripts/cargo_test_nonzero.sh -p alice-lol-humanoid --features vrm --test vrm_diagnostics
 
+      # 診断の CLI (example vrm_diagnose) を合成の VRM に実行し、終了コードを確かめる
+      # (所見なし 0 / 所見あり 1 / 読めない file 2、走った件数が足りなければ fail)
+      - name: Run (humanoid vrm_diagnose exit codes)
+        if: matrix.label == ''
+        working-directory: ALICE-LOL
+        shell: bash
+        run: scripts/vrm_diagnose_check.sh
+
       # Phase X.8 B-8: catch example bit-rot. `required-features` on
       # llm-bridge-only examples auto-skips them on the macos default
       # matrix, so a single line covers both configurations.

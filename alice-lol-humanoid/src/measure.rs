@@ -3,7 +3,9 @@
 //! The unit is the height of the eyes above the sole: the sole is at 0 and the eyes at 1. Only
 //! points that every rig has and that hair, ears and props cannot move are read: the sole (the
 //! lowest point of the foot on the body mesh), the eye line (the eye bones) and the joints. The
-//! top of the head is not measured, it is a parameter of the law.
+//! top of the head is a parameter of the law; it is measured only when a reader marks it (the
+//! scalp of the body mesh, never the hair), and with the chin it gives the figure's
+//! [`ProportionClass`].
 //!
 //! The input is a [`BodyMarks`] in a fixed frame (x to the body's left, y up, z forward); the
 //! readers of file formats (feature `fbx`) build it.
@@ -107,6 +109,14 @@ pub struct BodyMarks {
     pub eye: f64,
     /// The height of the chin, when the face was read
     pub chin: Option<f64>,
+    /// The height of the top of the head (the scalp, not the hair), when it was read
+    ///
+    /// A reader takes it from the body mesh's vertices on the head bone itself, so hair on its own
+    /// bones or in its own mesh does not move it. Hair merged into the body mesh and weighted to the
+    /// head bone is read as the scalp: its top then measures as a `head_top` outside the body
+    /// law's range, which binding the measure reports (check the bind before trusting the
+    /// [`ProportionClass`] of [`Measured::proportion_class`]).
+    pub head_top: Option<f64>,
     /// The joints: paired parts carry a side, the hips none
     pub joints: BTreeMap<(Part, Option<Side>), [f64; 3]>,
 }
@@ -119,6 +129,7 @@ impl BodyMarks {
             sole,
             eye,
             chin: None,
+            head_top: None,
             joints: BTreeMap::new(),
         }
     }
@@ -159,6 +170,7 @@ impl std::error::Error for MeasureError {}
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measured {
     values: Vec<(&'static str, f64)>,
+    class: Option<ProportionClass>,
 }
 
 impl Measured {
@@ -175,6 +187,13 @@ impl Measured {
     #[must_use]
     pub fn values(&self) -> &[(&'static str, f64)] {
         &self.values
+    }
+
+    /// The figure's proportion class, when both the head top and the chin were marked
+    // ALLOW-UNWIRED: the figure's class for callers outside this workspace that measure a body and show or gate on it; no caller inside the workspace
+    #[must_use]
+    pub const fn proportion_class(&self) -> Option<ProportionClass> {
+        self.class
     }
 
     /// The values as the law's parameter list, for `ProportionLaw::bind`
@@ -203,12 +222,15 @@ fn pair(marks: &BodyMarks, part: Part, name: &'static str) -> Result<[[f64; 3]; 
 ///
 /// Paired parts are the mean of the left and the right. The arm is measured along the
 /// bones (shoulder to elbow to wrist), so a body in an A pose measures as in a T pose. The face
-/// length needs the chin; without it the value is absent and the law's default stands. Values are
-/// not clamped to the law's ranges: binding them says which are outside.
+/// length needs the chin; without it the value is absent and the law's default stands. The head
+/// top is measured when marked, and with the chin gives the [`ProportionClass`] (heads = (top −
+/// sole) / (top − chin), `eye_ratio` = (eye − sole) / (top − sole), in the marks' one space).
+/// Values are not clamped to the law's ranges: binding them says which are outside.
 ///
 /// # Errors
 ///
-/// [`MeasureError::BadUnit`] when the eyes are not above the sole or a mark is not finite,
+/// [`MeasureError::BadUnit`] when the eyes are not above the sole, the head top not above the
+/// eyes, the chin not below the head top, or a mark is not finite,
 /// [`MeasureError::Missing`] when a part the law needs was not marked,
 /// [`MeasureError::Degenerate`] when the arm has no length.
 pub fn measure(marks: &BodyMarks) -> Result<Measured, MeasureError> {
@@ -216,8 +238,9 @@ pub fn measure(marks: &BodyMarks) -> Result<Measured, MeasureError> {
     let finite = marks.sole.is_finite()
         && marks.eye.is_finite()
         && marks.chin.is_none_or(f64::is_finite)
+        && marks.head_top.is_none_or(f64::is_finite)
         && marks.joints.values().flatten().all(|v| v.is_finite());
-    if !finite || e.is_nan() || e <= 0.0 {
+    if !finite || e.is_nan() || e <= 0.0 || marks.head_top.is_some_and(|t| t <= marks.eye) {
         return Err(MeasureError::BadUnit);
     }
     let up = |y: f64| (y - marks.sole) / e;
@@ -250,7 +273,15 @@ pub fn measure(marks: &BodyMarks) -> Result<Measured, MeasureError> {
     if let Some(chin) = marks.chin {
         values.push(("face_length", (marks.eye - chin) / e));
     }
-    Ok(Measured { values })
+    let mut class = None;
+    if let Some(top) = marks.head_top {
+        let height = top - marks.sole;
+        values.push(("head_top", height / e));
+        if let Some(chin) = marks.chin {
+            class = Some(ProportionClass::of(height / (top - chin), e / height)?);
+        }
+    }
+    Ok(Measured { values, class })
 }
 
 /// The proportion class of a figure, from two ratios: its height in head lengths (`heads` = the

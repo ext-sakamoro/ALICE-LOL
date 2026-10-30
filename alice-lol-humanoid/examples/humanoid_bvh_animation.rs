@@ -87,7 +87,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn load_bind_pose() -> Result<HumanoidTemplate, Box<dyn std::error::Error>> {
     if let Some(vrm_path) = std::env::args().nth(2) {
         println!("VRM bind pose from: {vrm_path}");
-        match HumanoidTemplate::from_vrm(&vrm_path)? {
+        let (template, warnings) = HumanoidTemplate::from_vrm(&vrm_path)?;
+        for w in &warnings {
+            println!("warning: {w:?}");
+        }
+        match template {
             Some(t) => return Ok(t),
             None => {
                 eprintln!("VRM に humanoid bones が見つからないため default 使用");

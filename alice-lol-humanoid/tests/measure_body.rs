@@ -174,3 +174,53 @@ fn the_measured_values_bind_the_body_law() {
     assert!(close(b.point("elbow_l").unwrap(), [0.235, 0.9, 0.0]));
     assert!(close(b.point("chin").unwrap(), [0.0, 0.94, 0.0]));
 }
+
+/// The head top, when marked: its height in eye units, and with the chin the proportion class.
+/// Both ratios are read from the marks in the one space they share: heads = (top − sole) /
+/// (top − chin), `eye_ratio` = (eye − sole) / (top − sole)
+#[test]
+fn the_head_top_and_the_proportion_class() {
+    use alice_lol_humanoid::measure::ProportionClass as C;
+    let class = |top: Option<f64>, chin: Option<f64>| {
+        let mut m = marks();
+        m.head_top = top;
+        m.chin = chin;
+        measure(&m).map(|g| (g.get("head_top"), g.proportion_class()))
+    };
+    // sole 0.5, eyes 2.5 (e = 2); no chin: the height is measured, the head length is not
+    assert_eq!(
+        class(Some(2.64), None),
+        Ok((Some((2.64 - 0.5) / 2.0), None))
+    );
+    // top 2.64, chin 2.34: heads 2.14 / 0.3 = 7.13, eye_ratio 2 / 2.14 = 0.935
+    assert_eq!(class(Some(2.64), Some(2.34)).unwrap().1, Some(C::Adult));
+    // top 2.9, chin 2.2: heads 2.4 / 0.7 = 3.43
+    assert_eq!(class(Some(2.9), Some(2.2)).unwrap().1, Some(C::Youthful));
+    // top 2.68, chin 2.32: heads 2.18 / 0.36 = 6.06, eye_ratio 0.917 (between the bands)
+    assert_eq!(
+        class(Some(2.68), Some(2.32)).unwrap().1,
+        Some(C::Indeterminate)
+    );
+    // decided by the head count alone (the eyes in the adult band): top 2.6, chin 2.1: heads
+    // 2.1 / 0.5 = 4.2, eye_ratio 2 / 2.1 = 0.952
+    assert_eq!(class(Some(2.6), Some(2.1)).unwrap().1, Some(C::Youthful));
+    // no head top: neither
+    assert_eq!(class(None, Some(2.34)), Ok((None, None)));
+    // a head top at or below the eyes, or not finite, is a bad mark
+    for top in [2.5, 2.4, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            class(Some(top), Some(2.34)),
+            Err(MeasureError::BadUnit),
+            "{top}"
+        );
+        // without the chin too (no class to catch it)
+        assert_eq!(class(Some(top), None), Err(MeasureError::BadUnit), "{top}");
+    }
+    // the head top is the law's last parameter
+    let mut m = marks();
+    m.head_top = Some(2.64);
+    assert_eq!(
+        measure(&m).unwrap().values().last().map(|v| v.0),
+        Some("head_top")
+    );
+}

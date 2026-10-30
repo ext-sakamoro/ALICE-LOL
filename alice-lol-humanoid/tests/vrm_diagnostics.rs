@@ -284,3 +284,145 @@ fn no_humanoid_or_no_glb_is_an_error_not_an_empty_pass() {
         "extensions": {"VRMC_vrm": {"humanoid": {"humanBones": {"spine": {"node": 0}}}}}});
     assert!(diagnose_glb(&glb(&bare)).is_err(), "compared nothing");
 }
+
+/// The load path: the template is read only from a file the checks accept. A finding that would
+/// make the template wrong (the joints at the wrong node, in the wrong unit or off the ground) is
+/// an error; one that leaves the joints right is returned beside the template as a warning
+mod load {
+    use super::{clean, glb, D};
+    use alice_lol_humanoid::vrm::VrmError;
+    use alice_lol_humanoid::HumanoidTemplate;
+    use serde_json::{json, Value};
+
+    fn load(name: &str, j: &Value) -> Result<(Option<HumanoidTemplate>, Vec<D>), VrmError> {
+        let path = std::env::temp_dir().join(format!("vrm_load_{}_{name}.vrm", std::process::id()));
+        std::fs::write(&path, glb(j)).unwrap();
+        let r = HumanoidTemplate::from_vrm(&path);
+        std::fs::remove_file(&path).unwrap();
+        r
+    }
+
+    #[test]
+    fn a_clean_rig_loads_with_no_warning() {
+        let (t, w) = load("clean", &clean(true)).expect("a clean rig loads");
+        assert!(t.is_some(), "the template");
+        assert_eq!(w, vec![]);
+    }
+
+    #[test]
+    fn hips_on_a_grounding_root_is_refused() {
+        let mut j = clean(true);
+        j["extensions"]["VRM"]["humanoid"]["humanBones"][0]["node"] = json!(0);
+        match load("hips", &j) {
+            Err(VrmError::Rejected(d)) => assert_eq!(
+                d,
+                vec![D::HipsNotPelvis {
+                    hips_node: 0,
+                    pelvis_node: Some(1)
+                }]
+            ),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_quarter_scale_or_sunk_rig_is_refused() {
+        let mut j = clean(true);
+        j["nodes"][0]["scale"] = json!([0.25, 0.25, 0.25]);
+        assert!(
+            matches!(load("scale", &j), Err(VrmError::Rejected(d)) if matches!(d.as_slice(), [D::HeightOutOfRange { .. }]))
+        );
+        let mut k = clean(true);
+        k["nodes"][0]["translation"] = json!([0.0, -0.3, 0.0]);
+        assert!(
+            matches!(load("sunk", &k), Err(VrmError::Rejected(d)) if matches!(d.as_slice(), [D::FeetNotOnGround { .. }]))
+        );
+    }
+
+    #[test]
+    fn cosmetic_findings_load_as_warnings() {
+        let mut j = clean(true);
+        j["materials"] = json!([{}]);
+        j["extensionsUsed"] = json!(["VRM", "VRMC_springBone"]);
+        let (t, w) = load("cosmetic", &j).expect("cosmetic findings do not refuse the file");
+        assert!(t.is_some());
+        assert_eq!(
+            w,
+            vec![
+                D::DefaultMetallicMaterials { count: 1, of: 1 },
+                D::DeclaredExtensionUnused {
+                    name: "VRMC_springBone".into()
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn a_plain_gltf_is_no_template_and_no_check() {
+        let j = json!({"asset": {"version": "2.0"}, "nodes": [{"name": "Box", "mesh": 0}], "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}]});
+        let (t, w) = load("plain", &j).expect("a glTF that is not a VRM is not an error");
+        assert!(t.is_none());
+        assert_eq!(w, vec![]);
+    }
+
+    /// Which findings make the template wrong (errors) and which do not (warnings), one per kind
+    #[test]
+    fn the_error_and_warning_split() {
+        let cases = [
+            (
+                D::HipsNotPelvis {
+                    hips_node: 0,
+                    pelvis_node: None,
+                },
+                true,
+            ),
+            (
+                D::HeightOutOfRange {
+                    height: 0.3,
+                    scale_to_nominal: 4.6,
+                },
+                true,
+            ),
+            (
+                D::FeetNotOnGround {
+                    lowest_foot_y: -0.2,
+                    crosses_origin: true,
+                },
+                true,
+            ),
+            (D::PositionBoundsMissing { missing: 1, of: 2 }, false),
+            (D::DefaultMetallicMaterials { count: 1, of: 1 }, false),
+            (D::DeclaredExtensionUnused { name: "X".into() }, false),
+            (D::MorphsWithoutExpressions { targets: 1 }, false),
+        ];
+        for (d, err) in cases {
+            assert_eq!(d.is_error(), err, "{d:?}");
+        }
+    }
+}
+
+/// The files `scripts/vrm_diagnose_check.sh` runs the `vrm_diagnose` example on (CI and preflight):
+/// the clean rig and the rig whose hips sit on the grounding root, as built here. A difference
+/// fails; `VRM_FIXTURES_WRITE=1` writes them again
+#[test]
+fn the_example_fixtures_are_the_rigs_built_here() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let mut hips = clean(false);
+    hips["extensions"]["VRMC_vrm"]["humanoid"]["humanBones"]["hips"]["node"] = json!(0);
+    let files = [
+        ("vrm_clean.glb", glb(&clean(false))),
+        ("vrm_hips_on_root.glb", glb(&hips)),
+    ];
+    for (name, bytes) in &files {
+        let path = dir.join(name);
+        if std::env::var_os("VRM_FIXTURES_WRITE").is_some() {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(&path, bytes).unwrap();
+        }
+        assert_eq!(
+            &std::fs::read(&path).unwrap_or_default(),
+            bytes,
+            "{name} differs from the rig built here"
+        );
+    }
+}

@@ -2,7 +2,7 @@
 //!
 //! VRM 0.x binary GLB からhumanoid bone を抽出し [`HumanoidTemplate`] を構築する
 //!
-//! 対応 VRM version: [`extract_humanoid_bones`] は **0.x のみ** (`extensions.VRM.humanoid.humanBones`)、
+//! 対応 VRM version: [`HumanoidTemplate::from_vrm`] の bone 読み込みは **0.x のみ** (`extensions.VRM.humanoid.humanBones`)、
 //! 読み込みの診断 [`diagnose_glb`] は 0.x と 1.0 (`VRMC_vrm`) の両方を読む
 //!
 //! # 依存
@@ -17,7 +17,12 @@
 //!
 //! # #[cfg(feature = "vrm")]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! match HumanoidTemplate::from_vrm("character.vrm")? {
+//! // a file whose hips, height or feet would make the template wrong is refused (`VrmError::Rejected`)
+//! let (template, warnings) = HumanoidTemplate::from_vrm("character.vrm")?;
+//! for w in &warnings {
+//!     println!("warning: {w:?}");
+//! }
+//! match template {
 //!     Some(t) => println!("bones: {}, joints: {}", t.bones.len(), t.joints.len()),
 //!     None => println!("VRM に humanoid bones が含まれていない (VRM 1.0 の可能性)"),
 //! }
@@ -29,7 +34,7 @@
 //!
 //! # H.3 実装ノート (duplication)
 //!
-//! GLB JSON parser + node hierarchy walker + `extract_humanoid_bones` +
+//! GLB JSON parser + node hierarchy walker + humanoid bone 読み込み +
 //! VRM bone name → [`Joint`] mapping は 参照実装の `src/vrm_import.rs` から抜粋
 //! Phase H.5 で Manga / LOL 間の reconciliation 判断
 
@@ -53,6 +58,9 @@ pub enum VrmError {
     Io(std::io::Error),
     /// VRM data / schema 不整合
     MissingData(String),
+    /// The checks of [`diagnose_glb`] found what would make the template wrong (the findings for
+    /// which [`VrmDiagnostic::is_error`] holds)
+    Rejected(Vec<VrmDiagnostic>),
 }
 
 impl std::fmt::Display for VrmError {
@@ -60,6 +68,7 @@ impl std::fmt::Display for VrmError {
         match self {
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::MissingData(s) => write!(f, "VRM data missing: {s}"),
+            Self::Rejected(d) => write!(f, "VRM refused: {d:?}"),
         }
     }
 }
@@ -68,7 +77,7 @@ impl std::error::Error for VrmError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
-            Self::MissingData(_) => None,
+            Self::MissingData(_) | Self::Rejected(_) => None,
         }
     }
 }
@@ -85,7 +94,7 @@ impl From<std::io::Error> for VrmError {
 
 /// VRM humanoid bone name → world position の map
 ///
-/// [`extract_humanoid_bones`] の返り値 VRM 標準の bone name (英字 camelCase、
+/// VRM から読んだ humanoid bones ([`HumanoidTemplate::from_vrm_bones`] の入力) VRM 標準の bone name (英字 camelCase、
 /// 例: `"hips"` / `"leftUpperArm"`) を key に、bind pose (T-pose) の world position を value とする
 #[derive(Debug, Clone, Default)]
 pub struct VrmBoneMap {
@@ -120,22 +129,22 @@ impl VrmBoneMap {
 }
 
 // ============================================================================
-// extract_humanoid_bones
+// humanoid bones (read only through the checked HumanoidTemplate::from_vrm)
 // ============================================================================
 
-/// VRM 0.x binary GLB から humanoid bones の world position を抽出
+/// The world positions of the VRM 0.x humanoid bones of a parsed glTF JSON
 ///
-/// # 戻り値
+/// Private: a file is read for its bones only by [`HumanoidTemplate::from_vrm`], which checks it
+/// with [`diagnose_glb`] first (an unchecked reader would hand back the bones of a file whose hips
+/// are not the pelvis)
 ///
 /// - `Some(VrmBoneMap)`: VRM extension が存在し 1 個以上の bone が抽出できた
 /// - `None`: VRM extension 不在 (glTF 通常 file or VRM 1.0)、または humanoid.humanBones 欠落
 ///
 /// # Errors
 ///
-/// - [`VrmError::Io`]: file open / read 失敗
-/// - [`VrmError::MissingData`]: GLB header 不正、JSON parse 失敗、`glTF nodes` 欠落
-pub fn extract_humanoid_bones<P: AsRef<Path>>(path: P) -> Result<Option<VrmBoneMap>, VrmError> {
-    let json = parse_glb_json(path.as_ref())?;
+/// - [`VrmError::MissingData`]: `glTF nodes` 欠落
+fn humanoid_bones_of(json: &serde_json::Value) -> Result<Option<VrmBoneMap>, VrmError> {
     let Some(vrm_ext) = json.get("extensions").and_then(|e| e.get("VRM")) else {
         return Ok(None);
     };
@@ -146,7 +155,7 @@ pub fn extract_humanoid_bones<P: AsRef<Path>>(path: P) -> Result<Option<VrmBoneM
     else {
         return Ok(None);
     };
-    let node_world_translations = compute_node_world_translations(&json)?;
+    let node_world_translations = compute_node_world_translations(json)?;
     let mut map: BTreeMap<String, Vec3> = BTreeMap::new();
     for entry in human_bones {
         let Some(name) = entry.get("bone").and_then(|b| b.as_str()) else {
@@ -356,19 +365,38 @@ fn walk_node_hierarchy(
 // ============================================================================
 
 impl HumanoidTemplate {
-    /// VRM file path から [`HumanoidTemplate`] を構築 ([`extract_humanoid_bones`] + [`Self::from_vrm_bones`] の組合せ)
+    /// VRM file path から [`HumanoidTemplate`] を構築 (VRM 0.x の humanoid bones を読み [`Self::from_vrm_bones`] に渡す)
+    ///
+    /// A file with humanoid bones is first checked with [`diagnose_glb`]: a finding that would make
+    /// the template wrong ([`VrmDiagnostic::is_error`]: the hips not the pelvis, the height outside
+    /// the human range, the feet off the ground) refuses the file; the others are returned beside
+    /// the template as warnings.
     ///
     /// # 戻り値
     ///
-    /// - `Ok(Some(HumanoidTemplate))`: VRM が humanoid bones を持ち、必須 bone (head + hips) が揃っている
-    /// - `Ok(None)`: VRM extension 不在 or 必須 bone 欠落
+    /// - `Ok((Some(HumanoidTemplate), warnings))`: VRM が humanoid bones を持ち、必須 bone (head + hips) が揃っている
+    /// - `Ok((None, []))`: VRM extension 不在 or 必須 bone 欠落 (warnings is empty when no humanoid was read)
     ///
     /// # Errors
     ///
-    /// - [`VrmError::Io`] / [`VrmError::MissingData`] ([`extract_humanoid_bones`] 参照)
-    pub fn from_vrm<P: AsRef<Path>>(path: P) -> Result<Option<Self>, VrmError> {
-        let bones = extract_humanoid_bones(path)?;
-        Ok(bones.as_ref().and_then(Self::from_vrm_bones))
+    /// - [`VrmError::Io`]: file open / read 失敗
+    /// - [`VrmError::MissingData`]: GLB header 不正、JSON parse 失敗、`glTF nodes` 欠落 ([`diagnose_glb`] 参照)
+    /// - [`VrmError::Rejected`]: the findings that would make the template wrong
+    pub fn from_vrm<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<(Option<Self>, Vec<VrmDiagnostic>), VrmError> {
+        let json = parse_glb_json(path.as_ref())?;
+        let Some(bones) = humanoid_bones_of(&json)? else {
+            return Ok((None, Vec::new()));
+        };
+        let (errors, warnings): (Vec<_>, Vec<_>) = diagnose_json(&json)?
+            .diagnostics
+            .into_iter()
+            .partition(VrmDiagnostic::is_error);
+        if !errors.is_empty() {
+            return Err(VrmError::Rejected(errors));
+        }
+        Ok((Self::from_vrm_bones(&bones), warnings))
     }
 
     /// [`VrmBoneMap`] から [`HumanoidTemplate`] を構築
@@ -487,6 +515,21 @@ pub enum VrmDiagnostic {
     },
 }
 
+impl VrmDiagnostic {
+    /// Whether the finding makes a template read from the file wrong: the joints at the wrong node
+    /// (the hips), in the wrong unit (the height) or off the ground (the feet). The others leave
+    /// the joints right and are warnings
+    #[must_use]
+    pub const fn is_error(&self) -> bool {
+        matches!(
+            self,
+            Self::HipsNotPelvis { .. }
+                | Self::HeightOutOfRange { .. }
+                | Self::FeetNotOnGround { .. }
+        )
+    }
+}
+
 /// What [`diagnose_glb`] compared, per check (a check whose input is absent compares 0)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct VrmCompared {
@@ -549,17 +592,21 @@ pub const GROUND_TOLERANCE: f32 = 0.01;
 /// [`VrmError::MissingData`] when the bytes are not a GLB, the file has no humanoid mapping, or
 /// the checks compared nothing (an empty pass is not a pass).
 pub fn diagnose_glb(bytes: &[u8]) -> Result<VrmReport, VrmError> {
-    let json = parse_glb_json_bytes(bytes)?;
-    let bones = humanoid_nodes(&json).ok_or_else(|| {
+    diagnose_json(&parse_glb_json_bytes(bytes)?)
+}
+
+/// [`diagnose_glb`] on a parsed glTF JSON
+fn diagnose_json(json: &serde_json::Value) -> Result<VrmReport, VrmError> {
+    let bones = humanoid_nodes(json).ok_or_else(|| {
         VrmError::MissingData("no humanoid mapping (neither VRM 0.x nor VRM 1.0)".into())
     })?;
-    let world = compute_node_world_translations(&json)?;
+    let world = compute_node_world_translations(json)?;
     let mut rep = VrmReport::default();
-    check_skeleton(&json, &bones, &world, &mut rep);
-    check_positions(&json, &mut rep);
-    check_materials(&json, &mut rep);
-    check_extensions(&json, &mut rep);
-    check_morphs(&json, &mut rep);
+    check_skeleton(json, &bones, &world, &mut rep);
+    check_positions(json, &mut rep);
+    check_materials(json, &mut rep);
+    check_extensions(json, &mut rep);
+    check_morphs(json, &mut rep);
     if rep.compared.total() == 0 {
         return Err(VrmError::MissingData(
             "the diagnostics compared nothing".into(),

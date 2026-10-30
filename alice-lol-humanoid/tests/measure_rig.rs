@@ -213,3 +213,31 @@ fn bone_names_of_the_usual_rig_conventions() {
         assert_eq!(classify(name), want, "{name:?}");
     }
 }
+
+/// The head top: the highest vertex of the body mesh on the head bone itself, above the eyes.
+/// Hair on its own bones, or in its own mesh, does not move it; a body with no head vertex above
+/// the eyes has no head top
+#[test]
+fn the_head_top_is_the_highest_head_vertex_of_the_body() {
+    use alice_lol_humanoid::measure::ProportionClass;
+    assert_eq!(body_marks(&rig(vec![body()])).unwrap().head_top, None);
+    let mut b = body();
+    // the scalp, and a strand on a hair bone above it
+    b.positions
+        .extend([[0.0, 1.07, 0.0], [0.02, 1.06, -0.03], [0.0, 1.2, 0.0]]);
+    b.leads.extend([Some(14), Some(14), Some(17)]);
+    // a hair mesh on the head bone, above everything
+    let hair = mesh(&[([0.0, 1.25, 0.0], 14)]);
+    for meshes in [
+        vec![b.clone()],
+        vec![b.clone(), hair.clone()],
+        vec![hair, b],
+    ] {
+        let m = body_marks(&rig(meshes)).unwrap();
+        assert_eq!(m.head_top, Some(1.07));
+        // chin 0.94: heads 1.07 / 0.13 = 8.2, eye_ratio 1 / 1.07 = 0.935
+        let got = measure(&m).unwrap();
+        assert_eq!(got.get("head_top"), Some(1.07));
+        assert_eq!(got.proportion_class(), Some(ProportionClass::Adult));
+    }
+}

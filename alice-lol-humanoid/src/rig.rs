@@ -286,8 +286,11 @@ pub fn body_marks(rig: &Rig) -> Result<BodyMarks, MeasureError> {
     };
     // ordered by comparison, not f64::min (whose zero sign differs between targets)
     let lowest = |a: Option<f64>, y: f64| Some(a.map_or(y, |a: f64| if y < a { y } else { a }));
-    let mut body: Option<(usize, f64)> = None;
+    let mut body: Option<(usize, f64, Option<f64>)> = None;
     let mut chin: Option<f64> = None;
+    // the highest vertex on the head bone itself (not a hair bone) above the eyes, per mesh: the
+    // body mesh's is the head top
+    let highest = |a: Option<f64>, y: f64| Some(a.map_or(y, |a: f64| if y > a { y } else { a }));
     for m in &rig.meshes {
         let points = || m.positions.iter().zip(&m.leads);
         // the chin: in front of the head, between the eyes' outer bounds, on the head bone itself
@@ -309,15 +312,19 @@ pub fn body_marks(rig: &Rig) -> Result<BodyMarks, MeasureError> {
         parts.sort_unstable();
         parts.dedup();
         let named = parts.len();
+        let top = points()
+            .filter(|(p, b)| b.is_some_and(is_head) && p[1] > marks.eye)
+            .map(|(p, _)| p[1])
+            .fold(None, highest);
         if let Some(sole) = sole {
-            if body.is_none_or(|(n, _)| named > n) {
-                body = Some((named, sole));
+            if body.is_none_or(|(n, _, _)| named > n) {
+                body = Some((named, sole, top));
             }
         }
     }
-    marks.sole = body
-        .ok_or(MeasureError::Missing("skinned body with feet"))?
-        .1;
+    let body = body.ok_or(MeasureError::Missing("skinned body with feet"))?;
+    marks.sole = body.1;
+    marks.head_top = body.2;
     marks.chin = chin;
     Ok(marks)
 }

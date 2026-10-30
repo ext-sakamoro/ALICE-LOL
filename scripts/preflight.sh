@@ -522,6 +522,8 @@ step "ci.yml / test: Test (humanoid fbx measure, named)"
 ( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh -p alice-lol-humanoid --features fbx --test measure_fbx )
 step "ci.yml / test: Test (humanoid vrm diagnostics, named)"
 ( export CARGO_TERM_COLOR="always"; scripts/cargo_test_nonzero.sh -p alice-lol-humanoid --features vrm --test vrm_diagnostics )
+step "ci.yml / test: Run (humanoid vrm_diagnose exit codes)"
+( export CARGO_TERM_COLOR="always"; scripts/vrm_diagnose_check.sh )
 
 step "ci.yml / gpu-parity: GPU ↔ CPU parity (grammar corpus + fixtures)"
 ( export CARGO_TERM_COLOR="always" ALICE_SDF_REQUIRE_GPU="1" WGPU_BACKEND="vulkan"; cargo test -p alice-lol --features wgsl --test gpu_parity -- --nocapture )
