@@ -50,6 +50,7 @@ DEFAULT_TARGETS=(
   "alice-lol|--test proportion_law_oracle|"
   "alice-lol|--test avatar_laws|"
   "alice-lol|--test sheet_law|"
+  "alice-lol|--test variant|"
   "alice-lol|--test three_view|"
   "alice-lol|--test sheet_render|"
   "alice-lol-humanoid|--test measure_body|"

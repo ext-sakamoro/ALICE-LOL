@@ -1,0 +1,34 @@
+# The knobs of an avatar body: how a variant departs from its base body, applied to the body's tubes
+law avatar_body_knobs
+kind proportion
+claim every knob at its default leaves the base body as it is: scales default to 1, offsets and angles to 0, the stature to a neutral 1.6 m
+claim the proportions stay in eye-height units; the stature (metres, sole to the top of the skull, without hair) is a uniform scale applied last, so a length in mm goes through it explicitly
+claim the ranges other than the stature's are provisional: the part gates of the body (seams, charts, poses) bound them later, a range is never widened to pass a gate
+claim the left and right sides take the same value of every knob (no asymmetry knob)
+claim the stature's range is the one the sheet law declares for a character (turnaround.stature)
+param stature number = 1.6 range 0.5 2.5
+# limb length, a scale of each chain's segment length
+param upper_arm_length number = 1 range 0.85 1.2
+param forearm_length number = 1 range 0.85 1.2
+param thigh_length number = 1 range 0.85 1.2
+param shin_length number = 1 range 0.85 1.2
+# girth, a scale of each tube's mean radius
+param neck_girth number = 1 range 0.8 1.3
+param chest_girth number = 1 range 0.8 1.3
+param waist_girth number = 1 range 0.8 1.3
+param pelvis_girth number = 1 range 0.8 1.3
+param upper_arm_girth number = 1 range 0.8 1.3
+param forearm_girth number = 1 range 0.8 1.3
+param thigh_girth number = 1 range 0.8 1.3
+param shin_girth number = 1 range 0.8 1.3
+# radius offsets at the bust, the waist and the hips, in eye heights
+param bust_offset number = 0 range -0.02 0.02
+param waist_offset number = 0 range -0.02 0.02
+param hip_offset number = 0 range -0.02 0.02
+# the shoulders' lateral offset from the base, in eye heights, the same on both sides
+param shoulder_width number = 0 range -0.012 0.02
+# rest posture, rotations in degrees
+param spine_posture number = 0 range -8 8
+param neck_posture number = 0 range -8 8
+param pelvis_posture number = 0 range -8 8
+out stature_m = stature

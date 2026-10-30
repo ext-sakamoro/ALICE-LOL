@@ -706,6 +706,21 @@ class = "local"
 reason = "takes the identifiers and ranges of this crate's own proportion laws (avatar_body, avatar_face) to check a record against; it carries no Law-bearing value of another crate"
 
 [[entry]]
+path = "alice_lol::variant::KnobTable::variant"
+class = "local"
+reason = "takes knob names of this crate's knob law (each checked against the table) with integer steps, and the identifiers of part laws, hashed into the variant identifier as given and never read"
+
+[[entry]]
+path = "alice_lol::variant::sample"
+class = "local"
+reason = "takes the identifiers of part laws, hashed into each sampled variant's identifier as given and never read"
+
+[[entry]]
+path = "alice_lol::variant::uniformity"
+class = "local"
+reason = "takes the name of a knob of this crate's knob table to report on"
+
+[[entry]]
 path = "alice_lol::sheet_law::SheetLaw::from_file"
 class = "authoring"
 reason = "reads a sheet law file a person or a model writes; the law's identifier (the kind tag and its canonical lines) names what was read"

@@ -102,6 +102,20 @@ fn err(line: usize, message: impl Into<String>) -> ProportionLawError {
     }
 }
 
+/// An unordered set of parameter tuples: `group <name>: <param> <param> …` lines with the same name,
+/// each line one member (a tuple, its parameters in line order), every member of the same length
+///
+/// The members are interchangeable (the knots of a set of tails, say): an instance that swaps two
+/// members is the same instance, so a reader that names an instance (a variant identifier)
+/// canonicalises the members first. A parameter is in at most one member of one group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnobGroup {
+    /// the group's name
+    pub name: String,
+    /// its members, in file order; each a list of parameter names
+    pub members: Vec<Vec<String>>,
+}
+
 /// A declared parameter
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProportionParam {
@@ -135,6 +149,8 @@ struct Require {
 pub struct ProportionLaw {
     name: String,
     params: Vec<ProportionParam>,
+    /// `group` lines: unordered sets of parameter tuples, in file order (see [`KnobGroup`])
+    groups: Vec<KnobGroup>,
     lets: Vec<Line>,
     /// `out` lines have one expression, `point` lines three, in file order
     outputs: Vec<Line>,
@@ -254,6 +270,7 @@ impl ProportionLaw {
         let mut name = None;
         let mut kind = false;
         let mut params: Vec<ProportionParam> = Vec::new();
+        let mut groups: Vec<KnobGroup> = Vec::new();
         let mut lets: Vec<(String, LawExpr)> = Vec::new();
         let mut outputs: Vec<(String, Vec<LawExpr>)> = Vec::new();
         let mut requires: Vec<(String, [LawExpr; 2])> = Vec::new();
@@ -356,6 +373,54 @@ impl ProportionLaw {
             };
             match word {
                 "claim" | "source" => {}
+                "group" => {
+                    let Some((g, members)) = rest.split_once(':') else {
+                        return Err(err(line, "`group <name>: <param> <param> …` expected"));
+                    };
+                    let g = g.trim();
+                    if !is_name(g) {
+                        return Err(err(line, format!("`{g}` is not a group name")));
+                    }
+                    let member: Vec<String> =
+                        members.split_whitespace().map(str::to_owned).collect();
+                    if member.is_empty() {
+                        return Err(err(line, format!("an empty member of the group `{g}`")));
+                    }
+                    for n in &member {
+                        if !params.iter().any(|q| &q.name == n) {
+                            return Err(err(
+                                line,
+                                format!("`{n}` in the group `{g}` is not a declared parameter"),
+                            ));
+                        }
+                        let in_member = member.iter().filter(|m| *m == n).count() > 1;
+                        if in_member
+                            || groups
+                                .iter()
+                                .flat_map(|k| k.members.iter().flatten())
+                                .any(|m| m == n)
+                        {
+                            return Err(err(line, format!("`{n}` is in two group members")));
+                        }
+                    }
+                    match groups.iter_mut().find(|k| k.name == g) {
+                        Some(k) if k.members[0].len() != member.len() => {
+                            return Err(err(
+                                line,
+                                format!(
+                                    "the members of the group `{g}` differ in length ({} and {})",
+                                    k.members[0].len(),
+                                    member.len()
+                                ),
+                            ));
+                        }
+                        Some(k) => k.members.push(member),
+                        None => groups.push(KnobGroup {
+                            name: g.to_owned(),
+                            members: vec![member],
+                        }),
+                    }
+                }
                 "param" => {
                     let w: Vec<&str> = rest.split_whitespace().collect();
                     let [n, "number", "=", d, "range", lo, hi] = w[..] else {
@@ -517,6 +582,7 @@ impl ProportionLaw {
         let law = Self {
             name,
             params,
+            groups,
             lets: compiled_lets,
             outputs: compiled_outputs,
             requires: compiled_requires,
@@ -532,6 +598,12 @@ impl ProportionLaw {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// The `group` lines: unordered sets of parameter tuples, in file order
+    #[must_use]
+    pub fn groups(&self) -> &[KnobGroup] {
+        &self.groups
     }
 
     /// The declared parameters, in file order
@@ -593,6 +665,20 @@ impl ProportionLaw {
         }
         if let Some((n, id)) = &self.parent {
             h = h.str("derive").str(n).bytes(id);
+        }
+        // likewise only a law with group lines hashes them: they change what counts as the same
+        // instance, so they are part of the law
+        if !self.groups.is_empty() {
+            h = h.str("group").u64(self.groups.len() as u64);
+            for g in &self.groups {
+                h = h.str(&g.name).u64(g.members.len() as u64);
+                for m in &g.members {
+                    h = h.u64(m.len() as u64);
+                    for n in m {
+                        h = h.str(n);
+                    }
+                }
+            }
         }
         h.finish()
     }
