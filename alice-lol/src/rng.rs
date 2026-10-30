@@ -1,9 +1,8 @@
 //! A deterministic pseudo-random stream: xorshift64\* with no external dependency.
 //!
 //! The same seed gives the same stream on every machine (integer arithmetic only). It is for
-//! generating data and sampling a parameter box, not for anything that must be unpredictable.
-//! [`Rng::uniform`] is exactly uniform over any integer range (rejection); [`Rng::int`] takes a
-//! remainder and is exactly uniform only when the span is a power of two.
+//! generating data, not for anything that must be unpredictable. [`Rng::int`] takes a remainder
+//! and is exactly uniform only when the span is a power of two.
 
 /// A deterministic stream (xorshift64\*)
 #[derive(Debug, Clone)]
@@ -30,29 +29,6 @@ impl Rng {
         x.wrapping_mul(0x2545_F491_4F6C_DD1D)
     }
 
-    /// An integer in `[lo, hi]`, every value with the same probability: draws above the largest
-    /// multiple of the span are rejected and drawn again
-    ///
-    /// # Panics
-    ///
-    /// When `hi < lo`.
-    pub fn uniform(&mut self, lo: i64, hi: i64) -> i64 {
-        assert!(hi >= lo, "uniform: an empty range [{lo}, {hi}]");
-        let span = hi.abs_diff(lo).wrapping_add(1);
-        if span == 0 {
-            // the whole of i64: every draw is in range
-            return i64::from_ne_bytes(self.next_u64().to_ne_bytes());
-        }
-        // the draws that map evenly: [0, u64::MAX - (2^64 mod span)]
-        let limit = u64::MAX - (u64::MAX - span + 1) % span;
-        loop {
-            let x = self.next_u64();
-            if x <= limit {
-                return lo.wrapping_add_unsigned(x % span);
-            }
-        }
-    }
-
     /// `[0, 1)` (the top 24 bits as an `f32` mantissa)
     #[allow(clippy::cast_precision_loss, reason = "24 bits, exact in f32")]
     pub fn unit(&mut self) -> f32 {
@@ -69,7 +45,6 @@ impl Rng {
     }
 
     /// An integer in `[lo, hi]` by remainder: exactly uniform only when `hi - lo + 1` is a power of two
-    /// (use [`Self::uniform`] otherwise)
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap,
@@ -114,7 +89,7 @@ impl Rng {
 #[cfg(test)]
 #[allow(
     clippy::many_single_char_names,
-    reason = "test streams a, b, r and values x, i, u, s"
+    reason = "test streams a, b and values x, i, s"
 )]
 mod tests {
     use super::*;
@@ -130,30 +105,8 @@ mod tests {
             let i = a.int(2, 5);
             assert_eq!(i, b.int(2, 5));
             assert!((2..=5).contains(&i));
-            let u = a.uniform(-7, 9);
-            assert_eq!(u, b.uniform(-7, 9));
-            assert!((-7..=9).contains(&u));
         }
         let s = a.stepped(10.0, 100.0, 5.0);
         assert!((s / 5.0).fract().abs() < 1e-6, "{s}");
-    }
-
-    #[test]
-    fn uniform_covers_the_ends_of_a_range() {
-        let mut r = Rng::new(7);
-        let (mut lo, mut hi) = (false, false);
-        for _ in 0..10_000 {
-            match r.uniform(-2, 2) {
-                -2 => lo = true,
-                2 => hi = true,
-                _ => {}
-            }
-        }
-        assert!(lo && hi);
-        assert_eq!(
-            Rng::new(1).uniform(i64::MIN, i64::MAX),
-            Rng::new(1).uniform(i64::MIN, i64::MAX)
-        );
-        assert_eq!(Rng::new(3).uniform(5, 5), 5);
     }
 }

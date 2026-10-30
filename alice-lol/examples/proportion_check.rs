@@ -136,6 +136,12 @@ fn main() -> ExitCode {
     for r in law.requires() {
         println!("require {r}");
     }
+    // an unordered group: one line per member, as the law writes it
+    for g in law.groups() {
+        for m in &g.members {
+            println!("group {}: {}", g.name, m.join(" "));
+        }
+    }
     println!(
         "outputs {}",
         law.output_names().collect::<Vec<_>>().join(" ")
