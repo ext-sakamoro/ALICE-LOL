@@ -129,7 +129,7 @@ pub mod proportion_law;
 pub mod three_view;
 
 // law の道具が読む小さな厳密な JSON (record / sheet の記入)
-mod json_lite;
+pub mod json_lite;
 
 // 設定画の組の Law (kind sheet): 埋めるべき情報を slot として宣言し、記入を検査する
 pub mod rng;

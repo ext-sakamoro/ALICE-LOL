@@ -696,6 +696,16 @@ class = "authoring"
 reason = "reads a three-view record a person or a model writes from a character sheet (landmark heights read on the drawing); it carries no identifier of another crate, and its record format line `three_view 1` is required"
 
 [[entry]]
+path = "alice_lol::json_lite::parse"
+class = "authoring"
+reason = "reads JSON a person or a model writes, in a strict subset (no escapes, no duplicate keys, finite numbers, depth at most 16); it builds plain values and carries no identifier of another crate"
+
+[[entry]]
+path = "alice_lol::json_lite::get"
+class = "local"
+reason = "looks up a key of an object json_lite::parse already built; the key is a name the caller chose"
+
+[[entry]]
 path = "alice_lol::three_view::record_from_json"
 class = "authoring"
 reason = "reads the landmarks a model or a detector writes as JSON and builds a record from them; it carries no identifier of another crate"
