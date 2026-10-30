@@ -41,6 +41,9 @@ EXEMPT = {
     ("scripts/test_id_move_check.py",
      'lib = subprocess.run(["git", "-C", str(d), "show", "v0.3.0:src/lib.rs"], check=True,'):
         "d is a repository the test creates in a temporary directory, with its own v0.3.0 tag",
+    ("scripts/test_shared_files.py",
+     'data = subprocess.run(["git", "-C", tmp, "show", "FETCH_HEAD:conformance/shared-files.toml"], check=True,'):
+        "tmp is a repository the test creates and fills by fetching ALICE-Law at the pinned revision; it reads that commit, not this repository's history",
 }
 
 
