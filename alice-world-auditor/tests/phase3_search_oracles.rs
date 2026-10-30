@@ -164,12 +164,12 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
         "closed form 自体の計算が狂っている (oracle の空振り確認)"
     );
 
-    // ⚠️ **既定 config (`substeps: 8` / `damping: 0.99`) では 537 frame に
+    // ⚠️ **1 frame あたり 0.99 の減衰 (率 `-ln(0.99)/dt`) では 537 frame に
     // 物理的に到達できない** — frame 毎の
     // 0.99 速度減衰は終端速度を `a*dt/(1-0.99) ≈ 8.3 m/s` に抑え、bang-bang
     // 最適が要求する peak `sqrt(d*a) ≈ 22.36 m/s` の 4 割弱しか出せない
     // (全力加速だけでも 99.9 m に 819〜822 frame 要する、537 の 1.53 倍)
-    // `damping: ONE` で消し、`substeps: 1` で整数格子モデル
+    // 減衰を `damping_rate: 0` (既定) で消し、`substeps: 1` で整数格子モデル
     // (`v += a*dt` が厳密 / `x += v*dt`) と一致させる (`substeps` は damping
     // と違い frame 頭の速度 impulse 注入で吸収できない位置格子単位のズレを
     // 生むため、1 に揺らす必要がある) — この scene の目的は「理想 bang-bang
@@ -177,7 +177,7 @@ fn c_plan_does_not_fall_for_naive_kinetic_energy_dominance() {
     // ではないため、「既定 config で書く」方針の対象外として扱う
     let mut world = PhysicsWorld::new(PhysicsConfig {
         gravity: Vec3Fix::ZERO,
-        damping: Fix128::ONE,
+        damping_rate: Fix128::ZERO,
         substeps: 1,
         ..PhysicsConfig::default()
     });

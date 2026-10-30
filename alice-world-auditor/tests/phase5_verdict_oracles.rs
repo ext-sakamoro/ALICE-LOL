@@ -38,7 +38,7 @@ const BUDGET: u64 = 1_000_000;
 fn lattice_config() -> PhysicsConfig {
     PhysicsConfig {
         gravity: Vec3Fix::ZERO,
-        damping: Fix128::ONE,
+        damping_rate: Fix128::ZERO,
         substeps: 1,
         ..PhysicsConfig::default()
     }
@@ -349,12 +349,14 @@ fn undecided_when_the_replay_ends_inside_the_target_but_still_moving() {
     );
 }
 
-/// Undecided: the default config's damping (0.99 per frame) and 8 substeps
-/// make the lattice plan fall short in the engine.
+/// Undecided: damping (a retention of 0.99 per 1/64 s frame, as the rate
+/// `-ln(0.99) * 64` per second) and the default 8 substeps make the lattice
+/// plan fall short in the engine.
 #[test]
 fn undecided_under_the_default_damping() {
     let config = PhysicsConfig {
         gravity: Vec3Fix::ZERO,
+        damping_rate: -Fix128::from_ratio(99, 100).ln() * Fix128::from_int(64),
         ..PhysicsConfig::default()
     };
     let got = audit(
@@ -442,7 +444,7 @@ fn undecided_when_the_replay_overflows_even_though_the_final_state_looks_like_th
     let g = -Fix128::from_int(3_i64 << 60);
     let config = PhysicsConfig {
         gravity: Vec3Fix::new(Fix128::ZERO, g, Fix128::ZERO),
-        damping: Fix128::ONE,
+        damping_rate: Fix128::ZERO,
         substeps: 2,
         ..PhysicsConfig::default()
     };

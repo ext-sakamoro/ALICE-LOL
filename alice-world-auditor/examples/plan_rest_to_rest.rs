@@ -5,10 +5,11 @@
 //!
 //! The same body, goal and parameters are audited under two configs:
 //!
-//! - dyadic `a*dt` / `dt`, `damping = 1`: the lattice-optimal plan replays
+//! - dyadic `a*dt` / `dt`, no damping (`damping_rate = 0`): the lattice-optimal plan replays
 //!   exactly in the engine, so the verdict is `Proven` (640 frames, the
 //!   closed form `2*sqrt(d/a)/dt`);
-//! - the default config (`damping = 0.99`, 8 substeps): the same lattice
+//! - damping (a retention of 0.99 per frame, the rate `-ln(0.99)/dt` per
+//!   second) and the default 8 substeps: the same lattice
 //!   plan falls short in the engine, so the verdict is `Undecided`
 //!   (`ReplayMismatch`) — the lattice optimum is not presented as an engine
 //!   success.
@@ -46,19 +47,21 @@ fn main() {
 
     let exact = PhysicsConfig {
         gravity: Vec3Fix::ZERO,
-        damping: Fix128::ONE,
+        damping_rate: Fix128::ZERO,
         substeps: 1,
         ..PhysicsConfig::default()
     };
     let verdict = audit(&body, exact, &goal, &params);
     match &verdict {
-        Audit::Proven(p) => println!("damping 1, dyadic dt: Proven in {} frames", p.frames),
-        other => println!("damping 1, dyadic dt: {other:?}"),
+        Audit::Proven(p) => println!("no damping, dyadic dt: Proven in {} frames", p.frames),
+        other => println!("no damping, dyadic dt: {other:?}"),
     }
     assert!(matches!(&verdict, Audit::Proven(p) if p.frames == 640));
 
+    // a retention of 0.99 per 1/64 s frame, as a rate per second: -ln(0.99) * 64
     let default_damping = PhysicsConfig {
         gravity: Vec3Fix::ZERO,
+        damping_rate: -Fix128::from_ratio(99, 100).ln() * Fix128::from_int(64),
         ..PhysicsConfig::default()
     };
     let verdict = audit(&body, default_damping, &goal, &params);
