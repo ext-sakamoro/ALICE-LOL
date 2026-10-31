@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=19efcf7f3bc30b82679449d3f44d765881949fc4#19efcf7f3bc30b82679449d3f44d765881949fc4"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=5c8a364297b75bd76bf867aa0ca8fcc85afb5c94#5c8a364297b75bd76bf867aa0ca8fcc85afb5c94"
 dependencies = [
  "alice-det-math",
  "alice-zip",
