@@ -26,8 +26,8 @@
 //!   engine** under the caller's `PhysicsConfig`; `Proven` only when the
 //!   goal then holds exactly in `Fix128` and the engine's overflow flag is
 //!   not set. Sufficient conditions for `Proven` on a reachable target:
-//!   `a_max_axis * dt` and `dt` dyadic (exact in `Fix128`), damping `1`,
-//!   zero gravity and no starting velocity off the goal axis. They are
+//!   `a_max_axis * dt` and `dt` dyadic (exact in `Fix128`), no damping
+//!   (`damping_rate` 0, the default), zero gravity and no starting velocity off the goal axis. They are
 //!   not necessary: a plan outside them is `Proven` when its replay still
 //!   ends in the goal exactly. Otherwise the answer is `Undecided`, with
 //!   the reason.
@@ -50,7 +50,7 @@
 //!
 //! The search decides `AtRest` as "lattice `S == 0`" on the goal axis. In
 //! the engine a body no constraint or contact moves keeps its predicted
-//! velocity bit for bit, so under zero gravity and damping `1` the final
+//! velocity bit for bit, so under zero gravity and no damping the final
 //! `v.x` is the start velocity plus the injected impulses, exactly: a
 //! rest-to-rest plan from rest ends at `v.x == 0` even for a non-dyadic
 //! `a*dt` / `dt`, and only the position carries the rounding. `AtRest` in
@@ -371,7 +371,7 @@ fn search_step(
 /// along the goal axis by injecting a frame-head velocity impulse per
 /// `action` then stepping — the same injection point validated against a
 /// real `PhysicsWorld` for the witness trajectory (`x = 100.00001` after
-/// 537 frames with `damping: ONE, substeps: 1`).
+/// 537 frames with `damping_rate: 0, substeps: 1`).
 #[cfg(feature = "physics")]
 fn drive_world(
     world: &mut alice_physics::PhysicsWorld,
@@ -691,12 +691,12 @@ fn exact_state(body: &alice_physics::RigidBody, target: &FixAabb) -> (bool, bool
 ///
 /// For a reachable target, the replay matches the lattice exactly when
 /// `a_max_axis * dt` and `dt` are dyadic (exact in `Fix128`, e.g.
-/// `a = 4, dt = 1/64`), `config.damping == 1`, gravity is zero, the body
+/// `a = 4, dt = 1/64`), `config.damping_rate == 0`, gravity is zero, the body
 /// has no starting velocity off the goal axis, and `target`'s `x` window
 /// contains a lattice point. These are sufficient, not necessary: `Proven`
 /// rests on the replay, so a plan outside them (e.g. `dt = 1/60`) is
 /// `Proven` when its replay still ends in the goal exactly. When the replay
-/// misses (e.g. the default damping `0.99`, or a non-dyadic position that
+/// misses (e.g. under damping, or a non-dyadic position that
 /// rounds past an edge), the answer is [`UndecidedCause::ReplayMismatch`] —
 /// never a `Proven` the engine does not back.
 ///
