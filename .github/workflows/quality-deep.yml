@@ -149,6 +149,7 @@ jobs:
       - name: Summary + gate (missed must be 0)
         if: always()
         working-directory: ALICE-LOL
+        shell: bash
         run: |
           {
             echo "## cargo-mutants — law cores shard ${{ matrix.shard }}/4 (\`law.rs\` + \`audit_law.rs\` + \`law_id.rs\`)"
@@ -172,7 +173,7 @@ jobs:
           # (測定結果が無い = path ミス or build 失敗、どちらも green にしない)
           if [ ! -f mutants.out/outcomes.json ] || [ ! -f mutants.out/missed.txt ]; then
             echo "::error::mutants.out/{outcomes.json,missed.txt} が無い — gate が何も検査していない (path 指定 or build を確認)"
-            find mutants.out -maxdepth 3 2>/dev/null | head -40
+            find mutants.out -maxdepth 3 2>/dev/null | head -40 || true
             exit 1
           fi
           if ! grep -q '"caught"' mutants.out/outcomes.json; then

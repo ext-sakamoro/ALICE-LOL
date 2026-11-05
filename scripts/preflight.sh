@@ -227,6 +227,8 @@ python3 scripts/law_corners.py laws/spike
 step "ci.yml / docs: law_ambiguity_lint (method scope, range provenance, language neutrality)"
 python3 scripts/test_line_split_guard.py
 python3 scripts/line_split_guard.py
+python3 scripts/test_workflow_pipefail.py
+python3 scripts/workflow_pipefail.py
 python3 scripts/test_workflow_concurrency.py
 python3 scripts/workflow_concurrency.py
 python3 scripts/test_changed_paths.py

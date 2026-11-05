@@ -272,6 +272,7 @@ jobs:
 
       # workspace 全体 (--workspace) を対象
       - name: Run coverage
+        shell: bash
         run: |
           cargo llvm-cov --workspace --lib --summary-only 2>&1 | tee coverage-summary.txt
 

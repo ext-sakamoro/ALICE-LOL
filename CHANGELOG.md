@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- CI: `scripts/workflow_pipefail.py` (試験 `scripts/test_workflow_pipefail.py`、他の repo と同じ中身) が、pipe する `run` step が pipefail で走るかを全 workflow で確かめる coverage、ALICE-Law の block、週次の Summary の step を `shell: bash` にした
 - `alice_lol::json_lite` を公開した (JSON の厳密な部分集合の reader: escape なし / 重複 key は拒否 / 有限の数 / 入れ子は 16 段まで) 他の crate が同じ reader で入力を読めるようにするため
 - proportion law の `group <name>: <param> …` 行: 同じ名前の行が順序を問わない組 (member は param の並び) を作り、law の識別子に入る (group の無い law の識別子は変わらない) 知らない param・2 つの member に出る param・長さの違う member・空の member・名前でない group 名は拒否する (例 `proportion_check` が表示する)
 - `alice_lol::rng`: seed から決まる乱数列 (xorshift64\*) を `alice-lol-datagen` から移した (datagen は再公開する)

@@ -823,6 +823,10 @@ jobs:
         run: python scripts/test_line_split_guard.py
       - name: line_split_guard (law file の読み手は LF だけで行を分ける)
         run: python scripts/line_split_guard.py
+      - name: workflow_pipefail oracle (検査器自身の試験)
+        run: python scripts/test_workflow_pipefail.py
+      - name: workflow_pipefail (pipe する step は pipefail で走る)
+        run: python scripts/workflow_pipefail.py
       - name: workflow_concurrency oracle (検査器自身の試験)
         run: python scripts/test_workflow_concurrency.py
       - name: workflow_concurrency (branch の push で走る workflow に concurrency、0 件は fail)
