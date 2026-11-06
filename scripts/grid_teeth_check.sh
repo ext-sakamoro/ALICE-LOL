@@ -23,16 +23,33 @@
 # changes of your own) before running it, since each mutant's restore is a
 # `git checkout --` of the files it touched.
 #
-# usage: scripts/grid_teeth_check.sh
+# usage: scripts/grid_teeth_check.sh [--anchors-only]
 # exit 0 if every mutant turned its target red; exit 1 if any mutant stayed
 # green (a gap the table in this script's own comments should either close
-# or explicitly justify).
+# or explicitly justify), did not apply (its anchor is no longer in the
+# source: the mutant tests nothing until the anchor is updated), or did not
+# compile (cargo's non-zero exit then says nothing about the test).
+#
+# --anchors-only applies each mutant to a temporary copy of its files and
+# builds nothing, in about a second, with the working tree untouched and
+# allowed to be dirty: the workflow runs it on every push, so the commit that
+# moves an anchored line goes red itself and not at the next weekly run.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [ -n "$(git status --porcelain)" ]; then
+ANCHORS_ONLY=0
+case "${1:-}" in
+  "") ;;
+  --anchors-only) ANCHORS_ONLY=1 ;;
+  *)
+    echo "usage: scripts/grid_teeth_check.sh [--anchors-only]" >&2
+    exit 2
+    ;;
+esac
+
+if [ "$ANCHORS_ONLY" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
   echo "grid_teeth_check: working tree is not clean -- commit or stash first" >&2
   echo "(each mutant restores its files with \`git checkout --\`, which would discard uncommitted work)" >&2
   exit 2
@@ -47,12 +64,14 @@ fi
 # lock file as an ordinary side effect of building", which is not this
 # script's concern (and not `--locked`: a lockfile update here is expected,
 # not an error to refuse)
-echo "grid_teeth_check: pre-build (settles Cargo.lock before the baseline is taken)"
-cargo build -p alice-lol --test degenerate_grid >/tmp/grid_teeth_prebuild.log 2>&1 || {
-  echo "grid_teeth_check: pre-build failed -- see /tmp/grid_teeth_prebuild.log" >&2
-  exit 2
-}
-BASELINE_STATUS="$(git status --porcelain)"
+if [ "$ANCHORS_ONLY" -eq 0 ]; then
+  echo "grid_teeth_check: pre-build (settles Cargo.lock before the baseline is taken)"
+  cargo build -p alice-lol --test degenerate_grid >/tmp/grid_teeth_prebuild.log 2>&1 || {
+    echo "grid_teeth_check: pre-build failed -- see /tmp/grid_teeth_prebuild.log" >&2
+    exit 2
+  }
+  BASELINE_STATUS="$(git status --porcelain)"
+fi
 
 MUTATED_FILES=()
 
@@ -65,14 +84,49 @@ trap cleanup EXIT
 
 declare -a RESULTS=()
 
+# $1 = mutation script, $2.. = files it touches: applies it to a temporary copy,
+# and succeeds when it applied and changed at least one of the files. The script
+# prints which anchor it did not find; a file it touches and $2.. omits is an
+# error here too, since it is not in the copy.
+applies_to_a_copy() {
+  local mutate="$1" scratch f rc=0 changed=0
+  shift
+  scratch="$(mktemp -d)"
+  for f in "$@"; do
+    mkdir -p "$scratch/$(dirname "$f")"
+    cp "$f" "$scratch/$f" || rc=1
+  done
+  if [ "$rc" -eq 0 ]; then
+    (cd "$scratch" && python3 -c "$mutate") || rc=1
+  fi
+  if [ "$rc" -eq 0 ]; then
+    for f in "$@"; do
+      cmp -s "$f" "$scratch/$f" || changed=1
+    done
+    [ "$changed" -eq 1 ] || rc=1
+  fi
+  rm -rf "$scratch"
+  return "$rc"
+}
+
 # $1 = mutant id, $2 = description, $3 = python3 mutation script, $4 = test
 # command, $5.. = files the mutation touches (restored after, even on
 # failure/interrupt)
 run_mutant() {
   local id="$1" desc="$2" mutate="$3" test_cmd="$4"
   shift 4
-  MUTATED_FILES=("$@")
   echo "== $id: $desc =="
+  if ! applies_to_a_copy "$mutate" "$@"; then
+    echo "  STALE: $id does not apply to the current source; update its anchor in scripts/grid_teeth_check.sh"
+    RESULTS+=("$id|STALE (no mutant)|$desc")
+    return 0
+  fi
+  if [ "$ANCHORS_ONLY" -eq 1 ]; then
+    echo "  applies"
+    RESULTS+=("$id|APPLIES|$desc")
+    return 0
+  fi
+  MUTATED_FILES=("$@")
   local log="/tmp/grid_teeth_${id}.log"
   python3 -c "$mutate"
   set +e
@@ -81,8 +135,14 @@ run_mutant() {
   set -e
   git checkout -- "${MUTATED_FILES[@]}"
   MUTATED_FILES=()
-  if [ "$rc" -ne 0 ]; then
+  if grep -q "could not compile" "$log"; then
+    echo "  BROKEN: the mutated source does not compile (rc=$rc, log: $log) -- this says nothing about the gate"
+    grep -E "^error" "$log" | head -5 | sed 's/^/    /' || true
+    RESULTS+=("$id|BROKEN (no build)|$desc")
+  elif [ "$rc" -ne 0 ]; then
     echo "  RED as expected (rc=$rc, log: $log)"
+    # what turned red, so a run's log shows it and not only an exit status
+    grep -E "^test .* FAILED|has overflowed its stack|signal: [0-9]+|exit (code|status)[: ]" "$log" | head -5 | sed 's/^/    /' || true
     RESULTS+=("$id|RED (expected)|$desc")
   else
     echo "  MISS: stayed GREEN (rc=0, log: $log) -- this gate does not catch this mutant"
@@ -156,6 +216,7 @@ p = 'alice-lol/src/runtime_parser.rs'
 t = open(p, encoding='utf-8').read()
 old = '''        if !v.is_finite() {
             return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
                 message: format!(\"number out of range: '{s}'\"),
                 position: start,
             });
@@ -230,7 +291,7 @@ fail=0
 for r in "${RESULTS[@]}"; do
   IFS='|' read -r id result desc <<<"$r"
   printf '%-4s %-16s %s\n' "$id" "$result" "$desc"
-  [[ "$result" == GREEN* ]] && fail=1
+  [[ "$result" == RED* || "$result" == APPLIES* ]] || fail=1
 done
 
 # each mutant already restores its own files right after its test run, but
@@ -242,12 +303,15 @@ done
 # have touched Cargo.lock again while running a mutant's test command (the
 # same ordinary resolution behavior the pre-build already settled once),
 # which is not a mutant-restore failure.
-final_status="$(git status --porcelain)"
-if [ "$final_status" != "$BASELINE_STATUS" ]; then
-  echo
-  echo "grid_teeth_check: the working tree does not match the pre-mutant baseline:" >&2
-  diff <(echo "$BASELINE_STATUS") <(echo "$final_status") >&2 || true
-  exit 1
+# (--anchors-only mutates only temporary copies)
+if [ "$ANCHORS_ONLY" -eq 0 ]; then
+  final_status="$(git status --porcelain)"
+  if [ "$final_status" != "$BASELINE_STATUS" ]; then
+    echo
+    echo "grid_teeth_check: the working tree does not match the pre-mutant baseline:" >&2
+    diff <(echo "$BASELINE_STATUS") <(echo "$final_status") >&2 || true
+    exit 1
+  fi
 fi
 
 # a silent bug in run_mutant (an early return, a typo in a mutant's own
@@ -264,6 +328,11 @@ if [ "$fail" -ne 0 ]; then
   echo
   echo "grid_teeth_check: one or more mutants did not turn their target red (see table above)"
   exit 1
+fi
+if [ "$ANCHORS_ONLY" -eq 1 ]; then
+  echo
+  echo "grid_teeth_check: ok (all 5 mutants apply; nothing built or run)"
+  exit 0
 fi
 echo
 echo "grid_teeth_check: ok (all 5 mutants turned their target red, tree restored clean)"

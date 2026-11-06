@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- CI: `scripts/grid_teeth_check.sh --anchors-only` (試験 `scripts/test_grid_teeth_check.py`) が 5 つの変異すべてを build なしでファイルの複製に当てて確かめ、push ごとに `grid-teeth-check.yml` の `changes` job と preflight で走る 変異の anchor を動かした commit が週次でなくその commit の CI で red になる 変異が当たらない / 変異したコードが compile できない場合は、その変異を飛ばさず表に載せて red にする (他の変異は最後まで走る)
 - CI: `scripts/workflow_pipefail.py` (試験 `scripts/test_workflow_pipefail.py`、他の repo と同じ中身) が、pipe する `run` step が pipefail で走るかを全 workflow で確かめる coverage、ALICE-Law の block、週次の Summary の step を `shell: bash` にした
 - `alice_lol::json_lite` を公開した (JSON の厳密な部分集合の reader: escape なし / 重複 key は拒否 / 有限の数 / 入れ子は 16 段まで) 他の crate が同じ reader で入力を読めるようにするため
 - proportion law の `group <name>: <param> …` 行: 同じ名前の行が順序を問わない組 (member は param の並び) を作り、law の識別子に入る (group の無い law の識別子は変わらない) 知らない param・2 つの member に出る param・長さの違う member・空の member・名前でない group 名は拒否する (例 `proportion_check` が表示する)
@@ -135,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `print_export` からの alice-sdf の `export_stl` / `export_stl_ascii` / `export_3mf` / `export_fbx` の再公開 (破壊的変更) これらは LOL の producer の識別子を書かない (ALICE-Law G8) LOL の書き出しは `node_to_stl` / `node_to_3mf` / `node_to_fbx` (と `lol_to_*`) を使う alice-sdf の形のまま書きたい時は alice-sdf から直接使う 戻らないことを compile_fail の試験 `unstamped_writers_are_not_reexported` が固定する
 
 ### Fixed
+- `scripts/grid_teeth_check.sh` の変異 M3 の anchor を現在の lexer に合わせた (`ParseError` に `kind` が増えて当たらなくなり、10-26 から週次の check が M3 で止まって M4 / M5 も走っていなかった)
 - CI (security-audit.yml / preflight): 情報のための todo! / TODO の一覧を `head -n 50 <<< "$hits"` で出す 以前の `echo "$hits" | head -50` は `set -o pipefail` の下で、一覧が 50 行を超えると head が先に閉じて echo が SIGPIPE になり、informational の step が時々失敗していた
 - 規則の Law の語の区切りを TASK.md どおり空白と tab だけにした: 第 2 実装 (`scripts/law_rules.py`) は Unicode の空白 (no-break space など) も区切り・端の空白として扱っており (`str.split()` / `str.strip()` / 正規表現の `\s`)、Rust の reader と答えが割れていた (`kind statute` の後の no-break space、`title` などの keyword の後の no-break space) 版・差分・statute・contract の Rust 側も `split_whitespace` を使っていた 両側とも 1 つの tokenizer (`fields` / `_words`) にし、差分の key は語を空白 1 つで繋いだ形で比べる Python の statute は字下げした `title` 行から字下げごと切り出していた (識別子が Rust と割れた) 400 桁の整数の入力で Python が OverflowError を出していた (int は float に変える前に比べる) `scripts/src_gap_check.py` は `#[ignore = "src gap: …"]` が複数行に分かれると見つけず、属性の外の `src gap` の文字列も通していた 時間で上限を切っていた線形の試験は件数を倍にした時の比で判定する (遅い runner で落ちない)
 - `RuleSet::from_files` が差分の版の `supersedes` を読む時に table の semantics と照合していたので、predicate (と machine) の差分の版を持つ rule set が読めなかった 照合は差分を解決する時にその版の semantics で行う
