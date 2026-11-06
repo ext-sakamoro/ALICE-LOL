@@ -27,8 +27,11 @@
 # exit 0 if every mutant turned its target red; exit 1 if any mutant stayed
 # green (a gap the table in this script's own comments should either close
 # or explicitly justify), did not apply (its anchor is no longer in the
-# source: the mutant tests nothing until the anchor is updated), or did not
-# compile (cargo's non-zero exit then says nothing about the test).
+# source: the mutant tests nothing until the anchor is updated), did not
+# compile, or left no failure line (a target that was renamed exits non-zero
+# too), or if a target is already red without any mutant. Red means a test
+# reported FAILED, a stack overflow or a signal; cargo's exit status alone
+# says nothing about the test.
 #
 # --anchors-only applies each mutant to a temporary copy of its files and
 # builds nothing, in about a second, with the working tree untouched and
@@ -65,9 +68,10 @@ fi
 # script's concern (and not `--locked`: a lockfile update here is expected,
 # not an error to refuse)
 if [ "$ANCHORS_ONLY" -eq 0 ]; then
+  LOG_DIR="$(mktemp -d)"
   echo "grid_teeth_check: pre-build (settles Cargo.lock before the baseline is taken)"
-  cargo build -p alice-lol --test degenerate_grid >/tmp/grid_teeth_prebuild.log 2>&1 || {
-    echo "grid_teeth_check: pre-build failed -- see /tmp/grid_teeth_prebuild.log" >&2
+  cargo build -p alice-lol --test degenerate_grid >"$LOG_DIR/prebuild.log" 2>&1 || {
+    echo "grid_teeth_check: pre-build failed -- see $LOG_DIR/prebuild.log" >&2
     exit 2
   }
   BASELINE_STATUS="$(git status --porcelain)"
@@ -83,6 +87,28 @@ cleanup() {
 trap cleanup EXIT
 
 declare -a RESULTS=()
+
+# what makes a run red: a test that failed, or the process dying under one
+FAILURE_LINE='^test .* \.\.\. .*FAILED|has overflowed its stack|signal: [0-9]+'
+
+# test commands seen green without a mutant, one per line
+GREEN_TARGETS=""
+
+# $1 = test command: succeeds when it passes on the source as committed, once per
+# command. A target already red would make any mutant look caught.
+target_is_green_unmutated() {
+  local test_cmd="$1" log="$LOG_DIR/unmutated.log"
+  case "$GREEN_TARGETS" in
+    *"[$test_cmd]"*) return 0 ;;
+  esac
+  echo "  unmutated: $test_cmd"
+  if ! eval "$test_cmd" >"$log" 2>&1; then
+    echo "  TARGET RED: $test_cmd fails without a mutant (log: $log)"
+    grep -E "$FAILURE_LINE|^error" "$log" | head -5 | sed 's/^/    /' || true
+    return 1
+  fi
+  GREEN_TARGETS="$GREEN_TARGETS[$test_cmd]"
+}
 
 # $1 = mutation script, $2.. = files it touches: applies it to a temporary copy,
 # and succeeds when it applied and changed at least one of the files. The script
@@ -126,8 +152,12 @@ run_mutant() {
     RESULTS+=("$id|APPLIES|$desc")
     return 0
   fi
+  if ! target_is_green_unmutated "$test_cmd"; then
+    RESULTS+=("$id|TARGET RED (no mutant)|$desc")
+    return 0
+  fi
   MUTATED_FILES=("$@")
-  local log="/tmp/grid_teeth_${id}.log"
+  local log="$LOG_DIR/${id}.log"
   python3 -c "$mutate"
   set +e
   eval "$test_cmd" >"$log" 2>&1
@@ -139,11 +169,15 @@ run_mutant() {
     echo "  BROKEN: the mutated source does not compile (rc=$rc, log: $log) -- this says nothing about the gate"
     grep -E "^error" "$log" | head -5 | sed 's/^/    /' || true
     RESULTS+=("$id|BROKEN (no build)|$desc")
-  elif [ "$rc" -ne 0 ]; then
+  elif [ "$rc" -ne 0 ] && grep -qE "$FAILURE_LINE" "$log"; then
     echo "  RED as expected (rc=$rc, log: $log)"
     # what turned red, so a run's log shows it and not only an exit status
-    grep -E "^test .* FAILED|has overflowed its stack|signal: [0-9]+|exit (code|status)[: ]" "$log" | head -5 | sed 's/^/    /' || true
+    grep -E "$FAILURE_LINE" "$log" | head -5 | sed 's/^/    /' || true
     RESULTS+=("$id|RED (expected)|$desc")
+  elif [ "$rc" -ne 0 ]; then
+    echo "  NO FAILURE LINE: rc=$rc and no test failed (log: $log) -- did the target move?"
+    grep -E "^error" "$log" | head -5 | sed 's/^/    /' || true
+    RESULTS+=("$id|NO FAILURE LINE|$desc")
   else
     echo "  MISS: stayed GREEN (rc=0, log: $log) -- this gate does not catch this mutant"
     RESULTS+=("$id|GREEN (MISS)|$desc")

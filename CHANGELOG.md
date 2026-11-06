@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- CI: `scripts/grid_teeth_check.sh --anchors-only` (試験 `scripts/test_grid_teeth_check.py`) が 5 つの変異すべてを build なしでファイルの複製に当てて確かめ、push ごとに `grid-teeth-check.yml` の `changes` job と preflight で走る 変異の anchor を動かした commit が週次でなくその commit の CI で red になる 変異が当たらない / 変異したコードが compile できない場合は、その変異を飛ばさず表に載せて red にする (他の変異は最後まで走る)
+- CI: `scripts/grid_teeth_check.sh --anchors-only` (試験 `scripts/test_grid_teeth_check.py`) が 5 つの変異すべてを build なしでファイルの複製に当てて確かめ、push ごとに `grid-teeth-check.yml` の `changes` job と preflight で走る 変異の anchor を動かした commit が週次でなくその commit の CI で red になる 変異が当たらない / 変異したコードが compile できない場合は、その変異を飛ばさず表に載せて red にする (他の変異は最後まで走る) RED は test の FAILED 行・stack overflow・signal がある時だけ数える (exit status だけでは、名前が変わった test target も RED と読んでいた) 変異なしで既に red の target はどの変異も捕まえたことにしない
 - CI: `scripts/workflow_pipefail.py` (試験 `scripts/test_workflow_pipefail.py`、他の repo と同じ中身) が、pipe する `run` step が pipefail で走るかを全 workflow で確かめる coverage、ALICE-Law の block、週次の Summary の step を `shell: bash` にした
 - `alice_lol::json_lite` を公開した (JSON の厳密な部分集合の reader: escape なし / 重複 key は拒否 / 有限の数 / 入れ子は 16 段まで) 他の crate が同じ reader で入力を読めるようにするため
 - proportion law の `group <name>: <param> …` 行: 同じ名前の行が順序を問わない組 (member は param の並び) を作り、law の識別子に入る (group の無い law の識別子は変わらない) 知らない param・2 つの member に出る param・長さの違う member・空の member・名前でない group 名は拒否する (例 `proportion_check` が表示する)
