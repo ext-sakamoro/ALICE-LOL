@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 世界の Law (`kind world`、`alice_lol::world_law`): 材質 (密度・摩擦・反発・柔らかさ) と雨 (有無・強さ mm/h) を `alice-physics` の parameter の名前と単位で書く 範囲外の値は丸めず行番号つきで拒否する `BoundWorld::describe` は値から計算した平易な文を返し、語の閾値を持たない 反発の文は `physics` feature の試験で実際の落下と照合する `physics` feature で `PhysicsMaterial` / `RigidBody` / `ClothConfig` / `DeformableConfig` に渡し、雨は質量流束から `ParticleEmitter` の `emission_rate` または `SphConfig` の粒子質量での粒子数にする 例 `laws/world/mochi_in_the_rain.law`、確認 `world_check`、文法 `lol.gbnf`、fuzz `fuzz_world_law_read`
+- CI: `scripts/frame_targets.sh` が世界の Law を wasm32-wasip1 で `physics` feature つきで build し、oracle 2 file を wasmtime で実行する 合格数が足りない時は fail する
 - CI: `scripts/grid_teeth_check.sh --anchors-only` (試験 `scripts/test_grid_teeth_check.py`) が 5 つの変異すべてを build なしでファイルの複製に当てて確かめ、push ごとに `grid-teeth-check.yml` の `changes` job と preflight で走る 変異の anchor を動かした commit が週次でなくその commit の CI で red になる 変異が当たらない / 変異したコードが compile できない場合は、その変異を飛ばさず表に載せて red にする (他の変異は最後まで走る) RED は test の FAILED 行・stack overflow・signal がある時だけ数える (exit status だけでは、名前が変わった test target も RED と読んでいた) 変異なしで既に red の target はどの変異も捕まえたことにしない
 - CI: `scripts/workflow_pipefail.py` (試験 `scripts/test_workflow_pipefail.py`、他の repo と同じ中身) が、pipe する `run` step が pipefail で走るかを全 workflow で確かめる coverage、ALICE-Law の block、週次の Summary の step を `shell: bash` にした
 - `alice_lol::json_lite` を公開した (JSON の厳密な部分集合の reader: escape なし / 重複 key は拒否 / 有限の数 / 入れ子は 16 段まで) 他の crate が同じ reader で入力を読めるようにするため

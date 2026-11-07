@@ -138,6 +138,9 @@ pub mod program_law;
 // 動く単語の参照 frame (glyph の形 + 動きの Law → 決定論の pixel と hash) 規則は FRAME_SEMANTICS_ID
 pub mod motion_frame;
 
+// ── 世界の Law (kind world): 物の材質と雨 ──
+pub mod world_law;
+
 /// Byte layout laws (`kind layout`): a binary format declared once, bytes read and checked
 /// against the declaration (the crate `alice-lol-layout`, re-exported)
 pub use alice_lol_layout as layout;

@@ -56,5 +56,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_world_law_read"
+path = "fuzz_targets/fuzz_world_law_read.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]

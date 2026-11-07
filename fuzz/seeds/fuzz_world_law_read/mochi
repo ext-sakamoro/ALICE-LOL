@@ -1,0 +1,13 @@
+# A soft block that hardly bounces, under light rain
+law mochi_in_the_rain
+kind world
+claim a soft block that hardly bounces, under light rain
+param softness number = 0.01 range 0 0.1
+param raining switch = on
+param strength number = 4 range 0 100
+material mochi density = 1100
+material mochi friction = 0.6
+material mochi bounce = 0.2
+material mochi edge_compliance = softness
+rain = raining
+rain_rate = strength

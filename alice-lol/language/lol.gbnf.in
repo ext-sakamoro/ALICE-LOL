@@ -45,7 +45,7 @@
 # full `program(...)` wrapping SDF + entity registry + Intent (Phase 3),
 # optionally declared with its units and purpose (root only, not nested).
 
-root ::= ws (units | program | expr | law) ws
+root ::= ws (units | program | expr | law | worldlaw) ws
 
 # ─── Units (`runtime_parser::parse_declared`) ─────────────────────────
 #
@@ -78,6 +78,26 @@ lawexpect ::= "expect" sp ident sp "==" sp number (sp "within" sp number)?
 lawrange ::= "range" sp ident (sp lawvalue)+
 lawincludes ::= "includes" sp ident (sp lawvalue)+
 ident ::= [a-zA-Z_] [a-zA-Z0-9_-]*
+
+# ─── 世界 Law (行ごとに 1 項、`world_law::WorldLaw::from_file`) ──────────
+#
+# 物の材質と雨を Physics の parameter の名前と単位で書く 値の式は research law の式
+worldlaw ::= "law" sp worldname nl "kind world" nl worldline (nl worldline)* nl?
+worldline ::= worldparam | worldlet | worldmaterial | worldrain | worldrate
+worldparam ::= "param" sp worldname sp "number = " worldnumber sp "range" sp worldnumber sp worldnumber
+             | "param" sp worldname sp "switch = " worldonoff
+worldlet ::= "let" sp worldname " = " worldexpr
+worldmaterial ::= "material" sp worldname sp worldfield " = " worldexpr
+worldrain ::= "rain = " (worldonoff | worldname)
+worldrate ::= "rain_rate = " worldexpr
+worldonoff ::= "on" | "off"
+worldfield ::= "density" | "friction" | "static_friction" | "bounce"
+             | "stretch_compliance" | "bend_compliance" | "edge_compliance"
+             | "volume_compliance" | "shape_stiffness" | "damping" | "sdf_friction"
+worldname ::= [a-z] [a-z0-9_]*
+worldnumber ::= "-"? [0-9]+ ("." [0-9]+)?
+worldexpr ::= worldterm ((" + " | " - " | " * " | " / " | " ^ ") worldterm)*
+worldterm ::= worldnumber | worldname | worldname "(" worldexpr (", " worldexpr)* ")" | "(" worldexpr ")"
 # a value is any run of printable ASCII except `#` (where parse_law starts a comment) and the
 # double quote: method paths (`f32::sin`), underscores and versions read the same in the
 # grammar and the parser
