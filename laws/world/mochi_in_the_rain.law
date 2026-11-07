@@ -1,0 +1,24 @@
+# A soft block that hardly bounces, under light rain
+law mochi_in_the_rain
+kind world
+claim a soft block that hardly bounces, under light rain
+param softness number = 0.01 range 0 0.1
+param raining switch = on
+param strength number = 4 range 0 100
+material mochi density = 1100
+material mochi friction = 0.6
+material mochi bounce = 0.2
+material mochi stretch_compliance = softness
+material mochi bend_compliance = 0.25
+material mochi damping = 0.985
+source shear modulus: Isono, Okamura, Fujimoto and Watanabe, Agric. Biol. Chem. 54(11):2941-2947 (1990), doi:10.1271/bbb1961.54.2941, Fig. 4
+source the storage modulus G' at 30 C and 0.1 Hz of mochi kneaded 10 min, water content 45.5 %, frozen and then kept 48 h at 2-4 C before the test
+source digitized from a log plot: log10 G' (dyn/cm^2) = 6.63 +- 0.03, so G' = 4.27e5 Pa within -7 % / +7 %
+source the condition is 30 C: room temperature (20-25 C) is not covered and not extrapolated; the modulus falls steeply above 40 C (Fig. 6)
+source Poisson's ratio 0.49 is assumed for a water-rich gel and was not measured
+material mochi shear_modulus = 427000
+material mochi shear_modulus basis measured
+material mochi poisson_ratio = 0.49
+material mochi poisson_ratio basis assumed
+rain = raining
+rain_rate = strength

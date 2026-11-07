@@ -7,7 +7,7 @@ reads the log of that run instead and fails when a listed target is missing
 from it or ran zero tests. The target list is the one in scripts/law_tests.sh
 (`DEFAULT_TARGETS` / `PHYSICS_TARGETS`), so the two cannot drift apart.
 
-usage: scripts/law_tests_from_log.py <default|physics|all> <cargo-test.log>
+usage: scripts/law_tests_from_log.py <default|physics|llm-bridge|all> <cargo-test.log>
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ TEST_LINE = re.compile(r"^test (\S+) \.\.\. ok")
 def targets(mode: str) -> list[tuple[str, str]]:
     text = (ROOT / "scripts/law_tests.sh").read_text(encoding="utf-8")
     groups = {}
-    for name in ("DEFAULT_TARGETS", "PHYSICS_TARGETS"):
+    for name in ("DEFAULT_TARGETS", "PHYSICS_TARGETS", "LLM_BRIDGE_TARGETS"):
         body = re.search(name + r"=\(\n(.*?)\n\)", text, re.S)
         if not body:
             raise SystemExit(f"error: {name} not found in scripts/law_tests.sh")
@@ -35,9 +35,11 @@ def targets(mode: str) -> list[tuple[str, str]]:
         return groups["DEFAULT_TARGETS"]
     if mode == "physics":
         return groups["PHYSICS_TARGETS"]
+    if mode == "llm-bridge":
+        return groups["LLM_BRIDGE_TARGETS"]
     if mode == "all":
-        return groups["DEFAULT_TARGETS"] + groups["PHYSICS_TARGETS"]
-    raise SystemExit("usage: law_tests_from_log.py <default|physics|all> <log>")
+        return groups["DEFAULT_TARGETS"] + groups["PHYSICS_TARGETS"] + groups["LLM_BRIDGE_TARGETS"]
+    raise SystemExit("usage: law_tests_from_log.py <default|physics|llm-bridge|all> <log>")
 
 
 def sections(log: str) -> list[tuple[str, str, list[str]]]:
@@ -59,7 +61,7 @@ def passed(lines: list[str]) -> int:
 
 def main() -> int:
     if len(sys.argv) != 3:
-        raise SystemExit("usage: law_tests_from_log.py <default|physics|all> <log>")
+        raise SystemExit("usage: law_tests_from_log.py <default|physics|llm-bridge|all> <log>")
     wanted = targets(sys.argv[1])
     secs = sections(Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace"))
     if not secs:

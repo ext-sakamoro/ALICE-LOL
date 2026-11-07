@@ -1,0 +1,642 @@
+//! World laws (`kind world`): reading, refusing, binding, the identifier and the plain text
+//!
+//! The expected values are worked out by hand from the law text and are not computed by the code
+//! under test. The golden test compares bits, and `scripts/frame_targets.sh` runs this file on
+//! wasm32-wasip1 under wasmtime too.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+
+use std::fmt::Write as _;
+
+use alice_lol::law_id::fold_semantics_pins;
+use alice_lol::world_law::{
+    measured_world_semantics_id, world_semantics_fingerprints, Basis, BindError, WorldLaw,
+    WorldValue::{Number, Switch},
+    MAX_VALUE, WORLD_SEMANTICS_ID, WORLD_SEMANTICS_PINS,
+};
+
+const MOCHI: &str = include_str!("../../laws/world/mochi_in_the_rain.law");
+
+const ONE: &str = "law one
+kind world
+material a density = 1000
+material a friction = 0.5
+material a bounce = 0.5
+";
+
+fn hex(b: &[u8]) -> String {
+    use std::fmt::Write as _;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
+}
+
+fn refused(text: &str, line: usize, part: &str) {
+    let e = WorldLaw::from_file(text).expect_err(text);
+    assert_eq!(e.line, line, "{e}");
+    assert!(e.message.contains(part), "{e}");
+}
+
+#[test]
+fn the_values_are_the_ones_the_law_states() {
+    let w = WorldLaw::from_file(MOCHI).unwrap().bind(&[]).unwrap();
+    let m = w.material("mochi").unwrap();
+    assert_eq!(m.density, 1100.0);
+    assert_eq!(m.friction, 0.6);
+    assert_eq!(m.static_friction, 0.6);
+    assert_eq!(m.bounce, 0.2);
+    assert_eq!(m.stretch_compliance, Some(0.01));
+    assert_eq!(m.bend_compliance, Some(0.25));
+    assert_eq!(m.edge_compliance, None);
+    assert_eq!(m.volume_compliance, None);
+    assert_eq!(m.shape_stiffness, None);
+    assert_eq!(m.damping, Some(0.985));
+    assert_eq!(m.sdf_friction, None);
+    assert_eq!(m.shear_modulus, Some(427_000.0));
+    assert_eq!(m.poisson_ratio, Some(0.49));
+    assert_eq!(m.shear_modulus_basis, Some(Basis::Measured));
+    assert_eq!(m.poisson_ratio_basis, Some(Basis::Assumed));
+    // E = 2 G (1 + nu) = 2 * 427000 * 1.49
+    assert!((m.youngs_modulus().unwrap() - 1_272_460.0).abs() < 1e-6);
+    assert!(w.rain().on);
+    assert_eq!(w.rain().rate_mm_per_hour, 4.0);
+    assert!(w.material("nothing").is_none());
+}
+
+#[test]
+fn softer_is_another_value_of_the_same_law() {
+    let law = WorldLaw::from_file(MOCHI).unwrap();
+    let w = law.bind(&[("softness", Number(0.05))]).unwrap();
+    assert_eq!(w.material("mochi").unwrap().stretch_compliance, Some(0.05));
+    let before = law.law_id();
+    assert_eq!(law.law_id(), before, "binding leaves the identifier");
+}
+
+#[test]
+fn every_field_reaches_its_own_slot() {
+    let law = WorldLaw::from_file(
+        "law all
+kind world
+material a density = 1
+material a friction = 2
+material a static_friction = 3
+material a bounce = 0.25
+material a stretch_compliance = 5
+material a bend_compliance = 6
+material a edge_compliance = 7
+material a volume_compliance = 8
+material a shape_stiffness = 0.5
+material a damping = 0.75
+material a sdf_friction = 0.875
+",
+    )
+    .unwrap();
+    let w = law.bind(&[]).unwrap();
+    let m = &w.materials()[0];
+    assert_eq!(
+        (m.density, m.friction, m.static_friction, m.bounce),
+        (1.0, 2.0, 3.0, 0.25)
+    );
+    assert_eq!(m.stretch_compliance, Some(5.0));
+    assert_eq!(m.bend_compliance, Some(6.0));
+    assert_eq!(m.edge_compliance, Some(7.0));
+    assert_eq!(m.volume_compliance, Some(8.0));
+    assert_eq!(m.shape_stiffness, Some(0.5));
+    assert_eq!(m.damping, Some(0.75));
+    assert_eq!(m.sdf_friction, Some(0.875));
+}
+
+#[test]
+fn a_let_and_the_functions_are_read_in_order() {
+    let law = WorldLaw::from_file(
+        "law l
+kind world
+param k number = 2 range 0 4
+let twice = 2 * k
+let more = twice + 1
+material a density = more ^ 2
+material a friction = sqrt(more - 1)
+material a bounce = cos(pi) + 1
+",
+    )
+    .unwrap();
+    let w = law.bind(&[]).unwrap();
+    let m = &w.materials()[0];
+    assert_eq!(m.density, 25.0);
+    assert_eq!(m.friction, 2.0);
+    assert_eq!(m.bounce, 0.0);
+    assert_eq!(m.bounce.to_bits(), 0.0f64.to_bits());
+}
+
+#[test]
+fn rain_follows_its_switch_and_its_flux_is_the_rate_over_3600() {
+    let law = WorldLaw::from_file(MOCHI).unwrap();
+    // 36 mm/h: 36 litres on a square metre an hour, 0.01 kg a second
+    let wet = law.bind(&[("strength", Number(36.0))]).unwrap().rain();
+    assert!(wet.on);
+    assert_eq!(wet.mass_flux(), 0.01);
+    assert_eq!(wet.particle_rate(0.002), Some(5.0));
+    assert_eq!(wet.particle_rate(0.0), None);
+    assert_eq!(wet.particle_rate(-1.0), None);
+    assert_eq!(wet.particle_rate(f64::NAN), None);
+    assert_eq!(wet.particle_rate(f64::INFINITY), None);
+
+    let dry = law
+        .bind(&[("strength", Number(36.0)), ("raining", Switch(false))])
+        .unwrap()
+        .rain();
+    assert!(!dry.on);
+    assert_eq!(dry.rate_mm_per_hour, 36.0, "the stated strength stays");
+    assert_eq!(dry.mass_flux(), 0.0);
+    assert_eq!(dry.particle_rate(0.002), Some(0.0));
+}
+
+#[test]
+fn rain_can_be_fixed_or_not_stated() {
+    let fixed = |v: &str| {
+        WorldLaw::from_file(&format!("{ONE}rain = {v}\nrain_rate = 3\n"))
+            .unwrap()
+            .bind(&[])
+            .unwrap()
+            .rain()
+            .on
+    };
+    assert!(fixed("on"));
+    assert!(!fixed("off"));
+    let none = WorldLaw::from_file(ONE).unwrap().bind(&[]).unwrap();
+    assert!(!none.rain().on);
+    assert_eq!(none.rain().rate_mm_per_hour, 0.0);
+    assert!(none.describe().contains("rain: not stated"));
+    // a law of rain alone
+    let only = WorldLaw::from_file("law r\nkind world\nrain = on\nrain_rate = 1\n").unwrap();
+    assert!(only.bind(&[]).unwrap().materials().is_empty());
+}
+
+#[test]
+fn a_value_outside_its_field_is_refused_naming_the_line() {
+    for (field, v, range) in [
+        ("density", "0", "above 0"),
+        ("density", "0 - 1", "above 0"),
+        ("density", "2 ^ 54", "above 0"),
+        ("friction", "0 - 0.5", "0..=2^53"),
+        ("friction", "2 ^ 54", "0..=2^53"),
+        ("bounce", "1.5", "0..=1"),
+        ("bounce", "0 - 0.5", "0..=1"),
+    ] {
+        let mut lines = ["density = 1000", "friction = 0.5", "bounce = 0.5"];
+        let wrong = format!("{field} = {v}");
+        let at = lines.iter().position(|l| l.starts_with(field)).unwrap();
+        lines[at] = &wrong;
+        let text = format!(
+            "law w\nkind world\nmaterial a {}\nmaterial a {}\nmaterial a {}\n",
+            lines[0], lines[1], lines[2]
+        );
+        let e = WorldLaw::from_file(&text).expect_err(&text);
+        assert!(e.to_string().contains(&format!("line {}", at + 3)), "{e}");
+        assert!(e.to_string().contains(range), "{e}");
+    }
+    for (field, v, range) in [
+        ("stretch_compliance", "0 - 1", "0..=2^53"),
+        ("bend_compliance", "0 - 1", "0..=2^53"),
+        ("edge_compliance", "0 - 1", "0..=2^53"),
+        ("volume_compliance", "0 - 1", "0..=2^53"),
+        ("shape_stiffness", "1.5", "0..=1"),
+        ("shape_stiffness", "0 - 1", "0..=1"),
+        ("damping", "1.5", "0..=1"),
+        ("damping", "0 - 1", "0..=1"),
+        ("sdf_friction", "1.5", "0..=1"),
+        ("sdf_friction", "0 - 1", "0..=1"),
+    ] {
+        let text = format!("{ONE}material a {field} = {v}\n");
+        let e = WorldLaw::from_file(&text).expect_err(&text);
+        assert!(e.to_string().contains("line 6"), "{e}");
+        assert!(e.to_string().contains(range), "{e}");
+    }
+}
+
+#[test]
+fn elastic_constants_are_optional_and_their_basis_is_stated() {
+    let w = WorldLaw::from_file(ONE).unwrap().bind(&[]).unwrap();
+    let m = &w.materials()[0];
+    assert_eq!(
+        (m.shear_modulus, m.poisson_ratio, m.youngs_modulus()),
+        (None, None, None)
+    );
+    assert!(w.describe().contains("elastic constants: not stated"));
+    // one without the other: no Young's modulus, and the missing one is said
+    let only_g = WorldLaw::from_file(&format!("{ONE}material a shear_modulus = 1000\n"))
+        .unwrap()
+        .bind(&[])
+        .unwrap();
+    assert_eq!(only_g.materials()[0].youngs_modulus(), None);
+    let text = only_g.describe();
+    assert!(
+        text.contains("shear modulus 1.0000e3 Pa (basis not stated)"),
+        "{text}"
+    );
+    assert!(text.contains("Poisson's ratio: not stated"), "{text}");
+    assert!(!text.contains("Young"), "{text}");
+    // the basis comes after the value and only for these two fields
+    refused(
+        &format!("{ONE}material a shear_modulus basis measured\n"),
+        6,
+        "not stated before its basis",
+    );
+    refused(
+        &format!("{ONE}material a density basis measured\n"),
+        6,
+        "takes no basis",
+    );
+    refused(
+        &format!("{ONE}material b poisson_ratio basis assumed\n"),
+        6,
+        "has no field yet",
+    );
+    refused(
+        &format!("{ONE}material a poisson_ratio = 0.3\nmaterial a poisson_ratio basis guessed\n"),
+        7,
+        "measured or assumed",
+    );
+    refused(
+        &format!("{ONE}material a poisson_ratio = 0.3\nmaterial a poisson_ratio basis assumed\nmaterial a poisson_ratio basis measured\n"),
+        8,
+        "given twice",
+    );
+    // the basis is in the identifier
+    let id = |b: &str| {
+        WorldLaw::from_file(&format!(
+            "{ONE}material a poisson_ratio = 0.3\nmaterial a poisson_ratio basis {b}\n"
+        ))
+        .unwrap()
+        .law_id()
+    };
+    assert_ne!(id("assumed"), id("measured"));
+    // ranges: G above 0, nu in -1..0.5
+    for (field, v, range) in [
+        ("shear_modulus", "0", "above 0"),
+        ("poisson_ratio", "0.5", "-1..0.5"),
+        ("poisson_ratio", "0 - 1.5", "-1..0.5"),
+    ] {
+        let text = format!("{ONE}material a {field} = {v}\n");
+        let e = WorldLaw::from_file(&text).expect_err(&text);
+        assert!(e.to_string().contains(range), "{e}");
+    }
+    assert!(WorldLaw::from_file(&format!("{ONE}material a poisson_ratio = 0 - 1\n")).is_ok());
+}
+
+#[test]
+fn the_edges_of_every_range_are_in_it() {
+    let w = WorldLaw::from_file(
+        "law e
+kind world
+material a density = 2 ^ 53
+material a friction = 2 ^ 53
+material a bounce = 1
+material a shape_stiffness = 1
+material a damping = 1
+material b density = 0.001
+material b friction = 0
+material b bounce = 0
+material b shape_stiffness = 0
+material b damping = 0
+rain = on
+rain_rate = 2 ^ 53
+",
+    )
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    let a = w.material("a").unwrap();
+    assert_eq!(a.density, MAX_VALUE);
+    assert_eq!(a.friction, MAX_VALUE);
+    assert_eq!(w.rain().rate_mm_per_hour, MAX_VALUE);
+    assert_eq!(a.bounce, 1.0);
+    assert_eq!(w.material("b").unwrap().bounce, 0.0);
+}
+
+#[test]
+fn negative_zero_reads_as_zero() {
+    let w = WorldLaw::from_file(
+        "law z
+kind world
+material a density = 1
+material a friction = 0 * (0 - 1)
+material a bounce = 0
+rain = on
+rain_rate = 0 * (0 - 1)
+",
+    )
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    assert_eq!(w.materials()[0].friction.to_bits(), 0);
+    assert_eq!(w.rain().rate_mm_per_hour.to_bits(), 0);
+}
+
+#[test]
+fn a_rain_rate_outside_its_range_is_refused_naming_the_line() {
+    let e = WorldLaw::from_file(&format!("{ONE}rain = on\nrain_rate = 0 - 1\n")).unwrap_err();
+    assert!(e.to_string().contains("line 7"), "{e}");
+    let e = WorldLaw::from_file(&format!("{ONE}rain = on\nrain_rate = 2 ^ 54\n")).unwrap_err();
+    assert!(e.to_string().contains("0..=2^53"), "{e}");
+}
+
+#[test]
+fn bad_parameter_values_are_refused() {
+    let law = WorldLaw::from_file(MOCHI).unwrap();
+    let e = |v: &[(&str, _)]| law.bind(v).unwrap_err();
+    assert_eq!(
+        e(&[("nope", Number(1.0))]),
+        BindError::UnknownParam("nope".into())
+    );
+    assert_eq!(
+        e(&[("softness", Number(0.0)), ("softness", Number(0.0))]),
+        BindError::RepeatedParam("softness".into())
+    );
+    for v in [-0.001, 0.101, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert_eq!(
+            e(&[("softness", Number(v))]),
+            BindError::ParamOutOfRange("softness".into())
+        );
+    }
+    assert_eq!(
+        e(&[("softness", Switch(true))]),
+        BindError::WrongType("softness".into())
+    );
+    assert_eq!(
+        e(&[("raining", Number(1.0))]),
+        BindError::WrongType("raining".into())
+    );
+    // the ends of a declared range are in it
+    assert!(law.bind(&[("softness", Number(0.0))]).is_ok());
+    assert!(law.bind(&[("softness", Number(0.1))]).is_ok());
+}
+
+#[test]
+fn a_value_that_is_not_finite_is_refused_when_bound() {
+    let law = WorldLaw::from_file(
+        "law n
+kind world
+param k number = 1 range 0 1
+let d = 1 / k
+material a density = d
+material a friction = 0
+material a bounce = 0
+",
+    )
+    .unwrap();
+    let e = law.bind(&[("k", Number(0.0))]).unwrap_err();
+    assert!(matches!(e, BindError::NonFinite { line: 4, .. }), "{e}");
+}
+
+#[test]
+fn what_does_not_read_is_refused_naming_the_line() {
+    refused("", 0, "empty");
+    refused("law x\n", 0, "not a world law");
+    refused("kind world\n", 1, "first line");
+    refused("law X\nkind world\n", 1, "first line");
+    refused("law x\nkind motion\n", 2, "second line");
+    refused("law x\nkind world\n", 0, "no material and no rain");
+    refused("law x\nkind world\nfoo\n", 3, "unknown line");
+    refused("law x\nkind world\nmaterial a\n", 3, "expected");
+    refused("law x\nkind world\nmaterial a b c = 1\n", 3, "expected");
+    refused(
+        "law x\nkind world\nmaterial A density = 1\n",
+        3,
+        "not a name",
+    );
+    refused(
+        "law x\nkind world\nmaterial a softness = 1\n",
+        3,
+        "not a field",
+    );
+    refused("law x\nkind world\nmaterial a density = nope\n", 3, "nope");
+    refused(
+        "law x\nkind world\nmaterial a density = 1\nmaterial a density = 2\n",
+        4,
+        "twice",
+    );
+    refused(
+        "law x\nkind world\nmaterial a density = 1\nmaterial a friction = 1\n",
+        0,
+        "no `bounce`",
+    );
+    refused(
+        "law x\nkind world\nmaterial a density = 1\nmaterial a bounce = 1\n",
+        0,
+        "no `friction`",
+    );
+    refused(
+        "law x\nkind world\nmaterial a friction = 1\nmaterial a bounce = 1\n",
+        0,
+        "no `density`",
+    );
+    refused("law x\nkind world\nparam a\n", 3, "expected");
+    refused(
+        "law x\nkind world\nparam a number = 5 range 0 1\n",
+        3,
+        "outside the range",
+    );
+    refused(
+        "law x\nkind world\nparam a number = 1e0 range 0 1\n",
+        3,
+        "plain decimals",
+    );
+    refused("law x\nkind world\nparam a switch = yes\n", 3, "on or off");
+    refused(
+        "law x\nkind world\nparam pi number = 1 range 0 1\n",
+        3,
+        "reserved",
+    );
+    refused(
+        "law x\nkind world\nparam a switch = on\nparam a switch = off\n",
+        4,
+        "reserved",
+    );
+    refused("law x\nkind world\nlet a\n", 3, "expected");
+    refused("law x\nkind world\nlet a = 1\nlet a = 2\n", 4, "reserved");
+    refused("law x\nkind world\nrain on\n", 3, "expected");
+    refused("law x\nkind world\nrain = maybe\n", 3, "not on, off");
+    refused(
+        "law x\nkind world\nparam n number = 1 range 0 1\nrain = n\n",
+        4,
+        "not on, off",
+    );
+    refused("law x\nkind world\nrain = on\n", 3, "without `rain_rate`");
+    refused("law x\nkind world\nrain_rate = 1\n", 3, "without `rain`");
+    refused("law x\nkind world\nrain_rate 1\n", 3, "expected");
+    refused(
+        "law x\nkind world\nrain = on\nrain = off\nrain_rate = 1\n",
+        4,
+        "second `rain`",
+    );
+    refused(
+        "law x\nkind world\nrain = on\nrain_rate = 1\nrain_rate = 2\n",
+        5,
+        "second `rain_rate`",
+    );
+    refused("law x\nkind world\n\u{7}\n", 3, "control character");
+    let many = "# x\n".repeat(1025);
+    refused(&many, 0, "more than 1024");
+}
+
+#[test]
+fn a_switch_is_not_a_number_in_an_expression() {
+    refused(
+        "law x\nkind world\nparam s switch = on\nmaterial a density = s\n",
+        4,
+        "s",
+    );
+}
+
+#[test]
+fn the_limits_hold() {
+    let mut params = String::from("law x\nkind world\nrain = on\nrain_rate = 1\n");
+    for i in 0..65 {
+        writeln!(params, "param p{i} switch = on").unwrap();
+    }
+    refused(&params, 69, "more than 64 parameters");
+
+    let mut lets = String::from("law x\nkind world\nrain = on\nrain_rate = 1\n");
+    for i in 0..257 {
+        writeln!(lets, "let v{i} = 1").unwrap();
+    }
+    refused(&lets, 261, "more than 256");
+
+    let mut mats = String::from("law x\nkind world\n");
+    for i in 0..65 {
+        writeln!(mats, "material m{i} density = 1").unwrap();
+    }
+    refused(&mats, 67, "more than 64 materials");
+}
+
+#[test]
+fn the_identifier_sees_the_meaning_only() {
+    let id = |t: &str| WorldLaw::from_file(t).unwrap().law_id();
+    let base = id(ONE);
+    // notes, comments, spacing and the order of the lines are not in it
+    assert_eq!(
+        base,
+        id("# note\nlaw one\nkind world\nclaim x\nmaterial a bounce=0.5\nmaterial a density =  1000\nmaterial a friction = 0.5\n")
+    );
+    assert_eq!(
+        id("law t\nkind world\nmaterial a density = 1\nmaterial a friction = 1\nmaterial a bounce = 1\nmaterial b density = 2\nmaterial b friction = 2\nmaterial b bounce = 0\n"),
+        id("law t\nkind world\nmaterial b density = 2\nmaterial b friction = 2\nmaterial b bounce = 0\nmaterial a density = 1\nmaterial a friction = 1\nmaterial a bounce = 1\n")
+    );
+    // each of these is in it
+    for other in [
+        "law two\nkind world\nmaterial a density = 1000\nmaterial a friction = 0.5\nmaterial a bounce = 0.5\n",
+        "law one\nkind world\nmaterial b density = 1000\nmaterial b friction = 0.5\nmaterial b bounce = 0.5\n",
+        "law one\nkind world\nmaterial a density = 1001\nmaterial a friction = 0.5\nmaterial a bounce = 0.5\n",
+        "law one\nkind world\nmaterial a density = 1000\nmaterial a friction = 0.5\nmaterial a bounce = 0.25\n",
+        "law one\nkind world\nparam p number = 1 range 0 1\nmaterial a density = 1000\nmaterial a friction = 0.5\nmaterial a bounce = 0.5\n",
+        "law one\nkind world\nparam p switch = on\nmaterial a density = 1000\nmaterial a friction = 0.5\nmaterial a bounce = 0.5\n",
+        "law one\nkind world\nlet q = 1\nmaterial a density = 1000\nmaterial a friction = 0.5\nmaterial a bounce = 0.5\n",
+    ] {
+        assert_ne!(base, id(other), "{other}");
+    }
+    let swap = |d: &str| {
+        id(&format!(
+            "law s\nkind world\nparam p {d}\nrain = on\nrain_rate = 1\n"
+        ))
+    };
+    assert_ne!(swap("number = 1 range 0 1"), swap("number = 0 range 0 1"));
+    assert_ne!(swap("number = 1 range 0 1"), swap("number = 1 range 0 2"));
+    assert_ne!(swap("number = 1 range 0 1"), swap("number = 1 range -1 1"));
+    assert_ne!(swap("switch = on"), swap("switch = off"));
+    let rain = |r: &str, v: &str| id(&format!("{ONE}rain = {r}\nrain_rate = {v}\n"));
+    assert_ne!(rain("on", "1"), rain("off", "1"));
+    assert_ne!(rain("on", "1"), rain("on", "2"));
+    assert_ne!(base, rain("off", "0"));
+    let named = |d: &str, r: &str| {
+        id(&format!(
+            "{ONE}param {d} switch = on\nparam other switch = on\nrain = {r}\nrain_rate = 1\n"
+        ))
+    };
+    assert_ne!(named("s", "s"), named("s", "other"));
+    assert_ne!(named("s", "s"), rain("on", "1"));
+}
+
+#[test]
+fn the_plain_text_is_what_the_values_do() {
+    let law = WorldLaw::from_file(MOCHI).unwrap();
+    let text = law.bind(&[]).unwrap().describe();
+    assert_eq!(
+        text,
+        "law: mochi_in_the_rain
+material: mochi
+  1100.000 kg in a cubic metre, 1.100 times water, sinks in water
+  grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
+  bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
+  stretch compliance 0.010000
+  bend compliance 0.250000
+  velocity kept per frame 0.985000
+  shear modulus 4.2700e5 Pa (measured)
+  Poisson's ratio 0.490 (assumed, not measured)
+  Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
+rain: on, 4.000 mm an hour, 0.001111 kg of water on each square metre each second
+"
+    );
+    let dry = law.bind(&[("raining", Switch(false))]).unwrap().describe();
+    assert!(dry.ends_with("rain: off\n"), "{dry}");
+    let density = |d: &str| {
+        WorldLaw::from_file(&format!(
+            "law d\nkind world\nmaterial a density = {d}\nmaterial a friction = 0\nmaterial a bounce = 0\n"
+        ))
+        .unwrap()
+        .bind(&[])
+        .unwrap()
+        .describe()
+    };
+    assert!(density("999").contains("floats on water"));
+    assert!(density("1000").contains("as dense as water"));
+    assert!(density("1001").contains("sinks in water"));
+}
+
+/// Recorded on arm64, and the same on every target this file runs on
+#[test]
+fn the_bits_are_the_recorded_ones() {
+    let law = WorldLaw::from_file(MOCHI).unwrap();
+    assert_eq!(
+        hex(&law.law_id()),
+        "02a85cd0490e9bd7321b6c817332edb81983e36518167da1fac7aea849861285"
+    );
+    let w = law
+        .bind(&[("softness", Number(0.03)), ("strength", Number(7.5))])
+        .unwrap();
+    let m = w.material("mochi").unwrap();
+    // 0.03 and 7.5/3600 as their exact f64 bits
+    assert_eq!(
+        m.stretch_compliance.unwrap().to_bits(),
+        0x3F9E_B851_EB85_1EB8
+    );
+    assert_eq!(w.rain().mass_flux().to_bits(), (7.5f64 / 3600.0).to_bits());
+    // a function goes through alice-det-math, so its bits are pinned too
+    let f = WorldLaw::from_file(
+        "law f\nkind world\nmaterial a density = 1\nmaterial a friction = exp(0.5)\nmaterial a bounce = sin(1) ^ 2\n",
+    )
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    // e^0.5 = 1.6487212707001282 and sin(1)^2 = 0.7080734182735712, as recorded bits
+    assert_eq!(f.materials()[0].friction.to_bits(), 0x3FFA_6129_8E1E_069C);
+    assert_eq!(f.materials()[0].bounce.to_bits(), 0x3FE6_A889_95D4_DC81);
+}
+
+#[test]
+fn the_semantics_id_is_the_fold_of_the_measured_pins() {
+    let measured = world_semantics_fingerprints();
+    assert_eq!(measured.len(), WORLD_SEMANTICS_PINS.len());
+    for ((name, got), (want_name, want)) in measured.iter().zip(WORLD_SEMANTICS_PINS) {
+        assert_eq!(name, want_name);
+        assert_eq!(hex(got), hex(want), "{name}");
+    }
+    assert_eq!(
+        hex(&fold_semantics_pins(WORLD_SEMANTICS_PINS)),
+        hex(&WORLD_SEMANTICS_ID)
+    );
+    assert_eq!(
+        hex(&measured_world_semantics_id()),
+        hex(&WORLD_SEMANTICS_ID)
+    );
+}

@@ -66,9 +66,27 @@ print(next((x["udid"] for k, v in d.items() if "iOS" in k for x in v if "iPhone"
   require_all_passed aarch64-apple-ios-sim "$out"
 }
 
+# The world laws on wasm32-wasip1: the build with the physics types, then both oracle files under
+# wasmtime. Each must report its full test count, so a run that executed fewer, or none, fails.
+world_wasm() {
+  command -v wasmtime >/dev/null || { echo "frame-targets: wasmtime is not on PATH" >&2; exit 2; }
+  cargo build -p alice-lol --target wasm32-wasip1 --features physics
+  local out spec file features count
+  for spec in "world_law_oracle::20" "world_law_physics:--features physics:9"; do
+    file="${spec%%:*}"; count="${spec##*:}"; features="${spec#*:}"; features="${features%:*}"
+    out="$(mktemp)"
+    # shellcheck disable=SC2086 # the features are two words or none
+    CARGO_TARGET_WASM32_WASIP1_RUNNER="wasmtime" \
+      cargo test -p alice-lol --target wasm32-wasip1 $features --test "$file" -- --test-threads=1 2>&1 | tee "$out"
+    grep -q "^test result: ok\. ${count} passed; 0 failed" "$out" \
+      || { echo "frame-targets: ${file} did not pass all ${count} tests on wasm32-wasip1" >&2; exit 1; }
+    echo "frame-targets: wasm32-wasip1: ${file}: ${count} passed"
+  done
+}
+
 case "$mode" in
-  wasm) wasm ;;
+  wasm) wasm; world_wasm ;;
   ios) ios ;;
-  all) wasm; ios ;;
+  all) wasm; world_wasm; ios ;;
   *) echo "usage: $0 [wasm|ios|all]" >&2; exit 2 ;;
 esac

@@ -645,6 +645,21 @@ class = "local"
 reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error); the values are Rust f64, range-checked against the declaration"
 
 [[entry]]
+path = "alice_lol::world_law::WorldLaw::from_file"
+class = "authoring"
+reason = "reads world law text a person or a model writes; the law's identifier (kind tag, WORLD_SEMANTICS_ID, the declared parameters and expressions) is computed from the meaning, not the spelling"
+
+[[entry]]
+path = "alice_lol::world_law::WorldLaw::bind"
+class = "local"
+reason = "the text is a parameter name, looked up among the names this law declares (an unknown or repeated one is an error)"
+
+[[entry]]
+path = "alice_lol::world_law::BoundWorld::material"
+class = "local"
+reason = "the text is a material name, looked up among the names this law declares (an unknown one is None)"
+
+[[entry]]
 path = "alice_lol::law_ref::LawRef::from_bytes"
 class = "exchange"
 test = "alice-lol/tests/law_ref_oracle.rs::a_reference_from_another_build_or_law_is_refused_naming_both"

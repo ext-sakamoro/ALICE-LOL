@@ -513,3 +513,40 @@ fn rejects_unknown_nested_and_misplaced_units_declarations() {
         );
     }
 }
+
+#[test]
+fn accepts_world_laws_and_their_fields_are_the_fields_the_reader_knows() {
+    let g = lol_grammar();
+    for law in [
+        include_str!("../../laws/world/mochi_in_the_rain.law"),
+        "law r\nkind world\nrain = on\nrain_rate = 2 ^ 3\n",
+        "law f\nkind world\nlet a = sin(1) + (2 * 3)\nmaterial m density = a\n",
+    ] {
+        // the grammar has no comment or note line: a model writes no prose here
+        let mut text = String::new();
+        for l in law
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.starts_with("claim") && !l.starts_with("source"))
+        {
+            text.push_str(l);
+            text.push('\n');
+        }
+        assert!(accepts(g, &text), "{text}");
+    }
+    for field in alice_lol::world_law::FIELDS {
+        let law = format!("law f\nkind world\nmaterial m {field} = 1\n");
+        assert!(accepts(g, &law), "{field}");
+    }
+    assert!(rejects(g, "law f\nkind world\nmaterial m softness = 1\n"));
+    assert!(accepts(
+        g,
+        "law f\nkind world\nmaterial m poisson_ratio = 0.49\nmaterial m poisson_ratio basis assumed\n"
+    ));
+    assert!(rejects(
+        g,
+        "law f\nkind world\nmaterial m density basis measured\n"
+    ));
+    assert!(rejects(g, "law f\nkind motion\nrain = on\n"));
+    assert!(rejects(g, "law f\nkind world\nrain = 1\n"));
+    assert!(rejects(g, "law F\nkind world\nrain = on\n"));
+}

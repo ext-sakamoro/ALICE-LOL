@@ -9,7 +9,7 @@
 # law modules but is not listed below also fails the run, so a new oracle file
 # cannot be skipped silently. Used by ci.yml and scripts/preflight.sh.
 #
-# usage: scripts/law_tests.sh [default|physics|crypto|all|list] [cargo test args...]   (default: all)
+# usage: scripts/law_tests.sh [default|physics|llm-bridge|crypto|all|list] [cargo test args...]   (default: all)
 #   extra arguments go to every `cargo test` (e.g. `--release` for the release-profile leg)
 #   list: only check that every law test file is listed (CI counts the runs from
 #         the log of its full `cargo test` with scripts/law_tests_from_log.py)
@@ -48,9 +48,15 @@ DEFAULT_TARGETS=(
   "alice-lol|--test motion_frame_oracle|"
   "alice-lol|--test audit_series_oracle|"
   "alice-lol|--test proportion_law_oracle|"
+  "alice-lol|--test world_law_oracle|"
 )
 PHYSICS_TARGETS=(
   "alice-lol|--test analytic_thermal|physics"
+  "alice-lol|--test world_law_physics|physics"
+)
+# the grammar test checks the world-law field names; it is built only with llm-bridge
+LLM_BRIDGE_TARGETS=(
+  "alice-lol|--test lol_gbnf_test|llm-bridge"
 )
 # the rule-law call (`hmac_sha256`) is built only with crypto-calls; run with `crypto` / `all`
 CRYPTO_TARGETS=(
@@ -62,15 +68,16 @@ extra=("${@:2}")
 case "$mode" in
   default) targets=("${DEFAULT_TARGETS[@]}") ;;
   physics) targets=("${PHYSICS_TARGETS[@]}") ;;
+  llm-bridge) targets=("${LLM_BRIDGE_TARGETS[@]}") ;;
   crypto) targets=("${CRYPTO_TARGETS[@]}") ;;
-  all|list) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}" "${CRYPTO_TARGETS[@]}") ;;
-  *) echo "usage: $0 [default|physics|crypto|all|list]" >&2; exit 2 ;;
+  all|list) targets=("${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}" "${LLM_BRIDGE_TARGETS[@]}" "${CRYPTO_TARGETS[@]}") ;;
+  *) echo "usage: $0 [default|physics|llm-bridge|crypto|all|list]" >&2; exit 2 ;;
 esac
 
 # Every integration test file that uses `law::` or `research_law` must be listed
 # (`audit_law::` matches `law::` too, so audit laws are covered by the same scan)
 listed=" "
-for t in "${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}"; do
+for t in "${DEFAULT_TARGETS[@]}" "${PHYSICS_TARGETS[@]}" "${LLM_BRIDGE_TARGETS[@]}"; do
   args="${t#*|}"; args="${args%%|*}"
   [[ "$args" == --test* ]] && listed+="${args#--test } "
 done

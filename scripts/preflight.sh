@@ -491,6 +491,9 @@ step "ci.yml / test: Law oracles (crypto-calls, rule laws with the call)"
 step "ci.yml / test: Test [features=--features llm-bridge]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features llm-bridge )
 
+step "ci.yml / test: Law oracles (llm-bridge, each target ran at least one test)"
+( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh llm-bridge )
+
 step "ci.yml / test: Test [features=--features glsl,wgsl,hlsl]"
 ( export CARGO_TERM_COLOR="always"; cargo test --features glsl,wgsl,hlsl )
 
