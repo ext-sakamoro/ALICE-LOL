@@ -87,15 +87,17 @@ ident ::= [a-zA-Z_] [a-zA-Z0-9_-]*
 #
 # 物の材質と雨を Physics の parameter の名前と単位で書く 値の式は research law の式
 worldlaw ::= "law" sp worldname nl "kind world" nl worldline (nl worldline)* nl?
-worldline ::= worldparam | worldlet | worldmaterial | worldbasis | worldrain | worldrate | worldhand | worldhandbasis | worldhandspread
+worldline ::= worldparam | worldlet | worldmaterial | worldbasis | worldrain | worldrate | worldhand | worldhandbasis | worldhandspread | worlddynamic | worlddynamicbasis
 worldparam ::= "param" sp worldname sp "number = " worldnumber sp "range" sp worldnumber sp worldnumber
              | "param" sp worldname sp "switch = " worldonoff
 worldlet ::= "let" sp worldname " = " worldexpr
 worldmaterial ::= "material" sp worldname sp worldfield " = " worldexpr
-worldbasis ::= "material" sp worldname sp ("shear_modulus" | "poisson_ratio" | "loss_modulus" | "adhesion" | "contact_area") " basis " ("measured" | "assumed")
+worldbasis ::= "material" sp worldname sp ("shear_modulus" | "poisson_ratio" | "adhesion" | "contact_area") " basis " ("measured" | "assumed")
 worldhand ::= ("hand_youngs_modulus" | "hand_poisson_ratio") " = " worldexpr
 worldhandbasis ::= ("hand_youngs_modulus" | "hand_poisson_ratio") " basis " ("measured" | "assumed")
 worldhandspread ::= "hand_youngs_modulus spread " worldnumber sp worldnumber
+worlddynamic ::= "material" sp worldname " dynamic " ("shear" | "youngs") " at " worldnumber " storage " worldexpr " loss " worldexpr
+worlddynamicbasis ::= "material" sp worldname " dynamic basis " ("measured" | "assumed")
 worldrain ::= "rain = " (worldonoff | worldname)
 worldrate ::= "rain_rate = " worldexpr
 worldonoff ::= "on" | "off"
@@ -103,7 +105,6 @@ worldfield ::= "density" | "friction" | "static_friction" | "bounce"
              | "stretch_compliance" | "bend_compliance" | "edge_compliance"
              | "volume_compliance" | "shape_stiffness" | "damping" | "sdf_friction"
              | "shear_modulus" | "poisson_ratio" | "adhesion" | "contact_area"
-             | "loss_modulus" | "modulus_frequency"
 worldname ::= [a-z] [a-z0-9_]*
 worldnumber ::= "-"? [0-9]+ ("." [0-9]+)?
 worldexpr ::= worldterm ((" + " | " - " | " * " | " / " | " ^ ") worldterm)*

@@ -9,7 +9,8 @@ use std::fmt::Write as _;
 
 use alice_lol::law_id::fold_semantics_pins;
 use alice_lol::world_law::{
-    measured_world_semantics_id, world_semantics_fingerprints, Basis, BindError, WorldLaw,
+    measured_world_semantics_id, world_semantics_fingerprints, Basis, BindError, ModulusKind,
+    WorldLaw,
     WorldValue::{Number, Switch},
     MAX_VALUE, WORLD_SEMANTICS_ID, WORLD_SEMANTICS_PINS,
 };
@@ -52,9 +53,15 @@ fn the_values_are_the_ones_the_law_states() {
     assert_eq!(m.volume_compliance, None);
     assert_eq!(m.shape_stiffness, None);
     assert_eq!(m.damping, None);
-    assert_eq!(m.loss_modulus, Some(10_000.0));
-    assert_eq!(m.loss_modulus_basis, Some(Basis::Measured));
-    assert_eq!(m.modulus_frequency, Some(0.1));
+    // the scene's mochi is the assumed combination; the measured conditions are their own materials
+    assert_eq!(m.dynamic.as_ref().unwrap().basis, Some(Basis::Assumed));
+    let isono = w.material("mochi_48h_30c").unwrap();
+    let row = isono.dynamic.as_ref().unwrap().rows[0];
+    assert_eq!(
+        (row.frequency, row.storage, row.loss),
+        (0.1, 427_000.0, 10_000.0)
+    );
+    assert_eq!(isono.dynamic.as_ref().unwrap().basis, Some(Basis::Measured));
     assert_eq!(m.sdf_friction, None);
     assert_eq!(m.shear_modulus, Some(427_000.0));
     assert_eq!(m.poisson_ratio, Some(0.49));
@@ -575,11 +582,44 @@ material: mochi
   shear modulus 4.2700e5 Pa (measured)
   Poisson's ratio 0.490 (assumed, not measured)
   Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
-  at 1.0000e-1 Hz: storage modulus 4.2700e5 Pa, loss modulus 1.0000e4 Pa (measured), loss tangent 0.0234; the response at other frequencies is not stated
+  dynamic youngs modulus (E' and E'', assumed, not measured) stated at 4 frequencies 3.0000e0..1.0000e2 Hz; between them interpolated on log-log axes, outside them not stated
+    3.0000e0 Hz: storage 1.2725e6 Pa, loss 4.2135e4 Pa, loss tangent 0.0331
+    1.0000e1 Hz: storage 1.3952e6 Pa, loss 4.8378e4 Pa, loss tangent 0.0347
+    3.0000e1 Hz: storage 1.3479e6 Pa, loss 6.9126e4 Pa, loss tangent 0.0513
+    1.0000e2 Hz: storage 1.9039e6 Pa, loss 2.3423e5 Pa, loss tangent 0.1230
   adhesion 2.0000e0 N (assumed, not measured): the pull at which a hand's hold lets go
   contact area 2.0000e-4 m^2 (assumed, not measured)
   grip stiffness 5.1815e3 N/m, derived: the material (2.6721e4 N/m) and the hand (6.4279e3 N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = 7.9788e-3 m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness
   grip stiffness over the skin's stated spread 4.0000e4..3.1000e5 Pa: 8.0443e2..5.1815e3 N/m
+material: mochi_48h_30c
+  1100.000 kg in a cubic metre, 1.100 times water, sinks in water
+  grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
+  bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
+  shear modulus 4.2700e5 Pa (measured)
+  Poisson's ratio 0.490 (assumed, not measured)
+  Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
+  dynamic shear modulus (G' and G'', measured) stated at one frequency, 1.0000e-1 Hz; other frequencies not stated
+    1.0000e-1 Hz: storage 4.2700e5 Pa, loss 1.0000e4 Pa, loss tangent 0.0234
+material: mochi_5d_19c
+  1100.000 kg in a cubic metre, 1.100 times water, sinks in water
+  grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
+  bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
+  elastic constants: not stated
+  dynamic youngs modulus (E' and E'', measured) stated at 4 frequencies 3.0000e0..1.0000e2 Hz; between them interpolated on log-log axes, outside them not stated
+    3.0000e0 Hz: storage 1.3032e7 Pa, loss 5.0699e5 Pa, loss tangent 0.0389
+    1.0000e1 Hz: storage 1.3964e7 Pa, loss 7.0795e5 Pa, loss tangent 0.0507
+    3.0000e1 Hz: storage 1.3335e7 Pa, loss 7.7625e5 Pa, loss tangent 0.0582
+    1.0000e2 Hz: storage 2.2131e7 Pa, loss 3.7154e6 Pa, loss tangent 0.1679
+material: mochi_5d_30c
+  1100.000 kg in a cubic metre, 1.100 times water, sinks in water
+  grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
+  bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
+  elastic constants: not stated
+  dynamic youngs modulus (E' and E'', measured) stated at 4 frequencies 3.0000e0..1.0000e2 Hz; between them interpolated on log-log axes, outside them not stated
+    3.0000e0 Hz: storage 1.0839e7 Pa, loss 3.5892e5 Pa, loss tangent 0.0331
+    1.0000e1 Hz: storage 1.1885e7 Pa, loss 4.1210e5 Pa, loss tangent 0.0347
+    3.0000e1 Hz: storage 1.1482e7 Pa, loss 5.8884e5 Pa, loss tangent 0.0513
+    1.0000e2 Hz: storage 1.6218e7 Pa, loss 1.9953e6 Pa, loss tangent 0.1230
 hand: skin Young's modulus 3.1000e5 Pa (assumed, not measured, reported values spread over 4.0000e4..3.1000e5 Pa), Poisson's ratio 0.480 (assumed, not measured)
 rain: on, 4.000 mm an hour, 0.001111 kg of water on each square metre each second
 "
@@ -606,7 +646,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "431de4e60b07756cd000a5514ab794b57d7c62ed8e9a8197209921ef3d8322fb"
+        "682b0a5e8615a112f12703fff96a88795804d54a103c5bb072125905a402b008"
     );
     let w = law.bind(&[("strength", Number(7.5))]).unwrap();
     // 7.5/3600 as its exact f64 bits
@@ -860,58 +900,144 @@ fn the_hand_lines_are_refused_out_of_place_or_range() {
     );
 }
 
-/// A loss modulus is stated at one frequency, with the storage modulus at that frequency; nothing
-/// is said about other frequencies (no relaxation model)
+/// Between two stated rows each modulus is interpolated on log-log axes: at the geometric mean of
+/// two frequencies it is the geometric mean of the two moduli; a loss of 0 at an end interpolates
+/// linearly; a stated frequency gives its row exactly; outside the range there is no answer
 #[test]
-fn a_loss_modulus_is_stated_at_one_frequency() {
-    let base = "law v\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+fn a_dynamic_table_interpolates_on_log_log_axes_inside_its_range_only() {
+    let w = WorldLaw::from_file(
+        "law d\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n\
+         material a dynamic youngs at 100 storage 10000 loss 0\nmaterial a dynamic youngs at 1 storage 100 loss 10\n",
+    )
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    let d = w.material("a").unwrap().dynamic.clone().unwrap();
+    assert_eq!(d.kind, ModulusKind::Youngs);
+    assert_eq!(d.basis, None);
+    // rows are sorted by frequency whatever the line order
+    assert_eq!(
+        d.rows.iter().map(|r| r.frequency).collect::<Vec<_>>(),
+        [1.0, 100.0]
+    );
+    assert_eq!(d.at(1.0), Some((100.0, 10.0)));
+    assert_eq!(d.at(100.0), Some((10_000.0, 0.0)));
+    let (storage, loss) = d.at(10.0).unwrap();
+    // sqrt(100 * 10000) = 1000; the loss is 10 + (0 - 10) / 2 = 5
+    assert!((storage - 1000.0).abs() <= 1000.0 * 1e-12, "{storage}");
+    assert!((loss - 5.0).abs() <= 5.0 * 1e-12, "{loss}");
+    for f in [0.5, 0.999, 100.001, 1e6, 0.0, -1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(d.at(f), None, "{f}");
+    }
+}
+
+/// The scene reads `mochi`; it is Horiuchi's 30 C table scaled to Isono's level, stated as an
+/// assumption, and the measured tables stay as measured, not spliced
+#[test]
+fn the_scene_mochi_is_the_assumed_combination_of_two_measured_states() {
+    let w = WorldLaw::from_file(MOCHI).unwrap().bind(&[]).unwrap();
+    let scene = w.material("mochi").unwrap().dynamic.clone().unwrap();
+    let five_days = w.material("mochi_5d_30c").unwrap().dynamic.clone().unwrap();
+    let isono = w.material("mochi_48h_30c").unwrap();
+    assert_eq!(scene.basis, Some(Basis::Assumed));
+    assert_eq!(five_days.basis, Some(Basis::Measured));
+    // level = E(48 h) / E'(5 d, 3 Hz), the same factor on every row and on both moduli
+    let e_48h = 2.0 * 427_000.0 * (1.0 + 0.49);
+    // the 5 day 30 C storage modulus at 3 Hz is 10^7.035 Pa = 1.0839e7 Pa
+    assert!((five_days.rows[0].storage / 1.0839e7 - 1.0).abs() < 1e-4);
+    let level = e_48h / five_days.rows[0].storage;
+    assert!((level - 0.1174).abs() < 5e-4, "{level}");
+    for (s, f) in scene.rows.iter().zip(&five_days.rows) {
+        assert_eq!(s.frequency, f.frequency);
+        assert!((s.storage / f.storage - level).abs() <= level * 1e-12);
+        assert!((s.loss / f.loss - level).abs() <= level * 1e-12);
+    }
+    // at 3 Hz the scene's storage modulus is Isono's Young's modulus
+    assert!((scene.rows[0].storage - isono.youngs_modulus().unwrap()).abs() <= e_48h * 1e-12);
+    // the logo's motion, 4 to 15 Hz, is inside the stated range; 0.1 Hz is not, for the scene
+    assert!(scene.at(4.0).is_some() && scene.at(15.0).is_some());
+    assert_eq!(scene.at(0.1), None);
+    // the two measured 5 day temperatures are different tables
+    let nineteen = w.material("mochi_5d_19c").unwrap().dynamic.clone().unwrap();
+    assert!(nineteen.rows[0].storage > five_days.rows[0].storage);
+    // only the scene's mochi is held by a hand
+    assert!(w.grip("mochi").is_some());
+    for m in ["mochi_48h_30c", "mochi_5d_19c", "mochi_5d_30c"] {
+        assert!(w.grip(m).is_none(), "{m}");
+    }
+}
+
+#[test]
+fn a_dynamic_table_is_refused_out_of_form_or_range() {
+    let base = "law d\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+    let row = |f: &str| format!("material a dynamic shear at {f} storage 100 loss 1\n");
+    refused(&format!("{base}{}{}", row("1"), row("1")), 7, "given twice");
     refused(
-        &format!("{base}material a loss_modulus = 10\n"),
-        6,
-        "needs `a modulus_frequency`",
+        &format!(
+            "{base}{}material a dynamic youngs at 2 storage 100 loss 1\n",
+            row("1")
+        ),
+        7,
+        "one kind per material",
     );
     refused(
-        &format!("{base}material a modulus_frequency = 1\n"),
+        &format!("{base}material a dynamic basis measured\n"),
         6,
-        "needs `a shear_modulus`",
-    );
-    refused(
-        &format!("{base}material a shear_modulus = 100\nmaterial a modulus_frequency = 0\n"),
-        0,
-        "modulus_frequency",
+        "no dynamic row before its basis",
     );
     refused(
         &format!(
-            "{base}material a modulus_frequency = 1\nmaterial a modulus_frequency basis measured\n"
+            "{base}{}material a dynamic basis measured\n{}",
+            row("1"),
+            row("2")
         ),
-        7,
-        "takes no basis",
+        8,
+        "after its basis",
     );
-    let text = |extra: &str| {
-        WorldLaw::from_file(&format!(
-            "{base}material a shear_modulus = 1000\nmaterial a modulus_frequency = 2\n{extra}"
-        ))
-        .unwrap()
-        .bind(&[])
-        .unwrap()
-        .describe()
+    refused(
+        &format!(
+            "{base}{}material a dynamic basis measured\nmaterial a dynamic basis assumed\n",
+            row("1")
+        ),
+        8,
+        "given twice",
+    );
+    for f in ["0", "-1", "1e2", "x"] {
+        refused(&format!("{base}{}", row(f)), 6, "plain decimal above 0");
+    }
+    refused(
+        &format!("{base}material a dynamic shear at 1 storage 100\n"),
+        6,
+        "expected",
+    );
+    refused(
+        &format!("{base}material a dynamic bulk at 1 storage 100 loss 1\n"),
+        6,
+        "expected",
+    );
+    refused(
+        &format!("{base}material a dynamic shear at 1 storage 0 loss 1\n"),
+        0,
+        "storage",
+    );
+    refused(
+        &format!("{base}material a dynamic shear at 1 storage 1 loss 0 - 1\n"),
+        0,
+        "loss",
+    );
+    // the table is in the identifier, a row's value and its frequency both
+    let id = |text: &str| {
+        WorldLaw::from_file(&format!("{base}{text}"))
+            .unwrap()
+            .law_id()
     };
-    // G''/G' = 250/1000
-    assert!(
-        text("material a loss_modulus = 250\nmaterial a loss_modulus basis assumed\n").contains(
-            "  at 2.0000e0 Hz: storage modulus 1.0000e3 Pa, loss modulus 2.5000e2 Pa (assumed, not measured), loss tangent 0.2500; the response at other frequencies is not stated"
-        )
+    assert_ne!(id(&row("1")), id(&row("2")));
+    assert_ne!(
+        id(&row("1")),
+        id("material a dynamic shear at 1 storage 101 loss 1\n")
     );
-    assert!(
-        text("").contains("  at 2.0000e0 Hz: storage modulus 1.0000e3 Pa, loss modulus not stated")
-    );
-    // a modulus without a frequency says nothing about one
-    assert!(
-        !WorldLaw::from_file(&format!("{base}material a shear_modulus = 1000\n"))
-            .unwrap()
-            .bind(&[])
-            .unwrap()
-            .describe()
-            .contains(" Hz:")
+    assert_ne!(
+        id(&row("1")),
+        id("material a dynamic youngs at 1 storage 100 loss 1\n")
     );
 }

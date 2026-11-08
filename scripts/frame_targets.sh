@@ -72,7 +72,7 @@ world_wasm() {
   command -v wasmtime >/dev/null || { echo "frame-targets: wasmtime is not on PATH" >&2; exit 2; }
   cargo build -p alice-lol --target wasm32-wasip1 --features physics
   local out spec file features count
-  for spec in "world_law_oracle::26" "world_law_physics:--features physics:9"; do
+  for spec in "world_law_oracle::28" "world_law_physics:--features physics:9"; do
     file="${spec%%:*}"; count="${spec##*:}"; features="${spec#*:}"; features="${features%:*}"
     out="$(mktemp)"
     # shellcheck disable=SC2086 # the features are two words or none
