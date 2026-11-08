@@ -547,6 +547,18 @@ fn accepts_world_laws_and_their_fields_are_the_fields_the_reader_knows() {
         "law f\nkind world\nmaterial m density basis measured\n"
     ));
     assert!(rejects(g, "law f\nkind motion\nrain = on\n"));
+    assert!(accepts(
+        g,
+        "law f\nkind world\nhand_youngs_modulus = 310000\nhand_youngs_modulus basis assumed\nhand_poisson_ratio = 0.48\n"
+    ));
+    assert!(rejects(
+        g,
+        "law f\nkind world\nhand_youngs_modulus basis guessed\n"
+    ));
+    assert!(rejects(
+        g,
+        "law f\nkind world\nmaterial m density = 1\nmaterial m density basis measured\n"
+    ));
     assert!(rejects(g, "law f\nkind world\nrain = 1\n"));
     assert!(rejects(g, "law F\nkind world\nrain = on\n"));
 }

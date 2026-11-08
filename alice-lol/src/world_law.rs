@@ -33,9 +33,12 @@
 //! - `param <name> switch = on|off`: a named switch, read only by the `rain` line
 //! - `let <name> = <expr>`: a value for the later lines
 //! - `material <name> <field> = <expr>`: one of [`FIELDS`], at most once per material
-//! - `material <name> <field> basis measured|assumed`: how `shear_modulus` or `poisson_ratio` was
-//!   obtained, after its value; the law's `source` lines say where a measured value comes from.
-//!   Young's modulus is never stated: [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
+//! - `material <name> <field> basis measured|assumed`: how `shear_modulus`, `poisson_ratio`,
+//!   `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
+//!   a measured value comes from. Young's modulus is never stated:
+//!   [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
+//! - `hand_youngs_modulus = <expr>` (Pa) and `hand_poisson_ratio = <expr>`: the skin of the hand
+//!   that holds things, both or neither, each optionally followed by `<key> basis measured|assumed`
 //! - `rain = on|off|<switch>` and `rain_rate = <expr>` (millimetres an hour): both or neither;
 //!   neither means the law says nothing about rain, which reads as no rain
 //!
@@ -52,6 +55,18 @@
 //!
 //! [`BoundWorld::describe`] states what a value does, computed from the value. It uses no
 //! thresholds of its own (no "soft" or "heavy" past a chosen number).
+//!
+//! # Grip
+//!
+//! A hand holds a material through a spring that lets go when its force passes the material's
+//! `adhesion` (N). The spring's stiffness is not stated by a law; [`BoundWorld::grip`] derives it
+//! so it cannot contradict the elastic constants. Model: a flat circular contact of area
+//! `contact_area` (radius `a = sqrt(A / pi)`) pressed into an elastic half-space has the normal
+//! stiffness `k = 2 a E*`, `E* = E / (1 - nu^2)` (Boussinesq's flat punch); the material and the
+//! hand's skin are two such springs in series, `k = k_m k_h / (k_m + k_h)`. Range: the half-space
+//! holds while `a` is much smaller than the thickness of the held body (a body 160 mm deep held
+//! at `a` = 8 mm is 20 radii deep); a thin sheet held across its thickness is outside it. Left
+//! out: friction in the contact plane, the curvature of the finger, rate dependence.
 
 use std::fmt;
 use std::fmt::Write as _;
@@ -63,7 +78,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 13] = [
+pub const FIELDS: [&str; 15] = [
     "density",
     "friction",
     "static_friction",
@@ -77,6 +92,8 @@ pub const FIELDS: [&str; 13] = [
     "sdf_friction",
     "shear_modulus",
     "poisson_ratio",
+    "adhesion",
+    "contact_area",
 ];
 
 const DENSITY: usize = 0;
@@ -92,6 +109,8 @@ const DAMPING: usize = 9;
 const SDF_FRICTION: usize = 10;
 const SHEAR_MODULUS: usize = 11;
 const POISSON_RATIO: usize = 12;
+const ADHESION: usize = 13;
+const CONTACT_AREA: usize = 14;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -114,7 +133,7 @@ pub const MAX_LINES: usize = 1024;
 pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     (
         "world: field ranges, refused not clamped, and the plain text computed from the values",
-        hex32("16f728a20eb499941b91db09c4ca8cc871929dfdbe3d9a3eeceaa9102c7e1f66"),
+        hex32("7cd95bf324e535e15decf531b046d716adec4a8ba715453a77d88caa765cccf1"),
     ),
     (
         "world: the expression functions of research laws",
@@ -124,7 +143,7 @@ pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 
 /// The fold of [`WORLD_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const WORLD_SEMANTICS_ID: [u8; 32] =
-    hex32("52fce0e090c785f2f00af9e7d5ed2e1033f79725678280260d30f6f0408a5a24");
+    hex32("b6b020aecc6e580bc5afcb47f6375f550ac373902919f4f51b0ae097c42d762c");
 
 /// A world law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -277,6 +296,15 @@ pub struct WorldLaw {
     /// sorted by name
     materials: Vec<Material>,
     rain: Option<Rain>,
+    hand: Option<Hand>,
+}
+
+#[derive(Debug, Clone)]
+struct Hand {
+    youngs_modulus: Line,
+    poisson_ratio: Line,
+    youngs_modulus_basis: Option<Basis>,
+    poisson_ratio_basis: Option<Basis>,
 }
 
 /// One material under one set of parameter values
@@ -317,6 +345,14 @@ pub struct BoundMaterial {
     pub shear_modulus_basis: Option<Basis>,
     /// how `poisson_ratio` was obtained, when the law says
     pub poisson_ratio_basis: Option<Basis>,
+    /// the pull in N at which a hand's hold on the material lets go, at least 0
+    pub adhesion: Option<f64>,
+    /// the area in m^2 a hand's hold touches, above 0
+    pub contact_area: Option<f64>,
+    /// how `adhesion` was obtained, when the law says
+    pub adhesion_basis: Option<Basis>,
+    /// how `contact_area` was obtained, when the law says
+    pub contact_area_basis: Option<Basis>,
 }
 
 impl BoundMaterial {
@@ -326,6 +362,42 @@ impl BoundMaterial {
     pub fn youngs_modulus(&self) -> Option<f64> {
         Some(2.0 * self.shear_modulus? * (1.0 + self.poisson_ratio?))
     }
+}
+
+/// The skin of the hand that holds things, under one set of parameter values
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoundHand {
+    /// Young's modulus of the skin in Pa, above 0
+    pub youngs_modulus: f64,
+    /// Poisson's ratio of the skin, in `[-1, 0.5)`
+    pub poisson_ratio: f64,
+    /// how `youngs_modulus` was obtained, when the law says
+    pub youngs_modulus_basis: Option<Basis>,
+    /// how `poisson_ratio` was obtained, when the law says
+    pub poisson_ratio_basis: Option<Basis>,
+}
+
+/// A hand's hold on a material: a spring to the hand that lets go past `adhesion`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Grip {
+    /// the contact radius `sqrt(A / pi)` in m
+    pub contact_radius: f64,
+    /// the material's flat-contact stiffness `2 a E / (1 - nu^2)` in N/m
+    pub material_stiffness: f64,
+    /// the skin's flat-contact stiffness in N/m
+    pub hand_stiffness: f64,
+    /// the two in series, in N/m
+    pub stiffness: f64,
+    /// the pull in N at which the hold lets go, when the law states it
+    pub adhesion: Option<f64>,
+}
+
+/// The normal stiffness `2 a E / (1 - nu^2)` of a flat circular contact of radius `a` on an elastic
+/// half-space (Boussinesq)
+// no fused multiply-add: the bits must be the same on every platform
+#[allow(clippy::suboptimal_flops)]
+fn flat_contact_stiffness(a: f64, youngs_modulus: f64, poisson_ratio: f64) -> f64 {
+    2.0 * a * youngs_modulus / (1.0 - poisson_ratio * poisson_ratio)
 }
 
 /// Rain under one set of parameter values
@@ -364,11 +436,12 @@ pub struct BoundWorld {
     materials: Vec<BoundMaterial>,
     rain: BoundRain,
     states_rain: bool,
+    hand: Option<BoundHand>,
 }
 
 const fn field_range(slot: usize) -> &'static str {
     match slot {
-        DENSITY | SHEAR_MODULUS => "above 0 and at most 2^53",
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA => "above 0 and at most 2^53",
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
@@ -379,7 +452,7 @@ const fn field_range(slot: usize) -> &'static str {
 
 fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
-        DENSITY | SHEAR_MODULUS => v > 0.0 && v <= MAX_VALUE,
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
         _ => (0.0..=MAX_VALUE).contains(&v),
@@ -439,7 +512,9 @@ impl WorldLaw {
             lets: Vec::new(),
             materials: Vec::new(),
             rain: None,
+            hand: None,
         };
+        let mut hand = HandLines::default();
         let mut rain_switch: Option<(usize, RainSwitch)> = None;
         let mut rain_rate: Option<Line> = None;
         for (k, raw) in lines.iter().enumerate() {
@@ -500,6 +575,9 @@ impl WorldLaw {
                     };
                     rain_rate = Some(law.line(line, "rain_rate", v)?);
                 }
+                "hand_youngs_modulus" | "hand_poisson_ratio" => {
+                    hand.read(&law, line, word, rest)?;
+                }
                 _ => return Err(err(line, format!("unknown line `{word}`"))),
             }
         }
@@ -507,6 +585,7 @@ impl WorldLaw {
         if !kind {
             return Err(err(0, "not a world law (no `kind world`)"));
         }
+        law.hand = hand.finish()?;
         law.finish(rain_switch, rain_rate)?;
         law.bind(&[])
             .map_err(|e| err(0, format!("with the default parameters: {e}")))?;
@@ -689,18 +768,18 @@ impl WorldLaw {
         let [m, field, "basis", word] = w[..] else {
             return Err(err(line, ""));
         };
-        let basis = match word {
-            "measured" => Basis::Measured,
-            "assumed" => Basis::Assumed,
-            _ => return Err(err(line, "a basis is measured or assumed")),
-        };
+        let basis = basis_word(line, word)?;
         let slot = match field {
             "shear_modulus" => SHEAR_MODULUS,
             "poisson_ratio" => POISSON_RATIO,
+            "adhesion" => ADHESION,
+            "contact_area" => CONTACT_AREA,
             _ => {
                 return Err(err(
                     line,
-                    format!("`{field}` takes no basis (only shear_modulus and poisson_ratio)"),
+                    format!(
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion and contact_area)"
+                    ),
                 ))
             }
         };
@@ -774,6 +853,20 @@ impl WorldLaw {
                     RainSwitch::Named(n) => h.u32(2).str(n),
                 };
                 r.rate.expr.hash_into(h)
+            }
+        };
+        h = match &self.hand {
+            None => h.u32(0),
+            Some(hand) => {
+                let mut h = hand.youngs_modulus.expr.hash_into(h.u32(1));
+                h = hand.poisson_ratio.expr.hash_into(h);
+                for b in [hand.youngs_modulus_basis, hand.poisson_ratio_basis] {
+                    h = match b {
+                        None => h.u32(0),
+                        Some(b) => h.u32(1).u32(u32::from(b == Basis::Measured)),
+                    };
+                }
+                h
             }
         };
         h.finish()
@@ -857,11 +950,16 @@ impl WorldLaw {
                 )
             }
         };
+        let hand = match &self.hand {
+            None => None,
+            Some(hand) => Some(bind_hand(hand, &slots)?),
+        };
         Ok(BoundWorld {
             name: self.name.clone(),
             materials,
             rain,
             states_rain,
+            hand,
         })
     }
 }
@@ -910,7 +1008,121 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         poisson_ratio: v[POISSON_RATIO],
         shear_modulus_basis: basis_of(m, SHEAR_MODULUS),
         poisson_ratio_basis: basis_of(m, POISSON_RATIO),
+        adhesion: v[ADHESION],
+        contact_area: v[CONTACT_AREA],
+        adhesion_basis: basis_of(m, ADHESION),
+        contact_area_basis: basis_of(m, CONTACT_AREA),
     })
+}
+
+fn bind_hand(hand: &Hand, slots: &[f64]) -> Result<BoundHand, BindError> {
+    let e = eval(&hand.youngs_modulus, slots)?;
+    if !field_in_range(SHEAR_MODULUS, e) {
+        return Err(BindError::OutOfRange {
+            line: hand.youngs_modulus.at,
+            name: hand.youngs_modulus.name.clone(),
+            range: field_range(SHEAR_MODULUS),
+        });
+    }
+    let nu = eval(&hand.poisson_ratio, slots)?;
+    if !field_in_range(POISSON_RATIO, nu) {
+        return Err(BindError::OutOfRange {
+            line: hand.poisson_ratio.at,
+            name: hand.poisson_ratio.name.clone(),
+            range: field_range(POISSON_RATIO),
+        });
+    }
+    Ok(BoundHand {
+        youngs_modulus: e,
+        poisson_ratio: nu + 0.0,
+        youngs_modulus_basis: hand.youngs_modulus_basis,
+        poisson_ratio_basis: hand.poisson_ratio_basis,
+    })
+}
+
+fn basis_word(line: usize, word: &str) -> Result<Basis, WorldLawError> {
+    match word {
+        "measured" => Ok(Basis::Measured),
+        "assumed" => Ok(Basis::Assumed),
+        _ => Err(err(line, "a basis is measured or assumed")),
+    }
+}
+
+/// The hand lines as read, before they are paired
+#[derive(Default)]
+struct HandLines {
+    youngs_modulus: Option<Line>,
+    poisson_ratio: Option<Line>,
+    youngs_modulus_basis: Option<Basis>,
+    poisson_ratio_basis: Option<Basis>,
+}
+
+impl HandLines {
+    /// `hand_youngs_modulus = <expr>`, `hand_poisson_ratio = <expr>` or `<key> basis <word>`
+    fn read(
+        &mut self,
+        law: &WorldLaw,
+        line: usize,
+        key: &str,
+        rest: &str,
+    ) -> Result<(), WorldLawError> {
+        let is_e = key == "hand_youngs_modulus";
+        if let Some(v) = after_equals(rest) {
+            let slot = if is_e {
+                &mut self.youngs_modulus
+            } else {
+                &mut self.poisson_ratio
+            };
+            if slot.is_some() {
+                return Err(err(line, format!("a second `{key}` line")));
+            }
+            *slot = Some(law.line(line, key, v)?);
+            return Ok(());
+        }
+        let Some(word) = rest.strip_prefix("basis ") else {
+            return Err(err(
+                line,
+                format!("`{key} = <expression>` or `{key} basis measured|assumed` expected"),
+            ));
+        };
+        let basis = basis_word(line, word.trim())?;
+        let (stated, slot) = if is_e {
+            (
+                self.youngs_modulus.is_some(),
+                &mut self.youngs_modulus_basis,
+            )
+        } else {
+            (self.poisson_ratio.is_some(), &mut self.poisson_ratio_basis)
+        };
+        if !stated {
+            return Err(err(line, format!("`{key}` is not stated before its basis")));
+        }
+        if slot.is_some() {
+            return Err(err(line, format!("the basis of `{key}` is given twice")));
+        }
+        *slot = Some(basis);
+        Ok(())
+    }
+
+    fn finish(self) -> Result<Option<Hand>, WorldLawError> {
+        match (self.youngs_modulus, self.poisson_ratio) {
+            (Some(youngs_modulus), Some(poisson_ratio)) => Ok(Some(Hand {
+                youngs_modulus,
+                poisson_ratio,
+                youngs_modulus_basis: self.youngs_modulus_basis,
+                poisson_ratio_basis: self.poisson_ratio_basis,
+            })),
+            (None, None) => Ok(None),
+            (Some(e), None) => Err(err(
+                e.at,
+                "`hand_youngs_modulus` without `hand_poisson_ratio`",
+            )),
+            (None, Some(nu)) => Err(err(
+                nu.at,
+                "`hand_poisson_ratio` without `hand_youngs_modulus`",
+            )),
+        }
+    }
 }
 
 fn basis_of(m: &Material, slot: usize) -> Option<Basis> {
@@ -936,6 +1148,20 @@ impl BoundWorld {
         self.rain
     }
 
+    /// The skin of the hand, when the law states it
+    #[must_use]
+    pub const fn hand(&self) -> Option<BoundHand> {
+        self.hand
+    }
+
+    /// A hand's hold on a material, derived from the law (module docs, Grip); `None` unless the
+    /// material states `shear_modulus`, `poisson_ratio` and `contact_area` and the law states the
+    /// hand
+    #[must_use]
+    pub fn grip(&self, material: &str) -> Option<Grip> {
+        grip_of(self.material(material)?, self.hand?)
+    }
+
     /// What this world does, in plain text, computed from its values
     #[must_use]
     pub fn describe(&self) -> String {
@@ -943,7 +1169,23 @@ impl BoundWorld {
         // writing to a String cannot fail
         let _ = writeln!(s, "law: {}", self.name);
         for m in &self.materials {
-            describe_material(&mut s, m);
+            describe_material(&mut s, m, self.hand);
+        }
+        match self.hand {
+            Some(h) => {
+                let basis = |b: Option<Basis>| b.map_or("basis not stated", Basis::word);
+                let _ = writeln!(
+                    s,
+                    "hand: skin Young's modulus {:.4e} Pa ({}), Poisson's ratio {:.3} ({})",
+                    h.youngs_modulus,
+                    basis(h.youngs_modulus_basis),
+                    h.poisson_ratio,
+                    basis(h.poisson_ratio_basis)
+                );
+            }
+            None => {
+                let _ = writeln!(s, "hand: not stated");
+            }
         }
         if self.states_rain {
             let r = self.rain;
@@ -964,7 +1206,66 @@ impl BoundWorld {
     }
 }
 
-fn describe_material(s: &mut String, m: &BoundMaterial) {
+fn grip_of(m: &BoundMaterial, hand: BoundHand) -> Option<Grip> {
+    let a = (m.contact_area? / std::f64::consts::PI).sqrt();
+    let material_stiffness = flat_contact_stiffness(a, m.youngs_modulus()?, m.poisson_ratio?);
+    let hand_stiffness = flat_contact_stiffness(a, hand.youngs_modulus, hand.poisson_ratio);
+    Some(Grip {
+        contact_radius: a,
+        material_stiffness,
+        hand_stiffness,
+        stiffness: material_stiffness * hand_stiffness / (material_stiffness + hand_stiffness),
+        adhesion: m.adhesion,
+    })
+}
+
+fn describe_grip(s: &mut String, m: &BoundMaterial, hand: Option<BoundHand>) {
+    if m.adhesion.is_none() && m.contact_area.is_none() {
+        return;
+    }
+    let basis = |b: Option<Basis>| b.map_or("basis not stated", Basis::word);
+    match m.adhesion {
+        Some(f) => {
+            let _ = writeln!(
+                s,
+                "  adhesion {f:.4e} N ({}): the pull at which a hand's hold lets go",
+                basis(m.adhesion_basis)
+            );
+        }
+        None => {
+            let _ = writeln!(s, "  adhesion: not stated");
+        }
+    }
+    match m.contact_area {
+        Some(area) => {
+            let _ = writeln!(
+                s,
+                "  contact area {area:.4e} m^2 ({})",
+                basis(m.contact_area_basis)
+            );
+        }
+        None => {
+            let _ = writeln!(s, "  contact area: not stated");
+        }
+    }
+    match hand.and_then(|h| grip_of(m, h)) {
+        Some(g) => {
+            let _ = writeln!(
+                s,
+                "  grip stiffness {:.4e} N/m, derived: the material ({:.4e} N/m) and the hand ({:.4e} N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = {:.4e} m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness",
+                g.stiffness, g.material_stiffness, g.hand_stiffness, g.contact_radius
+            );
+        }
+        None => {
+            let _ = writeln!(
+                s,
+                "  grip stiffness: not derived (needs the shear modulus, Poisson's ratio, contact area and the hand)"
+            );
+        }
+    }
+}
+
+fn describe_material(s: &mut String, m: &BoundMaterial, hand: Option<BoundHand>) {
     let _ = writeln!(s, "material: {}", m.name);
     let water = if m.density > WATER_DENSITY {
         "sinks in water"
@@ -1042,6 +1343,7 @@ fn describe_material(s: &mut String, m: &BoundMaterial) {
             }
         }
     }
+    describe_grip(s, m, hand);
 }
 
 /// The values under the types of `alice-physics`
@@ -1167,6 +1469,16 @@ material a sdf_friction = k * 0.5
 material b density = 2500 - 1500 * k
 material b friction = 0
 material b bounce = 0
+material b shear_modulus = 1000 + 1000 * k
+material b shear_modulus basis measured
+material b poisson_ratio = 0.25 * k
+material b poisson_ratio basis assumed
+material b adhesion = k
+material b adhesion basis assumed
+material b contact_area = 0.0001 + 0.0001 * k
+hand_youngs_modulus = 300000
+hand_youngs_modulus basis assumed
+hand_poisson_ratio = 0.45
 rain = wet
 rain_rate = 10 * k
 ";
