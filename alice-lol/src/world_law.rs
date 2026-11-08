@@ -34,13 +34,16 @@
 //! - `let <name> = <expr>`: a value for the later lines
 //! - `material <name> <field> = <expr>`: one of [`FIELDS`], at most once per material
 //! - `material <name> <field> basis measured|assumed`: how `shear_modulus`, `poisson_ratio`,
-//!   `loss_modulus`, `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
+//!   `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
 //!   a measured value comes from. Young's modulus is never stated:
 //!   [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
-//! - `loss_modulus` (Pa) and `modulus_frequency` (Hz): when the material states a frequency, its
-//!   `shear_modulus` and `loss_modulus` are the storage and loss moduli G' and G'' measured at that
-//!   one frequency. A loss modulus needs the frequency, and the frequency needs a shear modulus.
-//!   No relaxation model is fitted and nothing is said about other frequencies
+//! - `material <name> dynamic shear|youngs at <f> storage <expr> loss <expr>`: one row of a
+//!   dynamic-modulus table, the storage and loss moduli (G' and G'' for `shear`, E' and E'' for
+//!   `youngs`, Pa) measured at the frequency `f` (Hz, a plain decimal above 0), one line per
+//!   frequency, one kind per material; `material <name> dynamic basis measured|assumed` after the
+//!   rows. Between the stated frequencies [`DynamicModulus::at`] interpolates on log-log axes;
+//!   outside them it answers nothing (no extrapolation, no relaxation model is fitted). Data
+//!   measured under different conditions (storage, temperature) go in different materials
 //! - `hand_youngs_modulus = <expr>` (Pa) and `hand_poisson_ratio = <expr>`: the skin of the hand
 //!   that holds things, both or neither, each optionally followed by `<key> basis measured|assumed`;
 //!   `hand_youngs_modulus spread <lo> <hi>` (plain decimals, `0 < lo <= value <= hi`) states the
@@ -84,7 +87,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 17] = [
+pub const FIELDS: [&str; 15] = [
     "density",
     "friction",
     "static_friction",
@@ -100,8 +103,6 @@ pub const FIELDS: [&str; 17] = [
     "poisson_ratio",
     "adhesion",
     "contact_area",
-    "loss_modulus",
-    "modulus_frequency",
 ];
 
 const DENSITY: usize = 0;
@@ -119,8 +120,6 @@ const SHEAR_MODULUS: usize = 11;
 const POISSON_RATIO: usize = 12;
 const ADHESION: usize = 13;
 const CONTACT_AREA: usize = 14;
-const LOSS_MODULUS: usize = 15;
-const MODULUS_FREQUENCY: usize = 16;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -143,7 +142,7 @@ pub const MAX_LINES: usize = 1024;
 pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     (
         "world: field ranges, refused not clamped, and the plain text computed from the values",
-        hex32("bf9493c3d610c4b51b827b6b97c598be4f9dd92d4601232c3ecf314ef29d441d"),
+        hex32("c577bf8750864369a83018b690202dbe75a9758164e64fe31feb10f6fd5adb6b"),
     ),
     (
         "world: the expression functions of research laws",
@@ -153,7 +152,7 @@ pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 
 /// The fold of [`WORLD_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const WORLD_SEMANTICS_ID: [u8; 32] =
-    hex32("1a7d152bd6cb553a75e379b83b244b15730c44658c4fc590df85faa3b5765eb7");
+    hex32("5a1f3dda567944e983d6160948df81aeb124c26eb44e59880aaa4a3873296f43");
 
 /// A world law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -265,6 +264,89 @@ struct Material {
     fields: Vec<(usize, Line)>,
     /// how a field's value was obtained, by slot, sorted (`material <name> <field> basis <...>`)
     bases: Vec<(usize, Basis)>,
+    /// the dynamic-modulus table, sorted by frequency
+    dynamic: Option<DynamicLines>,
+}
+
+#[derive(Debug, Clone)]
+struct DynamicLines {
+    kind: ModulusKind,
+    /// (frequency in Hz, storage, loss), sorted by frequency
+    rows: Vec<(f64, Line, Line)>,
+    basis: Option<Basis>,
+}
+
+/// Which modulus a dynamic table states
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModulusKind {
+    /// G' and G'', in shear
+    Shear,
+    /// E' and E'', in tension or compression
+    Youngs,
+}
+
+impl ModulusKind {
+    const fn word(self) -> &'static str {
+        match self {
+            Self::Shear => "shear",
+            Self::Youngs => "youngs",
+        }
+    }
+}
+
+/// One stated row of a dynamic-modulus table
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DynamicRow {
+    /// Hz, above 0
+    pub frequency: f64,
+    /// the storage modulus in Pa, above 0
+    pub storage: f64,
+    /// the loss modulus in Pa, at least 0
+    pub loss: f64,
+}
+
+/// A material's dynamic modulus, stated at some frequencies
+#[derive(Debug, Clone, PartialEq)]
+pub struct DynamicModulus {
+    /// shear (G', G'') or Young's (E', E'')
+    pub kind: ModulusKind,
+    /// the stated rows, sorted by frequency
+    pub rows: Vec<DynamicRow>,
+    /// how the rows were obtained, when the law says
+    pub basis: Option<Basis>,
+}
+
+impl DynamicModulus {
+    /// `(storage, loss)` in Pa at `frequency` Hz: a stated row exactly, between two rows
+    /// interpolated on log-log axes (the logarithm of each modulus linear in the logarithm of the
+    /// frequency; a loss of 0 at either end interpolates linearly instead), and `None` outside the
+    /// stated range or for a frequency that is not finite and above 0
+    #[must_use]
+    pub fn at(&self, frequency: f64) -> Option<(f64, f64)> {
+        if !(frequency.is_finite() && frequency > 0.0) {
+            return None;
+        }
+        if let Some(r) = self
+            .rows
+            .iter()
+            .find(|r| r.frequency.to_bits() == frequency.to_bits())
+        {
+            return Some((r.storage, r.loss));
+        }
+        let hi = self.rows.iter().position(|r| r.frequency > frequency)?;
+        let lo = self.rows.get(hi.checked_sub(1)?)?;
+        let hi = &self.rows[hi];
+        let ln = alice_det_math::ln64;
+        let t = (ln(frequency) - ln(lo.frequency)) / (ln(hi.frequency) - ln(lo.frequency));
+        let between = |a: f64, b: f64| {
+            if a > 0.0 && b > 0.0 {
+                alice_det_math::exp64(ln(a) + t * (ln(b) - ln(a)))
+            } else {
+                a + t * (b - a)
+            }
+        };
+        Some((between(lo.storage, hi.storage), between(lo.loss, hi.loss)))
+    }
 }
 
 /// How the value of an elastic constant was obtained
@@ -364,12 +446,8 @@ pub struct BoundMaterial {
     pub adhesion_basis: Option<Basis>,
     /// how `contact_area` was obtained, when the law says
     pub contact_area_basis: Option<Basis>,
-    /// the loss modulus G'' in Pa at `modulus_frequency`, at least 0
-    pub loss_modulus: Option<f64>,
-    /// how `loss_modulus` was obtained, when the law says
-    pub loss_modulus_basis: Option<Basis>,
-    /// the frequency in Hz at which `shear_modulus` (G') and `loss_modulus` (G'') hold, above 0
-    pub modulus_frequency: Option<f64>,
+    /// the dynamic-modulus table, when the law states one
+    pub dynamic: Option<DynamicModulus>,
 }
 
 impl BoundMaterial {
@@ -463,7 +541,7 @@ pub struct BoundWorld {
 
 const fn field_range(slot: usize) -> &'static str {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA | MODULUS_FREQUENCY => "above 0 and at most 2^53",
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA => "above 0 and at most 2^53",
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
@@ -474,7 +552,7 @@ const fn field_range(slot: usize) -> &'static str {
 
 fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA | MODULUS_FREQUENCY => v > 0.0 && v <= MAX_VALUE,
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
         _ => (0.0..=MAX_VALUE).contains(&v),
@@ -641,22 +719,6 @@ impl WorldLaw {
                     ));
                 }
             }
-            let line_of =
-                |slot: usize| m.fields.iter().find(|(s, _)| *s == slot).map(|(_, l)| l.at);
-            for (needs, needed) in [
-                (LOSS_MODULUS, MODULUS_FREQUENCY),
-                (MODULUS_FREQUENCY, SHEAR_MODULUS),
-            ] {
-                if let (Some(at), None) = (line_of(needs), line_of(needed)) {
-                    return Err(err(
-                        at,
-                        format!(
-                            "`{} {}` needs `{} {}`",
-                            m.name, FIELDS[needs], m.name, FIELDS[needed]
-                        ),
-                    ));
-                }
-            }
         }
         Ok(())
     }
@@ -755,6 +817,9 @@ impl WorldLaw {
                 "`material <name> <field> = <expression>` or `material <name> <field> basis measured|assumed` expected",
             )
         };
+        if rest.split_whitespace().nth(1) == Some("dynamic") {
+            return self.read_dynamic(line, rest);
+        }
         if !rest.contains('=') {
             return self.read_basis(line, rest).map_err(|e| {
                 if e.message.is_empty() {
@@ -789,6 +854,7 @@ impl WorldLaw {
                 name: m.to_owned(),
                 fields: Vec::new(),
                 bases: Vec::new(),
+                dynamic: None,
             });
             self.materials.len() - 1
         };
@@ -797,6 +863,105 @@ impl WorldLaw {
             return Err(err(line, format!("`{m} {field}` is given twice")));
         }
         fields.push((slot, l));
+        Ok(())
+    }
+
+    /// `material <name> dynamic <kind> at <f> storage <expr> loss <expr>` or
+    /// `material <name> dynamic basis measured|assumed`
+    fn read_dynamic(&mut self, line: usize, rest: &str) -> Result<(), WorldLawError> {
+        let form = "`material <name> dynamic shear|youngs at <f> storage <expression> loss <expression>` expected";
+        let mut w = rest.splitn(3, ' ');
+        let (Some(m), Some(_), Some(tail)) = (w.next(), w.next(), w.next()) else {
+            return Err(err(line, form));
+        };
+        if !is_name(m) {
+            return Err(err(line, format!("`{m}` is not a name")));
+        }
+        let tail = tail.trim();
+        if let Some(word) = tail.strip_prefix("basis ") {
+            let basis = basis_word(line, word.trim())?;
+            let Some(table) = self
+                .materials
+                .iter_mut()
+                .find(|x| x.name == m)
+                .and_then(|x| x.dynamic.as_mut())
+            else {
+                return Err(err(
+                    line,
+                    format!("`{m}` has no dynamic row before its basis"),
+                ));
+            };
+            if table.basis.is_some() {
+                return Err(err(
+                    line,
+                    format!("the basis of `{m} dynamic` is given twice"),
+                ));
+            }
+            table.basis = Some(basis);
+            return Ok(());
+        }
+        let (kind, after) = if let Some(a) = tail.strip_prefix("shear at ") {
+            (ModulusKind::Shear, a)
+        } else if let Some(a) = tail.strip_prefix("youngs at ") {
+            (ModulusKind::Youngs, a)
+        } else {
+            return Err(err(line, form));
+        };
+        let Some((f, after)) = after.split_once(' ') else {
+            return Err(err(line, form));
+        };
+        let Some(f) = number(f).filter(|f| *f > 0.0 && *f <= MAX_VALUE) else {
+            return Err(err(line, "a frequency is a plain decimal above 0"));
+        };
+        let Some((storage, loss)) = after
+            .trim()
+            .strip_prefix("storage ")
+            .and_then(|s| s.split_once(" loss "))
+        else {
+            return Err(err(line, form));
+        };
+        let storage = self.line(line, &format!("{m} dynamic storage at {f}"), storage)?;
+        let loss = self.line(line, &format!("{m} dynamic loss at {f}"), loss)?;
+        let at = if let Some(at) = self.materials.iter().position(|x| x.name == m) {
+            at
+        } else {
+            if self.materials.len() == MAX_MATERIALS {
+                return Err(err(line, format!("more than {MAX_MATERIALS} materials")));
+            }
+            self.materials.push(Material {
+                name: m.to_owned(),
+                fields: Vec::new(),
+                bases: Vec::new(),
+                dynamic: None,
+            });
+            self.materials.len() - 1
+        };
+        let table = self.materials[at].dynamic.get_or_insert(DynamicLines {
+            kind,
+            rows: Vec::new(),
+            basis: None,
+        });
+        if table.kind != kind {
+            return Err(err(
+                line,
+                format!(
+                    "`{m} dynamic` is {} already; one kind per material",
+                    table.kind.word()
+                ),
+            ));
+        }
+        if table.basis.is_some() {
+            return Err(err(line, format!("a row of `{m} dynamic` after its basis")));
+        }
+        if table
+            .rows
+            .iter()
+            .any(|(g, _, _)| g.to_bits() == f.to_bits())
+        {
+            return Err(err(line, format!("`{m} dynamic` at {f} Hz is given twice")));
+        }
+        table.rows.push((f, storage, loss));
+        table.rows.sort_by(|a, b| a.0.total_cmp(&b.0));
         Ok(())
     }
 
@@ -812,12 +977,11 @@ impl WorldLaw {
             "poisson_ratio" => POISSON_RATIO,
             "adhesion" => ADHESION,
             "contact_area" => CONTACT_AREA,
-            "loss_modulus" => LOSS_MODULUS,
             _ => {
                 return Err(err(
                     line,
                     format!(
-                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, loss_modulus, adhesion and contact_area)"
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion and contact_area)"
                     ),
                 ))
             }
@@ -883,6 +1047,22 @@ impl WorldLaw {
             for (slot, b) in &m.bases {
                 h = h.str(FIELDS[*slot]).u32(u32::from(*b == Basis::Measured));
             }
+            h = match &m.dynamic {
+                None => h.u32(0),
+                Some(d) => {
+                    let mut h = h
+                        .u32(1)
+                        .u32(u32::from(d.kind == ModulusKind::Youngs))
+                        .u64(d.rows.len() as u64);
+                    for (f, storage, loss) in &d.rows {
+                        h = loss.expr.hash_into(storage.expr.hash_into(h.f64(*f)));
+                    }
+                    match d.basis {
+                        None => h.u32(0),
+                        Some(b) => h.u32(1).u32(u32::from(b == Basis::Measured)),
+                    }
+                }
+            };
         }
         h = match &self.rain {
             None => h.u32(0),
@@ -1054,9 +1234,42 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         contact_area: v[CONTACT_AREA],
         adhesion_basis: basis_of(m, ADHESION),
         contact_area_basis: basis_of(m, CONTACT_AREA),
-        loss_modulus: v[LOSS_MODULUS],
-        loss_modulus_basis: basis_of(m, LOSS_MODULUS),
-        modulus_frequency: v[MODULUS_FREQUENCY],
+        dynamic: match &m.dynamic {
+            None => None,
+            Some(d) => Some(bind_dynamic(d, slots)?),
+        },
+    })
+}
+
+fn bind_dynamic(d: &DynamicLines, slots: &[f64]) -> Result<DynamicModulus, BindError> {
+    let mut rows = Vec::with_capacity(d.rows.len());
+    for (frequency, storage, loss) in &d.rows {
+        let s = eval(storage, slots)?;
+        if !(s > 0.0 && s <= MAX_VALUE) {
+            return Err(BindError::OutOfRange {
+                line: storage.at,
+                name: storage.name.clone(),
+                range: "above 0 and at most 2^53",
+            });
+        }
+        let l = eval(loss, slots)?;
+        if !(0.0..=MAX_VALUE).contains(&l) {
+            return Err(BindError::OutOfRange {
+                line: loss.at,
+                name: loss.name.clone(),
+                range: "in 0..=2^53",
+            });
+        }
+        rows.push(DynamicRow {
+            frequency: *frequency,
+            storage: s,
+            loss: l + 0.0,
+        });
+    }
+    Ok(DynamicModulus {
+        kind: d.kind,
+        rows,
+        basis: d.basis,
     })
 }
 
@@ -1456,25 +1669,46 @@ fn describe_material(s: &mut String, m: &BoundMaterial, hand: Option<BoundHand>)
             }
         }
     }
-    if let (Some(f), Some(g)) = (m.modulus_frequency, m.shear_modulus) {
-        match m.loss_modulus {
-            Some(loss) => {
-                let _ = writeln!(
-                    s,
-                    "  at {f:.4e} Hz: storage modulus {g:.4e} Pa, loss modulus {loss:.4e} Pa ({}), loss tangent {:.4}; the response at other frequencies is not stated",
-                    basis(m.loss_modulus_basis),
-                    loss / g
-                );
-            }
-            None => {
-                let _ = writeln!(
-                    s,
-                    "  at {f:.4e} Hz: storage modulus {g:.4e} Pa, loss modulus not stated; the response at other frequencies is not stated"
-                );
-            }
-        }
+    if let Some(d) = &m.dynamic {
+        describe_dynamic(s, d);
     }
     describe_grip(s, m, hand);
+}
+
+fn describe_dynamic(s: &mut String, d: &DynamicModulus) {
+    let (lo, hi) = match (d.rows.first(), d.rows.last()) {
+        (Some(a), Some(b)) => (a.frequency, b.frequency),
+        _ => return,
+    };
+    let names = match d.kind {
+        ModulusKind::Shear => "G' and G''",
+        ModulusKind::Youngs => "E' and E''",
+    };
+    let basis = d.basis.map_or("basis not stated", Basis::word);
+    if d.rows.len() == 1 {
+        let _ = writeln!(
+            s,
+            "  dynamic {} modulus ({names}, {basis}) stated at one frequency, {lo:.4e} Hz; other frequencies not stated",
+            d.kind.word()
+        );
+    } else {
+        let _ = writeln!(
+            s,
+            "  dynamic {} modulus ({names}, {basis}) stated at {} frequencies {lo:.4e}..{hi:.4e} Hz; between them interpolated on log-log axes, outside them not stated",
+            d.kind.word(),
+            d.rows.len()
+        );
+    }
+    for r in &d.rows {
+        let _ = writeln!(
+            s,
+            "    {:.4e} Hz: storage {:.4e} Pa, loss {:.4e} Pa, loss tangent {:.4}",
+            r.frequency,
+            r.storage,
+            r.loss,
+            r.loss / r.storage
+        );
+    }
 }
 
 /// The values under the types of `alice-physics`
@@ -1607,9 +1841,9 @@ material b poisson_ratio basis assumed
 material b adhesion = k
 material b adhesion basis assumed
 material b contact_area = 0.0001 + 0.0001 * k
-material b loss_modulus = 100 * k
-material b loss_modulus basis measured
-material b modulus_frequency = 0.1
+material b dynamic youngs at 3 storage 1000 + 100 * k loss 50 * k
+material b dynamic youngs at 30 storage 2000 loss 100
+material b dynamic basis measured
 hand_youngs_modulus = 300000
 hand_youngs_modulus basis assumed
 hand_youngs_modulus spread 40000 400000

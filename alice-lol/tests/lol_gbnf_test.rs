@@ -555,6 +555,14 @@ fn accepts_world_laws_and_their_fields_are_the_fields_the_reader_knows() {
         g,
         "law f\nkind world\nhand_youngs_modulus basis guessed\n"
     ));
+    assert!(accepts(
+        g,
+        "law f\nkind world\nmaterial m dynamic youngs at 3 storage 10 ^ 7.1 loss 10 ^ 5.7\nmaterial m dynamic basis measured\n"
+    ));
+    assert!(rejects(
+        g,
+        "law f\nkind world\nmaterial m dynamic bulk at 3 storage 1 loss 1\n"
+    ));
     assert!(rejects(
         g,
         "law f\nkind world\nmaterial m density = 1\nmaterial m density basis measured\n"

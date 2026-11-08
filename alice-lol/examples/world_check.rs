@@ -25,7 +25,9 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn usage() -> ExitCode {
-    eprintln!("usage: world_check <law file> [--param name=value]... [--switch name=on|off]...");
+    eprintln!(
+        "usage: world_check <law file> [--param name=value]... [--switch name=on|off]... [--frequency <Hz>]..."
+    );
     eprintln!("       world_check --semantics");
     ExitCode::from(2)
 }
@@ -91,8 +93,16 @@ fn main() -> ExitCode {
         return usage();
     };
     let mut values: Vec<(&str, WorldValue)> = Vec::new();
+    let mut frequencies: Vec<f64> = Vec::new();
     let mut rest = args[1..].iter();
     while let Some(flag) = rest.next() {
+        if flag == "--frequency" {
+            match rest.next().and_then(|v| v.parse().ok()) {
+                Some(f) => frequencies.push(f),
+                None => return usage(),
+            }
+            continue;
+        }
         let Some((name, value)) = rest.next().and_then(|a| a.split_once('=')) else {
             return usage();
         };
@@ -126,6 +136,7 @@ fn main() -> ExitCode {
             println!("id: {}", hex(&law.law_id()));
             print!("{}", bound.describe());
             print_grips(&bound);
+            print_dynamic_at(&bound, &frequencies);
             #[cfg(feature = "physics")]
             print_physics(&bound);
             ExitCode::SUCCESS
@@ -147,6 +158,27 @@ fn print_grips(bound: &alice_lol::world_law::BoundWorld) {
         );
     }
     for m in bound.materials() {
+        if let Some(d) = &m.dynamic {
+            let rows: Vec<String> = d
+                .rows
+                .iter()
+                .map(|r| format!("{}:{}:{}", r.frequency, r.storage, r.loss))
+                .collect();
+            let kind = match d.kind {
+                alice_lol::world_law::ModulusKind::Shear => "shear",
+                alice_lol::world_law::ModulusKind::Youngs => "youngs",
+            };
+            let basis = match d.basis {
+                Some(alice_lol::world_law::Basis::Measured) => "measured",
+                Some(alice_lol::world_law::Basis::Assumed) => "assumed",
+                None => "none",
+            };
+            println!(
+                "dynamic {}: kind={kind} basis={basis} rows_hz_storage_pa_loss_pa={}",
+                m.name,
+                rows.join(",")
+            );
+        }
         if let Some(g) = bound.grip(&m.name) {
             let adhesion = g
                 .adhesion
@@ -161,6 +193,22 @@ fn print_grips(bound: &alice_lol::world_law::BoundWorld) {
                 g.stiffness.to_bits(),
                 g.contact_radius
             );
+        }
+    }
+}
+
+/// The dynamic moduli of every material at each `--frequency`, interpolated inside its table
+fn print_dynamic_at(bound: &alice_lol::world_law::BoundWorld, frequencies: &[f64]) {
+    for f in frequencies {
+        for m in bound.materials() {
+            let Some(d) = &m.dynamic else { continue };
+            match d.at(*f) {
+                Some((storage, loss)) => println!(
+                    "dynamic_at {} {f}: storage_pa={storage} loss_pa={loss}",
+                    m.name
+                ),
+                None => println!("dynamic_at {} {f}: not stated", m.name),
+            }
         }
     }
 }

@@ -2,25 +2,63 @@
 law mochi_in_the_rain
 kind world
 claim a viscoelastic block that hardly bounces, under light rain
+claim measured conditions are separate materials (mochi_48h_30c, mochi_5d_19c, mochi_5d_30c); mochi is the one the scene uses, and it combines them by an assumed factor
 param raining switch = on
 param strength number = 4 range 0 100
+source density, friction and bounce are assumed for every mochi material below and were not measured
+#
+# Isono, Okamura, Fujimoto and Watanabe, Agric. Biol. Chem. 54(11):2941-2947 (1990), doi:10.1271/bbb1961.54.2941
+source mochi_48h_30c: kneaded 10 min, water content 45.5 %, frozen and then kept 48 h at 2-4 C; Weissenberg rheogoniometer, shear, 30 C, 0.1 Hz
+source Fig. 4 upper panel, digitized from a log plot: log10 G' (dyn/cm^2) = 6.63 +- 0.03, so G' = 4.27e5 Pa within -7 % / +7 %
+source Fig. 4 lower panel, same sample and conditions: log10 G'' (dyn/cm^2) = 4.98, 5.01, 5.02 at three strains, so G'' = 5.00 +- 0.02, 1.00e4 Pa within -5 % / +5 %
+source other frequencies at 30 C are not readable from the paper (Fig. 7 is a perspective mesh; Figs. 9 and 10 are at 90 C after gelatinization)
+source Poisson's ratio 0.49 is assumed for a water-rich gel and was not measured
+material mochi_48h_30c density = 1100
+material mochi_48h_30c friction = 0.6
+material mochi_48h_30c bounce = 0.2
+material mochi_48h_30c shear_modulus = 427000
+material mochi_48h_30c shear_modulus basis measured
+material mochi_48h_30c poisson_ratio = 0.49
+material mochi_48h_30c poisson_ratio basis assumed
+material mochi_48h_30c dynamic shear at 0.1 storage 427000 loss 10000
+material mochi_48h_30c dynamic basis measured
+#
+# Horiuchi, J. Appl. Glycosci. 42(2):129-138 (1995), doi:10.11541/jag1994.42.129, Fig. 1, the stamped (pounded) sample
+source mochi_5d_19c and mochi_5d_30c: kept 5 days at 4 C, then 1 x 1 x 3 cm specimens; longitudinal vibration, Young's modulus, water content 45.0 %
+source Fig. 1 digitized from a log plot rendered at 300 dpi, axes calibrated on the minor ticks: each value +- 0.02 decade (+- 5 %), the overlapping 30 C loss value at 3 Hz +- 0.04 decade
+source mochi_5d_19c is the 19.2 C curve, mochi_5d_30c the 30.2 C curve; the paper measured nothing below 3 Hz or above 100 Hz
+material mochi_5d_19c density = 1100
+material mochi_5d_19c friction = 0.6
+material mochi_5d_19c bounce = 0.2
+material mochi_5d_19c dynamic youngs at 3 storage 10 ^ 7.115 loss 10 ^ 5.705
+material mochi_5d_19c dynamic youngs at 10 storage 10 ^ 7.145 loss 10 ^ 5.85
+material mochi_5d_19c dynamic youngs at 30 storage 10 ^ 7.125 loss 10 ^ 5.89
+material mochi_5d_19c dynamic youngs at 100 storage 10 ^ 7.345 loss 10 ^ 6.57
+material mochi_5d_19c dynamic basis measured
+material mochi_5d_30c density = 1100
+material mochi_5d_30c friction = 0.6
+material mochi_5d_30c bounce = 0.2
+material mochi_5d_30c dynamic youngs at 3 storage 10 ^ 7.035 loss 10 ^ 5.555
+material mochi_5d_30c dynamic youngs at 10 storage 10 ^ 7.075 loss 10 ^ 5.615
+material mochi_5d_30c dynamic youngs at 30 storage 10 ^ 7.06 loss 10 ^ 5.77
+material mochi_5d_30c dynamic youngs at 100 storage 10 ^ 7.21 loss 10 ^ 6.3
+material mochi_5d_30c dynamic basis measured
+#
+# the scene's mochi: Isono's level (48 h) with Horiuchi's frequency shape (5 days, 30 C)
+source mochi is an assumption: the 48 h mochi is about 8.5 times softer than the 5 day mochi (E 1.27e6 Pa at 0.1 Hz against E' 1.08e7 Pa at 3 Hz, both near 30 C), so the 5 day table is scaled by level = E(48 h) / E'(5 d, 3 Hz); that the shape carries over between the two states was not measured; E(48 h) = 2 G (1 + nu) uses the assumed Poisson's ratio 0.49, so the level carries that assumption too
+let level = 2 * 427000 * (1 + 0.49) / 10 ^ 7.035
 material mochi density = 1100
 material mochi friction = 0.6
 material mochi bounce = 0.2
-source shear modulus: Isono, Okamura, Fujimoto and Watanabe, Agric. Biol. Chem. 54(11):2941-2947 (1990), doi:10.1271/bbb1961.54.2941, Fig. 4
-source the storage modulus G' at 30 C and 0.1 Hz of mochi kneaded 10 min, water content 45.5 %, frozen and then kept 48 h at 2-4 C before the test
-source digitized from a log plot: log10 G' (dyn/cm^2) = 6.63 +- 0.03, so G' = 4.27e5 Pa within -7 % / +7 %
-source the condition is 30 C: room temperature (20-25 C) is not covered and not extrapolated; the modulus falls steeply above 40 C (Fig. 6)
-source Poisson's ratio 0.49 is assumed for a water-rich gel and was not measured
 material mochi shear_modulus = 427000
 material mochi shear_modulus basis measured
 material mochi poisson_ratio = 0.49
 material mochi poisson_ratio basis assumed
-source loss modulus: same figure (Fig. 4, lower panel), same sample and conditions (30 C, 0.1 Hz): log10 G'' (dyn/cm^2) = 4.98, 5.01, 5.02 at three strains, so G'' = 5.00 +- 0.02, 1.00e4 Pa within -5 % / +5 %, loss tangent 0.023
-source other frequencies at 30 C are not readable from the paper (Fig. 7 is a perspective mesh; Figs. 9 and 10 are at 90 C after gelatinization), so no relaxation model is fitted and only the 0.1 Hz pair is stated
-material mochi loss_modulus = 10000
-material mochi loss_modulus basis measured
-material mochi modulus_frequency = 0.1
+material mochi dynamic youngs at 3 storage level * 10 ^ 7.035 loss level * 10 ^ 5.555
+material mochi dynamic youngs at 10 storage level * 10 ^ 7.075 loss level * 10 ^ 5.615
+material mochi dynamic youngs at 30 storage level * 10 ^ 7.06 loss level * 10 ^ 5.77
+material mochi dynamic youngs at 100 storage level * 10 ^ 7.21 loss level * 10 ^ 6.3
+material mochi dynamic basis assumed
 source adhesion: no measured force at which a hand's hold on fresh mochi lets go was found; 2 N is assumed as a tack stress of about 10 kPa over the contact area below
 source contact area: a finger pad pressed on a soft surface, about 2 cm^2, assumed
 material mochi adhesion = 2
