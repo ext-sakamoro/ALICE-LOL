@@ -125,6 +125,7 @@ fn main() -> ExitCode {
         Ok(bound) => {
             println!("id: {}", hex(&law.law_id()));
             print!("{}", bound.describe());
+            print_grips(&bound);
             #[cfg(feature = "physics")]
             print_physics(&bound);
             ExitCode::SUCCESS
@@ -132,6 +133,34 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("{path}: {e}");
             ExitCode::from(1)
+        }
+    }
+}
+
+/// One line per material the hand can hold, for a program to read: the values in SI units and the
+/// exact bits of the derived stiffness
+fn print_grips(bound: &alice_lol::world_law::BoundWorld) {
+    if let Some(h) = bound.hand() {
+        println!(
+            "hand_skin: youngs_modulus_pa={} poisson_ratio={}",
+            h.youngs_modulus, h.poisson_ratio
+        );
+    }
+    for m in bound.materials() {
+        if let Some(g) = bound.grip(&m.name) {
+            let adhesion = g
+                .adhesion
+                .map_or_else(|| "none".to_owned(), |f| f.to_string());
+            let spread = g
+                .stiffness_spread
+                .map_or_else(|| "none".to_owned(), |(lo, hi)| format!("{lo}..{hi}"));
+            println!(
+                "grip {}: stiffness_n_per_m={} bits={:#018x} adhesion_n={adhesion} contact_radius_m={} stiffness_spread_n_per_m={spread}",
+                m.name,
+                g.stiffness,
+                g.stiffness.to_bits(),
+                g.contact_radius
+            );
         }
     }
 }

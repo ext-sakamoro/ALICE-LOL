@@ -660,6 +660,11 @@ class = "local"
 reason = "the text is a material name, looked up among the names this law declares (an unknown one is None)"
 
 [[entry]]
+path = "alice_lol::world_law::BoundWorld::grip"
+class = "local"
+reason = "the text is a material name, looked up among the names this law declares (an unknown one is None)"
+
+[[entry]]
 path = "alice_lol::law_ref::LawRef::from_bytes"
 class = "exchange"
 test = "alice-lol/tests/law_ref_oracle.rs::a_reference_from_another_build_or_law_is_refused_naming_both"

@@ -574,6 +574,11 @@ material: mochi
   shear modulus 4.2700e5 Pa (measured)
   Poisson's ratio 0.490 (assumed, not measured)
   Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
+  adhesion 2.0000e0 N (assumed, not measured): the pull at which a hand's hold lets go
+  contact area 2.0000e-4 m^2 (assumed, not measured)
+  grip stiffness 5.1815e3 N/m, derived: the material (2.6721e4 N/m) and the hand (6.4279e3 N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = 7.9788e-3 m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness
+  grip stiffness over the skin's stated spread 4.0000e4..3.1000e5 Pa: 8.0443e2..5.1815e3 N/m
+hand: skin Young's modulus 3.1000e5 Pa (assumed, not measured, reported values spread over 4.0000e4..3.1000e5 Pa), Poisson's ratio 0.480 (assumed, not measured)
 rain: on, 4.000 mm an hour, 0.001111 kg of water on each square metre each second
 "
     );
@@ -599,7 +604,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "02a85cd0490e9bd7321b6c817332edb81983e36518167da1fac7aea849861285"
+        "36f7ec88935e559c0ea66376aed4a7258e7f0c6076ec95424c5ea65d691632b5"
     );
     let w = law
         .bind(&[("softness", Number(0.03)), ("strength", Number(7.5))])
@@ -638,5 +643,224 @@ fn the_semantics_id_is_the_fold_of_the_measured_pins() {
     assert_eq!(
         hex(&measured_world_semantics_id()),
         hex(&WORLD_SEMANTICS_ID)
+    );
+}
+
+/// The grip of the mochi law, against the flat circular punch on an elastic half-space
+/// (Boussinesq: `k = 2 a E / (1 - nu^2)`, `a = sqrt(A / pi)`) for the mochi and the skin in series.
+/// Expected values computed by hand from the law text: G = 427000 Pa, nu = 0.49, so
+/// E = 2 G (1 + nu) = 1272460 Pa; A = 2e-4 m^2, a = 7.978845608e-3 m; skin E = 310000 Pa, nu = 0.48
+#[test]
+fn the_grip_is_two_flat_contacts_in_series() {
+    let w = WorldLaw::from_file(MOCHI).unwrap().bind(&[]).unwrap();
+    let g = w.grip("mochi").unwrap();
+    let close = |got: f64, want: f64| (got - want).abs() <= want * 1e-12;
+    assert!(close(g.contact_radius, 0.007_978_845_608_028_654), "{g:?}");
+    assert!(close(g.material_stiffness, 26_721.310_389_241_058), "{g:?}");
+    assert!(close(g.hand_stiffness, 6_427.864_185_262_168), "{g:?}");
+    assert!(close(g.stiffness, 5_181.454_930_295_214), "{g:?}");
+    // in series the pair is softer than either spring and the reciprocals add
+    assert!(g.stiffness < g.hand_stiffness && g.hand_stiffness < g.material_stiffness);
+    let reciprocal = 1.0 / g.material_stiffness + 1.0 / g.hand_stiffness;
+    assert!(close(1.0 / g.stiffness, reciprocal), "{g:?}");
+    assert_eq!(g.adhesion, Some(2.0));
+    // over the skin's spread 40..310 kPa: the low end by hand, the high end is the point value
+    let (lo, hi) = g.stiffness_spread.unwrap();
+    assert!(close(lo, 804.433_060_376_326_9), "{g:?}");
+    assert_eq!(hi, g.stiffness);
+}
+
+#[test]
+fn a_spread_is_after_the_value_and_contains_it() {
+    let base = "law h\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+    let hand =
+        |lines: &str| format!("{base}hand_youngs_modulus = 100\n{lines}hand_poisson_ratio = 0.4\n");
+    assert!(WorldLaw::from_file(&hand("hand_youngs_modulus spread 50 200\n")).is_ok());
+    assert!(WorldLaw::from_file(&hand("hand_youngs_modulus spread 100 100\n")).is_ok());
+    refused(
+        &format!("{base}hand_youngs_modulus spread 1 2\n"),
+        6,
+        "not stated before its spread",
+    );
+    refused(
+        &hand("hand_youngs_modulus spread 1 2\nhand_youngs_modulus spread 1 2\n"),
+        8,
+        "given twice",
+    );
+    refused(&hand("hand_youngs_modulus spread 2 1\n"), 7, "0 < lo <= hi");
+    refused(&hand("hand_youngs_modulus spread 0 1\n"), 7, "0 < lo <= hi");
+    refused(
+        &hand("hand_youngs_modulus spread 1e2 2e2\n"),
+        7,
+        "plain decimals",
+    );
+    refused(
+        &hand("hand_youngs_modulus spread 1\n"),
+        7,
+        "spread <lo> <hi>",
+    );
+    refused(&format!("{base}hand_youngs_modulus = 1\nhand_poisson_ratio = 0.4\nhand_poisson_ratio spread 1 2\n"), 8, "takes no spread");
+    // the value must lie inside the spread
+    refused(
+        &hand("hand_youngs_modulus spread 200 300\n"),
+        0,
+        "inside its stated spread",
+    );
+    refused(
+        &hand("hand_youngs_modulus spread 10 50\n"),
+        0,
+        "inside its stated spread",
+    );
+    // the spread is in the identifier
+    let id = |lines: &str| WorldLaw::from_file(&hand(lines)).unwrap().law_id();
+    assert_ne!(id(""), id("hand_youngs_modulus spread 50 200\n"));
+    assert_ne!(
+        id("hand_youngs_modulus spread 50 200\n"),
+        id("hand_youngs_modulus spread 50 300\n")
+    );
+}
+
+/// Four times the area is twice the radius, so every stiffness doubles exactly (k is linear in a,
+/// and scaling by a power of two is exact in f64)
+#[test]
+fn four_times_the_area_doubles_every_stiffness() {
+    let at = |area: &str| {
+        let text = format!(
+            "law g\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n\
+             material a shear_modulus = 100000\nmaterial a poisson_ratio = 0.3\nmaterial a contact_area = {area}\n\
+             hand_youngs_modulus = 200000\nhand_poisson_ratio = 0.45\n"
+        );
+        WorldLaw::from_file(&text)
+            .unwrap()
+            .bind(&[])
+            .unwrap()
+            .grip("a")
+            .unwrap()
+    };
+    let (one, four) = (at("0.0001"), at("0.0004"));
+    assert_eq!(four.contact_radius, 2.0 * one.contact_radius);
+    assert_eq!(four.material_stiffness, 2.0 * one.material_stiffness);
+    assert_eq!(four.hand_stiffness, 2.0 * one.hand_stiffness);
+    assert_eq!(four.stiffness, 2.0 * one.stiffness);
+    // and the material's spring is the closed form with E = 2 G (1 + nu) = 260000 Pa
+    let a = (0.0001f64 / std::f64::consts::PI).sqrt();
+    let want = 2.0 * a * 260_000.0 / (1.0 - 0.09);
+    assert!(
+        (one.material_stiffness - want).abs() <= want * 1e-12,
+        "{one:?}"
+    );
+    assert_eq!(one.adhesion, None);
+}
+
+#[test]
+fn a_grip_needs_the_material_constants_the_area_and_the_hand() {
+    let base = "law g\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+    let full = "material a shear_modulus = 1000\nmaterial a poisson_ratio = 0.3\nmaterial a contact_area = 0.0001\n";
+    let hand = "hand_youngs_modulus = 200000\nhand_poisson_ratio = 0.45\n";
+    let grip = |text: &str| {
+        WorldLaw::from_file(text)
+            .unwrap()
+            .bind(&[])
+            .unwrap()
+            .grip("a")
+    };
+    assert!(grip(&format!("{base}{full}{hand}")).is_some());
+    assert!(grip(&format!("{base}{full}")).is_none(), "no hand");
+    for drop in ["shear_modulus", "poisson_ratio", "contact_area"] {
+        let mut kept = String::new();
+        for l in full.lines().filter(|l| !l.contains(drop)) {
+            kept.push_str(l);
+            kept.push('\n');
+        }
+        assert!(grip(&format!("{base}{kept}{hand}")).is_none(), "{drop}");
+    }
+    let text = WorldLaw::from_file(&format!("{base}material a adhesion = 1\n"))
+        .unwrap()
+        .bind(&[])
+        .unwrap()
+        .describe();
+    assert!(
+        text.contains("  adhesion 1.0000e0 N (basis not stated)"),
+        "{text}"
+    );
+    assert!(text.contains("  contact area: not stated"), "{text}");
+    assert!(text.contains("  grip stiffness: not derived"), "{text}");
+    assert!(text.contains("hand: not stated"), "{text}");
+    // a material that states neither says nothing about a grip
+    assert!(!WorldLaw::from_file(ONE)
+        .unwrap()
+        .bind(&[])
+        .unwrap()
+        .describe()
+        .contains("grip stiffness"));
+}
+
+#[test]
+fn the_hand_lines_are_refused_out_of_place_or_range() {
+    let base = "law h\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+    refused(
+        &format!("{base}hand_youngs_modulus = 1\n"),
+        6,
+        "without `hand_poisson_ratio`",
+    );
+    refused(
+        &format!("{base}hand_poisson_ratio = 0.4\n"),
+        6,
+        "without `hand_youngs_modulus`",
+    );
+    refused(
+        &format!("{base}hand_youngs_modulus basis assumed\n"),
+        6,
+        "not stated before its basis",
+    );
+    refused(
+        &format!(
+            "{base}hand_youngs_modulus = 1\nhand_youngs_modulus = 2\nhand_poisson_ratio = 0.4\n"
+        ),
+        7,
+        "a second `hand_youngs_modulus`",
+    );
+    refused(
+        &format!("{base}hand_youngs_modulus = 1\nhand_youngs_modulus basis guessed\nhand_poisson_ratio = 0.4\n"),
+        7,
+        "measured or assumed",
+    );
+    // the values are bound with the field ranges of G and nu: above 0, and in -1..0.5
+    let bind = |e: &str, nu: &str| {
+        WorldLaw::from_file(
+            "law h\nkind world\nparam e number = 1 range -1 1000000\nparam nu number = 0.4 range -2 2\n\
+             material a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n\
+             hand_youngs_modulus = e\nhand_poisson_ratio = nu\n",
+        )
+        .unwrap()
+        .bind(&[("e", Number(e.parse().unwrap())), ("nu", Number(nu.parse().unwrap()))])
+    };
+    assert!(bind("1", "0.4").is_ok());
+    assert!(matches!(
+        bind("0", "0.4"),
+        Err(BindError::OutOfRange { line: 8, .. })
+    ));
+    assert!(matches!(
+        bind("1", "0.5"),
+        Err(BindError::OutOfRange { line: 9, .. })
+    ));
+    // the contact area is above 0; the adhesion may be 0
+    refused(
+        &format!("{base}material a contact_area = 0\n"),
+        0,
+        "contact_area",
+    );
+    assert!(WorldLaw::from_file(&format!("{base}material a adhesion = 0\n")).is_ok());
+    // adhesion and contact_area take a basis after their value
+    let b = WorldLaw::from_file(&format!(
+        "{base}material a adhesion = 1\nmaterial a adhesion basis measured\nmaterial a contact_area = 1\nmaterial a contact_area basis assumed\n"
+    ))
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    let m = b.material("a").unwrap();
+    assert_eq!(
+        (m.adhesion_basis, m.contact_area_basis),
+        (Some(Basis::Measured), Some(Basis::Assumed))
     );
 }

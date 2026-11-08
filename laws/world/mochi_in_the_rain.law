@@ -20,5 +20,19 @@ material mochi shear_modulus = 427000
 material mochi shear_modulus basis measured
 material mochi poisson_ratio = 0.49
 material mochi poisson_ratio basis assumed
+source adhesion: no measured force at which a hand's hold on fresh mochi lets go was found; 2 N is assumed as a tack stress of about 10 kPa over the contact area below
+source contact area: a finger pad pressed on a soft surface, about 2 cm^2, assumed
+material mochi adhesion = 2
+material mochi adhesion basis assumed
+material mochi contact_area = 0.0002
+material mochi contact_area basis assumed
+source hand: finger skin Young's modulus about 310 kPa by cylindrical indentation with a Hertzian model ("Insights into the Young's modulus of human finger skin: evaluating contact area and indentation creep behaviour", Acta Technica Napocensis, atna-mam.utcluj.ro article 2661); reported values span about 40 to 300 kPa by method, so it is used as assumed
+source hand Poisson's ratio 0.48 is assumed for a water-rich soft tissue and was not measured
+source grip: the stiffness is derived (flat contact on a half-space, the mochi and the skin in series); the contact radius about 8 mm is small next to a letter 160 mm deep, so the half-space holds
+hand_youngs_modulus = 310000
+hand_youngs_modulus basis assumed
+hand_youngs_modulus spread 40000 310000
+hand_poisson_ratio = 0.48
+hand_poisson_ratio basis assumed
 rain = raining
 rain_rate = strength
