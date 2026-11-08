@@ -45,12 +45,16 @@ fn the_values_are_the_ones_the_law_states() {
     assert_eq!(m.friction, 0.6);
     assert_eq!(m.static_friction, 0.6);
     assert_eq!(m.bounce, 0.2);
-    assert_eq!(m.stretch_compliance, Some(0.01));
-    assert_eq!(m.bend_compliance, Some(0.25));
+    // mochi is a solid: the law states no cloth or deformable parameters for it
+    assert_eq!(m.stretch_compliance, None);
+    assert_eq!(m.bend_compliance, None);
     assert_eq!(m.edge_compliance, None);
     assert_eq!(m.volume_compliance, None);
     assert_eq!(m.shape_stiffness, None);
-    assert_eq!(m.damping, Some(0.985));
+    assert_eq!(m.damping, None);
+    assert_eq!(m.loss_modulus, Some(10_000.0));
+    assert_eq!(m.loss_modulus_basis, Some(Basis::Measured));
+    assert_eq!(m.modulus_frequency, Some(0.1));
     assert_eq!(m.sdf_friction, None);
     assert_eq!(m.shear_modulus, Some(427_000.0));
     assert_eq!(m.poisson_ratio, Some(0.49));
@@ -66,8 +70,8 @@ fn the_values_are_the_ones_the_law_states() {
 #[test]
 fn softer_is_another_value_of_the_same_law() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
-    let w = law.bind(&[("softness", Number(0.05))]).unwrap();
-    assert_eq!(w.material("mochi").unwrap().stretch_compliance, Some(0.05));
+    let w = law.bind(&[("strength", Number(9.0))]).unwrap();
+    assert_eq!(w.rain().rate_mm_per_hour, 9.0);
     let before = law.law_id();
     assert_eq!(law.law_id(), before, "binding leaves the identifier");
 }
@@ -350,26 +354,26 @@ fn bad_parameter_values_are_refused() {
         BindError::UnknownParam("nope".into())
     );
     assert_eq!(
-        e(&[("softness", Number(0.0)), ("softness", Number(0.0))]),
-        BindError::RepeatedParam("softness".into())
+        e(&[("strength", Number(0.0)), ("strength", Number(0.0))]),
+        BindError::RepeatedParam("strength".into())
     );
-    for v in [-0.001, 0.101, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+    for v in [-0.001, 100.001, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         assert_eq!(
-            e(&[("softness", Number(v))]),
-            BindError::ParamOutOfRange("softness".into())
+            e(&[("strength", Number(v))]),
+            BindError::ParamOutOfRange("strength".into())
         );
     }
     assert_eq!(
-        e(&[("softness", Switch(true))]),
-        BindError::WrongType("softness".into())
+        e(&[("strength", Switch(true))]),
+        BindError::WrongType("strength".into())
     );
     assert_eq!(
         e(&[("raining", Number(1.0))]),
         BindError::WrongType("raining".into())
     );
     // the ends of a declared range are in it
-    assert!(law.bind(&[("softness", Number(0.0))]).is_ok());
-    assert!(law.bind(&[("softness", Number(0.1))]).is_ok());
+    assert!(law.bind(&[("strength", Number(0.0))]).is_ok());
+    assert!(law.bind(&[("strength", Number(100.0))]).is_ok());
 }
 
 #[test]
@@ -568,12 +572,10 @@ material: mochi
   1100.000 kg in a cubic metre, 1.100 times water, sinks in water
   grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
   bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
-  stretch compliance 0.010000
-  bend compliance 0.250000
-  velocity kept per frame 0.985000
   shear modulus 4.2700e5 Pa (measured)
   Poisson's ratio 0.490 (assumed, not measured)
   Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
+  at 1.0000e-1 Hz: storage modulus 4.2700e5 Pa, loss modulus 1.0000e4 Pa (measured), loss tangent 0.0234; the response at other frequencies is not stated
   adhesion 2.0000e0 N (assumed, not measured): the pull at which a hand's hold lets go
   contact area 2.0000e-4 m^2 (assumed, not measured)
   grip stiffness 5.1815e3 N/m, derived: the material (2.6721e4 N/m) and the hand (6.4279e3 N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = 7.9788e-3 m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness
@@ -604,17 +606,10 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "36f7ec88935e559c0ea66376aed4a7258e7f0c6076ec95424c5ea65d691632b5"
+        "431de4e60b07756cd000a5514ab794b57d7c62ed8e9a8197209921ef3d8322fb"
     );
-    let w = law
-        .bind(&[("softness", Number(0.03)), ("strength", Number(7.5))])
-        .unwrap();
-    let m = w.material("mochi").unwrap();
-    // 0.03 and 7.5/3600 as their exact f64 bits
-    assert_eq!(
-        m.stretch_compliance.unwrap().to_bits(),
-        0x3F9E_B851_EB85_1EB8
-    );
+    let w = law.bind(&[("strength", Number(7.5))]).unwrap();
+    // 7.5/3600 as its exact f64 bits
     assert_eq!(w.rain().mass_flux().to_bits(), (7.5f64 / 3600.0).to_bits());
     // a function goes through alice-det-math, so its bits are pinned too
     let f = WorldLaw::from_file(
@@ -862,5 +857,61 @@ fn the_hand_lines_are_refused_out_of_place_or_range() {
     assert_eq!(
         (m.adhesion_basis, m.contact_area_basis),
         (Some(Basis::Measured), Some(Basis::Assumed))
+    );
+}
+
+/// A loss modulus is stated at one frequency, with the storage modulus at that frequency; nothing
+/// is said about other frequencies (no relaxation model)
+#[test]
+fn a_loss_modulus_is_stated_at_one_frequency() {
+    let base = "law v\nkind world\nmaterial a density = 1\nmaterial a friction = 0\nmaterial a bounce = 0\n";
+    refused(
+        &format!("{base}material a loss_modulus = 10\n"),
+        6,
+        "needs `a modulus_frequency`",
+    );
+    refused(
+        &format!("{base}material a modulus_frequency = 1\n"),
+        6,
+        "needs `a shear_modulus`",
+    );
+    refused(
+        &format!("{base}material a shear_modulus = 100\nmaterial a modulus_frequency = 0\n"),
+        0,
+        "modulus_frequency",
+    );
+    refused(
+        &format!(
+            "{base}material a modulus_frequency = 1\nmaterial a modulus_frequency basis measured\n"
+        ),
+        7,
+        "takes no basis",
+    );
+    let text = |extra: &str| {
+        WorldLaw::from_file(&format!(
+            "{base}material a shear_modulus = 1000\nmaterial a modulus_frequency = 2\n{extra}"
+        ))
+        .unwrap()
+        .bind(&[])
+        .unwrap()
+        .describe()
+    };
+    // G''/G' = 250/1000
+    assert!(
+        text("material a loss_modulus = 250\nmaterial a loss_modulus basis assumed\n").contains(
+            "  at 2.0000e0 Hz: storage modulus 1.0000e3 Pa, loss modulus 2.5000e2 Pa (assumed, not measured), loss tangent 0.2500; the response at other frequencies is not stated"
+        )
+    );
+    assert!(
+        text("").contains("  at 2.0000e0 Hz: storage modulus 1.0000e3 Pa, loss modulus not stated")
+    );
+    // a modulus without a frequency says nothing about one
+    assert!(
+        !WorldLaw::from_file(&format!("{base}material a shear_modulus = 1000\n"))
+            .unwrap()
+            .bind(&[])
+            .unwrap()
+            .describe()
+            .contains(" Hz:")
     );
 }

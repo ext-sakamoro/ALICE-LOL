@@ -1,16 +1,12 @@
-# A soft block that hardly bounces, under light rain
+# A viscoelastic block that hardly bounces, under light rain
 law mochi_in_the_rain
 kind world
-claim a soft block that hardly bounces, under light rain
-param softness number = 0.01 range 0 0.1
+claim a viscoelastic block that hardly bounces, under light rain
 param raining switch = on
 param strength number = 4 range 0 100
 material mochi density = 1100
 material mochi friction = 0.6
 material mochi bounce = 0.2
-material mochi stretch_compliance = softness
-material mochi bend_compliance = 0.25
-material mochi damping = 0.985
 source shear modulus: Isono, Okamura, Fujimoto and Watanabe, Agric. Biol. Chem. 54(11):2941-2947 (1990), doi:10.1271/bbb1961.54.2941, Fig. 4
 source the storage modulus G' at 30 C and 0.1 Hz of mochi kneaded 10 min, water content 45.5 %, frozen and then kept 48 h at 2-4 C before the test
 source digitized from a log plot: log10 G' (dyn/cm^2) = 6.63 +- 0.03, so G' = 4.27e5 Pa within -7 % / +7 %
@@ -20,6 +16,11 @@ material mochi shear_modulus = 427000
 material mochi shear_modulus basis measured
 material mochi poisson_ratio = 0.49
 material mochi poisson_ratio basis assumed
+source loss modulus: same figure (Fig. 4, lower panel), same sample and conditions (30 C, 0.1 Hz): log10 G'' (dyn/cm^2) = 4.98, 5.01, 5.02 at three strains, so G'' = 5.00 +- 0.02, 1.00e4 Pa within -5 % / +5 %, loss tangent 0.023
+source other frequencies at 30 C are not readable from the paper (Fig. 7 is a perspective mesh; Figs. 9 and 10 are at 90 C after gelatinization), so no relaxation model is fitted and only the 0.1 Hz pair is stated
+material mochi loss_modulus = 10000
+material mochi loss_modulus basis measured
+material mochi modulus_frequency = 0.1
 source adhesion: no measured force at which a hand's hold on fresh mochi lets go was found; 2 N is assumed as a tack stress of about 10 kPa over the contact area below
 source contact area: a finger pad pressed on a soft surface, about 2 cm^2, assumed
 material mochi adhesion = 2

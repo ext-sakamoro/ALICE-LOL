@@ -9,18 +9,18 @@
 //! function).
 //!
 //! ```text
-//! law mochi_in_the_rain
+//! law flag_in_the_rain
 //! kind world
-//! claim a soft block that hardly bounces, under light rain
+//! claim a cotton flag that hardly bounces, under light rain
 //! param softness number = 0.01 range 0 0.1
 //! param raining switch = on
 //! param strength number = 4 range 0 100
-//! material mochi density = 1100
-//! material mochi friction = 0.6
-//! material mochi bounce = 0.2
-//! material mochi stretch_compliance = softness
-//! material mochi bend_compliance = 0.25
-//! material mochi damping = 0.985
+//! material cotton density = 1500
+//! material cotton friction = 0.6
+//! material cotton bounce = 0.1
+//! material cotton stretch_compliance = softness
+//! material cotton bend_compliance = 0.25
+//! material cotton damping = 0.985
 //! rain = raining
 //! rain_rate = strength
 //! ```
@@ -34,9 +34,13 @@
 //! - `let <name> = <expr>`: a value for the later lines
 //! - `material <name> <field> = <expr>`: one of [`FIELDS`], at most once per material
 //! - `material <name> <field> basis measured|assumed`: how `shear_modulus`, `poisson_ratio`,
-//!   `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
+//!   `loss_modulus`, `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
 //!   a measured value comes from. Young's modulus is never stated:
 //!   [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
+//! - `loss_modulus` (Pa) and `modulus_frequency` (Hz): when the material states a frequency, its
+//!   `shear_modulus` and `loss_modulus` are the storage and loss moduli G' and G'' measured at that
+//!   one frequency. A loss modulus needs the frequency, and the frequency needs a shear modulus.
+//!   No relaxation model is fitted and nothing is said about other frequencies
 //! - `hand_youngs_modulus = <expr>` (Pa) and `hand_poisson_ratio = <expr>`: the skin of the hand
 //!   that holds things, both or neither, each optionally followed by `<key> basis measured|assumed`;
 //!   `hand_youngs_modulus spread <lo> <hi>` (plain decimals, `0 < lo <= value <= hi`) states the
@@ -80,7 +84,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 15] = [
+pub const FIELDS: [&str; 17] = [
     "density",
     "friction",
     "static_friction",
@@ -96,6 +100,8 @@ pub const FIELDS: [&str; 15] = [
     "poisson_ratio",
     "adhesion",
     "contact_area",
+    "loss_modulus",
+    "modulus_frequency",
 ];
 
 const DENSITY: usize = 0;
@@ -113,6 +119,8 @@ const SHEAR_MODULUS: usize = 11;
 const POISSON_RATIO: usize = 12;
 const ADHESION: usize = 13;
 const CONTACT_AREA: usize = 14;
+const LOSS_MODULUS: usize = 15;
+const MODULUS_FREQUENCY: usize = 16;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -135,7 +143,7 @@ pub const MAX_LINES: usize = 1024;
 pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     (
         "world: field ranges, refused not clamped, and the plain text computed from the values",
-        hex32("035284fe2e065a65234958b57bdd42e04d80ed819254fe595b38b1d089bbc896"),
+        hex32("bf9493c3d610c4b51b827b6b97c598be4f9dd92d4601232c3ecf314ef29d441d"),
     ),
     (
         "world: the expression functions of research laws",
@@ -145,7 +153,7 @@ pub const WORLD_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 
 /// The fold of [`WORLD_SEMANTICS_PINS`] (the oracle checks the two agree)
 pub const WORLD_SEMANTICS_ID: [u8; 32] =
-    hex32("6a60d2d0ee49b12f59a9f1d4b66c409b2f4f912673d9db4e5edc5dfb0c5861e2");
+    hex32("1a7d152bd6cb553a75e379b83b244b15730c44658c4fc590df85faa3b5765eb7");
 
 /// A world law that does not read, with the line it was on (0 for the whole file)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,6 +364,12 @@ pub struct BoundMaterial {
     pub adhesion_basis: Option<Basis>,
     /// how `contact_area` was obtained, when the law says
     pub contact_area_basis: Option<Basis>,
+    /// the loss modulus G'' in Pa at `modulus_frequency`, at least 0
+    pub loss_modulus: Option<f64>,
+    /// how `loss_modulus` was obtained, when the law says
+    pub loss_modulus_basis: Option<Basis>,
+    /// the frequency in Hz at which `shear_modulus` (G') and `loss_modulus` (G'') hold, above 0
+    pub modulus_frequency: Option<f64>,
 }
 
 impl BoundMaterial {
@@ -449,7 +463,7 @@ pub struct BoundWorld {
 
 const fn field_range(slot: usize) -> &'static str {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA => "above 0 and at most 2^53",
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA | MODULUS_FREQUENCY => "above 0 and at most 2^53",
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
@@ -460,7 +474,7 @@ const fn field_range(slot: usize) -> &'static str {
 
 fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA | MODULUS_FREQUENCY => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
         _ => (0.0..=MAX_VALUE).contains(&v),
@@ -627,6 +641,22 @@ impl WorldLaw {
                     ));
                 }
             }
+            let line_of =
+                |slot: usize| m.fields.iter().find(|(s, _)| *s == slot).map(|(_, l)| l.at);
+            for (needs, needed) in [
+                (LOSS_MODULUS, MODULUS_FREQUENCY),
+                (MODULUS_FREQUENCY, SHEAR_MODULUS),
+            ] {
+                if let (Some(at), None) = (line_of(needs), line_of(needed)) {
+                    return Err(err(
+                        at,
+                        format!(
+                            "`{} {}` needs `{} {}`",
+                            m.name, FIELDS[needs], m.name, FIELDS[needed]
+                        ),
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -782,11 +812,12 @@ impl WorldLaw {
             "poisson_ratio" => POISSON_RATIO,
             "adhesion" => ADHESION,
             "contact_area" => CONTACT_AREA,
+            "loss_modulus" => LOSS_MODULUS,
             _ => {
                 return Err(err(
                     line,
                     format!(
-                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion and contact_area)"
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, loss_modulus, adhesion and contact_area)"
                     ),
                 ))
             }
@@ -1023,6 +1054,9 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         contact_area: v[CONTACT_AREA],
         adhesion_basis: basis_of(m, ADHESION),
         contact_area_basis: basis_of(m, CONTACT_AREA),
+        loss_modulus: v[LOSS_MODULUS],
+        loss_modulus_basis: basis_of(m, LOSS_MODULUS),
+        modulus_frequency: v[MODULUS_FREQUENCY],
     })
 }
 
@@ -1422,6 +1456,24 @@ fn describe_material(s: &mut String, m: &BoundMaterial, hand: Option<BoundHand>)
             }
         }
     }
+    if let (Some(f), Some(g)) = (m.modulus_frequency, m.shear_modulus) {
+        match m.loss_modulus {
+            Some(loss) => {
+                let _ = writeln!(
+                    s,
+                    "  at {f:.4e} Hz: storage modulus {g:.4e} Pa, loss modulus {loss:.4e} Pa ({}), loss tangent {:.4}; the response at other frequencies is not stated",
+                    basis(m.loss_modulus_basis),
+                    loss / g
+                );
+            }
+            None => {
+                let _ = writeln!(
+                    s,
+                    "  at {f:.4e} Hz: storage modulus {g:.4e} Pa, loss modulus not stated; the response at other frequencies is not stated"
+                );
+            }
+        }
+    }
     describe_grip(s, m, hand);
 }
 
@@ -1555,6 +1607,9 @@ material b poisson_ratio basis assumed
 material b adhesion = k
 material b adhesion basis assumed
 material b contact_area = 0.0001 + 0.0001 * k
+material b loss_modulus = 100 * k
+material b loss_modulus basis measured
+material b modulus_frequency = 0.1
 hand_youngs_modulus = 300000
 hand_youngs_modulus basis assumed
 hand_youngs_modulus spread 40000 400000
