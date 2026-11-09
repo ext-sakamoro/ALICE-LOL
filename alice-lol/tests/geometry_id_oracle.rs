@@ -23,8 +23,16 @@ fn pin(name: &str) -> [u8; 32] {
 
 #[test]
 fn every_pin_matches_its_live_behaviour_digest() {
-    let cases: &[(&str, [u8; 32])] = &[
-        ("alice-det-math", alice_det_math::SEMANTICS_ID),
+    let mut cases: Vec<(String, [u8; 32])> = alice_lol::law_id::DET_MATH_FUNCTIONS
+        .iter()
+        .map(|f| {
+            (
+                format!("alice-det-math::{f}"),
+                alice_det_math::function_pin(f),
+            )
+        })
+        .collect();
+    let own: &[(&str, [u8; 32])] = &[
         (
             "rotate: angle canonicalisation",
             canon_angle_deg_probe_digest(),
@@ -54,6 +62,7 @@ fn every_pin_matches_its_live_behaviour_digest() {
             fmt_f32_fidelity_probe_digest(),
         ),
     ];
+    cases.extend(own.iter().map(|(n, d)| ((*n).to_owned(), *d)));
     // ⚠️ 比較件数 0 件 fail (空振り防止、検査器自身の空振りを防ぐ既存の規律と同軸)
     assert_eq!(
         cases.len(),
@@ -61,7 +70,7 @@ fn every_pin_matches_its_live_behaviour_digest() {
         "pin の数と検査した件数が一致しない (新しい pin を足したらここにも足す)"
     );
     let mut checked = 0;
-    for (name, live) in cases {
+    for (name, live) in &cases {
         assert_eq!(
             *live,
             pin(name),

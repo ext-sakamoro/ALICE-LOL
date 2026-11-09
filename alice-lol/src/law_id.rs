@@ -10,7 +10,8 @@
 //! 1. **domain** ([`LAW_ID_DOMAIN`]) — 他の用途の hash と衝突させない
 //! 2. **種類** (`*_LAW_KIND`) — 別の種類の Law が偶然同じ byte 列を書いても分かれる
 //! 3. **算術の世代** ([`LOL_SEMANTICS_ID`]) — ⚠️ **同じ text でも評価する算術が違えば
-//!    別の答えが出る**ので、別の Law として扱う
+//!    別の答えが出る**ので、別の Law として扱う 算術はこの crate が呼ぶ alice-det-math の関数
+//!    ([`DET_MATH_PINS`]) と、この crate 自身の判定の pin で表す
 //! 4. **主張そのもの** — 名前・項・値・単位
 //!
 //! # なぜ長さを前置するか
@@ -77,8 +78,19 @@ mod tag {
 /// ⚠️ 値は**振る舞いから計算**する (oracle が各 entry を再計算して突合する)
 /// 名前を足したら [`LOL_SEMANTICS_ID`] を再計算する (module doc の「再記録する順序」)
 pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
-    // 上流の算術世代 これが変われば本 crate の識別子も変わる
-    ("alice-det-math", alice_det_math::SEMANTICS_ID),
+    // この crate が呼ぶ alice-det-math の関数 ([`DET_MATH_PINS`]、同じ順) 呼ぶ関数の振る舞いが
+    // 変われば本 crate の識別子も変わる 呼ばない関数の変化では動かない
+    ("alice-det-math::atan2", DET_MATH_PINS[0].1),
+    ("alice-det-math::atan2_64", DET_MATH_PINS[1].1),
+    ("alice-det-math::cos64", DET_MATH_PINS[2].1),
+    ("alice-det-math::exp64", DET_MATH_PINS[3].1),
+    ("alice-det-math::ln64", DET_MATH_PINS[4].1),
+    ("alice-det-math::powf64", DET_MATH_PINS[5].1),
+    ("alice-det-math::powi", DET_MATH_PINS[6].1),
+    ("alice-det-math::sin64", DET_MATH_PINS[7].1),
+    ("alice-det-math::sin_cos", DET_MATH_PINS[8].1),
+    ("alice-det-math::sqrt64", DET_MATH_PINS[9].1),
+    ("alice-det-math::tan", DET_MATH_PINS[10].1),
     // 監査の判定順序 (証拠 -> 成立範囲 -> 期待値) 順序は verdict を変えるので意味論
     (
         "audit verdict order: evidence -> ranges -> expectations",
@@ -104,77 +116,79 @@ pub const LOL_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
 ];
 
-/// alice-det-math の世代ごとの [`LOL_SEMANTICS_ID`] `(alice-det-math の SEMANTICS_ID, その下での fold)`
-///
-/// ⚠️ [`LOL_SEMANTICS_PINS`] の最初の pin は解決された alice-det-math の識別子なので、
-/// alice-det-math の版が動くと fold も動く (0.5.0 → 0.5.1 で `max` / `min` が増え識別子が
-/// 変わった) 定数 1 つでは、どちらかの版で一致しなくなる ⇒ 世代ごとに記録し、build した
-/// alice-det-math の行を [`LOL_SEMANTICS_ID`] にする 前の世代の行は残す (その世代で作った
-/// 識別子を [`known_semantics_id`] で読めるように)
-///
-/// 各行が「その alice-det-math の識別子に差し替えた pin の fold」であることは oracle が
-/// 検査する (`tests/semantics_id_per_det_math.rs`) alice-det-math が新しい識別子になったら
-/// 行を足す (足さないと compile 時に止まる)
-pub const LOL_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
-    // alice-det-math 0.5.0
+/// この crate が呼ぶ alice-det-math の関数 (ALICE-Law の `scripts/fold_set_check.py` が source の
+/// 呼び出しと比べ、書く)
+pub const DET_MATH_FUNCTIONS: &[&str] = &[
+    "atan2", "atan2_64", "cos64", "exp64", "ln64", "powf64", "powi", "sin64", "sin_cos", "sqrt64",
+    "tan",
+];
+
+/// [`DET_MATH_FUNCTIONS`] の各関数の識別子 (`alice_det_math::function_pin`、同じ順) 解決した
+/// alice-det-math でどれかが動くと compile が止まる (下の `assert_function_pins`) ので、別の bit から
+/// 作った識別子を名乗ることはない 呼ばない関数が動いても何も変わらない
+/// [`LOL_SEMANTICS_PINS`] と [`crate::geometry_id::LOL_GEOMETRY_SEMANTICS_PINS`] の
+/// `alice-det-math::<関数>` の行がこの値を畳む
+pub const DET_MATH_PINS: &[(&str, [u8; 32])] = &[
     (
-        hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000"),
-        hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421"),
+        "atan2",
+        hex32("f1227770b42015176d620dba415653be1a14b9708624f4f70594011c54fef376"),
     ),
-    // alice-det-math 0.5.1 (`max` / `min` / `max64` / `min64` を追加)
     (
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
-        hex32("d81c2cbbf7f010b7b3368c461d0a4ba60345fae302e9991fbd992d35dc3a7002"),
+        "atan2_64",
+        hex32("ccdc96ba060eea7bb72fb909e5b64608812abb708f77cc59b820d8db8bd2e416"),
     ),
-    // alice-det-math 0.5.2 at 2d01c63f (clamp の G2 の順、`sin` / `cos` の |x| >= 2^13、`powf` の負の底、`powf64` (fdlibm e_pow)、`hypot` の両方 subnormal、`erf` の追加)
     (
-        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
-        hex32("c71fed08b4a6e4771cf5d375c5dbed1dfc8e368f034e7948a9b093eddc05cd10"),
+        "cos64",
+        hex32("d9cf0bbeda9dbf12a0c98e913ce75b6f5a404c8ff6bac44aee88269f8f05bb75"),
+    ),
+    (
+        "exp64",
+        hex32("f87502b37c757ae5ea59a3cc991d02c3fe19ff3c75c9edd294216055372bf2a8"),
+    ),
+    (
+        "ln64",
+        hex32("51c11488d360bb972761d2cecf192c173249f846f8127ef950e580b99a590cdc"),
+    ),
+    (
+        "powf64",
+        hex32("b3b442523e6ddfcc344c5923864caa7d342d0fe0757f0ab1371149cd41a6ad2e"),
+    ),
+    (
+        "powi",
+        hex32("d3d76ba59208f7b0151ccde9b63043f538bc6b7737d1f16ff02d918f5806be45"),
+    ),
+    (
+        "sin64",
+        hex32("9d31aa70c38253a2ca1d1c7849f0a650c7ac1a15f8a594d10ad2c9b69c62b2ea"),
+    ),
+    (
+        "sin_cos",
+        hex32("025acd2cdc900eff683e39ef1e71de115dafe8da8a1a4b02847b41d75cbd130f"),
+    ),
+    (
+        "sqrt64",
+        hex32("051b24b99798891af42895e889ecb5add515496fc771ba5637a830f8f645988d"),
+    ),
+    (
+        "tan",
+        hex32("6b715b71c6fee0f708eee391597b2626737555f32610d75539b23fe5eb35e22b"),
     ),
 ];
 
-/// [`LOL_SEMANTICS_PINS`] の fold (build した alice-det-math の行) ⚠️ 定数と fold の一致は
-/// oracle が検査する
-pub const LOL_SEMANTICS_ID: [u8; 32] = semantics_id_for(&alice_det_math::SEMANTICS_ID);
+const _: () = alice_det_math::assert_function_pins(DET_MATH_PINS);
 
-/// alice-det-math の識別子に対応する [`LOL_SEMANTICS_ID`]
-///
-/// # Panics
-///
-/// [`LOL_SEMANTICS_BY_DET_MATH`] に行が無い時 (const 文脈では compile 時に止まる) 新しい
-/// alice-det-math の識別子には、その fold を行として足す
-#[must_use]
-pub const fn semantics_id_for(det_math: &[u8; 32]) -> [u8; 32] {
-    let mut i = 0;
-    while i < LOL_SEMANTICS_BY_DET_MATH.len() {
-        if same32(&LOL_SEMANTICS_BY_DET_MATH[i].0, det_math) {
-            return LOL_SEMANTICS_BY_DET_MATH[i].1;
-        }
-        i += 1;
-    }
-    panic!("alice-det-math SEMANTICS_ID has no row in LOL_SEMANTICS_BY_DET_MATH: add its fold");
-}
-
-/// `id` がこの crate の知っている alice-det-math の世代の [`LOL_SEMANTICS_ID`] なら、その
-/// alice-det-math の識別子 (前の世代で作った識別子を見分けるため)
-#[must_use]
-pub fn known_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
-    LOL_SEMANTICS_BY_DET_MATH
-        .iter()
-        .find(|(_, lol)| lol == id)
-        .map(|(det_math, _)| *det_math)
-}
+/// [`LOL_SEMANTICS_PINS`] の fold ⚠️ 定数と fold の一致は oracle が検査する
+/// (`tests/semantics_id_from_function_pins.rs`)
+pub const LOL_SEMANTICS_ID: [u8; 32] =
+    hex32("6749fc1715757f46c3a8e53dd043116ca22b40a1469c3a627f1a6edf14025321");
 
 /// 以前の世代の [`LOL_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
 ///
-/// 行は [`LOL_SEMANTICS_BY_DET_MATH`] の、alice-det-math の識別子が
-/// `alice_det_math::PREVIOUS_SEMANTICS_IDS` にある行 (alice-det-math が同じ bit を再現すると
-/// 確かめた世代) の LOL 側の識別子 ⚠️ 導出でなく literal で書くのは、識別子の移動の検査
-/// (`scripts/id_move_check.py`) が literal を抜いて `previous-tests` が落ちることを確かめるため
-/// 導出との一致は `tests/semantics_id_per_det_math.rs` が両方向で検査する
-/// alice-det-math 0.5.2 at 2d01c63f は以前の世代を同じ bit と認めない (`PREVIOUS_SEMANTICS_IDS` が空) ので空
-/// 以前の世代の識別子を戻すのは、その版が書いたものを読み、その版自身の結果と bit で一致する試験
-/// (版をまたぐ oracle) がある時だけ
+/// ⚠️ literal で書くのは、識別子の移動の検査 (`scripts/id_move_check.py`) が literal を抜いて
+/// `previous-tests` が落ちることを確かめるため alice-det-math の識別子全体を畳んでいた世代
+/// (0.5.0 / 0.5.1 / 0.5.2 at 2d01c63f の `403359f6…` / `d81c2cbb…` / `c71fed08…`) は入れない: その版が
+/// 書いたものを読み、その版自身の結果と bit で一致する試験 (版をまたぐ oracle) が無い 戻すのは
+/// その試験を置いた時だけ
 pub const PREVIOUS_LOL_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// 保存された LOL の識別子を分類する ([`LOL_SEMANTICS_ID`] なら `Verified`、
@@ -195,17 +209,6 @@ pub(crate) fn classify(
     } else {
         alice_det_math::SemanticsCheck::Mismatch
     }
-}
-
-pub(crate) const fn same32(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    let mut i = 0;
-    while i < 32 {
-        if a[i] != b[i] {
-            return false;
-        }
-        i += 1;
-    }
-    true
 }
 
 /// 16 進 64 文字を 32 byte に (const 文脈で書けるようにするため)

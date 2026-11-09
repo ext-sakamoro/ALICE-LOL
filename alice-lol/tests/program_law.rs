@@ -1,9 +1,10 @@
 //! The law of a LOL program's shape as a law reference v2 (`alice_lol::program_law`)
 //!
 //! Oracle: the expected bytes and law identifiers were written by ALICE-Zip's independent
-//! implementation (`scripts/law_ref_v2_reference.py` at 19f6f2c1, standard-library Python) for kind
-//! `lol.law.program/v1`, the geometry semantics identifier of alice-det-math 0.5.2 at 2d01c63f (8ee0c1a3) and one `source`
-//! row; they are not computed by the code under test.
+//! implementation (`scripts/law_ref_v2_reference.py` at ad06e53c, standard-library Python) for kind
+//! `lol.law.program/v1`, the geometry semantics identifier folded from the alice-det-math functions this
+//! crate calls (f7b59df6) and one `source` row; they are not computed by the code under test (the same
+//! script reproduces the earlier values under 8ee0c1a3).
 
 use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use alice_lol::program_law::{
@@ -20,10 +21,10 @@ fn unhex(s: &str) -> Vec<u8> {
 }
 
 const SPHERE: &str = "sphere(1.0)";
-const SPHERE_LAW_ID: &str = "bea43826d3c6c9afb9e1c07cee35fa067b99aba47a1c915502719d58bb96c669";
-const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f76318ee0c1a391b51f78c66e4d6b9db593666a5922f4a706ffffe76e63f975ba48a7bea43826d3c6c9afb9e1c07cee35fa067b99aba47a1c915502719d58bb96c6690106736f7572636505000000000000000b73706865726528312e3029";
+const SPHERE_LAW_ID: &str = "93dccd4a9a36b554b68b6d4c234e9fe497de30ab79155a54144b5e7152796023";
+const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f7631f7b59df6e6db19f7c08f3cc9a10ec73e3ef4170c2008eb833cb9a5d25e4cfaa693dccd4a9a36b554b68b6d4c234e9fe497de30ab79155a54144b5e71527960230106736f7572636505000000000000000b73706865726528312e3029";
 const BOX: &str = "box3d(1.0, 1.0, 1.0)";
-const BOX_LAW_ID: &str = "574278053125f888e39a851c75029eeeb52da7b41683d8db2fe276a51da950c5";
+const BOX_LAW_ID: &str = "df8972e437b95a59455061ed7486f88ad4859926a2971104af9e3ec45741b666";
 
 #[test]
 fn the_kind_and_the_semantics_are_the_program_law_s() {

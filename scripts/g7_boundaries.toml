@@ -482,26 +482,6 @@ class = "local"
 reason = "a stored geometry identifier classified against this crate's own identifier and its literal list of earlier ones (an identifier compared, no value decoded); the readers that take the text call it"
 
 [[entry]]
-path = "alice_lol::law_id::semantics_id_for"
-class = "local"
-reason = "an alice-det-math identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
-
-[[entry]]
-path = "alice_lol::law_id::known_semantics_id"
-class = "local"
-reason = "an identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
-
-[[entry]]
-path = "alice_lol::geometry_id::geometry_semantics_id_for"
-class = "local"
-reason = "an alice-det-math identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
-
-[[entry]]
-path = "alice_lol::geometry_id::known_geometry_semantics_id"
-class = "local"
-reason = "an identifier looked up in this crate's table of generations (an identifier compared, no value decoded)"
-
-[[entry]]
 path = "alice_lol::intent::music_intent"
 class = "local"
 reason = "alice-synth's 8-byte MusicIntent packet, held opaquely and never decoded here; the receiver that decodes it compares the writer's identifier (alice-synth's G7, the stated residual of this crate's G7)"

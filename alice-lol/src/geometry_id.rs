@@ -81,7 +81,7 @@ use crate::angle::{
     ROTATION_AXIS_PROBE_TABLE,
 };
 use crate::emit::{fmt_f32, FMT_F32_FIDELITY_PROBE_VALUES};
-use crate::law_id::{hex32, same32};
+use crate::law_id::{hex32, DET_MATH_PINS};
 use crate::limits::{
     checked_rotation_quat, checked_tpms_fields, ROTATION_QUAT_BOUNDARY_PROBE_INPUTS,
     TPMS_VALIDITY_PROBE_INPUTS,
@@ -380,9 +380,19 @@ pub fn stdlib_transcendental_probe_digest() -> [u8; 32] {
 /// ⚠️ 値は振る舞いから計算する (各 probe digest 関数の現在の出力)
 /// `tests/geometry_id_oracle.rs` が各 entry を再計算して突合する
 pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
-    // 上流の算術世代 これが変われば本 crate の幾何評価の識別子も変わる
-    // (`law_id::LOL_SEMANTICS_PINS` の最初の entry と同じ理由、同じ形)
-    ("alice-det-math", alice_det_math::SEMANTICS_ID),
+    // この crate が呼ぶ alice-det-math の関数 (`law_id::DET_MATH_PINS`、同じ順、
+    // `law_id::LOL_SEMANTICS_PINS` と同じ行) 呼ぶ関数の振る舞いが変われば幾何評価の識別子も変わる
+    ("alice-det-math::atan2", DET_MATH_PINS[0].1),
+    ("alice-det-math::atan2_64", DET_MATH_PINS[1].1),
+    ("alice-det-math::cos64", DET_MATH_PINS[2].1),
+    ("alice-det-math::exp64", DET_MATH_PINS[3].1),
+    ("alice-det-math::ln64", DET_MATH_PINS[4].1),
+    ("alice-det-math::powf64", DET_MATH_PINS[5].1),
+    ("alice-det-math::powi", DET_MATH_PINS[6].1),
+    ("alice-det-math::sin64", DET_MATH_PINS[7].1),
+    ("alice-det-math::sin_cos", DET_MATH_PINS[8].1),
+    ("alice-det-math::sqrt64", DET_MATH_PINS[9].1),
+    ("alice-det-math::tan", DET_MATH_PINS[10].1),
     (
         "rotate: angle canonicalisation",
         hex32("ecff9d3055efcb57e6cac095b88ed1207310f6f36d42f4945ae07862a792b9a1"),
@@ -413,70 +423,16 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
 ];
 
-/// alice-det-math の世代ごとの [`LOL_GEOMETRY_SEMANTICS_ID`] `(alice-det-math の SEMANTICS_ID, その下での fold)`
-///
-/// [`crate::law_id::LOL_SEMANTICS_BY_DET_MATH`] と同じ理由・同じ形: 最初の pin が解決された
-/// alice-det-math の識別子なので、定数 1 つではどちらかの版で fold と一致しなくなる 各行が
-/// その識別子に差し替えた pin の fold であることは `tests/geometry_semantics_per_det_math.rs`
-/// が検査する
-pub const LOL_GEOMETRY_SEMANTICS_BY_DET_MATH: &[([u8; 32], [u8; 32])] = &[
-    // alice-det-math 0.5.0
-    (
-        hex32("135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000"),
-        hex32("251e73bf84e00c4c1916184bdcbbb75e5cf3f74b62fd4adcbc3922dd18df907d"),
-    ),
-    // alice-det-math 0.5.1
-    (
-        hex32("85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315"),
-        hex32("d1cbba69a1b33ce7363ac178f16ad0cb062699ff8c9c76af7058c6d006bc8a24"),
-    ),
-    // alice-det-math 0.5.2 at 2d01c63f (clamp の G2 の順、`sin` / `cos` の |x| >= 2^13、`powf` の負の底、`powf64` (fdlibm e_pow)、`hypot` の両方 subnormal、`erf` の追加)
-    (
-        hex32("a2a11b9b826227fa7a9ed8ab2c1ce63dbb07ad4c39aa2c46a363ddea6b47dbe9"),
-        hex32("8ee0c1a391b51f78c66e4d6b9db593666a5922f4a706ffffe76e63f975ba48a7"),
-    ),
-];
-
-/// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold (build した alice-det-math の行)
-/// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` が検査する
+/// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
+/// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` と `tests/semantics_id_from_function_pins.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    geometry_semantics_id_for(&alice_det_math::SEMANTICS_ID);
-
-/// alice-det-math の識別子に対応する [`LOL_GEOMETRY_SEMANTICS_ID`]
-///
-/// # Panics
-///
-/// [`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`] に行が無い時 (const 文脈では compile 時に止まる)
-#[must_use]
-pub const fn geometry_semantics_id_for(det_math: &[u8; 32]) -> [u8; 32] {
-    let mut i = 0;
-    while i < LOL_GEOMETRY_SEMANTICS_BY_DET_MATH.len() {
-        if same32(&LOL_GEOMETRY_SEMANTICS_BY_DET_MATH[i].0, det_math) {
-            return LOL_GEOMETRY_SEMANTICS_BY_DET_MATH[i].1;
-        }
-        i += 1;
-    }
-    panic!("alice-det-math SEMANTICS_ID has no row in LOL_GEOMETRY_SEMANTICS_BY_DET_MATH: add its fold");
-}
-
-/// `id` がこの crate の知っている alice-det-math の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] なら、
-/// その alice-det-math の識別子
-#[must_use]
-pub fn known_geometry_semantics_id(id: &[u8; 32]) -> Option<[u8; 32]> {
-    LOL_GEOMETRY_SEMANTICS_BY_DET_MATH
-        .iter()
-        .find(|(_, g)| g == id)
-        .map(|(det_math, _)| *det_math)
-}
+    hex32("f7b59df6e6db19f7c08f3cc9a10ec73e3ef4170c2008eb833cb9a5d25e4cfaa6");
 
 /// 以前の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
 ///
 /// [`crate::law_id::PREVIOUS_LOL_SEMANTICS_IDS`] と同じ規則・同じ理由で literal にする
-/// [`LOL_GEOMETRY_SEMANTICS_BY_DET_MATH`] からの導出との一致は
-/// `tests/geometry_semantics_per_det_math.rs` が両方向で検査する
-/// alice-det-math 0.5.2 at 2d01c63f は以前の世代を同じ bit と認めない (`PREVIOUS_SEMANTICS_IDS` が空) ので空
-/// 以前の世代の識別子を戻すのは、その版が書いたものを読み、その版自身の結果と bit で一致する試験
-/// (版をまたぐ oracle) がある時だけ
+/// alice-det-math の識別子全体を畳んでいた世代 (0.5.0 / 0.5.1 / 0.5.2 at 2d01c63f の `251e73bf…` /
+/// `d1cbba69…` / `8ee0c1a3…`) は入れない: 版をまたぐ oracle が無い 戻すのはその試験を置いた時だけ
 pub const PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS: &[[u8; 32]] = &[];
 
 /// 保存された幾何の識別子を分類する ([`crate::law_id::check_lol_semantics`] と同じ形)

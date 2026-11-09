@@ -68,12 +68,10 @@ fn id(l: &ResearchLaw) -> [u8; 32] {
 }
 
 /// the semantics identifier the recorded values below were computed under (LOL under
-/// alice-det-math 0.5.0): a recorded value pins the serialization, so it is compared under the
-/// generation it was recorded in, whatever alice-det-math this build links
+/// alice-det-math 0.5.0, `403359f6…`): a recorded value pins the serialization, so it is compared
+/// under the identifier it was recorded with, whatever this build's identifier is
 const fn recorded_semantics() -> [u8; 32] {
-    alice_lol::law_id::semantics_id_for(&alice_lol::law_id::hex32(
-        "135c407d4249c1c200e4d1be79a12e848ce5c355fc3a918da965849e697ef000",
-    ))
+    alice_lol::law_id::hex32("403359f60a227113988db2cc16d2c9b40a2cb3d725f06cebb6a57828ee2a8421")
 }
 
 /// `n*R*T/V` parses left-associatively: ((n * R) * T) / V

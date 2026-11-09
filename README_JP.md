@@ -458,15 +458,15 @@ scripts/preflight.sh --quick    # the CI gates that do not run the test suites
 - [ALICE-Synth](https://github.com/ext-sakamoro/ALICE-Synth): `music` intent の 8 byte の中身を定義する
 - [ALICE-View](https://github.com/ext-sakamoro/ALICE-View): wgpu レンダラ
 
-<!-- law-integration:begin law=40973a8a7a679e6befac9a49b76cd4425165128f -->
+<!-- law-integration:begin law=f4c7ffb43840d3f7a5a96c4fed56593c0c3b0eec -->
 ## ALICE-Law との統合
 
-ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `40973a8a7a67` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
+ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `f4c7ffb43840` とこの repository の `alice-law-conformance.toml` から生成する 手で編集しない
 
 | | |
 |---|---|
 | release train | alice-lol 0.4.2 (published)、Law への依存: あり |
-| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.5.2"` |
+| 算術 | train の alice-det-math 0.5.1、算術の識別子 `85e0884623b154a3b2b264374907b6cbac09307ca3f9a08339e48c567d3cb315` この crate の要求は `alice-det-math = "0.6"` |
 | end to end 検査 | 対象 (`alice-lol = ">=0.4.1, <0.6"`)、digest `9f7cf676708a272e3817ebbf0727c610f391e1547747af4307ee44d5523267c2`、aarch64 と x86_64 で同じ |
 
 ### 適合 (G1-G14)
@@ -478,7 +478,7 @@ ALICE-Law の `scripts/gen-law-readme-block.py` が ALICE-Law `40973a8a7a67` と
 | G3 no-outer-fneg-of-fma | 適合 | measured on the clean tree: the syntax-tree check reads 181 files, 416 fma-family calls (all mul_add, 346 in src/; measured 2026-10-18 under the current rule … |
 | G4 debug-release-arch-goldens | 適合 | the signed-zero and exact-cancellation cases are pinned against fixed bit patterns in a library function (quat_from_euler_xyz, not a copy in the test) and the … |
 | G5 release-profile-test-leg | 適合 | The Law-bearing tests are the Law oracle targets of scripts/law_tests.sh (every file using law:: or research_law must be listed there, and each target must run … |
-| G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte constants folded from the crate's own … |
+| G6 semantics-id | 適合 | LOL_SEMANTICS_ID (audit and research laws) and LOL_GEOMETRY_SEMANTICS_ID (SdfNode evaluation and emit) are 32-byte literals, the folds of the crate's own … |
 | G7 handshake-carries-id | 適合 | The boundaries where a library crate (alice-lol, alice-lol-layout, alice-lol-macro) takes a value without its Rust type, and how each carries the writer's … |
 | G8 persisted-semantics-id | 適合 | the durable forms the workspace writes are the law references of law_ref (LawRef::to_bytes: the motion semantics identifier and the law identifier in every … |
 | G9 persisted-meaning-change-is-major | 適合 | the identifiers a stored form carries are all under the check: the law identifier, the geometry identifier (the export producer) and, since the G8 change, the … |

@@ -549,7 +549,7 @@ mod quat_from_euler_xyz_tests {
 
     /// The `alice-det-math` version the oracle table literals below were
     /// measured against (see the table's own doc comment)
-    const DET_MATH_PINNED_VERSION: &str = "0.5.2";
+    const DET_MATH_PINNED_VERSION: &str = "0.6.1";
 
     /// The `rustc --version` output the `y`-component formula's
     /// debug/release stability (and the oracle table literals) were last

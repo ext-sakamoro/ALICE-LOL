@@ -76,6 +76,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 監査 Law の項 `includes <key> <value>...`: 実測の組 (文字列の list) が列挙した値をすべて含むこと (他の値があってもよい) を求める 例: lint の設定が少なくともこれらの method を禁じる `expect` と同じ主張の段で file の順に見て、key が測られていなければ `Undecided`、値が 1 つでも欠ければ `Breaks` (subject は key、実測は欠けた値) 順序と重複は両側で無視し、値は文字列として比べる `Clause::Includes` / 文法の `lawincludes` / `law_id` の新しい項の種類 (既存の Law の識別子は変わらない) / 適合の仕様 `conformance/TASK.md` / 参照実装と corpus 生成器 / probe 6 件 / 適合の corpus の Law `laws/spike/lint_bans_include.law` (corpus は 392 → 411 vector) / 「includes を集合の一致として読む」誤りが失敗する control (`REF_BUG=16`) 試験 `alice-lol/tests/audit_law_includes.rs` (実装の前に赤を確かめた)、文法と `parse_law` の一致 (`alice-lol/tests/lol_gbnf_test.rs`)
 
 ### Changed
+- 破壊的変更: `LOL_SEMANTICS_ID` と `LOL_GEOMETRY_SEMANTICS_ID` は alice-det-math の識別子全体でなく、この crate が呼ぶ 11 関数の識別子 (`law_id::DET_MATH_FUNCTIONS` / `DET_MATH_PINS`、`alice_det_math::function_pin`) を畳む 両方の pin の表の `alice-det-math` の行は `alice-det-math::<関数>` の 11 行になった 呼ぶ関数の振る舞いが変われば識別子も変わり、呼ばない関数の変化では動かない 解決した alice-det-math で呼ぶ関数の識別子が動くと `assert_function_pins` で compile が止まる 識別子は `c71fed08…` → `6749fc17…` (法則) / `8ee0c1a3…` → `f7b59df6…` (幾何) 以前の世代 (0.5.0 / 0.5.1 / 0.5.2 at 2d01c63f) の識別子は `PREVIOUS_*` に入れない (版をまたぐ oracle が無い) 書き出し (STL / 3MF / FBX) は刻印の識別子だけが変わり、形の bytes は同じ (旧版の出力との byte 比較で確認)
+- 依存: alice-det-math を `branch = "main"` + version "0.6" (0.6.1)、alice-zip と alice-sdf も `branch = "main"` + version (rev の固定をやめた) `alice-lol-ui` と clippy の canary も同じ CI の sibling の ALICE-LLM と ALICE-Physics を det-math 0.6 の main に上げた
+- CI (ALICE-Law G11): Law の固定を f4c7ffb にし (`.github/shared-files-pin` / `.github/g11-table-pin`)、その表が目標とする共有の bytes に `scripts/id_move_check.py` / `release_baseline.py` / `semver_gate.py` とそれぞれの試験、`test_libm_dependency_guard.py` を揃えた
 - `alice-llm` の要求を `>=2, <5` に広げた 4.0.0 で変わった関数はこの crate から呼んでいない
 - 依存を alice-sdf 5c8a364 にした (Catmull–Clark の `mesh::subdiv` を含む) この crate の書き出しと識別子は動かない (`scripts/id_move_check.py` で確認) `alice-lol-ui` / clippy の canary / fuzz の lock と `scripts/sdf_writers.lock` も同じ revision
 - CI (ALICE-Law G9 / G11): 識別子の移動の検査器 (`scripts/id_move_check.py` と試験) を共有の新しい bytes にし、新しく足した associated const を受けるようにした 他の共有の file も ALICE-Law 40973a8a の表が計画した bytes にし、shared-files と G11 の表の pin を上げた 試験が履歴を読まないことの検査 (`scripts/history_free_tests.py`) に、新しい `scripts/test_shared_files.py` が ALICE-Law を一時 directory に fetch して読む行を理由付きで除外に載せた (この repository の履歴は読まない)
@@ -138,6 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- 破壊的変更: `law_id::LOL_SEMANTICS_BY_DET_MATH` / `semantics_id_for` / `known_semantics_id` と `geometry_id::LOL_GEOMETRY_SEMANTICS_BY_DET_MATH` / `geometry_semantics_id_for` / `known_geometry_semantics_id` (alice-det-math の世代ごとの表) 識別子が呼ぶ関数の pin の fold になったので、世代の表は無い 保存された識別子は `check_lol_semantics` / `check_lol_geometry_semantics` で分類する
 - 破壊的変更: workspace の member `alice-lol-humanoid` を外した
 - `print_export` からの alice-sdf の `export_stl` / `export_stl_ascii` / `export_3mf` / `export_fbx` の再公開 (破壊的変更) これらは LOL の producer の識別子を書かない (ALICE-Law G8) LOL の書き出しは `node_to_stl` / `node_to_3mf` / `node_to_fbx` (と `lol_to_*`) を使う alice-sdf の形のまま書きたい時は alice-sdf から直接使う 戻らないことを compile_fail の試験 `unstamped_writers_are_not_reexported` が固定する
 

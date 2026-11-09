@@ -163,7 +163,7 @@ fn only_a_law_with_a_series_carries_the_series_semantics() {
     // pinned: a literal for the flash law
     assert_eq!(
         hex(&law.law_id(&LOL_SEMANTICS_ID)),
-        "8f4a887d5b9b16fc04cf112446b7f3a30dfe60c4a168fab1181e48a28ee51af8"
+        "6e7e8704bb8a888cb1b2ed73eed4535cf7d8802c4ae5f722e42bd446a2b0c8c1"
     );
     // a name used twice, a floor on nothing, a bad expression
     for bad in [

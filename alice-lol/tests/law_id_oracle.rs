@@ -30,15 +30,15 @@ const DET_MATH_WHEN_RECORDED: [u8; 32] =
 /// alice-det-math の版が動いた時に旧世代の fold が合わなくなる (0.5.1 で実測)
 /// 旧世代の識別子はどれも alice-det-math 0.5.0 の下で記録した
 fn pins_as_recorded() -> Vec<(&'static str, [u8; 32])> {
-    LOL_SEMANTICS_PINS
-        .iter()
-        .map(|&(name, id)| {
-            if name == "alice-det-math" {
-                (name, DET_MATH_WHEN_RECORDED)
-            } else {
-                (name, id)
-            }
-        })
+    // the layout of the recorded generations: alice-det-math's whole identifier first, then this
+    // crate's own pins in their order (the per-function entries came later)
+    std::iter::once(("alice-det-math", DET_MATH_WHEN_RECORDED))
+        .chain(
+            LOL_SEMANTICS_PINS
+                .iter()
+                .copied()
+                .filter(|(name, _)| !name.starts_with("alice-det-math::")),
+        )
         .collect()
 }
 
@@ -215,11 +215,11 @@ fn the_semantics_identifier_is_not_all_zero() {
 #[test]
 fn the_semantics_identifier_folds_the_upstream_arithmetic() {
     // 上流の算術世代が変われば、こちらの識別子も変わらなければならない
-    // (上流の id を pin 表の 1 項目として含めていることの確認)
+    // (この crate が呼ぶ関数ごとの識別子を pin 表の項目として含めていることの確認)
     assert!(
         alice_lol::law_id::LOL_SEMANTICS_PINS
             .iter()
-            .any(|(name, _)| *name == "alice-det-math"),
+            .any(|(name, _)| name.starts_with("alice-det-math::")),
         "{:?}",
         alice_lol::law_id::LOL_SEMANTICS_PINS
             .iter()
@@ -257,13 +257,24 @@ fn the_audit_order_pin_is_the_measured_behaviour() {
 }
 
 #[test]
-fn the_upstream_arithmetic_pin_is_the_upstream_constant() {
-    // 上流の世代が上がったら、こちらの pin も追従しなければならない
-    let (_, pinned) = LOL_SEMANTICS_PINS
+fn the_upstream_arithmetic_pins_are_the_called_functions_pins() {
+    // 上流の算術は、この crate が呼ぶ関数ごとの識別子で畳む (alice-det-math の識別子全体ではない)
+    let det: Vec<_> = LOL_SEMANTICS_PINS
         .iter()
-        .find(|(name, _)| *name == "alice-det-math")
-        .expect("上流の pin");
-    assert_eq!(*pinned, alice_det_math::SEMANTICS_ID);
+        .filter_map(|(name, id)| name.strip_prefix("alice-det-math::").map(|f| (f, *id)))
+        .collect();
+    let want: Vec<_> = alice_lol::law_id::DET_MATH_FUNCTIONS
+        .iter()
+        .map(|f| (*f, alice_det_math::function_pin(f)))
+        .collect();
+    assert!(!want.is_empty(), "no called function compared");
+    assert_eq!(det, want);
+    assert!(
+        LOL_SEMANTICS_PINS
+            .iter()
+            .all(|(_, id)| *id != alice_det_math::SEMANTICS_ID),
+        "the whole alice-det-math identifier is not folded"
+    );
 }
 
 #[test]
