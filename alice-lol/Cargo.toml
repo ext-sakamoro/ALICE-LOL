@@ -35,16 +35,16 @@ sha2 = { version = "0.10", default-features = false }
 # stack を伸ばす (rustc と同じ手法) MIT OR Apache-2.0
 stacker = "0.1"
 # HMAC-SHA256 for rule laws (feature `crypto-calls`, off by default)
-alice-sign = { path = "../../ALICE-Sign", version = "0.1", default-features = false, optional = true }
+alice-sign = { git = "https://github.com/ext-sakamoro/ALICE-Sign", branch = "main", version = "0.1", default-features = false, optional = true }
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
 # grammar-constrained decoding without depending on alice-llm directly.
-alice-llm = { path = "../../ALICE-LLM", version = ">=2, <5", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
+alice-llm = { git = "https://github.com/ext-sakamoro/ALICE-LLM", branch = "main", version = "4", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
 # Optional; only pulled in when `physics` feature is enabled Provides
 # FilamentDb / fillet_stress / beam_stress / layer_adhesion / thermal_stress
 # access to stdlib::hardsurface primitives so material-backed stress checks
 # can replace hardcoded const fallbacks
-alice-physics = { path = "../../ALICE-Physics/crates/alice-physics", version = ">=3.0, <5", default-features = false, features = ["std"], optional = true }
+alice-physics = { git = "https://github.com/ext-sakamoro/ALICE-Physics", branch = "main", version = "4", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 # tests/transpiler_naga_validate.rs: corpus 全構文の WGSL / GLSL を naga で parse + validate
