@@ -21,8 +21,8 @@ dependencies = [
 
 [[package]]
 name = "alice-det-math"
-version = "0.5.2"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?rev=2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8#2d01c63ff0849cf0ab82eafb89f87f1b729bd2a8"
+version = "0.6.1"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#001694ccbe9bf0cdcd93f3e6b45e27779b77a41d"
 dependencies = [
  "bytemuck",
  "wide",
@@ -30,7 +30,8 @@ dependencies = [
 
 [[package]]
 name = "alice-llm"
-version = "3.0.0"
+version = "4.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-LLM?branch=main#e0a59641af211e6adeb08790d32884831f51f104"
 dependencies = [
  "alice-det-math",
  "rayon",
@@ -96,6 +97,7 @@ dependencies = [
 [[package]]
 name = "alice-physics"
 version = "4.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Physics?branch=main#1123e6be80944e0823e5abb61ddb168c263d7d9f"
 dependencies = [
  "alice-physics-core",
 ]
@@ -103,6 +105,7 @@ dependencies = [
 [[package]]
 name = "alice-physics-core"
 version = "4.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Physics?branch=main#1123e6be80944e0823e5abb61ddb168c263d7d9f"
 dependencies = [
  "alice-det-math",
  "sha2",
@@ -111,10 +114,11 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?rev=5c8a364297b75bd76bf867aa0ca8fcc85afb5c94#5c8a364297b75bd76bf867aa0ca8fcc85afb5c94"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#518e9986295875780ecfbacc958e8cdef08899e4"
 dependencies = [
  "alice-det-math",
  "alice-zip",
+ "ash",
  "bincode",
  "bytemuck",
  "crc32fast",
@@ -134,6 +138,7 @@ dependencies = [
 [[package]]
 name = "alice-sign"
 version = "0.1.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Sign?branch=main#8c8d1eebf4ef9fc4059dae08779f8846e832df5e"
 dependencies = [
  "ed25519-dalek",
  "sha2",
@@ -158,7 +163,7 @@ dependencies = [
 [[package]]
 name = "alice-zip"
 version = "0.11.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?rev=19f6f2c1ff5537642cefca006e37e2f00570d6ba#19f6f2c1ff5537642cefca006e37e2f00570d6ba"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#8d6e132ded0d804e2b3d6a6614396782aa0577b6"
 dependencies = [
  "alice-det-math",
  "libm",
