@@ -123,8 +123,9 @@ pub const DET_MATH_FUNCTIONS: &[&str] = &[
     "tan",
 ];
 
-/// [`DET_MATH_FUNCTIONS`] の各関数の識別子 (`alice_det_math::function_pin`、同じ順) 解決した
-/// alice-det-math でどれかが動くと compile が止まる (下の `assert_function_pins`) ので、別の bit から
+/// [`DET_MATH_FUNCTIONS`] の各関数の識別子 (`alice_det_math::function_pin`、同じ順)
+///
+/// 解決した alice-det-math でどれかが動くと compile が止まる (下の `assert_function_pins`) ので、別の bit から
 /// 作った識別子を名乗ることはない 呼ばない関数が動いても何も変わらない
 /// [`LOL_SEMANTICS_PINS`] と [`crate::geometry_id::LOL_GEOMETRY_SEMANTICS_PINS`] の
 /// `alice-det-math::<関数>` の行がこの値を畳む
