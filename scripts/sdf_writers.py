@@ -97,15 +97,72 @@ def load_config(path: Path = CONFIG) -> dict:
     return cfg
 
 
-def sdf_pin(manifest: Path = LOL_MANIFEST) -> str:
-    """the full commit of alice-sdf that alice-lol's manifest names (`git = SDF_GIT`, `rev = <40 hex>`)"""
+def sdf_pin(manifest: Path = LOL_MANIFEST, lock: Path = ROOT / "Cargo.lock") -> str:
+    """the full commit of alice-sdf that alice-lol builds against: the manifest's `rev = <40 hex>` (`git = SDF_GIT`),
+    or, when the manifest names a `branch`, the one commit the committed Cargo.lock resolved it to
+    (`source = "git+SDF_GIT?branch=<branch>#<40 hex>"`, exactly one alice-sdf entry)"""
     dep = tomllib.loads(manifest.read_text(encoding="utf-8")).get("dependencies", {}).get("alice-sdf")
     if not isinstance(dep, dict) or dep.get("git") != SDF_GIT:
         raise ValueError(f"{manifest}: alice-sdf is not taken by git from {SDF_GIT}")
+    if "branch" in dep and "rev" not in dep:
+        want = re.compile(re.escape(f"git+{SDF_GIT}?branch={dep['branch']}#") + r"([0-9a-f]{40})")
+        try:
+            pkgs = tomllib.loads(lock.read_text(encoding="utf-8")).get("package", [])
+        except OSError as e:
+            raise ValueError(f"{lock}: cannot read the lock that pins alice-sdf's branch: {e}") from e
+        hits = [m.group(1) for p in pkgs if p.get("name") == "alice-sdf"
+                for m in [want.fullmatch(p.get("source", ""))] if m]
+        if len(hits) != 1:
+            raise ValueError(f"{lock}: {len(hits)} alice-sdf entries at a full commit of {SDF_GIT} branch "
+                             f"{dep['branch']!r} (want 1)")
+        return hits[0]
     rev = dep.get("rev", "")
     if not re.fullmatch(r"[0-9a-f]{40}", rev):
         raise ValueError(f"{manifest}: alice-sdf's rev is not a full commit: {rev!r}")
     return rev
+
+
+def sdf_spec(manifest: Path = LOL_MANIFEST) -> str:
+    """how alice-lol's manifest names the alice-sdf commit (`branch = "<b>"` or `rev = "<40 hex>"`): the canary takes
+    alice-sdf the same way, so both resolve through the same rule"""
+    dep = tomllib.loads(manifest.read_text(encoding="utf-8")).get("dependencies", {}).get("alice-sdf", {})
+    if isinstance(dep, dict) and "branch" in dep and "rev" not in dep:
+        return f'branch = "{dep["branch"]}"'
+    return f'rev = "{sdf_pin(manifest)}"'
+
+
+def git_alice_commits(lock: Path) -> dict[str, str]:
+    """name -> the full commit of every git `alice-*` package in a Cargo.lock (`source = "git+...#<40 hex>"`)"""
+    out = {}
+    for p in tomllib.loads(lock.read_text(encoding="utf-8")).get("package", []):
+        m = re.fullmatch(r"git\+[^#]+#([0-9a-f]{40})", p.get("source", ""))
+        if p.get("name", "").startswith("alice-") and m:
+            out[p["name"]] = m.group(1)
+    return out
+
+
+def canary_problems(toml_text: str, lock: Path, pin: str, spec: str, workspace_lock: Path | None = None) -> list[str]:
+    """the canary's alice-sdf line must name the commit as alice-lol does (`spec`), its own Cargo.lock must resolve
+    alice-sdf to the same full commit `pin`, and every git alice-* it locks must sit at the commit the workspace's
+    Cargo.lock has (one det-math in the repository, not one per lock)"""
+    found = []
+    line = next((l for l in toml_text.splitlines() if l.startswith("alice-sdf = ")), "")
+    if f"git = \"{SDF_GIT}\", {spec}," not in line:
+        found.append(f"scripts/clippy-lib-canary/Cargo.toml: alice-sdf is not taken as alice-lol takes it ({spec}): run --write")
+    try:
+        pkgs = tomllib.loads(lock.read_text(encoding="utf-8")).get("package", [])
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        return found + [f"{lock}: cannot be read: {e}"]
+    srcs = [p.get("source", "") for p in pkgs if p.get("name") == "alice-sdf"]
+    if len(srcs) != 1 or not srcs[0].startswith(f"git+{SDF_GIT}?") or not srcs[0].endswith(f"#{pin}"):
+        found.append(f"scripts/clippy-lib-canary/Cargo.lock resolves alice-sdf to {srcs}, not {SDF_GIT} at {pin[:12]}: "
+                     "run --write")
+    if workspace_lock is not None:
+        ws, own = git_alice_commits(workspace_lock), git_alice_commits(lock)
+        off = sorted(n for n in own if n in ws and own[n] != ws[n])
+        if off:
+            found.append(f"scripts/clippy-lib-canary/Cargo.lock has {off} at other commits than {workspace_lock.name}: run --write")
+    return found
 
 
 def sdf_dir(pin: str | None = None) -> Path:
@@ -117,9 +174,9 @@ def sdf_dir(pin: str | None = None) -> Path:
     found = [p for p in meta["packages"] if p["name"] == "alice-sdf"]
     if len(found) != 1:
         raise ValueError(f"cargo metadata resolves {len(found)} alice-sdf package(s), not 1")
-    want = f"git+{SDF_GIT}?rev={pin}#{pin}"
-    if found[0].get("source") != want:
-        raise ValueError(f"alice-sdf resolves to {found[0].get('source')}, the manifest pins {want}")
+    src = found[0].get("source") or ""
+    if not re.fullmatch(re.escape(f"git+{SDF_GIT}?") + r"(rev=" + re.escape(pin) + r"|branch=[^#&]+)#" + re.escape(pin), src):
+        raise ValueError(f"alice-sdf resolves to {src}, not {SDF_GIT} at the pinned commit {pin}")
     return Path(found[0]["manifest_path"]).parent
 
 
@@ -424,10 +481,23 @@ def generate(cfg: dict) -> tuple[list[str], int]:
     # the canary crate takes alice-sdf with exactly these features, and alice-sdf's documentation is built
     # through it, so the API read here is the API the canary calls
     toml = CANARY_TOML.read_text(encoding="utf-8")
-    dep = (f'alice-sdf = {{ git = "{SDF_GIT}", rev = "{pin}", version = "{version}", default-features = false, '
+    spec = sdf_spec()
+    dep = (f'alice-sdf = {{ git = "{SDF_GIT}", {spec}, version = "{version}", default-features = false, '
            f'features = {json.dumps(feats)} }}  # generated by scripts/sdf_writers.py --write')
     toml = re.sub(r"(?m)^alice-sdf = .*$", dep, toml) if re.search(r"(?m)^alice-sdf = ", toml) else toml.rstrip("\n") + "\n" + dep + "\n"
     CANARY_TOML.write_text(toml, encoding="utf-8")
+    # the canary's own lock at the same commit as alice-lol's (a branch resolves wherever the lock says)
+    subprocess.run(["cargo", "update", "-q", "--manifest-path", str(CANARY_TOML), "-p", "alice-sdf", "--precise", pin],
+                   check=True)
+    # updating alice-sdf re-resolves its own git dependencies: put each git alice-* back at the workspace's commit
+    canary_lock, ws_lock = CANARY_TOML.parent / "Cargo.lock", ROOT / "Cargo.lock"
+    ws = git_alice_commits(ws_lock)
+    for pkg, sha in git_alice_commits(canary_lock).items():
+        if pkg in ws and sha != ws[pkg]:
+            subprocess.run(["cargo", "update", "-q", "--manifest-path", str(CANARY_TOML), "-p", pkg, "--precise", ws[pkg]], check=True)
+    bad = canary_problems(toml, canary_lock, pin, spec, ws_lock)
+    if bad:
+        return bad, 0
     doc = rustdoc("alice-sdf", cfg["nightly"], [], CANARY_TOML)
     cands = candidates(doc, name, frozenset(count))
     writers, found = classify(cands, count, cfg.get("outside", []), sdf_not_writers(src))
@@ -760,6 +830,8 @@ def main(argv: list[str] | None = None) -> int:
         lock = tomllib.loads(LOCK.read_text(encoding="utf-8"))
         found = check_lock(cfg, lock, sdf_count(), sdf_pin(), WRITERS_CONFIG.read_text(encoding="utf-8"),
                            CANARY_SRC.read_text(encoding="utf-8"))
+        found += canary_problems(CANARY_TOML.read_text(encoding="utf-8"), CANARY_TOML.parent / "Cargo.lock", sdf_pin(),
+                                 sdf_spec(), ROOT / "Cargo.lock")
         if not a.lol_json:
             found += second_pass(cfg, lock)
         doc = json.loads(a.lol_json.read_text()) if a.lol_json else rustdoc("alice-lol", cfg["nightly"], ["--all-features"])
