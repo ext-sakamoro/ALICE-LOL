@@ -33,7 +33,9 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ".github/workflows/release-profile.yml"
 PATTERNS = ".github/paths/release-profile.txt"
 SELECTIONS = ("default", "physics")
-FIXED = ("Cargo.toml", "Cargo.lock", ".github/alice-siblings", WORKFLOW, PATTERNS, "scripts/law_tests.sh",
+# the sibling list, when the repository has one (no list: every alice-* comes by git, nothing to watch)
+SIBLINGS = ".github/alice-siblings"
+FIXED = ("Cargo.toml", "Cargo.lock", WORKFLOW, PATTERNS, "scripts/law_tests.sh",
          "scripts/cargo_test_nonzero.sh", "scripts/release_leg_check.py")
 
 
@@ -92,7 +94,7 @@ def problems(root: Path, metadata: dict) -> tuple[list[str], int]:
     for d in required_dirs(root, metadata):
         if f"{d}/**" not in patterns:
             out.append(f"{PATTERNS}: no `{d}/**` (a workspace member the Law tests build)")
-    for f in FIXED:
+    for f in FIXED + ((SIBLINGS,) if (root / SIBLINGS).exists() else ()):
         if f not in patterns:
             out.append(f"{PATTERNS}: no `{f}`")
     return out, len(steps)

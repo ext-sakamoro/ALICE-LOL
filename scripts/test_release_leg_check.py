@@ -64,6 +64,14 @@ class Leg(unittest.TestCase):
         self.edit(r.PATTERNS, "alice-lol-layout/**\n", "")
         self.assertIn(f"{r.PATTERNS}: no `alice-lol-layout/**` (a workspace member the Law tests build)", self.check()[0])
 
+    def test_the_sibling_list_is_required_only_when_the_repository_has_one(self):
+        # no .github/alice-siblings (every alice-* comes by git): nothing to watch, no pattern asked for
+        self.assertNotIn(f"{r.PATTERNS}: no `{r.SIBLINGS}`", self.check()[0])
+        # a list present: it decides what the release builds against, so the paths filter must watch it
+        (self.tmp / r.SIBLINGS).parent.mkdir(parents=True, exist_ok=True)
+        (self.tmp / r.SIBLINGS).write_text("ALICE-SDF " + "0" * 40 + "\n")
+        self.assertIn(f"{r.PATTERNS}: no `{r.SIBLINGS}`", self.check()[0])
+
     def test_the_fixed_patterns_are_required(self):
         self.edit(r.PATTERNS, "Cargo.lock\n", "")
         self.assertIn(f"{r.PATTERNS}: no `Cargo.lock`", self.check()[0])
