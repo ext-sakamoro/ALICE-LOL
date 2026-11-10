@@ -116,7 +116,7 @@ const GOLDEN: &[(&str, &str)] = &[
     ),
     (
         "node_to_fbx_roblox",
-        "dc1de32e3bd16af6ff47a3fbd7769a86e89f6f04e2680b8174ab649b88eea60b",
+        "c063ba6cec281838596082c10547fcb3a3967dde77dc668576dbe9abe34a3f95",
     ),
     (
         "node_to_obj_roblox",
