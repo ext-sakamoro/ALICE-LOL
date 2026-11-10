@@ -114,9 +114,23 @@ class Siblings(unittest.TestCase):
             root = tree(Path(d), '[dependencies]\na = { path = "../a" }\n')
             self.assertEqual(rs.main(["--root", str(root)]), 2)
 
+    def test_no_sibling_with_a_declaration_of_none_passes(self):
+        # .github/alice-siblings exists and names no repository (comments only): zero read is the declared state
+        with tempfile.TemporaryDirectory() as d:
+            root = tree(Path(d), '[dependencies]\na = { path = "../a" }\n')
+            (root / ".github").mkdir()
+            (root / ".github" / "alice-siblings").write_text("# none: every alice-* comes by git\n", encoding="utf-8")
+            self.assertEqual(rs.main(["--root", str(root)]), 0)
+
+    def test_no_sibling_read_while_siblings_are_declared_exits_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = tree(Path(d), '[dependencies]\na = { path = "../a" }\n')
+            (root / ".github").mkdir()
+            (root / ".github" / "alice-siblings").write_text("ALICE-SDF " + "0" * 40 + "\n", encoding="utf-8")
+            self.assertEqual(rs.main(["--root", str(root)]), 2)
+
     def test_the_real_tree_lists_its_siblings(self):
         rows = rs.plan(rs.ROOT)
-        self.assertGreater(len(rows), 0)
         listed = {line.split()[0] for line in (rs.ROOT / ".github" / "alice-siblings").read_text(encoding="utf-8").splitlines()
                   if line.strip() and not line.startswith("#")}
         self.assertEqual({r[0] for r in rows}, listed, "the path siblings are the ones .github/alice-siblings lists")

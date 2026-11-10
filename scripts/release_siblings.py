@@ -17,7 +17,8 @@ error. A sibling directory that two members point at must name the same package.
 
 usage: release_siblings.py [--root DIR] [--resolve] [--owner OWNER]
   prints one `<dir> <package> <version> [<tag>]` line per sibling
-Exit 1 on an error above, 2 when no sibling path dependency was read.
+Exit 1 on an error above, 2 when no sibling path dependency was read, unless .github/alice-siblings exists and names
+no repository (every alice-* dependency comes by git: zero is the declared state, not an empty run).
 """
 from __future__ import annotations
 
@@ -120,6 +121,14 @@ def plan(root: Path, tags_of=None) -> list[tuple[str, str, str, str | None]]:
     return rows
 
 
+def declares_no_sibling(root: Path) -> bool:
+    """True when .github/alice-siblings exists and, past its `#` comments and blank lines, names no repository"""
+    path = root / ".github" / "alice-siblings"
+    if not path.is_file():
+        return False
+    return not any(line.split("#", 1)[0].strip() for line in path.read_text(encoding="utf-8").splitlines())
+
+
 def main(argv: list[str]) -> int:
     root, resolve, owner = ROOT, False, "ext-sakamoro"
     args = list(argv)
@@ -143,6 +152,9 @@ def main(argv: list[str]) -> int:
         print(" ".join(x for x in row if x is not None))
     print(f"release siblings: {len(rows)}", file=sys.stderr)
     if not rows:
+        if declares_no_sibling(root):
+            print("release siblings: none, as .github/alice-siblings declares (every alice-* comes by git)", file=sys.stderr)
+            return 0
         print("error: no sibling path dependency was read", file=sys.stderr)
         return 2
     return 0
