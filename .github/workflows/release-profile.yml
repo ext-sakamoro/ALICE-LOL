@@ -28,7 +28,6 @@ on:
       - 'scripts/law_tests.sh'
       - 'scripts/cargo_test_nonzero.sh'
       - 'scripts/release_leg_check.py'
-      - '.github/alice-siblings'
       - '.github/actions/**'
       - '.github/workflows/release-profile.yml'
       - '.github/paths/release-profile.txt'
@@ -86,9 +85,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

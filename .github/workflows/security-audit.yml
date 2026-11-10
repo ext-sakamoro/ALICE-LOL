@@ -19,7 +19,6 @@ on:
       - '**/Cargo.lock'
       - '**/src/**'
       - 'deny.toml'
-      - '.github/alice-siblings'
       - '.github/workflows/security-audit.yml'
       - '.github/paths/security-audit.txt'
   schedule:
@@ -86,9 +85,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -120,9 +116,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -153,9 +146,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -256,9 +246,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
         with:

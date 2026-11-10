@@ -68,9 +68,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -181,9 +178,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -224,9 +218,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       # the targets go to the toolchain rust-toolchain.toml pins (the one cargo runs here),
@@ -253,9 +244,6 @@ jobs:
           path: ALICE-LOL
           # the release tags: scripts/id_move_check.py compares with the newest one
           fetch-depth: 0
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -326,9 +314,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -368,9 +353,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -394,9 +376,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -422,9 +401,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -458,9 +434,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       # Cargo.toml `rust-version` を実証する (宣言だけの MSRV は
       # clippy の incompatible_msrv を黙らせる)
@@ -503,9 +476,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-09-26
@@ -531,9 +501,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -552,9 +519,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -596,9 +560,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

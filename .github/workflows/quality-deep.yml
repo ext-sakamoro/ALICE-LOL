@@ -101,9 +101,6 @@ jobs:
         with:
           path: ALICE-LOL
           fetch-depth: 0
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
 
       - uses: dtolnay/rust-toolchain@stable
 

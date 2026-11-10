@@ -5,6 +5,5 @@
 **/Cargo.lock
 **/src/**
 deny.toml
-.github/alice-siblings
 .github/workflows/security-audit.yml
 .github/paths/security-audit.txt

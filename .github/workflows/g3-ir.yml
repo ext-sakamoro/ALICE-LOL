@@ -23,7 +23,6 @@ on:
       - 'scripts/test_fneg_fma_ir_check.py'
       - 'scripts/no-outer-fneg-of-fma-allowlist.toml'
       - '.github/actions/alice-siblings/**'
-      - '.github/alice-siblings'
       - '.github/workflows/g3-ir.yml'
       - '.github/paths/g3-ir.txt'
   schedule:
@@ -92,9 +91,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ALICE-LOL
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       # the toolchain is rust-toolchain.toml's (the IR text depends on the LLVM version);
       # both targets are installed for the probe tests, which build for each architecture
       # (the probes have no build script, so the other architecture's is a plain cross build)

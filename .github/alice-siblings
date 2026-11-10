@@ -1,3 +1,0 @@
-# Sibling repositories the manifests take by path until the versions they need are on
-# crates.io: "<Repo> <full commit SHA>", cloned by .github/actions/alice-siblings and
-# checked against the local checkouts by scripts/alice_siblings_check.py

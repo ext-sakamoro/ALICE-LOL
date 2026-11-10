@@ -47,7 +47,6 @@ on:
       - '.github/semver-gate.toml'
       - 'scripts/changed_paths.py'
       - '.github/actions/alice-siblings/**'
-      - '.github/alice-siblings'
       - '.github/workflows/semver-checks.yml'
       - '.github/paths/semver-checks.txt'
   schedule:
@@ -116,9 +115,6 @@ jobs:
         with:
           path: ALICE-LOL
           persist-credentials: false
-      - uses: ./ALICE-LOL/.github/actions/alice-siblings
-        with:
-          repo-dir: ALICE-LOL
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable (branch, default toolchain stable)
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:

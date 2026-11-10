@@ -109,18 +109,19 @@ class Siblings(unittest.TestCase):
             with self.assertRaises(rs.SiblingError):
                 rs.sibling_deps(root)
 
-    def test_no_sibling_exits_2(self):
+    def test_no_sibling_and_no_list_passes(self):
+        # no .github/alice-siblings: the repository declares no sibling (every alice-* comes by git)
         with tempfile.TemporaryDirectory() as d:
             root = tree(Path(d), '[dependencies]\na = { path = "../a" }\n')
-            self.assertEqual(rs.main(["--root", str(root)]), 2)
+            self.assertEqual(rs.main(["--root", str(root)]), 0)
 
-    def test_no_sibling_with_a_declaration_of_none_passes(self):
-        # .github/alice-siblings exists and names no repository (comments only): zero read is the declared state
+    def test_no_sibling_with_a_list_that_names_none_exits_2(self):
+        # a present list that names no repository is not a declaration (the shared parser refuses it too): no file is
         with tempfile.TemporaryDirectory() as d:
             root = tree(Path(d), '[dependencies]\na = { path = "../a" }\n')
             (root / ".github").mkdir()
-            (root / ".github" / "alice-siblings").write_text("# none: every alice-* comes by git\n", encoding="utf-8")
-            self.assertEqual(rs.main(["--root", str(root)]), 0)
+            (root / ".github" / "alice-siblings").write_text("# nothing listed\n", encoding="utf-8")
+            self.assertEqual(rs.main(["--root", str(root)]), 2)
 
     def test_no_sibling_read_while_siblings_are_declared_exits_2(self):
         with tempfile.TemporaryDirectory() as d:
@@ -131,8 +132,9 @@ class Siblings(unittest.TestCase):
 
     def test_the_real_tree_lists_its_siblings(self):
         rows = rs.plan(rs.ROOT)
-        listed = {line.split()[0] for line in (rs.ROOT / ".github" / "alice-siblings").read_text(encoding="utf-8").splitlines()
-                  if line.strip() and not line.startswith("#")}
+        lst = rs.ROOT / ".github" / "alice-siblings"
+        listed = {line.split()[0] for line in lst.read_text(encoding="utf-8").splitlines()
+                  if line.strip() and not line.startswith("#")} if lst.is_file() else set()
         self.assertEqual({r[0] for r in rows}, listed, "the path siblings are the ones .github/alice-siblings lists")
         self.assertNotIn("alice-sdf", {r[1] for r in rows}, "alice-sdf comes by git, not as a path sibling")
 
