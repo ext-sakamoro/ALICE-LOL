@@ -179,6 +179,14 @@ fn print_grips(bound: &alice_lol::world_law::BoundWorld) {
                 rows.join(",")
             );
         }
+        if let Some(a) = m.contact_angle {
+            let basis = match m.contact_angle_basis {
+                Some(alice_lol::world_law::Basis::Measured) => "measured",
+                Some(alice_lol::world_law::Basis::Assumed) => "assumed",
+                None => "none",
+            };
+            println!("contact_angle {}: degrees={a} basis={basis}", m.name);
+        }
         if let Some(g) = bound.grip(&m.name) {
             let adhesion = g
                 .adhesion
