@@ -54,6 +54,10 @@ material mochi shear_modulus = 427000
 material mochi shear_modulus basis measured
 material mochi poisson_ratio = 0.49
 material mochi poisson_ratio basis assumed
+# the contact angle of water on mochi was not found measured; the value is assumed from proxies
+source contact angle: no measurement of water on mochi (a hydrated pounded rice cake) was found; proxies: films of dried gelatinized starch give about 50-80 degrees (Bialopiotrowicz, Food Hydrocolloids 2003; starch-coated surfaces 50-80 against 95-100 uncoated), whole rice kernels 89.8-120.6 (low-pressure plasma study, Microscopy and Microanalysis Research 2017); a wet starch gel is more wettable than a dried film, so 60 is assumed, within 40 to 90
+material mochi contact_angle = 60
+material mochi contact_angle basis assumed
 material mochi dynamic youngs at 3 storage level * 10 ^ 7.035 loss level * 10 ^ 5.555
 material mochi dynamic youngs at 10 storage level * 10 ^ 7.075 loss level * 10 ^ 5.615
 material mochi dynamic youngs at 30 storage level * 10 ^ 7.06 loss level * 10 ^ 5.77

@@ -34,7 +34,7 @@
 //! - `let <name> = <expr>`: a value for the later lines
 //! - `material <name> <field> = <expr>`: one of [`FIELDS`], at most once per material
 //! - `material <name> <field> basis measured|assumed`: how `shear_modulus`, `poisson_ratio`,
-//!   `adhesion` or `contact_area` was obtained, after its value; the law's `source` lines say where
+//!   `adhesion`, `contact_area` or `contact_angle` was obtained, after its value; the law's `source` lines say where
 //!   a measured value comes from. Young's modulus is never stated:
 //!   [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
 //! - `material <name> dynamic shear|youngs at <f> storage <expr> loss <expr>`: one row of a
@@ -87,7 +87,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 15] = [
+pub const FIELDS: [&str; 16] = [
     "density",
     "friction",
     "static_friction",
@@ -103,6 +103,7 @@ pub const FIELDS: [&str; 15] = [
     "poisson_ratio",
     "adhesion",
     "contact_area",
+    "contact_angle",
 ];
 
 const DENSITY: usize = 0;
@@ -120,6 +121,7 @@ const SHEAR_MODULUS: usize = 11;
 const POISSON_RATIO: usize = 12;
 const ADHESION: usize = 13;
 const CONTACT_AREA: usize = 14;
+const CONTACT_ANGLE: usize = 15;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -446,6 +448,11 @@ pub struct BoundMaterial {
     pub adhesion_basis: Option<Basis>,
     /// how `contact_area` was obtained, when the law says
     pub contact_area_basis: Option<Basis>,
+    /// the angle in degrees a drop of water makes with the material's surface at rest (its static
+    /// contact angle, through the water), in `(0, 180]`: what decides the shape of a drop it holds
+    pub contact_angle: Option<f64>,
+    /// how `contact_angle` was obtained, when the law says
+    pub contact_angle_basis: Option<Basis>,
     /// the dynamic-modulus table, when the law states one
     pub dynamic: Option<DynamicModulus>,
 }
@@ -545,6 +552,7 @@ const fn field_range(slot: usize) -> &'static str {
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
+        CONTACT_ANGLE => "above 0 and at most 180 (degrees)",
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => "in 0..=1",
         _ => "in 0..=2^53",
     }
@@ -554,6 +562,7 @@ fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
         DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
+        CONTACT_ANGLE => v > 0.0 && v <= 180.0,
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
         _ => (0.0..=MAX_VALUE).contains(&v),
     }
@@ -977,11 +986,12 @@ impl WorldLaw {
             "poisson_ratio" => POISSON_RATIO,
             "adhesion" => ADHESION,
             "contact_area" => CONTACT_AREA,
+            "contact_angle" => CONTACT_ANGLE,
             _ => {
                 return Err(err(
                     line,
                     format!(
-                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion and contact_area)"
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion, contact_area and contact_angle)"
                     ),
                 ))
             }
@@ -1234,6 +1244,8 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         contact_area: v[CONTACT_AREA],
         adhesion_basis: basis_of(m, ADHESION),
         contact_area_basis: basis_of(m, CONTACT_AREA),
+        contact_angle: v[CONTACT_ANGLE],
+        contact_angle_basis: basis_of(m, CONTACT_ANGLE),
         dynamic: match &m.dynamic {
             None => None,
             Some(d) => Some(bind_dynamic(d, slots)?),

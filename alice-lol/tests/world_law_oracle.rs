@@ -646,7 +646,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "682b0a5e8615a112f12703fff96a88795804d54a103c5bb072125905a402b008"
+        "9446884f2d8eee535eca7ef5f35fd89b47df68cba9ef34e4cd52fd0d0cce9976"
     );
     let w = law.bind(&[("strength", Number(7.5))]).unwrap();
     // 7.5/3600 as its exact f64 bits
@@ -1040,4 +1040,50 @@ fn a_dynamic_table_is_refused_out_of_form_or_range() {
         id(&row("1")),
         id("material a dynamic youngs at 1 storage 100 loss 1\n")
     );
+}
+
+/// A material may state the static contact angle of water on it (degrees, through the water), with its basis: what decides
+/// the shape a drop it holds takes. Its range is above 0 and at most 180; a law that does not state it keeps its identifier,
+/// and stating it is part of the identifier
+#[test]
+fn a_contact_angle_is_stated_with_its_basis_and_range() {
+    let w = WorldLaw::from_file(&format!(
+        "{ONE}material a contact_angle = 60\nmaterial a contact_angle basis assumed\n"
+    ))
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    let m = w.material("a").unwrap();
+    assert_eq!(m.contact_angle, Some(60.0));
+    assert_eq!(m.contact_angle_basis, Some(Basis::Assumed));
+    // the edges are in it; 0, below it and past 180 are not
+    for edge in ["180", "0.001"] {
+        assert!(
+            WorldLaw::from_file(&format!("{ONE}material a contact_angle = {edge}\n"))
+                .unwrap()
+                .bind(&[])
+                .is_ok(),
+            "{edge}"
+        );
+    }
+    for out in ["0", "-5", "180.5"] {
+        // refused when read, or when bound (a value is checked when it is known)
+        let refused = WorldLaw::from_file(&format!("{ONE}material a contact_angle = {out}\n"))
+            .map_or(true, |l| l.bind(&[]).is_err());
+        assert!(refused, "{out} is not a contact angle");
+    }
+    // not stated: the material has none, and the identifier is the one it had
+    let one = WorldLaw::from_file(ONE).unwrap();
+    assert_eq!(
+        one.bind(&[]).unwrap().material("a").unwrap().contact_angle,
+        None
+    );
+    let stated = WorldLaw::from_file(&format!("{ONE}material a contact_angle = 60\n")).unwrap();
+    assert_ne!(
+        one.law_id(),
+        stated.law_id(),
+        "the angle is part of the identifier"
+    );
+    // the mochi law reads
+    assert!(WorldLaw::from_file(MOCHI).is_ok());
 }
