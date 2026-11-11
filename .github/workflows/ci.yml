@@ -391,7 +391,7 @@ jobs:
   # 無いので Mesa の software Vulkan (lavapipe) を入れ、ALICE_SDF_REQUIRE_GPU=1
   # で「adapter なし → skip」を fail にする (alice-sdf ci.yml gpu-parity と同型)
   gpu-parity:
-    # ubuntu-24.04, not ubuntu-latest: ubuntu-latest moved to 26.04, where Mesa 26's lavapipe crashes (SIGSEGV)
+    # GPU lanes run on a fixed image (ubuntu-24.04) so the software Vulkan stack doesn't change under the job; move deliberately when the image is retired
     name: GPU parity (lavapipe)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
