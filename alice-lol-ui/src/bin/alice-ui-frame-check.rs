@@ -70,20 +70,21 @@ fn run(args: &[String]) -> ExitCode {
 fn print_law(law: &FrameLaw) {
     let names: Vec<&str> = law.checks().iter().map(|c| c.name()).collect();
     println!(
-        "law: checks [{}], touch target >= {} px phone / {} px desktop, control cover <= {:.0} %, chrome <= {:.0} % phone / {:.0} % desktop",
+        "law: checks [{}], touch target >= {} px phone / {} px desktop, control cover <= {:.0} %, chrome <= {:.0} % phone / {:.0} % desktop, text >= {} px",
         names.join(", "),
         law.min_touch_target(true),
         law.min_touch_target(false),
         law.max_control_cover() * 100.0,
         law.max_chrome_share(true) * 100.0,
-        law.max_chrome_share(false) * 100.0
+        law.max_chrome_share(false) * 100.0,
+        law.min_text_px()
     );
 }
 
 const USAGE: &str = "usage: alice-ui-frame-check [--config ui-frame.json] [--json] <report.json>...
        alice-ui-frame-check run --config ui-frame.json --scenario <module> --url <base> --out <dir> [--shots <dir>] [--label <name>]
 config (ui-frame.json): checks, touch_target {phone, desktop}, max_control_cover, chrome_share {phone, desktop},
-  phone_max_short_side, scenarios {name: {checks}}; run also reads viewports [{name, w, h, touch}], roles {selector: role}, probe
+  min_text_px, phone_max_short_side, scenarios {name: {checks}}; run also reads viewports [{name, w, h, touch}], roles {selector: role}, probe
 exit: 0 pass, 1 a violation (a check that compared nothing included), 2 unreadable input, 3 (run) a scenario failed";
 
 /// the options and report paths (`None`: `--config` without a path, reported)

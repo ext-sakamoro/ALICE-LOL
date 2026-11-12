@@ -69,6 +69,10 @@ fn the_reported_defects_are_found_in_the_measured_frame() {
             .starts_with("law: checks [layer-order, hit-target, control-cover"),
         "{out}"
     );
+    assert!(
+        out.lines().next().unwrap().ends_with("text >= 12 px"),
+        "{out}"
+    );
     let summary = out.lines().find(|l| l.contains(" compared [")).unwrap();
     for c in [
         "layer-order",
@@ -150,6 +154,15 @@ fn a_config_selects_checks_and_json_names_the_items() {
         .unwrap()
         .iter()
         .any(|i| i == "#rotHandle"));
+    // the text minimum of the config is the one in force
+    std::fs::write(&cfg, r#"{"checks":["layer-order"],"min_text_px":9}"#).unwrap();
+    let (_, out, err) = check(&["--config", cfg.to_str().unwrap(), f.to_str().unwrap()]);
+    assert!(
+        out.lines()
+            .next()
+            .is_some_and(|l| l.ends_with("text >= 9 px")),
+        "{out}{err}"
+    );
     // a bad config and a bad report are exit 2, as is no report
     std::fs::write(&cfg, r#"{"checks":["nope"]}"#).unwrap();
     assert_eq!(
@@ -164,6 +177,7 @@ fn a_config_selects_checks_and_json_names_the_items() {
     let (code, out, _) = check(&["--help"]);
     assert_eq!(code, 0);
     assert!(out.contains("touch_target {phone, desktop}"), "{out}");
+    assert!(out.contains("min_text_px"), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
