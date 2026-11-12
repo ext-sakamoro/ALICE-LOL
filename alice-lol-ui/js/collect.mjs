@@ -6,7 +6,7 @@
 //   [role=button], [tabindex]) as `control`.
 // - probe items: what the page's canvas drew this frame, from `window.<probe>()` (default
 //   `__uiProbe`), each `{ id, role, rect: [x, y, w, h], hit?: [x, y, w, h], interactive?, layer?,
-//   text_px?, text_min_px?, text_min_reason? }`
+//   text_px?, text_min_px?, text_min_reason?, text_expected?, text_lines? }`
 //   in CSS px. A page without a probe contributes no probe items (the report says so).
 // - text sizes: every visible element holding text of its own carries `text_px` (font size x
 //   transform scale, or the page's own `data-ui-text-px` for canvas / SDF text); elements with no
@@ -190,6 +190,8 @@ export async function collectFrame(page, cfg = {}) {
             text_px: Number.isFinite(it.text_px) ? it.text_px : null,
             text_min_px: Number.isFinite(it.text_min_px) ? it.text_min_px : null,
             text_min_reason: typeof it.text_min_reason === 'string' ? it.text_min_reason : null,
+            text_expected: !!it.text_expected,
+            text_lines: Number.isInteger(it.text_lines) && it.text_lines > 0 ? it.text_lines : null,
           });
         }
       }
