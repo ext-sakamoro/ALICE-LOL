@@ -37,6 +37,7 @@
 #![warn(missing_docs)]
 
 pub mod error;
+pub mod frame;
 pub mod law;
 pub mod layout;
 pub mod primitives;
@@ -46,6 +47,7 @@ pub mod theme;
 mod det_math;
 
 pub use error::{UiError, UiViolation};
+pub use frame::{FrameLaw, FrameReport, FrameVerdict, FrameViolation};
 pub use law::UiLaw;
 pub use primitives::{Badge, Button, Card, Chip, Divider, Icon, InputField, Panel};
 pub use theme::Theme;

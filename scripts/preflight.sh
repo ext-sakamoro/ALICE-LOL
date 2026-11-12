@@ -479,6 +479,9 @@ fi
 step "ci.yml / test: Test"
 ( export CARGO_TERM_COLOR="always"; cargo test )
 
+step "ci.yml / test: Frame law (alice-lol-ui serde, lib + command on measured reports)"
+( export CARGO_TERM_COLOR="always"; scripts/ui_frame_tests.sh )
+
 step "ci.yml / test: Src-gap tests still fail (docs/wiring-debt.md)"
 python3 scripts/src_gap_check.py --run
 
