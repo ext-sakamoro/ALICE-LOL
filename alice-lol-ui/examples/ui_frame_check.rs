@@ -19,6 +19,9 @@ fn item(id: &str, role: &str, rect: [f32; 4], interactive: bool) -> FrameItem {
         in_overlay: false,
         pinned: false,
         inline_text: false,
+        text_px: None,
+        text_min_px: None,
+        text_min_reason: None,
     }
 }
 

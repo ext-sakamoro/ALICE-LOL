@@ -61,8 +61,7 @@ fn the_reported_defects_are_found_in_the_measured_frame() {
             .any(|l| l.starts_with("text: #hint and #selInfo overlap")),
         "{out}"
     );
-    // every check compared something (the summary line lists all seven)
-    // the first line is the law in force, with all seven checks and the default thresholds
+    // the first line is the law in force, with every check and the default thresholds
     assert!(
         out.lines()
             .next()
@@ -79,10 +78,21 @@ fn the_reported_defects_are_found_in_the_measured_frame() {
         "text",
         "offscreen",
         "chrome-share",
+        "text-size",
     ] {
         assert!(summary.contains(&format!("{c} ")), "{summary}");
     }
-    assert!(!out.contains("compared nothing"), "{out}");
+    // the fixture was measured before the collector recorded text sizes, so text-size (and only
+    // it) has nothing to compare there; every other check compared something
+    assert_eq!(
+        lines(&out, "")
+            .iter()
+            .filter(|l| l.ends_with("compared nothing"))
+            .copied()
+            .collect::<Vec<_>>(),
+        vec!["text-size: compared nothing"],
+        "{out}"
+    );
 }
 
 #[test]
@@ -174,7 +184,7 @@ fn an_empty_report_fails_every_check() {
             .iter()
             .filter(|l| l.ends_with("compared nothing"))
             .count(),
-        7,
+        8,
         "{out}"
     );
     std::fs::remove_dir_all(&dir).unwrap();

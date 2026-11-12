@@ -26,6 +26,10 @@
 //!   pinned item (fixed / sticky), or any item of a page that does not scroll.
 //! - [`FrameCheck::ChromeShare`]: the union of `chrome` items covers at most
 //!   [`FrameLaw::max_chrome_share`] of the viewport (separate maxima for phone and desktop).
+//! - [`FrameCheck::TextSize`]: every item that draws text ([`FrameItem::text_px`]) draws it at
+//!   least [`FrameLaw::min_text_px`] tall on the screen (default 12 CSS px, the layout size times
+//!   the page's zoom); an item may set its own minimum ([`FrameItem::text_min_px`]) only with a
+//!   reason.
 
 #[cfg(feature = "serde")]
 use serde::Deserialize;
@@ -115,6 +119,17 @@ pub struct FrameItem {
     /// by the line height of the text around it)
     #[cfg_attr(feature = "serde", serde(default))]
     pub inline_text: bool,
+    /// the rendered text height (font size, em) in layout CSS px, for an item drawing its own text:
+    /// a DOM element's computed font size, or what a canvas reports for its text
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub text_px: Option<f32>,
+    /// this item's own minimum text size in CSS px (a caption drawn smaller on purpose); only
+    /// with [`FrameItem::text_min_reason`]
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub text_min_px: Option<f32>,
+    /// why the item has its own minimum text size
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub text_min_reason: Option<String>,
 }
 
 /// A point sampled inside an overlay: what was on top there
@@ -165,11 +180,13 @@ pub enum FrameCheck {
     Offscreen,
     /// the chrome takes a bounded share of the viewport
     ChromeShare,
+    /// text is drawn large enough to read
+    TextSize,
 }
 
 impl FrameCheck {
     /// every check, in report order
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::LayerOrder,
         Self::HitTarget,
         Self::ControlCover,
@@ -177,6 +194,7 @@ impl FrameCheck {
         Self::Text,
         Self::Offscreen,
         Self::ChromeShare,
+        Self::TextSize,
     ];
 
     /// the check's name in reports and configs
@@ -190,6 +208,7 @@ impl FrameCheck {
             Self::Text => "text",
             Self::Offscreen => "offscreen",
             Self::ChromeShare => "chrome-share",
+            Self::TextSize => "text-size",
         }
     }
 
@@ -279,6 +298,20 @@ pub enum FrameViolation {
         /// its rect
         rect: Rect,
     },
+    /// text drawn smaller than the minimum
+    TextTooSmall {
+        /// the item
+        id: String,
+        /// its text height on the screen in CSS px (the layout size times the page's zoom)
+        px: f32,
+        /// the minimum in CSS px
+        min: f32,
+    },
+    /// an item sets its own minimum text size without saying why
+    TextMinWithoutReason {
+        /// the item
+        id: String,
+    },
     /// the chrome takes more of the viewport than allowed
     ChromeTooLarge {
         /// the share of the viewport (0..=1)
@@ -304,6 +337,9 @@ impl FrameViolation {
                 Some(FrameCheck::Offscreen)
             }
             Self::ChromeTooLarge { .. } => Some(FrameCheck::ChromeShare),
+            Self::TextTooSmall { .. } | Self::TextMinWithoutReason { .. } => {
+                Some(FrameCheck::TextSize)
+            }
         }
     }
 
@@ -324,7 +360,9 @@ impl FrameViolation {
             }
             Self::HitTargetTooSmall { id, .. }
             | Self::TextOverflows { id, .. }
-            | Self::Offscreen { id, .. } => {
+            | Self::Offscreen { id, .. }
+            | Self::TextTooSmall { id, .. }
+            | Self::TextMinWithoutReason { id } => {
                 vec![id.as_str()]
             }
             Self::ControlCovers {
@@ -374,6 +412,13 @@ impl core::fmt::Display for FrameViolation {
                 "offscreen: {id} at [{:.0}, {:.0}, {:.0}, {:.0}] is not inside the viewport",
                 rect[0], rect[1], rect[2], rect[3]
             ),
+            Self::TextTooSmall { id, px, min } => {
+                write!(f, "text-size: {id} text is {px:.1} px on the screen < {min} px")
+            }
+            Self::TextMinWithoutReason { id } => write!(
+                f,
+                "text-size: {id} sets its own minimum text size without a reason"
+            ),
             Self::ChromeTooLarge { share, max } => write!(
                 f,
                 "chrome-share: chrome covers {:.1} % of the viewport (max {:.1} %)",
@@ -414,6 +459,7 @@ pub struct FrameLaw {
     max_chrome_share_phone: f32,
     max_chrome_share_desktop: f32,
     phone_max_short_side: f32,
+    min_text_px: f32,
 }
 
 /// Default maximum share of a subject a control may cover.
@@ -428,6 +474,9 @@ pub const DEFAULT_MIN_POINTER_TARGET: f32 = 24.0;
 pub const DEFAULT_MAX_CHROME_SHARE_PHONE: f32 = 0.12;
 /// Default maximum share of a desktop viewport the chrome may cover
 pub const DEFAULT_MAX_CHROME_SHARE_DESKTOP: f32 = 0.08;
+/// Default minimum rendered text size in CSS px (body text below this is hard to read on any
+/// device; a caption drawn smaller on purpose sets its own minimum with a reason)
+pub const DEFAULT_MIN_TEXT_PX: f32 = 12.0;
 /// Default: a viewport whose shorter side is below this many CSS px is a phone
 pub const DEFAULT_PHONE_MAX_SHORT_SIDE: f32 = 600.0;
 
@@ -451,6 +500,7 @@ impl FrameLaw {
             max_chrome_share_phone: DEFAULT_MAX_CHROME_SHARE_PHONE,
             max_chrome_share_desktop: DEFAULT_MAX_CHROME_SHARE_DESKTOP,
             phone_max_short_side: DEFAULT_PHONE_MAX_SHORT_SIDE,
+            min_text_px: DEFAULT_MIN_TEXT_PX,
         }
     }
 
@@ -498,6 +548,12 @@ impl FrameLaw {
         }
     }
 
+    /// the minimum rendered text size in CSS px
+    #[must_use]
+    pub const fn min_text_px(&self) -> f32 {
+        self.min_text_px
+    }
+
     /// whether `viewport` counts as a phone: its pointer is coarse when the report says, otherwise
     /// its shorter side is below the phone limit
     #[must_use]
@@ -528,6 +584,7 @@ impl FrameLaw {
                 FrameCheck::Text => text(report, &mut v.violations),
                 FrameCheck::Offscreen => offscreen(report, &mut v.violations),
                 FrameCheck::ChromeShare => self.chrome_share(report, &mut v.violations),
+                FrameCheck::TextSize => self.text_size(report, &mut v.violations),
             };
             v.compared.push((c, n));
             if n == 0 {
@@ -590,6 +647,43 @@ impl FrameLaw {
                         max: self.max_control_cover,
                     });
                 }
+            }
+        }
+        n
+    }
+
+    fn text_size(&self, report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
+        let vp = report.viewport;
+        // a page laid out wider than the screen is zoomed out by screen / layout width
+        let zoom = match vp.screen_w {
+            Some(screen) if vp.w > screen && vp.w > 0.0 => screen / vp.w,
+            _ => 1.0,
+        };
+        let mut n = 0;
+        for item in &report.items {
+            let Some(px) = item.text_px else { continue };
+            n += 1;
+            let reason = item
+                .text_min_reason
+                .as_deref()
+                .is_some_and(|r| !r.trim().is_empty());
+            let min = match item.text_min_px {
+                Some(own) if reason => own,
+                Some(_) => {
+                    out.push(FrameViolation::TextMinWithoutReason {
+                        id: item.id.clone(),
+                    });
+                    self.min_text_px
+                }
+                None => self.min_text_px,
+            };
+            let on_screen = px * zoom;
+            if on_screen < min {
+                out.push(FrameViolation::TextTooSmall {
+                    id: item.id.clone(),
+                    px: on_screen,
+                    min,
+                });
             }
         }
         n
@@ -703,7 +797,13 @@ fn offscreen(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
             });
         }
     }
-    for i in report.items.iter().filter(|i| i.role != "scene") {
+    // a `text` item exists for the text-size check only (the collector adds every element holding
+    // text); where text sits is the job of the roles that place things
+    for i in report
+        .items
+        .iter()
+        .filter(|i| i.role != "scene" && i.role != "text")
+    {
         n += 1;
         // across, every item has to fit (a page does not scroll sideways by design); down, only
         // a pinned item, or any item of a page that does not scroll
@@ -823,6 +923,9 @@ mod config {
         /// shorter side below which a viewport is a phone (default 600)
         #[serde(default)]
         pub phone_max_short_side: Option<f32>,
+        /// minimum rendered text size in CSS px (default 12)
+        #[serde(default)]
+        pub min_text_px: Option<f32>,
     }
 
     impl FrameLaw {
@@ -862,6 +965,9 @@ mod config {
                 law.max_chrome_share_phone = positive("chrome_share.phone", c.phone, 1.0)?;
                 law.max_chrome_share_desktop = positive("chrome_share.desktop", c.desktop, 1.0)?;
             }
+            if let Some(v) = cfg.min_text_px {
+                law.min_text_px = positive("min_text_px", v, f32::MAX)?;
+            }
             if let Some(v) = cfg.phone_max_short_side {
                 law.phone_max_short_side = positive("phone_max_short_side", v, f32::MAX)?;
             }
@@ -889,6 +995,9 @@ mod tests {
             in_overlay: false,
             pinned: false,
             inline_text: false,
+            text_px: None,
+            text_min_px: None,
+            text_min_reason: None,
         }
     }
 
@@ -942,7 +1051,10 @@ mod tests {
                 item("#sheet", "overlay", [20.0, 200.0, 300.0, 200.0], false),
                 item("#ok", "control", [20.0, 700.0, 60.0, 48.0], true),
                 item("#plank", "subject", [100.0, 500.0, 120.0, 10.0], false),
-                texted("#hint", "hint", [20.0, 100.0, 200.0, 20.0], [200.0, 20.0]),
+                FrameItem {
+                    text_px: Some(14.0),
+                    ..texted("#hint", "hint", [20.0, 100.0, 200.0, 20.0], [200.0, 20.0])
+                },
                 item("canvas", "scene", [0.0, 0.0, 390.0, 900.0], false),
             ],
             vec![
@@ -962,6 +1074,7 @@ mod tests {
                 (FrameCheck::Text, 1),
                 (FrameCheck::Offscreen, 5),
                 (FrameCheck::ChromeShare, 1),
+                (FrameCheck::TextSize, 1),
             ]
         );
     }
@@ -1223,6 +1336,102 @@ mod tests {
                 layout_w: 521.0,
                 screen_w: 390.0
             }]
+        );
+    }
+
+    #[test]
+    fn text_below_the_minimum_fails_and_at_the_minimum_passes() {
+        let at = FrameItem {
+            text_px: Some(12.0),
+            ..item("#body", "readout", [0.0, 0.0, 300.0, 20.0], false)
+        };
+        let under = FrameItem {
+            text_px: Some(6.0),
+            ..item("#squeezed", "readout", [0.0, 40.0, 300.0, 10.0], false)
+        };
+        let v = only(FrameCheck::TextSize).check(&report(vec![at, under], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::TextTooSmall {
+                id: "#squeezed".into(),
+                px: 6.0,
+                min: 12.0
+            }]
+        );
+        assert_eq!(v.compared, vec![(FrameCheck::TextSize, 2)]);
+    }
+
+    #[test]
+    fn a_zoomed_out_page_draws_its_text_smaller_than_its_layout_size() {
+        // 14 px in a 521 px layout on a 390 px screen: 14 * 390 / 521 = 10.48 px on the screen
+        let text = FrameItem {
+            text_px: Some(14.0),
+            ..item("#p", "readout", [0.0, 0.0, 300.0, 20.0], false)
+        };
+        let mut r = report(vec![text], vec![]);
+        assert!(only(FrameCheck::TextSize).check(&r).passed());
+        r.viewport.w = 521.0;
+        r.viewport.screen_w = Some(390.0);
+        let v = only(FrameCheck::TextSize).check(&r);
+        assert!(
+            matches!(&v.violations[..], [FrameViolation::TextTooSmall { px, .. }] if (*px - 14.0 * 390.0 / 521.0).abs() < 1e-4),
+            "{:?}",
+            v.violations
+        );
+    }
+
+    #[test]
+    fn a_text_item_is_sized_but_not_placed() {
+        // a `text` item (an element the collector found holding text) past the right edge: the
+        // offscreen check leaves it to the roles that place things, the text-size check reads it
+        let far = FrameItem {
+            text_px: Some(16.0),
+            ..item("#t", "text", [380.0, 0.0, 200.0, 20.0], false)
+        };
+        let ok = item("#ok", "control", [20.0, 700.0, 60.0, 48.0], true);
+        let r = report(vec![far.clone(), ok.clone()], vec![]);
+        let v = only(FrameCheck::Offscreen).check(&r);
+        assert!(v.passed(), "{:?}", v.violations);
+        assert_eq!(v.compared, vec![(FrameCheck::Offscreen, 1)]);
+        assert!(only(FrameCheck::TextSize).check(&r).passed());
+        let placed = FrameItem {
+            role: "readout".into(),
+            ..far
+        };
+        assert!(!only(FrameCheck::Offscreen)
+            .check(&report(vec![placed, ok], vec![]))
+            .passed());
+    }
+
+    #[test]
+    fn an_own_minimum_needs_a_reason() {
+        let caption = FrameItem {
+            text_px: Some(10.0),
+            text_min_px: Some(9.0),
+            text_min_reason: Some("legal caption under the price".into()),
+            ..item("#caption", "readout", [0.0, 0.0, 300.0, 14.0], false)
+        };
+        assert!(only(FrameCheck::TextSize)
+            .check(&report(vec![caption.clone()], vec![]))
+            .passed());
+        let silent = FrameItem {
+            text_min_reason: Some("  ".into()),
+            ..caption
+        };
+        assert_eq!(
+            only(FrameCheck::TextSize)
+                .check(&report(vec![silent], vec![]))
+                .violations,
+            vec![
+                FrameViolation::TextMinWithoutReason {
+                    id: "#caption".into()
+                },
+                FrameViolation::TextTooSmall {
+                    id: "#caption".into(),
+                    px: 10.0,
+                    min: 12.0
+                },
+            ]
         );
     }
 

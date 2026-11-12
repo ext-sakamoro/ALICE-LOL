@@ -406,7 +406,7 @@ the full vocabulary and worked examples against this crate's own
 | `alice-lol-macro` | the `lol!` proc-macro |
 | `alice-lol` | runtime parser, emitter, transpile and export functions, law checkers, intent IR, stdlib shapes |
 | `alice-lol-layout` | byte layout laws: declare a binary format once, decode or check bytes against it (`no_std`, re-exported as `alice_lol::layout`) |
-| `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law, checks of a rendered page (layer order, touch target, overlap, text, chrome share; `alice-ui-frame-check`) |
+| `alice-lol-ui` | UI shapes (button, card, panel …), flex / grid / stack layout, contrast law, checks of a rendered page (layer order, touch target, overlap, text, minimum text size, chrome share; `alice-ui-frame-check`) |
 | `alice-lol-datagen` | synthetic (caption, LOL) pair generator with self-check |
 | `alice-world-auditor-types` | goal and verdict types shared by law checkers and planners |
 | `alice-world-auditor` | planner over `alice-physics` worlds with three-valued verdicts |

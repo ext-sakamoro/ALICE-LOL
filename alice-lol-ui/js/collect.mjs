@@ -5,8 +5,12 @@
 //   `roles` (selector -> role), and visible controls (button, a[href], input, select, textarea,
 //   [role=button], [tabindex]) as `control`.
 // - probe items: what the page's canvas drew this frame, from `window.<probe>()` (default
-//   `__uiProbe`), each `{ id, role, rect: [x, y, w, h], hit?: [x, y, w, h], interactive?, layer? }`
+//   `__uiProbe`), each `{ id, role, rect: [x, y, w, h], hit?: [x, y, w, h], interactive?, layer?,
+//   text_px?, text_min_px?, text_min_reason? }`
 //   in CSS px. A page without a probe contributes no probe items (the report says so).
+// - text sizes: every visible element holding text of its own carries `text_px` (font size x
+//   transform scale, or the page's own `data-ui-text-px` for canvas / SDF text); elements with no
+//   role become `text` items, read only by the text-size check.
 // - layer samples: a grid of points inside every visible overlay; for each, the element on top
 //   (document.elementFromPoint) and whether it belongs to the overlay.
 //
@@ -32,13 +36,17 @@ export async function collectFrame(page, cfg = {}) {
       // the part of an element its ancestors let show: its box clipped by every ancestor whose
       // overflow is not visible (a header with overflow: hidden hides the buttons past its edge).
       // A fixed element escapes the clip of non-fixed ancestors, as the browser draws it
-      const shown = (el) => {
+      // With `scrolled`, an ancestor that scrolls (overflow auto / scroll) does not clip: a control
+      // half inside a scrolling panel is reached by scrolling, so its target is its whole box
+      const isScroller = (s) => /^(auto|scroll)$/.test(s.overflowX) || /^(auto|scroll)$/.test(s.overflowY);
+      const shown = (el, scrolled = false) => {
         const b = el.getBoundingClientRect();
         let x0 = b.left, y0 = b.top, x1 = b.right, y1 = b.bottom;
         const fixed = getComputedStyle(el).position === 'fixed';
         for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
           const s = getComputedStyle(a);
           if (fixed && s.transform === 'none' && s.position !== 'fixed') continue;
+          if (scrolled && isScroller(s)) continue;
           if (s.overflowX !== 'visible' || s.overflowY !== 'visible') {
             const r = a.getBoundingClientRect();
             if (s.overflowX !== 'visible') { x0 = Math.max(x0, r.left); x1 = Math.min(x1, r.right); }
@@ -81,6 +89,30 @@ export async function collectFrame(page, cfg = {}) {
       };
       for (const el of document.body.querySelectorAll('*')) if (!roleOf.has(el) && visible(el) && takesPointer(el)) roleOf.set(el, 'control');
 
+      // the rendered text size of an element holding text of its own (a text node child): its
+      // font size in CSS px times the scale its transforms apply; a canvas / SDF text element
+      // reports its drawn size itself (`data-ui-text-px`). Its own minimum, for an inline caption,
+      // is `data-ui-text-min` with the reason in `data-ui-text-reason`
+      const ownText = (el) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0);
+      const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+      const textSize = (el) => {
+        const reported = num(el.getAttribute('data-ui-text-px'));
+        let px = reported;
+        if (px === null && ownText(el)) {
+          px = parseFloat(getComputedStyle(el).fontSize);
+          // the scale of the transforms on the way up: the box drawn on screen over its layout size
+          const w = el.offsetWidth;
+          const b = el.getBoundingClientRect();
+          if (w > 0 && b.width > 0) px *= b.width / w;
+        }
+        if (px === null || !Number.isFinite(px)) return null;
+        return {
+          text_px: px,
+          text_min_px: num(el.getAttribute('data-ui-text-min')),
+          text_min_reason: el.getAttribute('data-ui-text-reason'),
+        };
+      };
+
       const items = [];
       const overlays = [];
       for (const [el, role] of roleOf) {
@@ -102,7 +134,7 @@ export async function collectFrame(page, cfg = {}) {
           source: 'dom',
           role,
           rect: rectOf(r),
-          hit: interactive ? rectOf(r) : null,
+          hit: interactive ? rectOf(shown(el, true)) : null,
           interactive,
           text: textual
             ? { scroll_w: el.scrollWidth, client_w: el.clientWidth, scroll_h: el.scrollHeight, client_h: el.clientHeight }
@@ -112,9 +144,21 @@ export async function collectFrame(page, cfg = {}) {
           pinned,
           // a link inside a sentence: displayed inline, its parent holding text of its own
           inline_text: el.tagName === 'A' && getComputedStyle(el).display === 'inline' && !!el.parentElement
-            && Array.from(el.parentElement.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0),
+            && ownText(el.parentElement),
+          ...(textSize(el) || {}),
         });
         if (role === 'overlay') overlays.push(el);
+      }
+      // every other visible element holding text of its own, as a `text` item (only the text-size
+      // check reads it)
+      for (const el of document.body.querySelectorAll('*')) {
+        if (roleOf.has(el) || !visible(el)) continue;
+        const size = textSize(el);
+        if (!size || !(ownText(el) || el.hasAttribute('data-ui-text-px'))) continue;
+        items.push({
+          id: idOf(el), source: 'dom', role: 'text', rect: rectOf(shown(el)), hit: null,
+          interactive: false, text: null, layer: null, ...size,
+        });
       }
 
       let probeState = 'absent';
@@ -131,6 +175,9 @@ export async function collectFrame(page, cfg = {}) {
             interactive: !!it.interactive,
             text: null,
             layer: Number.isFinite(it.layer) ? it.layer : null,
+            text_px: Number.isFinite(it.text_px) ? it.text_px : null,
+            text_min_px: Number.isFinite(it.text_min_px) ? it.text_min_px : null,
+            text_min_reason: typeof it.text_min_reason === 'string' ? it.text_min_reason : null,
           });
         }
       }
