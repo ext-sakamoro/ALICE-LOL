@@ -72,8 +72,9 @@ const browser = await chromium.launch({
 
 // `scroll_through`: scroll the page to the bottom one screen at a time and back before collecting,
 // so content drawn when it comes into view (a canvas drawn on intersection) is drawn
-// `text_elements` with `text_wait_ms` (default 30000): wait until every visible element the
-// selector marks reports its drawn size (`data-ui-text-px`), polling; what still has not reported
+// `text_wait_ms` (default 30000): wait until every visible element marked as drawing text
+// (`data-ui-text`, or the `text_elements` selector) without text of its own reports its drawn size
+// (`data-ui-text-px`), polling; what still has not reported
 // when the time is up is reported by the check (TextNotReported), not waited on forever
 async function waitForText(page, selector, ms) {
   const end = Date.now() + Math.max(0, ms);
@@ -81,7 +82,9 @@ async function waitForText(page, selector, ms) {
     const missing = await page.evaluate((sel) => Array.from(document.querySelectorAll(sel)).filter((el) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
-      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && !el.hasAttribute('data-ui-text-px');
+      // an element with its own text node is measured from its font; only a drawn one reports
+      const ownText = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0);
+      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && !ownText && !el.hasAttribute('data-ui-text-px');
     }).length, selector);
     if (missing === 0 || Date.now() >= end) return missing;
     await page.waitForTimeout(250);
@@ -118,7 +121,7 @@ for (const [sname, prepare] of scenarios) for (const v of viewports) {
     process.exit(3);
   }
   if (config.scroll_through) await scrollThrough(page, v);
-  if (config.text_elements) await waitForText(page, config.text_elements, config.text_wait_ms ?? 30000);
+  await waitForText(page, ['[data-ui-text]', config.text_elements].filter(Boolean).join(', '), config.text_wait_ms ?? 30000);
   const report = await collectFrame(page, { roles: config.roles || {}, probe: config.probe, textElements: config.text_elements });
   const file = path.join(args.out, `${name}.json`);
   fs.writeFileSync(file, JSON.stringify(report, null, 1));
