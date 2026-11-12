@@ -296,6 +296,14 @@ jobs:
       - name: Identifier moves (tests)
         working-directory: ALICE-LOL
         run: python3 scripts/test_id_move_check.py
+      # every tracked Cargo.lock takes each alice-* crate by git and with the same source as the other
+      # locks (scripts/lock_sources_check.py, shared with the other ALICE crates; exemptions in
+      # scripts/lock_sources.toml); no lock read fails
+      - name: Lock sources and agreement across workspaces (test, then check)
+        working-directory: ALICE-LOL
+        run: |
+          python3 scripts/test_lock_sources_check.py
+          python3 scripts/lock_sources_check.py
       - name: Identifier moves (the release compared with)
         working-directory: ALICE-LOL
         id: id-base

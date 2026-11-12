@@ -96,6 +96,8 @@ step "eol.yml / line endings (tests, then check)"
 python3 scripts/test_check_eol.py
 python3 scripts/check_eol.py
 CARGO_TERM_COLOR=always python3 scripts/test_id_move_check.py
+python3 scripts/test_lock_sources_check.py
+python3 scripts/lock_sources_check.py
 python3 scripts/id_move_check.py
 
 step "ci.yml / clippy: Clippy"
