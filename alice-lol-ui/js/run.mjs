@@ -9,7 +9,8 @@
 //   the checker; see `alice_lol_ui::frame::FrameConfig`), and `scenarios` { name: { checks } }
 //   for a scenario that runs other checks than the project's; `launch` { channel, args } for the
 //   browser (software GL for WebGL canvases), `scroll_through` (scroll the page before collecting)
-//   and `text_elements` (a selector of elements that draw text and must report its size).
+//   and `text_elements` (a selector of elements that draw text and must report its size; the run
+//   waits up to `text_wait_ms`, default 30000, for them to report before collecting).
 // - scenario: a module exporting `scenarios` { name: async (page, viewport, base) => {} }, each
 //   bringing the page to one state to check (a selected part, a cleared stage, ...), or a single
 //   `prepare(page, viewport, base)` (scenario `default`).
@@ -71,6 +72,22 @@ const browser = await chromium.launch({
 
 // `scroll_through`: scroll the page to the bottom one screen at a time and back before collecting,
 // so content drawn when it comes into view (a canvas drawn on intersection) is drawn
+// `text_elements` with `text_wait_ms` (default 30000): wait until every visible element the
+// selector marks reports its drawn size (`data-ui-text-px`), polling; what still has not reported
+// when the time is up is reported by the check (TextNotReported), not waited on forever
+async function waitForText(page, selector, ms) {
+  const end = Date.now() + Math.max(0, ms);
+  for (;;) {
+    const missing = await page.evaluate((sel) => Array.from(document.querySelectorAll(sel)).filter((el) => {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && !el.hasAttribute('data-ui-text-px');
+    }).length, selector);
+    if (missing === 0 || Date.now() >= end) return missing;
+    await page.waitForTimeout(250);
+  }
+}
+
 async function scrollThrough(page, v) {
   const step = Math.max(1, Math.floor(v.h * 0.8));
   for (let i = 0; i < 400; i++) {
@@ -101,6 +118,7 @@ for (const [sname, prepare] of scenarios) for (const v of viewports) {
     process.exit(3);
   }
   if (config.scroll_through) await scrollThrough(page, v);
+  if (config.text_elements) await waitForText(page, config.text_elements, config.text_wait_ms ?? 30000);
   const report = await collectFrame(page, { roles: config.roles || {}, probe: config.probe, textElements: config.text_elements });
   const file = path.join(args.out, `${name}.json`);
   fs.writeFileSync(file, JSON.stringify(report, null, 1));
