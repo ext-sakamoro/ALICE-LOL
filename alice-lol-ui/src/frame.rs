@@ -13,14 +13,17 @@
 //!   one of its descendants) on top.
 //! - [`FrameCheck::HitTarget`]: every interactive item's hit rect has a shorter side of at least
 //!   [`FrameLaw::min_touch_target`]: on a phone the static law's touch target
-//!   ([`UiLaw`](crate::UiLaw), 44 / 48 CSS px), with a mouse WCAG 2.2 SC 2.5.8's 24 CSS px.
+//!   ([`UiLaw`](crate::UiLaw), 44 / 48 CSS px), with a mouse WCAG 2.2 SC 2.5.8's 24 CSS px; a
+//!   link inside a sentence is exempt (the inline exception of SC 2.5.8).
 //! - [`FrameCheck::ControlCover`]: a control or `panel` outside an overlay covers at most
 //!   [`FrameLaw::max_control_cover`] of the area of any `subject` or `trajectory` item (a sheet
 //!   is meant to cover the scene, so its buttons are not counted).
 //! - [`FrameCheck::ControlOverlap`]: no two interactive hit rects intersect.
 //! - [`FrameCheck::Text`]: no text item (`readout`, `hint`, `control` with text) overflows its box,
 //!   and no two text items intersect unless one contains the other.
-//! - [`FrameCheck::Offscreen`]: every item other than `scene` lies inside the viewport.
+//! - [`FrameCheck::Offscreen`]: the page is not laid out wider than the screen (when the report
+//!   knows the screen width), and every item other than `scene` fits the viewport across; down, a
+//!   pinned item (fixed / sticky), or any item of a page that does not scroll.
 //! - [`FrameCheck::ChromeShare`]: the union of `chrome` items covers at most
 //!   [`FrameLaw::max_chrome_share`] of the viewport (separate maxima for phone and desktop).
 
@@ -50,6 +53,14 @@ pub struct Viewport {
     /// viewport's size decides phone or desktop
     #[cfg_attr(feature = "serde", serde(default))]
     pub coarse: Option<bool>,
+    /// whether the page scrolls vertically (its content is taller than the viewport): what lies
+    /// below the fold is reachable, so only pinned items have to fit vertically
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub scrolls_y: bool,
+    /// the width of the screen in CSS px (`screen.width`), when known: a page laid out wider than
+    /// the screen is zoomed out to fit, so everything on it is drawn smaller than measured
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub screen_w: Option<f32>,
 }
 
 /// The text box of a text-bearing DOM item (its scroll and client sizes)
@@ -67,6 +78,10 @@ pub struct TextBox {
 }
 
 /// One item on screen: a DOM element or an item a canvas reported through its probe
+// the flags are independent observations of one element measured by the collector (takes input,
+// inside an overlay, pinned, inline in text), not states of a machine: a flat record matches the
+// report's JSON
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 pub struct FrameItem {
@@ -91,6 +106,15 @@ pub struct FrameItem {
     /// whether the item is inside a visible overlay (a sheet or dialog meant to cover the scene)
     #[cfg_attr(feature = "serde", serde(default))]
     pub in_overlay: bool,
+    /// whether the item (or an ancestor) is pinned to the viewport (CSS position fixed or sticky):
+    /// it does not scroll with the page, so it has to fit the viewport
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub pinned: bool,
+    /// whether the item is a link inside a sentence (displayed inline, its parent holding text of
+    /// its own): WCAG 2.2 SC 2.5.8 exempts such a target from the size minimum (its size is set
+    /// by the line height of the text around it)
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub inline_text: bool,
 }
 
 /// A point sampled inside an overlay: what was on top there
@@ -241,6 +265,13 @@ pub enum FrameViolation {
         /// the intersection's area in CSS px²
         area: f32,
     },
+    /// the page is laid out wider than the screen (the browser zooms it out to fit)
+    PageWiderThanScreen {
+        /// the layout width in CSS px
+        layout_w: f32,
+        /// the screen width in CSS px
+        screen_w: f32,
+    },
     /// an item lies partly or wholly outside the viewport
     Offscreen {
         /// the item
@@ -269,7 +300,9 @@ impl FrameViolation {
             Self::ControlCovers { .. } => Some(FrameCheck::ControlCover),
             Self::ControlsOverlap { .. } => Some(FrameCheck::ControlOverlap),
             Self::TextOverflows { .. } | Self::TextOverlaps { .. } => Some(FrameCheck::Text),
-            Self::Offscreen { .. } => Some(FrameCheck::Offscreen),
+            Self::Offscreen { .. } | Self::PageWiderThanScreen { .. } => {
+                Some(FrameCheck::Offscreen)
+            }
             Self::ChromeTooLarge { .. } => Some(FrameCheck::ChromeShare),
         }
     }
@@ -278,9 +311,10 @@ impl FrameViolation {
     #[must_use]
     pub fn ids(&self) -> Vec<&str> {
         match self {
-            Self::NothingCompared(_) | Self::UnknownVersion(_) | Self::ChromeTooLarge { .. } => {
-                vec![]
-            }
+            Self::NothingCompared(_)
+            | Self::UnknownVersion(_)
+            | Self::ChromeTooLarge { .. }
+            | Self::PageWiderThanScreen { .. } => vec![],
             Self::OverlayCovered {
                 overlay, covering, ..
             } => {
@@ -331,6 +365,10 @@ impl core::fmt::Display for FrameViolation {
                 content[0], content[1], boxed[0], boxed[1]
             ),
             Self::TextOverlaps { a, b, area } => write!(f, "text: {a} and {b} overlap by {area:.0} px²"),
+            Self::PageWiderThanScreen { layout_w, screen_w } => write!(
+                f,
+                "offscreen: the page is laid out {layout_w:.0} px wide on a {screen_w:.0} px screen (zoomed out to fit)"
+            ),
             Self::Offscreen { id, rect } => write!(
                 f,
                 "offscreen: {id} at [{:.0}, {:.0}, {:.0}, {:.0}] is not inside the viewport",
@@ -502,7 +540,11 @@ impl FrameLaw {
     fn hit_target(&self, report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
         let min = self.min_touch_target(self.is_phone(report.viewport));
         let mut n = 0;
-        for item in report.items.iter().filter(|i| i.interactive) {
+        for item in report
+            .items
+            .iter()
+            .filter(|i| i.interactive && !i.inline_text)
+        {
             let Some(hit) = item.hit else { continue };
             n += 1;
             let side = crate::det_math::min(hit[2], hit[3]);
@@ -651,11 +693,25 @@ fn text(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
 
 fn offscreen(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
     let vp = report.viewport;
-    let screen = [0.0, 0.0, vp.w, vp.h];
     let mut n = 0;
+    if let Some(screen_w) = vp.screen_w {
+        n += 1;
+        if vp.w > screen_w + EDGE_EPS {
+            out.push(FrameViolation::PageWiderThanScreen {
+                layout_w: vp.w,
+                screen_w,
+            });
+        }
+    }
     for i in report.items.iter().filter(|i| i.role != "scene") {
         n += 1;
-        if !contains(screen, i.rect) {
+        // across, every item has to fit (a page does not scroll sideways by design); down, only
+        // a pinned item, or any item of a page that does not scroll
+        let down = !vp.scrolls_y || i.pinned;
+        let fits_across = i.rect[0] >= -EDGE_EPS && i.rect[0] + i.rect[2] <= vp.w + EDGE_EPS;
+        let fits_down =
+            !down || (i.rect[1] >= -EDGE_EPS && i.rect[1] + i.rect[3] <= vp.h + EDGE_EPS);
+        if !(fits_across && fits_down) {
             out.push(FrameViolation::Offscreen {
                 id: i.id.clone(),
                 rect: i.rect,
@@ -831,6 +887,8 @@ mod tests {
             interactive,
             text: None,
             in_overlay: false,
+            pinned: false,
+            inline_text: false,
         }
     }
 
@@ -864,6 +922,8 @@ mod tests {
                 h: 844.0,
                 dpr: 3.0,
                 coarse: None,
+                scrolls_y: false,
+                screen_w: None,
             },
             items,
             samples,
@@ -957,6 +1017,26 @@ mod tests {
     }
 
     #[test]
+    fn a_link_inside_a_sentence_is_exempt_from_the_target_size() {
+        let in_text = FrameItem {
+            inline_text: true,
+            ..item("p>a", "control", [40.0, 300.0, 60.0, 18.0], true)
+        };
+        let alone = item("li>a", "control", [40.0, 400.0, 60.0, 18.0], true);
+        let v = only(FrameCheck::HitTarget).check(&report(vec![in_text, alone], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::HitTargetTooSmall {
+                id: "li>a".into(),
+                side: 18.0,
+                min: 44.0
+            }]
+        );
+        // the exempt link is not compared
+        assert_eq!(v.compared, vec![(FrameCheck::HitTarget, 1)]);
+    }
+
+    #[test]
     fn the_target_minimum_is_44_on_a_phone_and_24_with_a_mouse() {
         // a 33.6 px desktop button: under the touch target, over WCAG 2.5.8's 24 px
         let button = item("#b", "control", [0.0, 0.0, 120.0, 33.6], true);
@@ -970,6 +1050,8 @@ mod tests {
             h: 720.0,
             dpr: 1.0,
             coarse: None,
+            scrolls_y: false,
+            screen_w: None,
         };
         assert!(only(FrameCheck::HitTarget).check(&r).passed());
         // the pointer decides over the size: a large touch screen is held to the touch target
@@ -1093,6 +1175,58 @@ mod tests {
     }
 
     #[test]
+    fn below_the_fold_of_a_scrolling_page_is_reachable_but_a_pinned_item_must_fit() {
+        let section = item("#section", "readout", [20.0, 1500.0, 300.0, 40.0], false);
+        let banner = FrameItem {
+            pinned: true,
+            ..item("#consent", "control", [37.0, 700.0, 300.0, 191.0], true)
+        };
+        let wide = item("#wide", "readout", [0.0, 1200.0, 480.0, 40.0], false);
+        let mut r = report(vec![section, banner, wide], vec![]);
+        // a page that does not scroll: everything has to fit
+        let ids = |v: &FrameVerdict| -> Vec<String> {
+            v.violations
+                .iter()
+                .filter_map(|x| match x {
+                    FrameViolation::Offscreen { id, .. } => Some(id.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            ids(&only(FrameCheck::Offscreen).check(&r)),
+            ["#section", "#consent", "#wide"]
+        );
+        // a scrolling page: the section below the fold is fine, the pinned banner past the bottom
+        // is not, and the over-wide item fails across
+        r.viewport.scrolls_y = true;
+        assert_eq!(
+            ids(&only(FrameCheck::Offscreen).check(&r)),
+            ["#consent", "#wide"]
+        );
+    }
+
+    #[test]
+    fn a_page_laid_out_wider_than_the_screen_fails() {
+        let button = item("#b", "control", [10.0, 10.0, 60.0, 48.0], true);
+        let mut r = report(vec![button], vec![]);
+        r.viewport.screen_w = Some(390.0);
+        // laid out at the screen width: fits
+        let v = only(FrameCheck::Offscreen).check(&r);
+        assert!(v.passed());
+        assert_eq!(v.compared, vec![(FrameCheck::Offscreen, 2)]);
+        // laid out 521 px wide on a 390 px screen: the browser zooms the page out
+        r.viewport.w = 521.0;
+        assert_eq!(
+            only(FrameCheck::Offscreen).check(&r).violations,
+            vec![FrameViolation::PageWiderThanScreen {
+                layout_w: 521.0,
+                screen_w: 390.0
+            }]
+        );
+    }
+
+    #[test]
     fn chrome_share_uses_the_union_and_the_phone_or_desktop_maximum() {
         // two overlapping header rows: union 390 x 200 of 390 x 844 = 23.7 % on a phone
         let rows = vec![
@@ -1115,6 +1249,8 @@ mod tests {
             h: 720.0,
             dpr: 1.0,
             coarse: None,
+            scrolls_y: false,
+            screen_w: None,
         };
         assert!(only(FrameCheck::ChromeShare).check(&desk).passed());
         desk.items[0].rect[3] = 60.0;

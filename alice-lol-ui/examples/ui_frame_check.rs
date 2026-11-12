@@ -17,6 +17,8 @@ fn item(id: &str, role: &str, rect: [f32; 4], interactive: bool) -> FrameItem {
         interactive,
         text: None,
         in_overlay: false,
+        pinned: false,
+        inline_text: false,
     }
 }
 
@@ -36,6 +38,8 @@ fn main() {
             h: 844.0,
             dpr: 3.0,
             coarse: Some(true),
+            scrolls_y: false,
+            screen_w: Some(390.0),
         },
         items: vec![
             item("header", "chrome", [0.0, 0.0, 390.0, 200.0], false),

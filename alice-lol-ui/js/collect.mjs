@@ -89,6 +89,12 @@ export async function collectFrame(page, cfg = {}) {
         const r = shown(el);
         const textual = el.childNodes.length > 0 && (el.textContent || '').trim().length > 0;
         const interactive = role === 'control' || el.matches(controlSelector) || takesPointer(el);
+        // pinned to the viewport (fixed / sticky, itself or an ancestor): it does not scroll away
+        let pinned = false;
+        for (let a = el; a && a !== document.documentElement; a = a.parentElement) {
+          const pos = getComputedStyle(a).position;
+          if (pos === 'fixed' || pos === 'sticky') { pinned = true; break; }
+        }
         // inside a visible overlay (a sheet or dialog meant to cover the scene)
         const inOverlay = Array.from(roleOf).some(([o, r]) => r === 'overlay' && o !== el && o.contains(el) && visible(o));
         items.push({
@@ -103,6 +109,10 @@ export async function collectFrame(page, cfg = {}) {
             : null,
           layer: null,
           in_overlay: inOverlay,
+          pinned,
+          // a link inside a sentence: displayed inline, its parent holding text of its own
+          inline_text: el.tagName === 'A' && getComputedStyle(el).display === 'inline' && !!el.parentElement
+            && Array.from(el.parentElement.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0),
         });
         if (role === 'overlay') overlays.push(el);
       }
@@ -158,7 +168,16 @@ export async function collectFrame(page, cfg = {}) {
         }
       }
 
-      return { version, viewport: { w: vw, h: vh, dpr: window.devicePixelRatio, coarse: matchMedia('(pointer: coarse)').matches }, probe: probeState, items, samples };
+      return { version, viewport: {
+          w: vw,
+          h: vh,
+          dpr: window.devicePixelRatio,
+          coarse: matchMedia('(pointer: coarse)').matches,
+          // the page scrolls down: what lies below the fold is reachable
+          scrolls_y: (document.scrollingElement || document.documentElement).scrollHeight > vh + 1,
+          // the screen width: a page laid out wider than this is zoomed out to fit
+          screen_w: window.screen.width,
+        }, probe: probeState, items, samples };
     },
     { roles: cfg.roles || {}, probe: cfg.probe || '__uiProbe', grid: cfg.grid || 7, controlSelector: CONTROL_SELECTOR, version: REPORT_VERSION },
   );
