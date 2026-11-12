@@ -1362,6 +1362,27 @@ mod tests {
     }
 
     #[test]
+    fn the_minimum_itself_passes_and_just_under_it_fails() {
+        let at = |px: f32| FrameItem {
+            text_px: Some(px),
+            ..item("#t", "readout", [0.0, 0.0, 300.0, 20.0], false)
+        };
+        assert!(only(FrameCheck::TextSize)
+            .check(&report(vec![at(12.0)], vec![]))
+            .passed());
+        assert_eq!(
+            only(FrameCheck::TextSize)
+                .check(&report(vec![at(11.9)], vec![]))
+                .violations,
+            vec![FrameViolation::TextTooSmall {
+                id: "#t".into(),
+                px: 11.9,
+                min: 12.0
+            }]
+        );
+    }
+
+    #[test]
     fn a_zoomed_out_page_draws_its_text_smaller_than_its_layout_size() {
         // 14 px in a 521 px layout on a 390 px screen: 14 * 390 / 521 = 10.48 px on the screen
         let text = FrameItem {
