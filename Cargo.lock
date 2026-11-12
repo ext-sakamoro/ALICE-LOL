@@ -30,8 +30,8 @@ dependencies = [
 
 [[package]]
 name = "alice-llm"
-version = "4.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-LLM?branch=main#e0a59641af211e6adeb08790d32884831f51f104"
+version = "5.0.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-LLM?branch=main#e8b8a1dfacf2fb707e9447f81cd2d55cf6c98773"
 dependencies = [
  "alice-det-math",
  "rayon",

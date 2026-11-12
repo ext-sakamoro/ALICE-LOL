@@ -39,7 +39,7 @@ alice-sign = { git = "https://github.com/ext-sakamoro/ALICE-Sign", branch = "mai
 # Optional; only pulled in when `llm-bridge` is enabled. Exposes the
 # GBNF parser + FSM + sampling helpers so downstream can drive
 # grammar-constrained decoding without depending on alice-llm directly.
-alice-llm = { git = "https://github.com/ext-sakamoro/ALICE-LLM", branch = "main", version = ">=4, <6", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
+alice-llm = { git = "https://github.com/ext-sakamoro/ALICE-LLM", branch = "main", version = "5", default-features = false, features = ["grammar", "simd", "parallel"], optional = true }
 # Optional; only pulled in when `physics` feature is enabled Provides
 # FilamentDb / fillet_stress / beam_stress / layer_adhesion / thermal_stress
 # access to stdlib::hardsurface primitives so material-backed stress checks
