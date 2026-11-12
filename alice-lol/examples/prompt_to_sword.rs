@@ -76,10 +76,16 @@ fn main() {
         eprintln!("failed to load tokenizer from GGUF");
         process::exit(1);
     });
-    let mut model = Llama3Model::from_gguf(&gguf).unwrap_or_else(|| {
-        eprintln!("failed to load model from GGUF");
-        process::exit(1);
-    });
+    // llm-5-typed-error: `into_iter().next()` reads both the 4.x `Option` and the 5.x `Result`
+    // while the requirement spans both; it drops the 5.x `LoadError` until the pin moves to 5 and
+    // this becomes `unwrap_or_else(|e| ..)` with the error printed
+    let mut model = Llama3Model::from_gguf(&gguf)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| {
+            eprintln!("failed to load model from GGUF");
+            process::exit(1);
+        });
     println!(
         "  loaded in {}ms — vocab={}",
         t0.elapsed().as_millis(),
