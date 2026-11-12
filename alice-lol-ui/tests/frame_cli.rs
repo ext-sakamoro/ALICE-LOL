@@ -178,6 +178,7 @@ fn a_config_selects_checks_and_json_names_the_items() {
     assert_eq!(code, 0);
     assert!(out.contains("touch_target {phone, desktop}"), "{out}");
     assert!(out.contains("min_text_px"), "{out}");
+    assert!(out.contains("text_elements"), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

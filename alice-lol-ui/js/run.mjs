@@ -7,7 +7,9 @@
 // - config (`ui-frame.json`, per project): `viewports` [{ name, w, h, touch? }], `roles`
 //   { selector: role }, `probe` (default `__uiProbe`), the law's `checks` / thresholds (read by
 //   the checker; see `alice_lol_ui::frame::FrameConfig`), and `scenarios` { name: { checks } }
-//   for a scenario that runs other checks than the project's.
+//   for a scenario that runs other checks than the project's; `launch` { channel, args } for the
+//   browser (software GL for WebGL canvases), `scroll_through` (scroll the page before collecting)
+//   and `text_elements` (a selector of elements that draw text and must report its size).
 // - scenario: a module exporting `scenarios` { name: async (page, viewport, base) => {} }, each
 //   bringing the page to one state to check (a selected part, a cleared stage, ...), or a single
 //   `prepare(page, viewport, base)` (scenario `default`).
@@ -59,7 +61,31 @@ const now = new Date();
 const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
 const label = args.label || path.basename(process.cwd());
 
-const browser = await chromium.launch();
+// `launch`: { channel, args } for Playwright (a canvas drawn with WebGL needs a GL: e.g.
+// { "channel": "chromium", "args": ["--use-gl=angle", "--use-angle=swiftshader"] })
+const launch = config.launch || {};
+const browser = await chromium.launch({
+  ...(launch.channel ? { channel: launch.channel } : {}),
+  ...(Array.isArray(launch.args) ? { args: launch.args } : {}),
+});
+
+// `scroll_through`: scroll the page to the bottom one screen at a time and back before collecting,
+// so content drawn when it comes into view (a canvas drawn on intersection) is drawn
+async function scrollThrough(page, v) {
+  const step = Math.max(1, Math.floor(v.h * 0.8));
+  for (let i = 0; i < 400; i++) {
+    const at = await page.evaluate((dy) => {
+      const el = document.scrollingElement || document.documentElement;
+      const before = el.scrollTop;
+      el.scrollTop = before + dy;
+      return { moved: el.scrollTop !== before };
+    }, step);
+    await page.waitForTimeout(120);
+    if (!at.moved) break;
+  }
+  await page.evaluate(() => { (document.scrollingElement || document.documentElement).scrollTop = 0; });
+  await page.waitForTimeout(300);
+}
 let status = 0;
 // one viewport at a time: prepare, collect, check, outline, screenshot, close (a page left open
 // keeps animating and slows the next viewport's scenario)
@@ -74,7 +100,8 @@ for (const [sname, prepare] of scenarios) for (const v of viewports) {
     await browser.close();
     process.exit(3);
   }
-  const report = await collectFrame(page, { roles: config.roles || {}, probe: config.probe });
+  if (config.scroll_through) await scrollThrough(page, v);
+  const report = await collectFrame(page, { roles: config.roles || {}, probe: config.probe, textElements: config.text_elements });
   const file = path.join(args.out, `${name}.json`);
   fs.writeFileSync(file, JSON.stringify(report, null, 1));
   console.log(`[frame-check] ${name}: ${report.items.length} items, ${report.samples.length} overlay samples, probe ${report.probe}`);

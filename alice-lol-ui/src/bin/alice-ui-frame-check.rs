@@ -84,7 +84,8 @@ fn print_law(law: &FrameLaw) {
 const USAGE: &str = "usage: alice-ui-frame-check [--config ui-frame.json] [--json] <report.json>...
        alice-ui-frame-check run --config ui-frame.json --scenario <module> --url <base> --out <dir> [--shots <dir>] [--label <name>]
 config (ui-frame.json): checks, touch_target {phone, desktop}, max_control_cover, chrome_share {phone, desktop},
-  min_text_px, phone_max_short_side, scenarios {name: {checks}}; run also reads viewports [{name, w, h, touch}], roles {selector: role}, probe
+  min_text_px, phone_max_short_side, scenarios {name: {checks}}; run also reads viewports [{name, w, h, touch}], roles {selector: role}, probe,
+  launch {channel, args}, scroll_through, text_elements
 exit: 0 pass, 1 a violation (a check that compared nothing included), 2 unreadable input, 3 (run) a scenario failed";
 
 /// the options and report paths (`None`: `--config` without a path, reported)

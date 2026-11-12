@@ -130,6 +130,14 @@ pub struct FrameItem {
     /// why the item has its own minimum text size
     #[cfg_attr(feature = "serde", serde(default))]
     pub text_min_reason: Option<String>,
+    /// the item draws text and has to report its size (a canvas the page marks as a text
+    /// canvas): without [`FrameItem::text_px`] the check reports it instead of skipping it
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub text_expected: bool,
+    /// how many lines of text the item draws (a canvas that wraps its text): its box has to be at
+    /// least this many lines of [`FrameItem::text_px`] tall, or the drawing is squashed
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub text_lines: Option<u32>,
 }
 
 /// A point sampled inside an overlay: what was on top there
@@ -312,6 +320,21 @@ pub enum FrameViolation {
         /// the item
         id: String,
     },
+    /// an item that draws text did not report its size (a canvas that did not draw, or does not
+    /// report): its text was not measured
+    TextNotReported {
+        /// the item
+        id: String,
+    },
+    /// a box shorter than the lines of text drawn in it: the drawing is squashed
+    TextSquashed {
+        /// the item
+        id: String,
+        /// its height in layout CSS px
+        height: f32,
+        /// the height its lines need (lines times the text size)
+        needed: f32,
+    },
     /// the chrome takes more of the viewport than allowed
     ChromeTooLarge {
         /// the share of the viewport (0..=1)
@@ -337,9 +360,10 @@ impl FrameViolation {
                 Some(FrameCheck::Offscreen)
             }
             Self::ChromeTooLarge { .. } => Some(FrameCheck::ChromeShare),
-            Self::TextTooSmall { .. } | Self::TextMinWithoutReason { .. } => {
-                Some(FrameCheck::TextSize)
-            }
+            Self::TextTooSmall { .. }
+            | Self::TextMinWithoutReason { .. }
+            | Self::TextNotReported { .. }
+            | Self::TextSquashed { .. } => Some(FrameCheck::TextSize),
         }
     }
 
@@ -362,7 +386,9 @@ impl FrameViolation {
             | Self::TextOverflows { id, .. }
             | Self::Offscreen { id, .. }
             | Self::TextTooSmall { id, .. }
-            | Self::TextMinWithoutReason { id } => {
+            | Self::TextMinWithoutReason { id }
+            | Self::TextNotReported { id }
+            | Self::TextSquashed { id, .. } => {
                 vec![id.as_str()]
             }
             Self::ControlCovers {
@@ -418,6 +444,14 @@ impl core::fmt::Display for FrameViolation {
             Self::TextMinWithoutReason { id } => write!(
                 f,
                 "text-size: {id} sets its own minimum text size without a reason"
+            ),
+            Self::TextNotReported { id } => write!(
+                f,
+                "text-size: {id} draws text but did not report its size (not drawn, or not reporting)"
+            ),
+            Self::TextSquashed { id, height, needed } => write!(
+                f,
+                "text-size: {id} is {height:.1} px tall, its lines need {needed:.1} px (squashed)"
             ),
             Self::ChromeTooLarge { share, max } => write!(
                 f,
@@ -661,8 +695,27 @@ impl FrameLaw {
         };
         let mut n = 0;
         for item in &report.items {
-            let Some(px) = item.text_px else { continue };
+            let Some(px) = item.text_px else {
+                if item.text_expected {
+                    n += 1;
+                    out.push(FrameViolation::TextNotReported {
+                        id: item.id.clone(),
+                    });
+                }
+                continue;
+            };
             n += 1;
+            if let Some(lines) = item.text_lines {
+                #[allow(clippy::cast_precision_loss, reason = "a line count, far below 2^24")]
+                let needed = lines as f32 * px;
+                if item.rect[3] + EDGE_EPS < needed {
+                    out.push(FrameViolation::TextSquashed {
+                        id: item.id.clone(),
+                        height: item.rect[3],
+                        needed,
+                    });
+                }
+            }
             let reason = item
                 .text_min_reason
                 .as_deref()
@@ -998,6 +1051,8 @@ mod tests {
             text_px: None,
             text_min_px: None,
             text_min_reason: None,
+            text_expected: false,
+            text_lines: None,
         }
     }
 
@@ -1422,6 +1477,50 @@ mod tests {
         assert!(!only(FrameCheck::Offscreen)
             .check(&report(vec![placed, ok], vec![]))
             .passed());
+    }
+
+    #[test]
+    fn a_text_canvas_that_did_not_report_is_a_violation_not_a_skip() {
+        let canvas = FrameItem {
+            text_expected: true,
+            ..item("#h2", "text", [0.0, 0.0, 300.0, 40.0], false)
+        };
+        let v = only(FrameCheck::TextSize).check(&report(vec![canvas.clone()], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::TextNotReported { id: "#h2".into() }]
+        );
+        assert_eq!(v.compared, vec![(FrameCheck::TextSize, 1)]);
+        let drawn = FrameItem {
+            text_px: Some(16.0),
+            ..canvas
+        };
+        assert!(only(FrameCheck::TextSize)
+            .check(&report(vec![drawn], vec![]))
+            .passed());
+    }
+
+    #[test]
+    fn a_box_shorter_than_its_lines_is_squashed() {
+        // 3 lines of 16 px need 48 px: 48 passes, 47 is squashed
+        let at = |h: f32| FrameItem {
+            text_px: Some(16.0),
+            text_lines: Some(3),
+            ..item("#p", "text", [0.0, 0.0, 300.0, h], false)
+        };
+        assert!(only(FrameCheck::TextSize)
+            .check(&report(vec![at(48.0)], vec![]))
+            .passed());
+        assert_eq!(
+            only(FrameCheck::TextSize)
+                .check(&report(vec![at(47.0)], vec![]))
+                .violations,
+            vec![FrameViolation::TextSquashed {
+                id: "#p".into(),
+                height: 47.0,
+                needed: 48.0
+            }]
+        );
     }
 
     #[test]

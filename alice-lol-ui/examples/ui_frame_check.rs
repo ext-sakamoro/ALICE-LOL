@@ -22,6 +22,8 @@ fn item(id: &str, role: &str, rect: [f32; 4], interactive: bool) -> FrameItem {
         text_px: None,
         text_min_px: None,
         text_min_reason: None,
+        text_expected: false,
+        text_lines: None,
     }
 }
 

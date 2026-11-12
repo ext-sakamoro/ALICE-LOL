@@ -10,7 +10,10 @@
 //   in CSS px. A page without a probe contributes no probe items (the report says so).
 // - text sizes: every visible element holding text of its own carries `text_px` (font size x
 //   transform scale, or the page's own `data-ui-text-px` for canvas / SDF text); elements with no
-//   role become `text` items, read only by the text-size check.
+//   role become `text` items, read only by the text-size check. An element marked as drawing text
+//   (`data-ui-text`, or the config's `text_elements` selector) that reports no size carries
+//   `text_expected` with no `text_px` (a violation, not a skip); `data-ui-text-lines` is how many
+//   lines it draws (its box has to hold them).
 // - layer samples: a grid of points inside every visible overlay; for each, the element on top
 //   (document.elementFromPoint) and whether it belongs to the overlay.
 //
@@ -25,11 +28,11 @@ const CONTROL_SELECTOR = 'button, a[href], input, select, textarea, [role="butto
 
 /**
  * @param {import('playwright').Page} page
- * @param {{ roles?: Record<string, string>, probe?: string, grid?: number }} [cfg]
+ * @param {{ roles?: Record<string, string>, probe?: string, grid?: number, textElements?: string }} [cfg]
  */
 export async function collectFrame(page, cfg = {}) {
   return page.evaluate(
-    ({ roles, probe, grid, controlSelector, version }) => {
+    ({ roles, probe, grid, controlSelector, version, textElements }) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const rectOf = (r) => [r.left, r.top, r.width, r.height];
@@ -95,7 +98,11 @@ export async function collectFrame(page, cfg = {}) {
       // is `data-ui-text-min` with the reason in `data-ui-text-reason`
       const ownText = (el) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0);
       const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+      // an element that draws text and has to report its size (`data-ui-text`, or the project's
+      // `text_elements` selector): without `data-ui-text-px` it is reported, not skipped
+      const expectsText = (el) => el.hasAttribute('data-ui-text') || (!!textElements && el.matches(textElements));
       const textSize = (el) => {
+        const expected = expectsText(el);
         const reported = num(el.getAttribute('data-ui-text-px'));
         let px = reported;
         if (px === null && ownText(el)) {
@@ -105,11 +112,16 @@ export async function collectFrame(page, cfg = {}) {
           const b = el.getBoundingClientRect();
           if (w > 0 && b.width > 0) px *= b.width / w;
         }
-        if (px === null || !Number.isFinite(px)) return null;
+        if (px === null || !Number.isFinite(px)) {
+          return expected ? { text_px: null, text_expected: true } : null;
+        }
+        const lines = num(el.getAttribute('data-ui-text-lines'));
         return {
           text_px: px,
           text_min_px: num(el.getAttribute('data-ui-text-min')),
           text_min_reason: el.getAttribute('data-ui-text-reason'),
+          text_expected: expected,
+          text_lines: lines !== null && Number.isInteger(lines) && lines > 0 ? lines : null,
         };
       };
 
@@ -154,7 +166,7 @@ export async function collectFrame(page, cfg = {}) {
       for (const el of document.body.querySelectorAll('*')) {
         if (roleOf.has(el) || !visible(el)) continue;
         const size = textSize(el);
-        if (!size || !(ownText(el) || el.hasAttribute('data-ui-text-px'))) continue;
+        if (!size) continue;
         items.push({
           id: idOf(el), source: 'dom', role: 'text', rect: rectOf(shown(el)), hit: null,
           interactive: false, text: null, layer: null, ...size,
@@ -226,6 +238,6 @@ export async function collectFrame(page, cfg = {}) {
           screen_w: window.screen.width,
         }, probe: probeState, items, samples };
     },
-    { roles: cfg.roles || {}, probe: cfg.probe || '__uiProbe', grid: cfg.grid || 7, controlSelector: CONTROL_SELECTOR, version: REPORT_VERSION },
+    { roles: cfg.roles || {}, probe: cfg.probe || '__uiProbe', grid: cfg.grid || 7, controlSelector: CONTROL_SELECTOR, version: REPORT_VERSION, textElements: cfg.textElements || '' },
   );
 }
