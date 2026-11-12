@@ -363,7 +363,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | `alice-lol-macro` | `lol!` proc-macro |
 | `alice-lol` | ランタイムパーサ、逆変換、シェーダ変換と出力の関数、法則の検査、intent IR、stdlib の形状 |
 | `alice-lol-layout` | byte layout の法則: binary 形式を 1 度宣言し、bytes をその宣言で読む・検査する (`no_std`、`alice_lol::layout` として再公開) |
-| `alice-lol-ui` | UI 形状 (button、card、panel など)、flex / grid / stack レイアウト、コントラストの法則 |
+| `alice-lol-ui` | UI 形状 (button、card、panel など)、flex / grid / stack レイアウト、コントラストの法則、描画された画面の検査 (重なり順、触れる大きさ、重なり、文字、上部の帯の割合、`alice-ui-frame-check`) |
 | `alice-lol-datagen` | 自己検査つきの合成 (caption, LOL) ペア生成 |
 | `alice-world-auditor-types` | 法則の検査器とプランナが共有する goal と判定の型 |
 | `alice-world-auditor` | `alice-physics` の world 上のプランナ、3 値判定 |

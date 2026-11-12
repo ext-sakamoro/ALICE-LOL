@@ -19,6 +19,8 @@ alice-det-math = { git = "https://github.com/ext-sakamoro/ALICE-DetMath", branch
 alice-lol = { path = "../alice-lol", version = "0.5.0", default-features = false }
 alice-sdf = { git = "https://github.com/ext-sakamoro/ALICE-SDF", branch = "main", version = "7", default-features = false }
 glam = "0.29"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 # alice-lol は現状 direct use なし (doc comment のみ)、public API contract として保持
 # (downstream consumer が alice-lol-ui + alice-lol 併用する時に version alignment を強制)
@@ -27,6 +29,16 @@ ignored = ["alice-lol"]
 
 [features]
 default = []
+# reading a frame report (JSON from js/collect.mjs) and the `alice-ui-frame-check` command
+serde = ["dep:serde", "dep:serde_json"]
+
+[[bin]]
+name = "alice-ui-frame-check"
+required-features = ["serde"]
+
+[[test]]
+name = "frame_cli"
+required-features = ["serde"]
 
 [[example]]
 name = "ui_button_showcase"
@@ -36,3 +48,6 @@ name = "ui_card_grid"
 
 [[example]]
 name = "ui_form_layout"
+
+[[example]]
+name = "ui_frame_check"
