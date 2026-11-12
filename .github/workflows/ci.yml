@@ -91,6 +91,15 @@ jobs:
       # (feature で module が消える / target の登録が外れると `cargo test` は green のまま、
       # 複数 target の合計では 1 つの空振りが他の件数に隠れる) law::/research_law を使う
       # test file が scripts/law_tests.sh に無い場合も fail する
+      # alice-lol-ui's frame law with its report reader (feature `serde`, off by default, so the
+      # plain Test above runs neither the config test nor the command on the measured reports in
+      # tests/fixtures/frame); fewer tests run than listed fails (0 compared is a failure)
+      - name: Frame law (alice-lol-ui serde, lib + command on measured reports)
+        if: matrix.label == ''
+        working-directory: ALICE-LOL
+        shell: bash
+        run: scripts/ui_frame_tests.sh
+
       - name: Law oracles (each target ran at least one test)
         if: matrix.label == ''
         working-directory: ALICE-LOL

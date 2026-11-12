@@ -92,6 +92,8 @@ dependencies = [
  "alice-lol",
  "alice-sdf",
  "glam",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

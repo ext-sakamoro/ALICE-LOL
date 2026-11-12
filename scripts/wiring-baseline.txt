@@ -2,7 +2,6 @@
 dead_code alice-lol/examples/complete_pipeline_output.rs 1
 dead_code alice-lol/src/law.rs 2
 unwired alice-lol-datagen/src/sample.rs::parse_sdf
-unwired alice-lol-ui/src/law.rs::strict_wcag_aaa
 unwired alice-lol-ui/src/layout.rs::padding
 unwired alice-lol-ui/src/layout.rs::stack
 unwired alice-lol-ui/src/primitives.rs::square
