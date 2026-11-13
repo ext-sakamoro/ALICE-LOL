@@ -96,31 +96,31 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "1d98f8836427ace4ac67da0df8a85c688e57d087db96332a4b0c142a7530f28e",
+        "ffb23a0fcec1c1722cbfdbf6380f59cce742a0bd6f873b6ef20f151685e56407",
     ),
     (
         "node_to_3mf",
-        "cc1688805cbde8744c5493cd6656c98ff8033c9fe33977880727424ac11cbbbc",
+        "79e6238e1305d474915b8be181ca527ca7acb243a9ac17bd2d5c124a0b325d78",
     ),
     (
         "node_to_fbx",
-        "d418cb66cebd46b5b68d42a7736c432ce93409717851c5e9c13a93697d5b99dd",
+        "4d4793747eddcb2f5de85b908dbf5cb2eb1f9ab85f403492cf2fa3e54c44e418",
     ),
     (
         "node_to_stl_dual_contouring",
-        "bc4a2d976562117a954504fa072dd1b31c03e47a858af838029b2dbf0ef41f03",
+        "57b64c1c34679967ee112243fa95313f0837aa95838ad8621d58b8fabfbbdbe0",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "be28263437c5377aff4250da8321e822934dce5e783bea8cc75a75fed243283c",
+        "37d4f1bda01a1b608ab1f8aea79ed197dabc4b4e892cec2713d2a26854797f8b",
     ),
     (
         "node_to_fbx_roblox",
-        "c063ba6cec281838596082c10547fcb3a3967dde77dc668576dbe9abe34a3f95",
+        "3023808dcb730d6df78543eb39e483693a63880c31086e3ba6f781977782eb0f",
     ),
     (
         "node_to_obj_roblox",
-        "cf33da2e1cd4b8d3e9da88dcc687de56e75b37dcaa8c353e2c92a62e36a01f60",
+        "e82092b03a46d51fea5a20da8ae1f4637eebe664477e2bc2b10a3a7337241037",
     ),
 ];
 
