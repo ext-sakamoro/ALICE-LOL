@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- One page holding one example of every property the collector reports (collect.test.mjs). -->
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  #sheet { position: absolute; left: 20px; top: 300px; width: 300px; height: 200px; background: #eee; }
+  #knob { position: fixed; left: 150px; top: 380px; width: 22px; height: 22px; background: #c00; z-index: 5; cursor: pointer; }
+  #clipbar { position: absolute; left: 0; top: 0; width: 200px; height: 40px; overflow: hidden; }
+  #clipped { position: absolute; left: 180px; top: 0; width: 60px; height: 40px; }
+  #panel { position: absolute; left: 0; top: 60px; width: 300px; height: 120px; overflow: auto; }
+  #handle { position: absolute; left: 320px; top: 60px; width: 30px; height: 30px; cursor: grab; }
+  #texts { position: absolute; left: 0; top: 520px; width: 360px; }
+  #scaled { transform: scale(0.5); transform-origin: 0 0; width: 300px; }
+</style></head><body>
+<div id="clipbar"><button id="clipped">cut</button></div>
+<div id="panel"><div style="height:100px"></div><button id="half" style="height:48px;width:120px">half</button></div>
+<div id="handle"></div>
+<div id="sheet" data-ui="overlay"><button id="inside">in sheet</button></div>
+<div id="knob" role="button" tabindex="0"></div>
+<div id="texts">
+  <p id="body16">Body text</p>
+  <p id="tiny6" style="font-size:6px">tiny</p>
+  <div id="scaled">scaled</div>
+  <canvas id="drawn" data-ui-text data-ui-text-px="9" data-ui-text-lines="2" width="10" height="10" style="display:block;width:200px;height:12px"></canvas>
+  <canvas id="silent" data-ui-text width="10" height="10" style="display:block;width:200px;height:20px"></canvas>
+  <p id="caption" style="font-size:10px" data-ui-text-min="9" data-ui-text-reason="legal caption">caption</p>
+  <p id="sentence">Read <a id="inlink" href="#">the terms</a> first.</p>
+</div>
+</body></html>

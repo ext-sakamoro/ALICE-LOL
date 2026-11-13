@@ -1,0 +1,6 @@
+# the paths that run .github/workflows/ui-collector.yml (scripts/changed_paths.py decide)
+# on.pull_request.paths of the workflow must list the same patterns in the same order
+# (scripts/changed_paths.py sync)
+alice-lol-ui/js/**
+.github/workflows/ui-collector.yml
+.github/paths/ui-collector.txt

@@ -1,0 +1,111 @@
+name: UI frame collector
+
+# The frame collector (alice-lol-ui/js/collect.mjs) on a real page in headless Chromium:
+# alice-lol-ui/js/test/collect.test.mjs opens fixtures/frame.html and checks each property the
+# frame law reads (clip by an overflow ancestor, a scroll container's control, a pointer-taking
+# element, overlay membership and samples, text sizes and reports, inline links, pointer and
+# screen width). The law itself is tested in Rust (scripts/ui_frame_tests.sh). Fewer tests run
+# than MIN_TESTS fails.
+
+on:
+  push:
+    # no paths here: a branch created at a SHA another ref already has gets an empty
+    # diff from GitHub's filter and the run is skipped; the changes job below compares
+    # with merge-base(origin/main) instead (patterns: .github/paths/ui-collector.txt)
+    branches: [main, 'ci/**']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'alice-lol-ui/js/**'
+      - '.github/workflows/ui-collector.yml'
+      - '.github/paths/ui-collector.txt'
+  workflow_dispatch:
+
+# the job reads the repository only
+permissions:
+  contents: read
+
+# a superseded run on a branch is cancelled; on main each commit has a group of its own
+# and is never cancelled (a cancelled main commit is unverified)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # which files changed: a new or force-pushed branch is compared with merge-base(origin/main),
+  # another push with before..after, a pull request with base...head; schedule and manual
+  # runs always run; any error runs (fail-closed) — scripts/changed_paths.py
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after || github.sha }}
+          CREATED: ${{ github.event.created }}
+          FORCED: ${{ github.event.forced }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/changed_paths.py decide --event "$EVENT"
+          --before "$BEFORE" --after "$AFTER" --created "$CREATED" --forced "$FORCED"
+          --base "$PR_BASE" --head "$PR_HEAD"
+          --patterns-file .github/paths/ui-collector.txt
+
+  collector:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    name: Collector on fixtures (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MIN_TESTS: 7
+      PLAYWRIGHT_VERSION: 1.64.1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Playwright and its headless Chromium (outside the repository)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pw"
+          cd "$RUNNER_TEMP/pw"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "playwright@$PLAYWRIGHT_VERSION"
+          npx playwright install --with-deps chromium-headless-shell
+      - name: collect.test.mjs (fewer than MIN_TESTS passing fails)
+        working-directory: alice-lol-ui/js/test
+        env:
+          PLAYWRIGHT_FROM: ${{ runner.temp }}/pw
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap collect.test.mjs | tee collector.tap
+          pass=$(grep -E '^# pass [0-9]+' collector.tap | awk '{print $3}')
+          fail=$(grep -E '^# fail [0-9]+' collector.tap | awk '{print $3}')
+          echo "collector tests: pass ${pass:-0}, fail ${fail:-?} (want >= $MIN_TESTS, 0)"
+          [ "${fail:-1}" = "0" ] && [ "${pass:-0}" -ge "$MIN_TESTS" ]
+
+  # one result for the workflow: run=true needs every job above to succeed, run=false needs
+  # them skipped (a skipped, cancelled or failed job after run=true is red)
+  gate:
+    name: Gate
+    if: always()
+    needs: [changes, collector]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/changed_paths.py gate --needs-json "$NEEDS"
