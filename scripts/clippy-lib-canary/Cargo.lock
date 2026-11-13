@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#001694ccbe9bf0cdcd93f3e6b45e27779b77a41d"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#6269efc2280a74301c91139117d5d01a5eca60df"
 dependencies = [
  "bytemuck",
  "wide",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#518e9986295875780ecfbacc958e8cdef08899e4"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#0df82712d4341a161ff000db46f60c17cd98531b"
 dependencies = [
  "alice-det-math",
  "alice-zip",
@@ -22,7 +22,6 @@ dependencies = [
  "bincode",
  "bytemuck",
  "crc32fast",
- "futures-channel",
  "glam",
  "log",
  "pollster",
@@ -37,8 +36,8 @@ dependencies = [
 
 [[package]]
 name = "alice-zip"
-version = "0.11.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#8d6e132ded0d804e2b3d6a6614396782aa0577b6"
+version = "0.12.0"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#6c5fc8b08f9c5f7232e072f12fea88b9999df310"
 dependencies = [
  "alice-det-math",
  "libm",
@@ -341,15 +340,6 @@ name = "foreign-types-shared"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
-
-[[package]]
-name = "futures-channel"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
-dependencies = [
- "futures-core",
-]
 
 [[package]]
 name = "futures-core"
