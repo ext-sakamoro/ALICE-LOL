@@ -163,7 +163,6 @@ python3 scripts/root_artifacts.py
 python3 scripts/test_license_check.py
 python3 scripts/test_fuzz_runs.py
 python3 scripts/license_check.py
-python3 scripts/test_published_source_check.py
 python3 scripts/test_package_integrity.py
 
 step "law-readme-block.yml: README ALICE-Law block (tests, then the check the job runs, at the block's ALICE-Law pin)"
@@ -552,8 +551,7 @@ step "security-audit.yml / audit: Run cargo audit"
 # dormant: ci.yml / registry-consumer runs only when dispatched; PREFLIGHT_DORMANT=1 runs its steps here as a
 # dispatch would
 if [[ "${PREFLIGHT_DORMANT:-0}" == 1 ]]; then
-  step "ci.yml / registry-consumer: published source + every macro keyword against crates.io"
-  python3 scripts/published_source_check.py
+  step "ci.yml / registry-consumer: every macro keyword against crates.io"
   python3 scripts/license_check.py --package
   REGISTRY_CONSUMER_ALLOW_DIRTY=1 scripts/registry_consumer.sh
   python3 scripts/package_integrity.py --member alice-lol --patches > target/patches-fresh.txt

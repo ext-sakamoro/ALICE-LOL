@@ -347,11 +347,6 @@ jobs:
           workspaces: ALICE-LOL
 
 
-      # workspace 内の依存 (path + version) の版要求が解決する公開版と、手元の src が同じ
-      - name: published source (workspace 内の依存が公開版と同じ src)
-        working-directory: ALICE-LOL
-        run: python3 scripts/published_source_check.py
-
       - name: license-check (各 crate の package の一覧に LICENSE-Proprietary / TRADEMARK_NOTICE)
         working-directory: ALICE-LOL
         run: python3 scripts/license_check.py --package
@@ -381,9 +376,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: published-source oracle (検査器自身の試験)
-        working-directory: ALICE-LOL
-        run: python3 scripts/test_published_source_check.py
       # the preflight mirror of law-readme-block.yml (the check itself runs there, here its tests)
       - name: README ALICE-Law block preflight check (tests)
         working-directory: ALICE-LOL

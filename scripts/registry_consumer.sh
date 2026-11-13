@@ -11,8 +11,7 @@
 #     `alice-sdf` fails to compile;
 #   - the lock of that build has one version of each `alice-*` crate.
 # The macro is taken from its package (a `[patch]`), because `alice-lol` requires the
-# version this workspace is about to publish; that the published macro is the same source
-# as the local one is `scripts/published_source_check.py`.
+# version this workspace is about to publish.
 #
 # It also rebuilds the same packaged crate from an isolated copy with no Cargo.lock
 # reachable by any ancestor walk from its own extracted directory: a real crates.io

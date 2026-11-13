@@ -155,6 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/alice-siblings` の ALICE-Sign の pin を 8a1b00d8 から bb79209e に上げた (ALICE-Identity / ALICE-Channel / ALICE-Sync と同じ alice-sign、`Cargo.lock` の alice-sign と alice-det-math は 1 版ずつ) 挙動の変更なし
 
 ### Removed
+- `scripts/published_source_check.py` と試験、CI (`registry-consumer` job の step と `checker-tests` job の試験の step) と preflight の step を外した crate を crates.io に公開しないことにしたので、この検査は公開版と比べる対象が 0 件のまま変わらない (比べる対象が無い検査は残さない)
 
 - 破壊的変更: `law_id::LOL_SEMANTICS_BY_DET_MATH` / `semantics_id_for` / `known_semantics_id` と `geometry_id::LOL_GEOMETRY_SEMANTICS_BY_DET_MATH` / `geometry_semantics_id_for` / `known_geometry_semantics_id` (alice-det-math の世代ごとの表) 識別子が呼ぶ関数の pin の fold になったので、世代の表は無い 保存された識別子は `check_lol_semantics` / `check_lol_geometry_semantics` で分類する
 - 破壊的変更: workspace の member `alice-lol-humanoid` を外した
