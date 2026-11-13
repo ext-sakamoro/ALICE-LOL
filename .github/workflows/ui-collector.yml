@@ -65,7 +65,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     name: Collector on fixtures (Chromium)
-    runs-on: ubuntu-latest
+    # a fixed image: Playwright installs no Chromium on ubuntu-latest (26.04); move deliberately
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       MIN_TESTS: 7
