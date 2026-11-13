@@ -91,6 +91,10 @@ step "ci.yml / test: Build examples [features=--features roblox]"
 ( export CARGO_TERM_COLOR="always"; cargo build --examples --features roblox )
 
 step "ci.yml / clippy: Identifier moves (tests, then against the published release)"
+step "ci.yml: Upstream previous identifiers (test, then whole-list uses only)"
+python3 scripts/test_upstream_previous_ids_check.py
+python3 scripts/upstream_previous_ids_check.py
+
 step "eol.yml / line endings (tests, then check)"
 # text files are LF in the index and the working tree (.github/workflows/eol.yml, shared by the ALICE crates)
 python3 scripts/test_check_eol.py
