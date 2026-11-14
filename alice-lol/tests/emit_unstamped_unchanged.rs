@@ -21,7 +21,12 @@ include!("data/parse_corpus_bbb6539.rs");
 /// that the reading did not change was shown by dumping every result before and after the
 /// rename (`tests/parse_corpus_dump.rs`) and comparing the dumps with `scripts/compare_corpus_dumps.py`
 /// (equal once the old names are put back, error positions moved by the shorter names)
-const DIGEST: &str = "ae71911661b784455c5266fbcacae7fd28e2d1688551e752f60c0dbaf665fd9f";
+/// Re-recorded a second time when `rounded_box(hx, hy, hz, r)` was given the outer half-extents (as for
+/// `box3d`) and the stdlib's rounded-box helper, `counterbore` and `mug` were corrected: the dump of
+/// `tests/parse_corpus_dump.rs` before and after differs in 285 lines, every one an entry whose
+/// construct builds a rounded box (directly, through the helper or as the emitted `RoundedBox`), a
+/// counterbore or the mug
+const DIGEST: &str = "755040551e406a7ec0b323181a26e53373e8dfa711d9d2a9016ce6f9ec4edcdc";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {

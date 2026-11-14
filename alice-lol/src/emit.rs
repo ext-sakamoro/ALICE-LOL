@@ -244,12 +244,25 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             // LOL の rounded_box の数値は外寸の半分 (= half_extents + round_radius、parse が half - r に戻す)
             #[allow(clippy::cast_possible_truncation)]
             let outer = |h: f32| (f64::from(h) + f64::from(*round_radius)) as f32;
-            let o = Vec3::new(
-                outer(half_extents.x),
-                outer(half_extents.y),
-                outer(half_extents.z),
-            );
-            prim!("rounded_box", v3(o), f(*round_radius))
+            // parse は r を最小の外寸の半分で抑えるので、半寸法がどれか負 (退化した形) か r が負の node は
+            // rounded_box では書けない その時は同じ値を返す `round(r, box3d(half))` で書く
+            // (|box(half)| - r で、RoundedBox の距離と同じ式)
+            if half_extents.min_element() >= 0.0 && *round_radius >= 0.0 {
+                let o = Vec3::new(
+                    outer(half_extents.x),
+                    outer(half_extents.y),
+                    outer(half_extents.z),
+                );
+                prim!("rounded_box", v3(o), f(*round_radius))
+            } else {
+                let _ = write!(
+                    out,
+                    "round({}, box3d({}))",
+                    f(*round_radius),
+                    v3(*half_extents)
+                );
+                Ok(())
+            }
         }
         SdfNode::Cylinder {
             radius,

@@ -438,7 +438,7 @@ With compartments: subtract dividers
 units(mm, print,
 subtract(
   rounded_box(42, 63, 16, 4.0),
-  translate(0, 0, 2, rounded_box(39, 60, 14, 1.0))
+  translate(0, 0, 3, rounded_box(39, 60, 15, 1.0))
 )
 )
 ```
