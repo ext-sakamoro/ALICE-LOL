@@ -5633,13 +5633,19 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
             Vec3::new(0.0, cavity_offset_y, -spec.wall_thickness * 0.5),
         );
         let mut tier = subtract(outer, cavity);
-        for k in 0..drains {
-            let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (n_f32(k) + 1.0));
-            let drain = translate(
-                cylinder(drain_r, drain_hy),
-                Vec3::new(x, drain_offset_y, -spec.wall_thickness * 0.5),
-            );
-            tier = subtract(tier, drain);
+        // 水抜き穴は 1 つの和集合にして 1 回で引く (順に引くと木の深さが穴の数だけ伸び、debug build の
+        // transpiler の再帰が stack を使い切る 値は max(a, -b, -c) で同じ)
+        let drain_holes: Vec<SdfNode> = (0..drains)
+            .map(|k| {
+                let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (n_f32(k) + 1.0));
+                translate(
+                    cylinder(drain_r, drain_hy),
+                    Vec3::new(x, drain_offset_y, -spec.wall_thickness * 0.5),
+                )
+            })
+            .collect();
+        if let Some(holes) = super::balanced_union_fold(drain_holes) {
+            tier = subtract(tier, holes);
         }
         let tier_placed = translate(tier, Vec3::new(0.0, tier_y, tier_z));
         cutters.push(tier_placed);
