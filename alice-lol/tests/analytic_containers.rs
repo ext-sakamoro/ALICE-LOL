@@ -154,3 +154,24 @@ fn tp_holder_mount_holes_go_through_the_backplate() {
 fn razor_holder_mount_hole_goes_through_the_backplate() {
     check("razor_holder(12, 22, 4.5)", 2.85);
 }
+
+/// The shower caddy's shelves have a front wall and walls of the specified 3 mm (runtime_parser
+/// default) up to the rim
+#[test]
+fn shower_caddy_shelves_have_their_specified_walls() {
+    check("shower_caddy(2, 250, 120)", 2.85);
+}
+
+/// The clamp rack is one part (hooks joined to the backplate) and its 5 mm backplate (runtime_parser
+/// default) keeps its thickness round the mount holes
+#[test]
+fn clamp_rack_is_one_part_with_its_specified_backplate() {
+    check("clamp_rack(5, 30, 150)", 3.9);
+}
+
+/// The drawer organizer's walls and dividers (1.5 / 1.2 mm in the default chopsticks set) reach the
+/// rim at full thickness (the cavities' rounded top edges left a thin lip at the rim)
+#[test]
+fn drawer_organizer_walls_reach_the_rim_at_full_thickness() {
+    check("drawer_organizer()", 1.2);
+}
