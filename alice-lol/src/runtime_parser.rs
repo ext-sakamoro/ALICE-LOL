@@ -743,11 +743,11 @@ impl<'a> Parser<'a> {
                 })
             }
             "rounded_box" => {
+                // hx / hy / hz は外寸の半分 (box3d と同じ)、角は r で内側に丸める
                 let (hx, hy, hz, r) = self.parse_4f()?;
-                Ok(SdfNode::RoundedBox {
-                    half_extents: Vec3::new(hx, hy, hz),
-                    round_radius: r,
-                })
+                Ok(crate::stdlib::hardsurface::pattern_sdf::rounded_box(
+                    hx, hy, hz, r,
+                ))
             }
             "cylinder" => {
                 let (r, h) = self.parse_2f()?;

@@ -60,9 +60,9 @@ const fn n_f32(n: u32) -> f32 {
 /// 外寸を渡しているので、内側の寸法 `half - r` を渡して外寸をちょうど `(hx, hy, hz)` にする `r` は最小の
 /// 半寸法を超えない (超えると内側の寸法が負になる)
 ///
-/// LOL の primitive `rounded_box(hx, hy, hz, r)` (`runtime_parser.rs`) は `SdfNode::RoundedBox` をそのまま作るので、
-/// その外寸は `hx + r` (この helper とは数値の意味が違う)
-fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
+/// LOL の primitive `rounded_box(hx, hy, hz, r)` (`runtime_parser.rs`) もこの関数で作る (数値の意味は 1 つ:
+/// 外寸の半分、`box3d` と同じ) `emit` は `half_extents + round_radius` を書いて戻す
+pub(crate) fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
     let half = Vec3::new(hx, hy, hz);
     let r = crate::det_math::max(
         crate::det_math::min(r, crate::det_vec::min_element(half)),

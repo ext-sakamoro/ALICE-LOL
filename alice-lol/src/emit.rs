@@ -240,7 +240,17 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
         SdfNode::RoundedBox {
             half_extents,
             round_radius,
-        } => prim!("rounded_box", v3(*half_extents), f(*round_radius)),
+        } => {
+            // LOL の rounded_box の数値は外寸の半分 (= half_extents + round_radius、parse が half - r に戻す)
+            #[allow(clippy::cast_possible_truncation)]
+            let outer = |h: f32| (f64::from(h) + f64::from(*round_radius)) as f32;
+            let o = Vec3::new(
+                outer(half_extents.x),
+                outer(half_extents.y),
+                outer(half_extents.z),
+            );
+            prim!("rounded_box", v3(o), f(*round_radius))
+        }
         SdfNode::Cylinder {
             radius,
             half_height,
