@@ -2,7 +2,7 @@
 law mochi_in_the_rain
 kind world
 claim a viscoelastic block that hardly bounces, under light rain
-claim measured conditions are separate materials (mochi_48h_30c, mochi_5d_19c, mochi_5d_30c); mochi is the one the scene uses, and it combines them by an assumed factor
+claim measured conditions are separate materials (mochi_commercial, mochi_48h_30c, mochi_5d_19c, mochi_5d_30c); mochi is the one the scene uses, fresh mochi, and its frequency shape is carried over by an assumed factor
 param raining switch = on
 param strength number = 4 range 0 100
 source density, friction and bounce are assumed for every mochi material below and were not measured
@@ -44,13 +44,25 @@ material mochi_5d_30c dynamic youngs at 30 storage 10 ^ 7.06 loss 10 ^ 5.77
 material mochi_5d_30c dynamic youngs at 100 storage 10 ^ 7.21 loss 10 ^ 6.3
 material mochi_5d_30c dynamic basis measured
 #
-# the scene's mochi: Isono's level (48 h) with Horiuchi's frequency shape (5 days, 30 C)
-source mochi is an assumption: the 48 h mochi is about 8.5 times softer than the 5 day mochi (E 1.27e6 Pa at 0.1 Hz against E' 1.08e7 Pa at 3 Hz, both near 30 C), so the 5 day table is scaled by level = E(48 h) / E'(5 d, 3 Hz); that the shape carries over between the two states was not measured; E(48 h) = 2 G (1 + nu) uses the assumed Poisson's ratio 0.49, so the level carries that assumption too
-let level = 2 * 427000 * (1 + 0.49) / 10 ^ 7.035
+# Chuang and Yeh, Journal of Food Engineering 74(3):314-323 (2006), "Rheological characteristics and texture attributes of glutinous rice cakes (mochi)", abstract as recorded by AGRIS (National Agricultural Library)
+source mochi_commercial: commercial glutinous rice cakes, water content 18 % to 55 % by the sugar added (water and sugar both soften it); dynamic oscillatory measurement, shear modulus G' 0.32 to 2.98 kPa and complex viscosity eta* 0.06 to 0.51 kPa s over the products; the abstract gives no temperature, frequency or strain, so eta* is not a dynamic row here (a row needs its frequency)
+source mochi_commercial takes the stiffest product, G' = 2980 Pa
+material mochi_commercial density = 1100
+material mochi_commercial friction = 0.6
+material mochi_commercial bounce = 0.2
+material mochi_commercial shear_modulus = 2980
+material mochi_commercial shear_modulus basis measured
+material mochi_commercial poisson_ratio = 0.49
+material mochi_commercial poisson_ratio basis assumed
+#
+# the scene's mochi: fresh mochi (chosen 2026-11-14), at the commercial products' stiffest, with Horiuchi's frequency shape (5 days, 30 C)
+source mochi is fresh mochi: Horiuchi (1995, above) finds the dynamic rigidity G' about 1e3 Pa at 60 to 90 C, measured as soon as it was made, while stored mochi is hundreds of kPa (mochi_48h_30c); the scene takes mochi_commercial's 2980 Pa, the stiffest of the soft products, within a factor of 3 of the hot mochi
+source the frequency shape is an assumption: Horiuchi's 5 day table is scaled by level = E(fresh) / E'(5 d, 3 Hz); that the shape carries over from stored to fresh mochi was not measured; E(fresh) = 2 G (1 + nu) uses the assumed Poisson's ratio 0.49, so the level carries that assumption too
+let level = 2 * 2980 * (1 + 0.49) / 10 ^ 7.035
 material mochi density = 1100
 material mochi friction = 0.6
 material mochi bounce = 0.2
-material mochi shear_modulus = 427000
+material mochi shear_modulus = 2980
 material mochi shear_modulus basis measured
 material mochi poisson_ratio = 0.49
 material mochi poisson_ratio basis assumed

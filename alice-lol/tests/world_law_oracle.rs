@@ -63,12 +63,18 @@ fn the_values_are_the_ones_the_law_states() {
     );
     assert_eq!(isono.dynamic.as_ref().unwrap().basis, Some(Basis::Measured));
     assert_eq!(m.sdf_friction, None);
-    assert_eq!(m.shear_modulus, Some(427_000.0));
+    // the scene's mochi is fresh mochi at the commercial products' stiffest (Chuang and Yeh 2006)
+    assert_eq!(m.shear_modulus, Some(2_980.0));
     assert_eq!(m.poisson_ratio, Some(0.49));
     assert_eq!(m.shear_modulus_basis, Some(Basis::Measured));
     assert_eq!(m.poisson_ratio_basis, Some(Basis::Assumed));
-    // E = 2 G (1 + nu) = 2 * 427000 * 1.49
-    assert!((m.youngs_modulus().unwrap() - 1_272_460.0).abs() < 1e-6);
+    // E = 2 G (1 + nu) = 2 * 2980 * 1.49
+    assert!((m.youngs_modulus().unwrap() - 8_880.4).abs() < 1e-9);
+    // the commercial products' stiffest is its own measured material, and the stored 48 h one stays as it was
+    let commercial = w.material("mochi_commercial").unwrap();
+    assert_eq!(commercial.shear_modulus, Some(2_980.0));
+    assert_eq!(commercial.shear_modulus_basis, Some(Basis::Measured));
+    assert_eq!(isono.shear_modulus, Some(427_000.0));
     assert!(w.rain().on);
     assert_eq!(w.rain().rate_mm_per_hour, 4.0);
     assert!(w.material("nothing").is_none());
@@ -579,18 +585,18 @@ material: mochi
   1100.000 kg in a cubic metre, 1.100 times water, sinks in water
   grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
   bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
-  shear modulus 4.2700e5 Pa (measured)
+  shear modulus 2.9800e3 Pa (measured)
   Poisson's ratio 0.490 (assumed, not measured)
-  Young's modulus 1.2725e6 Pa, derived as 2 G (1 + Poisson's ratio), not measured
+  Young's modulus 8.8804e3 Pa, derived as 2 G (1 + Poisson's ratio), not measured
   dynamic youngs modulus (E' and E'', assumed, not measured) stated at 4 frequencies 3.0000e0..1.0000e2 Hz; between them interpolated on log-log axes, outside them not stated
-    3.0000e0 Hz: storage 1.2725e6 Pa, loss 4.2135e4 Pa, loss tangent 0.0331
-    1.0000e1 Hz: storage 1.3952e6 Pa, loss 4.8378e4 Pa, loss tangent 0.0347
-    3.0000e1 Hz: storage 1.3479e6 Pa, loss 6.9126e4 Pa, loss tangent 0.0513
-    1.0000e2 Hz: storage 1.9039e6 Pa, loss 2.3423e5 Pa, loss tangent 0.1230
+    3.0000e0 Hz: storage 8.8804e3 Pa, loss 2.9406e2 Pa, loss tangent 0.0331
+    1.0000e1 Hz: storage 9.7372e3 Pa, loss 3.3762e2 Pa, loss tangent 0.0347
+    3.0000e1 Hz: storage 9.4066e3 Pa, loss 4.8243e2 Pa, loss tangent 0.0513
+    1.0000e2 Hz: storage 1.3287e4 Pa, loss 1.6347e3 Pa, loss tangent 0.1230
   adhesion 2.0000e0 N (assumed, not measured): the pull at which a hand's hold lets go
   contact area 2.0000e-4 m^2 (assumed, not measured)
-  grip stiffness 5.1815e3 N/m, derived: the material (2.6721e4 N/m) and the hand (6.4279e3 N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = 7.9788e-3 m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness
-  grip stiffness over the skin's stated spread 4.0000e4..3.1000e5 Pa: 8.0443e2..5.1815e3 N/m
+  grip stiffness 1.8123e2 N/m, derived: the material (1.8649e2 N/m) and the hand (6.4279e3 N/m) in series, each 2 a E / (1 - Poisson's ratio^2) for a flat contact of radius a = 7.9788e-3 m on an elastic half-space (Boussinesq), valid while a is much smaller than the body's thickness
+  grip stiffness over the skin's stated spread 4.0000e4..3.1000e5 Pa: 1.5225e2..1.8123e2 N/m
 material: mochi_48h_30c
   1100.000 kg in a cubic metre, 1.100 times water, sinks in water
   grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
@@ -620,6 +626,13 @@ material: mochi_5d_30c
     1.0000e1 Hz: storage 1.1885e7 Pa, loss 4.1210e5 Pa, loss tangent 0.0347
     3.0000e1 Hz: storage 1.1482e7 Pa, loss 5.8884e5 Pa, loss tangent 0.0513
     1.0000e2 Hz: storage 1.6218e7 Pa, loss 1.9953e6 Pa, loss tangent 0.1230
+material: mochi_commercial
+  1100.000 kg in a cubic metre, 1.100 times water, sinks in water
+  grip: sliding 0.600, at rest 0.600, the share of its weight it takes to move it
+  bounce 0.200: dropped from 1 m on the same material, it comes back up 0.040 m
+  shear modulus 2.9800e3 Pa (measured)
+  Poisson's ratio 0.490 (assumed, not measured)
+  Young's modulus 8.8804e3 Pa, derived as 2 G (1 + Poisson's ratio), not measured
 hand: skin Young's modulus 3.1000e5 Pa (assumed, not measured, reported values spread over 4.0000e4..3.1000e5 Pa), Poisson's ratio 0.480 (assumed, not measured)
 rain: on, 4.000 mm an hour, 0.001111 kg of water on each square metre each second
 "
@@ -646,7 +659,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "9446884f2d8eee535eca7ef5f35fd89b47df68cba9ef34e4cd52fd0d0cce9976"
+        "93b383d77be0d512faefaa424182de1c20160a72e330479f990b5d204ee745c2"
     );
     let w = law.bind(&[("strength", Number(7.5))]).unwrap();
     // 7.5/3600 as its exact f64 bits
@@ -683,25 +696,26 @@ fn the_semantics_id_is_the_fold_of_the_measured_pins() {
 
 /// The grip of the mochi law, against the flat circular punch on an elastic half-space
 /// (Boussinesq: `k = 2 a E / (1 - nu^2)`, `a = sqrt(A / pi)`) for the mochi and the skin in series.
-/// Expected values computed by hand from the law text: G = 427000 Pa, nu = 0.49, so
-/// E = 2 G (1 + nu) = 1272460 Pa; A = 2e-4 m^2, a = 7.978845608e-3 m; skin E = 310000 Pa, nu = 0.48
+/// Expected values computed by hand from the law text: G = 2980 Pa (fresh), nu = 0.49, so
+/// E = 2 G (1 + nu) = 8880.4 Pa; A = 2e-4 m^2, a = 7.978845608e-3 m; skin E = 310000 Pa, nu = 0.48
+/// (fresh mochi is softer than the skin: the pair is now nearly the mochi alone)
 #[test]
 fn the_grip_is_two_flat_contacts_in_series() {
     let w = WorldLaw::from_file(MOCHI).unwrap().bind(&[]).unwrap();
     let g = w.grip("mochi").unwrap();
     let close = |got: f64, want: f64| (got - want).abs() <= want * 1e-12;
     assert!(close(g.contact_radius, 0.007_978_845_608_028_654), "{g:?}");
-    assert!(close(g.material_stiffness, 26_721.310_389_241_058), "{g:?}");
+    assert!(close(g.material_stiffness, 186.485_960_093_532_44), "{g:?}");
     assert!(close(g.hand_stiffness, 6_427.864_185_262_168), "{g:?}");
-    assert!(close(g.stiffness, 5_181.454_930_295_214), "{g:?}");
+    assert!(close(g.stiffness, 181.228_147_527_255_57), "{g:?}");
     // in series the pair is softer than either spring and the reciprocals add
-    assert!(g.stiffness < g.hand_stiffness && g.hand_stiffness < g.material_stiffness);
+    assert!(g.stiffness < g.material_stiffness && g.material_stiffness < g.hand_stiffness);
     let reciprocal = 1.0 / g.material_stiffness + 1.0 / g.hand_stiffness;
     assert!(close(1.0 / g.stiffness, reciprocal), "{g:?}");
     assert_eq!(g.adhesion, Some(2.0));
     // over the skin's spread 40..310 kPa: the low end by hand, the high end is the point value
     let (lo, hi) = g.stiffness_spread.unwrap();
-    assert!(close(lo, 804.433_060_376_326_9), "{g:?}");
+    assert!(close(lo, 152.252_835_491_647_35), "{g:?}");
     assert_eq!(hi, g.stiffness);
 }
 
@@ -931,7 +945,7 @@ fn a_dynamic_table_interpolates_on_log_log_axes_inside_its_range_only() {
     }
 }
 
-/// The scene reads `mochi`; it is Horiuchi's 30 C table scaled to Isono's level, stated as an
+/// The scene reads `mochi`; it is Horiuchi's 30 C table scaled to fresh mochi's level, stated as an
 /// assumption, and the measured tables stay as measured, not spliced
 #[test]
 fn the_scene_mochi_is_the_assumed_combination_of_two_measured_states() {
@@ -941,19 +955,22 @@ fn the_scene_mochi_is_the_assumed_combination_of_two_measured_states() {
     let isono = w.material("mochi_48h_30c").unwrap();
     assert_eq!(scene.basis, Some(Basis::Assumed));
     assert_eq!(five_days.basis, Some(Basis::Measured));
-    // level = E(48 h) / E'(5 d, 3 Hz), the same factor on every row and on both moduli
-    let e_48h = 2.0 * 427_000.0 * (1.0 + 0.49);
+    // level = E(fresh) / E'(5 d, 3 Hz), the same factor on every row and on both moduli
+    let e_fresh = 2.0 * 2_980.0 * (1.0 + 0.49);
     // the 5 day 30 C storage modulus at 3 Hz is 10^7.035 Pa = 1.0839e7 Pa
     assert!((five_days.rows[0].storage / 1.0839e7 - 1.0).abs() < 1e-4);
-    let level = e_48h / five_days.rows[0].storage;
-    assert!((level - 0.1174).abs() < 5e-4, "{level}");
+    let level = e_fresh / five_days.rows[0].storage;
+    // 8880.4 / 10^7.035 = 8.1928e-4
+    assert!((level - 8.1928e-4).abs() < 1e-8, "{level}");
     for (s, f) in scene.rows.iter().zip(&five_days.rows) {
         assert_eq!(s.frequency, f.frequency);
         assert!((s.storage / f.storage - level).abs() <= level * 1e-12);
         assert!((s.loss / f.loss - level).abs() <= level * 1e-12);
     }
-    // at 3 Hz the scene's storage modulus is Isono's Young's modulus
-    assert!((scene.rows[0].storage - isono.youngs_modulus().unwrap()).abs() <= e_48h * 1e-12);
+    // at 3 Hz the scene's storage modulus is fresh mochi's Young's modulus
+    let fresh = w.material("mochi").unwrap();
+    assert!((scene.rows[0].storage - fresh.youngs_modulus().unwrap()).abs() <= e_fresh * 1e-12);
+    let _ = isono;
     // the logo's motion, 4 to 15 Hz, is inside the stated range; 0.1 Hz is not, for the scene
     assert!(scene.at(4.0).is_some() && scene.at(15.0).is_some());
     assert_eq!(scene.at(0.1), None);
