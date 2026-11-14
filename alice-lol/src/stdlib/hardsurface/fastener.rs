@@ -319,8 +319,9 @@ pub fn tap_hole(size: MetricSize, depth: f32, accuracy: f32) -> SdfNode {
 
 /// 座ぐり (counterbore) — ソケットキャップ頭が完全に沈む貫通穴
 ///
-/// 構造: 板貫通クリアランス穴 (下段) ∪ 頭径 × 頭高+0.5mm sink margin の cylinder (上段)
+/// 構造: 板貫通クリアランス穴 (下段) ∪ 頭径 × [`counterbore_depth`] の cylinder (上段)
 /// 板は Y=0 中心の厚さ `plate_thickness` を想定、頭は板上面 (Y = +`plate_thickness/2`) から沈む
+/// 深さは頭高 + 0.5 mm、ただし板の下に [`counterbore_floor`] を残す (薄い板では頭が板の上に出る)
 ///
 /// # 使用例
 ///
@@ -332,7 +333,7 @@ pub fn tap_hole(size: MetricSize, depth: f32, accuracy: f32) -> SdfNode {
 #[must_use]
 pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
     let head_dia = size.head_diameter_socket();
-    let bore_depth = size.head_height_socket() + 0.5;
+    let bore_depth = counterbore_depth(size, plate_thickness);
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
     // cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);
@@ -348,6 +349,29 @@ pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
         a: Arc::new(through),
         b: Arc::new(bore_shifted),
     }
+}
+
+/// 座ぐりの下に残す板の最小の厚み (mm): `max(0.5 × 呼び径, 1.2)`
+///
+/// 頭の座面が板を押す力を受ける部分 締結の設計の慣行では、座ぐりの底から板の裏までを呼び径の半分以上残す
+/// (M3 1.5 / M4 2.0 / M5 2.5 / M6 3.0 mm) 小さい呼び径でも 1.2 mm は残す この値は締結の強度の規則で、
+/// プリンタの限界とは独立 (締結の規則で、印刷の設定から導かない)
+#[must_use]
+pub fn counterbore_floor(size: MetricSize) -> f32 {
+    crate::det_math::max(size.nominal_diameter() * 0.5, 1.2)
+}
+
+/// 座ぐりの深さ (mm): 頭高 + 0.5 mm (頭が沈む余裕) で、板の下に [`counterbore_floor`] を残せる深さまで
+///
+/// 厚い板では頭高 + 0.5 mm (頭が 0.5 mm 沈む) 薄い板では床を残すために浅くなり、頭が板の上に
+/// `頭高 - 深さ` だけ出る 板が床より薄い時は 0 (座ぐりなし、貫通穴だけ)
+#[must_use]
+pub fn counterbore_depth(size: MetricSize, plate_thickness: f32) -> f32 {
+    let sink = size.head_height_socket() + 0.5;
+    crate::det_math::max(
+        crate::det_math::min(sink, plate_thickness - counterbore_floor(size)),
+        0.0,
+    )
 }
 
 /// 皿頭沈み (countersink) — ISO 10642 90° 皿頭を完全に沈める貫通穴

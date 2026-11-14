@@ -175,3 +175,9 @@ fn clamp_rack_is_one_part_with_its_specified_backplate() {
 fn drawer_organizer_walls_reach_the_rim_at_full_thickness() {
     check("drawer_organizer()", 1.2);
 }
+
+/// The VESA mount's M4 counterbores on its 5 mm plate keep a 2.0 mm floor (fastener::counterbore_floor)
+#[test]
+fn vesa_mount_counterbores_keep_their_floor() {
+    check("vesa_mount(75, 5, 4)", 2.0);
+}

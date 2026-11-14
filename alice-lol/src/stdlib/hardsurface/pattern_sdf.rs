@@ -8084,8 +8084,10 @@ mod tests {
             fillet_radius: 1.0,
         };
         let tray = drawer_organizer(&spec);
-        // slots 空 → cavities None → outer RoundedBox のまま
-        assert!(matches!(tray, SdfNode::RoundedBox { .. }));
+        // slots 空 → cavities None → 外殻のまま (縁が平らな角丸の箱 = Intersection) 中は材料、外寸の外は空
+        assert!(matches!(tray, SdfNode::Intersection { .. }));
+        assert!(eval::eval(&tray, Vec3::ZERO) < 0.0);
+        assert!(eval::eval(&tray, Vec3::new(spec.width * 0.5 + 0.1, 0.0, 0.0)) > 0.0);
     }
 
     #[test]

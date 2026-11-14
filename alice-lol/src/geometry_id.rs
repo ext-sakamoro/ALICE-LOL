@@ -415,7 +415,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
     (
         "stdlib: transcendental routing through alice_det_math",
-        hex32("e161067d3da77c1ad3449f03a5108f8124e9a352513ad922e99fda7429f50d44"),
+        hex32("1afa100d797e0f472763b89bd8830f470139dd11eff4612afb126624e8835a4e"),
     ),
     (
         "emit: fmt_f32 round-trip fidelity class",
@@ -426,7 +426,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
 /// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` と `tests/semantics_id_from_function_pins.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    hex32("f7b59df6e6db19f7c08f3cc9a10ec73e3ef4170c2008eb833cb9a5d25e4cfaa6");
+    hex32("41c29e6c73afd270a653b779a416b97fff8139eddb1a1770dd43cf1dc8c70791");
 
 /// 以前の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
 ///

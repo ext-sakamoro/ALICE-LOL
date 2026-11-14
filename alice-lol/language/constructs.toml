@@ -187,7 +187,7 @@ construct = [
   { name = "pin_hinge_knuckle",       rule = "name_3f" },
   { name = "rib",                     rule = "name_3f" },
   { name = "bearing_seat",            rule = "name_3f" },
-  { name = "rounded_box",             rule = "name_4f", args = "HHHH" },
+  { name = "rounded_box",             rule = "name_4f", args = "HHHL" },
   { name = "plane",                   rule = "name_4f", args = "RRRL" },
   { name = "helix",                   rule = "name_4f", args = "HHLH" },
   { name = "box_frame",               rule = "name_4f", args = "HHHL" },
