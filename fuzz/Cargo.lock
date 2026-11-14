@@ -54,7 +54,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#0df82712d4341a161ff000db46f60c17cd98531b"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#bed9d564b6ff6c22b5568f7122f8af80b23b3f99"
 dependencies = [
  "alice-det-math",
  "alice-zip",
@@ -77,7 +77,7 @@ dependencies = [
 [[package]]
 name = "alice-zip"
 version = "0.12.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#6c5fc8b08f9c5f7232e072f12fea88b9999df310"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#95ef35acd5ae33bc1dfceaf4d3b74925c50775a4"
 dependencies = [
  "alice-det-math",
  "libm",
