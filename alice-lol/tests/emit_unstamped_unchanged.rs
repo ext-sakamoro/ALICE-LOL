@@ -25,8 +25,11 @@ include!("data/parse_corpus_bbb6539.rs");
 /// `box3d`) and the stdlib's rounded-box helper, `counterbore` and `mug` were corrected: the dump of
 /// `tests/parse_corpus_dump.rs` before and after differs in 285 lines, every one an entry whose
 /// construct builds a rounded box (directly, through the helper or as the emitted `RoundedBox`), a
-/// counterbore or the mug
-const DIGEST: &str = "755040551e406a7ec0b323181a26e53373e8dfa711d9d2a9016ce6f9ec4edcdc";
+/// counterbore or the mug Then `shower_caddy` subtracts its drain holes as one union instead of one at
+/// a time (the tree was too deep for the debug build's transpiler, the value is the same
+/// max(a, -b, -c, ...) since the holes are plain cylinders under a plain union): the dump differs in
+/// the 5 lines of `shower_caddy` only
+const DIGEST: &str = "5485faed304872522af03f6ed90dd41ec715ef7a29b8965e27da5ca294a10cdc";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {
