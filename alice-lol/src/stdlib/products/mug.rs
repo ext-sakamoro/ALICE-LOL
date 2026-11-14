@@ -6,12 +6,10 @@
 //! マグカップ prompt に対して 11 min × 3 attempt で box+cylinder fallback して
 //! garbage 出力する問題を primitive 化で bypass)
 //!
-//! ## 座標系 (ALICE-LOL 慣習、Z-up)
+//! ## 座標系 (`SdfNode::Cylinder` の軸 = Y)
 //!
-//! - 底面は Z = 0 平面
-//! - 円筒中心軸は Z 軸
-//! - 取手は +X 方向に torus (major radius = 15mm、minor = 3mm)
-//! - 取手中心 Z 高さ = height / 2 (中央高さ)
+//! - 円筒の中心軸は Y 軸、原点が高さの中央 (底面は y = -height/2、縁は y = +height/2)
+//! - 取手は +X 方向に torus (major radius = 15mm、minor = 3mm)、中心の高さは y = 0 (中央)
 //!
 //! ## デフォルト値 (実プリント検証済み、Bambu H2D + PLA + 0.2mm layer 想定)
 //!
@@ -29,7 +27,7 @@
 //! - major radius: 15mm — 指 2-3 本入る
 //! - minor radius: 3mm — 印刷可能な最小径 (0.4mm nozzle × 8 line)
 //! - X 位置: dia/2 + `minor_r` (外壁に接する外側)
-//! - Y-axis 回転 (torus は XZ 平面に生成される、Y 軸 90° 回転で YZ 平面 = mug 側面)
+//! - X 軸まわりに 90° 回す (torus は XZ 平面に生成される、回すと XY 平面 = 縦の輪になり、Y 軸の本体の横に付く)
 
 use alice_sdf::SdfNode;
 use glam::Vec3;
@@ -38,8 +36,11 @@ use std::sync::Arc;
 /// 標準壁厚 (mm)、内側くぼみの radius offset
 const DEFAULT_WALL_THICKNESS: f32 = 3.0;
 
-/// 標準底厚 (mm)、subtract cylinder の Z offset
+/// 標準底厚 (mm)
 const DEFAULT_BOTTOM_THICKNESS: f32 = 3.0;
+
+/// くぼみを縁より上に伸ばす量 (mm)、上端を確実に貫通させる (縁に蓋を残さない)
+const TOP_CLEARANCE: f32 = 1.0;
 
 /// 取手 major radius (mm)、指 2-3 本入る手のサイズ
 const DEFAULT_HANDLE_MAJOR_R: f32 = 15.0;
@@ -67,10 +68,10 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
     let outer_r = dia * 0.5;
     let inner_r = outer_r - DEFAULT_WALL_THICKNESS;
     let half_h = height * 0.5;
-    // 内側くぼみ: 底 3mm 残す + 上端は貫通、subtract cylinder の中心 Z を
-    // (bottom_thickness / 2) 上に translate、half_height は (height - bottom) / 2
-    let hollow_z_offset = DEFAULT_BOTTOM_THICKNESS * 0.5;
-    let hollow_half_h = (height - DEFAULT_BOTTOM_THICKNESS).mul_add(0.5, 1.0); // +1mm で上端貫通確保
+    // 内側くぼみ: y = -height/2 + 底厚 から y = +height/2 + TOP_CLEARANCE まで (底を残し、上端は貫通)
+    // 円筒は Y 軸なので、くぼみは Y 方向にだけずらす 中心 = (底厚 + 余り) / 2、半分の高さ = (height - 底厚 + 余り) / 2
+    let hollow_y_offset = (DEFAULT_BOTTOM_THICKNESS + TOP_CLEARANCE) * 0.5;
+    let hollow_half_h = (height - DEFAULT_BOTTOM_THICKNESS + TOP_CLEARANCE) * 0.5;
 
     let outer = Arc::new(SdfNode::Cylinder {
         radius: outer_r,
@@ -82,17 +83,14 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
     });
     let hollow = Arc::new(SdfNode::Translate {
         child: hollow_raw,
-        offset: Vec3::new(0.0, 0.0, hollow_z_offset),
+        offset: Vec3::new(0.0, hollow_y_offset, 0.0),
     });
     let hollow_body = SdfNode::Subtraction {
         a: outer,
         b: hollow,
     };
 
-    // 取手: torus (XZ 平面) を Y 軸 90° 回転で YZ 平面化、X 方向に translate
-    // torus は default で center at origin、XZ 平面上に major_radius 円 tube
-    // Y 軸 90° 回転で major_radius 円が XY→XZ plane に (実質そのまま)
-    // 実際には X 軸 90° 回転で torus 面を垂直化 (取手が上下方向にループ)
+    // 取手: torus (XZ 平面) を X 軸まわりに 90° 回して XY 平面 (縦の輪) にし、X 方向に translate
     let handle_raw = Arc::new(SdfNode::Torus {
         major_radius: DEFAULT_HANDLE_MAJOR_R,
         minor_radius: DEFAULT_HANDLE_MINOR_R,
@@ -104,7 +102,7 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
         rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     });
     // 取手を mug 外壁 (X = outer_r) の外側 (X = outer_r + handle_minor_r) に配置
-    // 中央高さ (Z = 0、cylinder は原点中心) に translate
+    // 中央高さ (y = 0、cylinder は原点中心) に置く
     let handle = SdfNode::Translate {
         child: handle_rotated,
         offset: Vec3::new(outer_r + DEFAULT_HANDLE_MINOR_R, 0.0, 0.0),
