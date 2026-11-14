@@ -247,7 +247,7 @@ fn write_node_inner(node: &SdfNode, out: &mut String) -> Result<(), EmitError> {
             // parse は r を最小の外寸の半分で抑えるので、半寸法がどれか負 (退化した形) か r が負の node は
             // rounded_box では書けない その時は同じ値を返す `round(r, box3d(half))` で書く
             // (|box(half)| - r で、RoundedBox の距離と同じ式)
-            if half_extents.min_element() >= 0.0 && *round_radius >= 0.0 {
+            if crate::det_vec::min_element(*half_extents) >= 0.0 && *round_radius >= 0.0 {
                 let o = Vec3::new(
                     outer(half_extents.x),
                     outer(half_extents.y),
