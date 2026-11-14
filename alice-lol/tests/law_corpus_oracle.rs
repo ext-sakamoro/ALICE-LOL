@@ -432,6 +432,8 @@ struct Row {
     /// 解像度を上げても減らない構造を特定するために名前まで残す
     /// (WM-19b、`NonOverlap` の 21 件が res 4 / 8 で 1 件も動かない事実の追跡)
     undecided_names: Vec<(String, f32)>,
+    /// 到達性の解像度が上限に当たった construct の (名前, 測った最小肉厚)
+    capped: Vec<(String, f32)>,
 }
 
 type ConstraintBuilder = Box<dyn Fn(&SdfNode) -> Option<Constraint>>;
@@ -516,6 +518,112 @@ fn constraint_builders() -> Vec<(&'static str, ConstraintBuilder)> {
     ]
 }
 
+/// 判定する箱 (±[`AABB`]) の中の最小肉厚: res 96 の mesh の三角形ごとに、表面のすぐ内側で読んだ SDF の勾配の
+/// 逆向きに測る (面の法線は縁で信用しない) 三角形が無い時は `None`
+fn min_wall_in_box(node: &SdfNode) -> Option<f32> {
+    use alice_sdf::eval::eval_normal;
+    use alice_sdf::mesh::{sdf_to_mesh, MarchingCubesConfig};
+    use alice_sdf::validity::local_thickness;
+    let (lo, hi) = (Vec3::splat(-AABB), Vec3::splat(AABB));
+    let m = sdf_to_mesh(
+        node,
+        lo,
+        hi,
+        &MarchingCubesConfig {
+            resolution: 96,
+            ..MarchingCubesConfig::default()
+        },
+    );
+    let span = (hi - lo).length();
+    let pv = |i: u32| m.vertices[i as usize].position;
+    let mut min: Option<f32> = None;
+    for t in m.indices.chunks(3) {
+        let (a, b, c) = (pv(t[0]), pv(t[1]), pv(t[2]));
+        if (b - a).cross(c - a).length_squared() <= 0.0 {
+            continue;
+        }
+        let cen = (a + b + c) / 3.0;
+        let inside = cen - eval_normal(node, cen) * (eval(node, cen) + 1e-3);
+        let n = eval_normal(node, inside);
+        let origin = inside + n * (1e-4 - eval(node, inside));
+        if let Some(th) = local_thickness(node, origin, -n, span) {
+            min = Some(min.map_or(th, |m: f32| m.min(th)));
+        }
+    }
+    min
+}
+
+/// 到達性の判定の解像度の上限 (これを超える construct は [`REACHABLE_RESOLUTION_CAPPED`] に名前を出す)
+const REACHABLE_MAX_RESOLUTION: usize = 64;
+
+/// 上限 [`REACHABLE_MAX_RESOLUTION`] に当たる construct と、その最小肉厚 (mm、`min_wall_in_box` の実測)
+///
+/// これらは res 64 でもセルが壁の半分より大きく、到達性が決着しないまま残りうる 黙って未決定に
+/// 数えないよう名前で固定する (集合が変わったら、どれが増えた / 減ったかを見てから更新する)
+const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
+    ("cone", 0.1067),
+    ("blobby_cross", 0.0068),
+    ("terrain", 0.0002),
+    ("t_slot_bracket_2020", 0.0139),
+    ("pixhawk_mount", 0.0083),
+    ("tp_holder", 0.0112),
+    ("vesa_mount", 0.0030),
+    ("flange_mount", 0.0404),
+    ("chamfered_cube", 0.0964),
+    ("superellipsoid", 0.0003),
+    ("flange_circular", 0.1211),
+    ("rack_shelf", 0.0744),
+    ("columns_union", 0.0048),
+    ("groove", 0.0174),
+    ("columns_subtraction", 0.0115),
+    ("displacement", 0.0574),
+    ("noise", 0.0420),
+    ("surface_roughness", 0.0058),
+    ("fixture:sword", 0.0187),
+];
+
+/// 上限に当たった construct の実測が [`REACHABLE_RESOLUTION_CAPPED`] と一致するか (名前の集合と肉厚)
+fn assert_capped_matches(row: &Row) {
+    let mut got: Vec<(&str, f32)> = row.capped.iter().map(|(n, w)| (n.as_str(), *w)).collect();
+    let mut want: Vec<(&str, f32)> = REACHABLE_RESOLUTION_CAPPED.to_vec();
+    got.sort_by(|a, b| a.0.cmp(b.0));
+    want.sort_by(|a, b| a.0.cmp(b.0));
+    let got_names: Vec<&str> = got.iter().map(|(n, _)| *n).collect();
+    let want_names: Vec<&str> = want.iter().map(|(n, _)| *n).collect();
+    assert_eq!(
+        got_names, want_names,
+        "res {}: 上限に当たった construct の集合が固定と違う",
+        row.res
+    );
+    for ((n, g), (_, w)) in got.iter().zip(&want) {
+        assert!(
+            (g - w).abs() <= 1e-4_f32.max(0.01 * w),
+            "res {}: {n} の最小肉厚 {g} (固定 {w})",
+            row.res
+        );
+    }
+}
+
+/// 到達性の判定の解像度: セルが最小肉厚の半分以下になる最小の解像度 (`base` 以上、上限つき)
+///
+/// 到達性は経路が通る肉の中を区間で証明するので、壁がセルより薄いと決着しない (2026-11-14 実測:
+/// rounded_box の外寸を正しくして壁が仕様どおり薄くなり、固定の res 4 で決着率が 18.6 % → 11.6 %)
+/// 返り値は (解像度, 上限に当たったか)
+fn reachable_resolution(node: &SdfNode, base: usize) -> (usize, Option<f32>) {
+    let Some(wall) = min_wall_in_box(node).filter(|w| *w > 0.0) else {
+        return (base, None);
+    };
+    // cell = 2 AABB / res <= wall / 2  <=>  res >= 4 AABB / wall
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let need = (4.0 * AABB / wall).ceil() as usize;
+    let res = need.max(base);
+    if res > REACHABLE_MAX_RESOLUTION {
+        (REACHABLE_MAX_RESOLUTION, Some(wall))
+    } else {
+        (res, None)
+    }
+}
+
 /// 1 (constraint, resolution) 分を corpus 全件に当てて内訳を数える
 fn measure_row(
     label: &str,
@@ -523,17 +631,28 @@ fn measure_row(
     corpus: &[(String, SdfNode)],
     res: usize,
 ) -> Row {
-    let config = CheckConfig {
-        aabb_min: Vec3::splat(-AABB),
-        aabb_max: Vec3::splat(AABB),
-        resolution: res,
-    };
     let (mut passed, mut violated, mut skipped) = (0usize, 0, 0);
     let mut undecided_names = Vec::new();
+    let mut capped = Vec::new();
     for (name, node) in corpus {
         let Some(constraint) = build(node) else {
             skipped += 1;
             continue;
+        };
+        // 到達性だけ、解像度を construct の最小肉厚に合わせる (上限に当たったものは名前を残す)
+        let resolution = if label.starts_with("Reachable") {
+            let (r, cap) = reachable_resolution(node, res);
+            if let Some(wall) = cap {
+                capped.push((name.clone(), wall));
+            }
+            r
+        } else {
+            res
+        };
+        let config = CheckConfig {
+            aabb_min: Vec3::splat(-AABB),
+            aabb_max: Vec3::splat(AABB),
+            resolution,
         };
         let laws = vec![Law::hard(label, constraint).expect("provable constraint")];
         match verdict(&check_laws(&laws, &config)) {
@@ -555,6 +674,7 @@ fn measure_row(
         undecided,
         decided: (total - undecided) as f32 / total as f32,
         undecided_names,
+        capped,
     }
 }
 
@@ -578,7 +698,9 @@ fn decided_floor(label: &str) -> f32 {
         "MinThickness(0.2)" => 0.80,
         // 実測 88.1% / 88.9% ← 経路なしでは 85.7% / 86.1%
         "Contact(0.0..0.5)" => 0.88,
-        // 実測 17.4% (res 4) / 25.4% (res 8) — 未決定の 7 割強がここに集中する
+        // 2026-11-14: 解像度を construct の最小肉厚に合わせた (セル <= 壁 / 2、上限 64 は
+        // `REACHABLE_RESOLUTION_CAPPED` に名前で固定) 実測 15.1% (res 4) / 22.2% (res 8)
+        // それ以前の固定解像度での実測 17.4% (res 4) / 25.4% (res 8) — 未決定の 7 割強がここに集中する
         // ⚠️ **Lipschitz 経路で 1 件も動かなかった唯一の constraint** (値が完全同一)
         // 到達性は「連結性」を問うので、箱ごとの符号を締めても決着しない
         // = 未決定を減らすには**別の法則**が要る (探索深さでも包囲の精度でもない)
@@ -615,6 +737,16 @@ fn unresolved_rate_by_constraint() {
                 "  {label:<28} res {:>2}: {:>3} 件 (対象外 {:>3}) → 合格 {:>3} / 違反 {:>3} / 未決定 {:>3} (決着率 {:.1}%)",
                 r.res, r.total, r.skipped, r.passed, r.violated, r.undecided, r.decided * 100.0
             );
+        }
+        if label.starts_with("Reachable") {
+            for r in &rows {
+                assert_capped_matches(r);
+            }
+        }
+        for r in &rows {
+            for (n, w) in &r.capped {
+                eprintln!("  {label:<28} res {:>2}: 上限 {REACHABLE_MAX_RESOLUTION} に当たった {n} (最小肉厚 {w:.4})", r.res);
+            }
         }
         let delta = (rows[1].decided - rows[0].decided) * 100.0;
         let verdict_text = if delta >= 1.0 {
