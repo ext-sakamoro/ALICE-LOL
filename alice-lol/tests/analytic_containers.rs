@@ -5,6 +5,8 @@
 //! just below the surface (the face normal of a coarse mesh is not trusted near edges). A shape
 //! that only reached its wall thickness through an oversized rounded box, or whose rim tapers to
 //! nothing, fails here.
+// the probes spell the specification's closed forms (a * b + c) as written; these tests are not under the bit rule of src/
+#![allow(clippy::suboptimal_flops, clippy::many_single_char_names)]
 
 use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::eval::{eval, eval_normal};
@@ -22,7 +24,7 @@ struct Probe {
     measured: usize,
 }
 
-fn find(p: &mut [usize], mut x: usize) -> usize {
+const fn find(p: &mut [usize], mut x: usize) -> usize {
     while p[x] != x {
         p[x] = p[p[x]];
         x = p[x];
@@ -147,7 +149,7 @@ fn tp_holder_mount_holes_go_through_the_backplate() {
     check("tp_holder(40, 110, 5)", 4.5);
 }
 
-/// The razor holder's backplate is 3 mm (runtime_parser default) and its mount hole goes through it
+/// The razor holder's backplate is 3 mm (`runtime_parser` default) and its mount hole goes through it
 /// (the thinnest sample sits on the hole's rim, where a mesh of about 0.5 mm cells reads up to
 /// 0.25 mm short; a hole running inside the plate left 0.05 mm)
 #[test]
@@ -155,14 +157,14 @@ fn razor_holder_mount_hole_goes_through_the_backplate() {
     check("razor_holder(12, 22, 4.5)", 2.85);
 }
 
-/// The shower caddy's shelves have a front wall and walls of the specified 3 mm (runtime_parser
+/// The shower caddy's shelves have a front wall and walls of the specified 3 mm (`runtime_parser`
 /// default) up to the rim
 #[test]
 fn shower_caddy_shelves_have_their_specified_walls() {
     check("shower_caddy(2, 250, 120)", 2.85);
 }
 
-/// The clamp rack is one part (hooks joined to the backplate) and its 5 mm backplate (runtime_parser
+/// The clamp rack is one part (hooks joined to the backplate) and its 5 mm backplate (`runtime_parser`
 /// default) keeps its thickness round the mount holes
 #[test]
 fn clamp_rack_is_one_part_with_its_specified_backplate() {
@@ -176,7 +178,7 @@ fn drawer_organizer_walls_reach_the_rim_at_full_thickness() {
     check("drawer_organizer()", 1.2);
 }
 
-/// The VESA mount's M4 counterbores on its 5 mm plate keep a 2.0 mm floor (fastener::counterbore_floor)
+/// The VESA mount's M4 counterbores on its 5 mm plate keep a 2.0 mm floor (`fastener::counterbore_floor`)
 #[test]
 fn vesa_mount_counterbores_keep_their_floor() {
     check("vesa_mount(75, 5, 4)", 2.0);

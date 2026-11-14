@@ -546,7 +546,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     // used below as `x_cursor`'s starting (negative-half) position.
     let neg_inner_width = 2.0f32.mul_add(spec.wall_thickness, -spec.width);
     // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切ると、くぼみの丸い上の辺が縁に薄い唇を残す)
-    let inner_hz = (spec.height - spec.floor_thickness + 1.0) * 0.5;
+    let inner_hz = f32::midpoint(spec.height - spec.floor_thickness, 1.0);
     // 外殻の縁 (+Z) は平ら、縦の辺と底は fillet で丸める
     let outer = rounded_box_flat_top(tray_hx, tray_hy, tray_hz, spec.fillet_radius, Vec3::Z);
 
@@ -569,7 +569,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     // 全 cavity を Union で組立て、最後に outer から subtract
     let mut cavities: Option<SdfNode> = None;
     let mut x_cursor = neg_inner_width * 0.5;
-    let cavity_z_offset = (spec.floor_thickness + 1.0) * 0.5;
+    let cavity_z_offset = f32::midpoint(spec.floor_thickness, 1.0);
     // 仕切りは slot と slot の間だけ (total_slots - 1 枚、scale の計算と同じ数) 最後の slot の後には置かない
     let mut placed: u32 = 0;
     for slot in &spec.slots {
@@ -808,7 +808,7 @@ pub fn sticky_note_holder(spec: &StickyNoteHolderSpec) -> SdfNode {
     // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切らない)
     let cavity_h = spec.height - spec.floor_thickness + 1.0;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
+    let cavity_offset_z = f32::midpoint(spec.floor_thickness, 1.0);
 
     // 殻の角は外 2 mm / 内 (2 - 壁厚) mm で同心に丸め、角でも壁厚を保つ 縁 (+Z) は平ら
     let corner = 2.0;
@@ -883,7 +883,7 @@ pub fn business_card_holder(spec: &BusinessCardHolderSpec) -> SdfNode {
     // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切らない)
     let cavity_h = spec.slot_depth - spec.floor_thickness + 1.0;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
+    let cavity_offset_z = f32::midpoint(spec.floor_thickness, 1.0);
 
     // 殻の角は外 2 mm / 内 (2 - 壁厚) mm で同心に丸め、角でも壁厚を保つ 縁 (+Z) は平ら
     let corner = 2.0;
@@ -8093,7 +8093,7 @@ mod tests {
         // slots 空 → cavities None → 外殻のまま (縁が平らな角丸の箱 = Intersection) 中は材料、外寸の外は空
         assert!(matches!(tray, SdfNode::Intersection { .. }));
         assert!(eval::eval(&tray, Vec3::ZERO) < 0.0);
-        assert!(eval::eval(&tray, Vec3::new(spec.width * 0.5 + 0.1, 0.0, 0.0)) > 0.0);
+        assert!(eval::eval(&tray, Vec3::new(f32::midpoint(spec.width, 0.2), 0.0, 0.0)) > 0.0);
     }
 
     #[test]

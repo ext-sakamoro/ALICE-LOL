@@ -4,6 +4,12 @@
 //! The tray's outer size, the floor and every wall across the slots follow from the spec alone.
 //! The walls are found by scanning the field across the tray at mid-depth and mid-height: every
 //! material run (the two outer walls and each divider) must be at least as thick as the spec says.
+// the probes spell the specification's closed forms (a * b + c) as written; these tests are not under the bit rule of src/; the scan casts a positive span to a step count
+#![allow(
+    clippy::suboptimal_flops,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use alice_lol::stdlib::hardsurface::pattern_sdf::{drawer_organizer, DrawerSpec};
 use alice_sdf::eval::eval;
@@ -86,7 +92,11 @@ fn every_wall_across_the_slots_has_the_specified_thickness() {
         runs.len() >= 2,
         "fewer than two walls found (compared nothing): {runs:?}"
     );
-    assert_eq!(runs.len() as u32, slots + 1, "walls {runs:?}");
+    assert_eq!(
+        u32::try_from(runs.len()).expect("wall count fits u32"),
+        slots + 1,
+        "walls {runs:?}"
+    );
     let thinnest = runs.iter().copied().fold(f32::INFINITY, f32::min);
     let want = s.divider_thickness.min(s.wall_thickness) - 0.05;
     assert!(
