@@ -38,9 +38,9 @@
 )]
 
 use alice_lol::stdlib::hardsurface::fastener::{
-    bolt, counterbore, countersink, dowel_hole, heat_set_insert_hole, screw_hole, tap_hole,
-    wood_screw_pilot, MetricSize, CLEARANCE_H2D_FDM, COUNTERSUNK_TAPER_ANGLE_DEG, DEFAULT_ACCURACY,
-    HEAT_SET_SINK_MARGIN,
+    bolt, counterbore, counterbore_depth, countersink, dowel_hole, heat_set_insert_hole,
+    screw_hole, tap_hole, wood_screw_pilot, MetricSize, CLEARANCE_H2D_FDM,
+    COUNTERSUNK_TAPER_ANGLE_DEG, DEFAULT_ACCURACY, HEAT_SET_SINK_MARGIN,
 };
 use alice_lol::stdlib::hardsurface::joint::{
     dovetail, jst_ph_slot, pin_hinge_knuckle, slot, snap_fit_annular, snap_fit_cantilever,
@@ -460,7 +460,8 @@ fn counterbore_bore_top_is_flush_with_the_plate_top_face() {
         for i in 0..5_u16 {
             let plate = f32::from(i).mul_add(2.0, 6.0);
             let node = counterbore(size, plate);
-            let bore_depth = size.head_height_socket() + 0.5;
+            // 深さの閉形式: 頭高 + 0.5、ただし板の下に max(0.5 d, 1.2) を残す (fastener::counterbore_depth)
+            let bore_depth = counterbore_depth(size, plate);
             let head_r = size.head_diameter_socket() * 0.5;
             let shank_r = (size.nominal_diameter() + CLEARANCE_H2D_FDM) * 0.5;
             // 貫通穴より外、頭部沈み穴より内 の半径で測ると沈み穴だけが効く
@@ -501,7 +502,8 @@ fn counterbore_bore_diameter_equals_the_iso_head_diameter_with_zero_radial_clear
     let plate = 8.0;
     for size in ALL_SIZES {
         let node = counterbore(size, plate);
-        let bore_depth = size.head_height_socket() + 0.5;
+        // 深さの閉形式: 頭高 + 0.5、ただし板の下に max(0.5 d, 1.2) を残す (fastener::counterbore_depth)
+        let bore_depth = counterbore_depth(size, plate);
         let y = plate * 0.5 - bore_depth * 0.5;
         let bore_r = boundary(&node, Vec3::new(0.0, y, 0.0), Vec3::X, 50.0);
         let head_r = size.head_diameter_socket() * 0.5;
