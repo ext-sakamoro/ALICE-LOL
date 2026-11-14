@@ -93,26 +93,28 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 }
 
 /// file 全体の SHA-256 (書き出し関数ごと) 識別子の位置・値が変わると変わる
+/// Re-recorded when `LOL_GEOMETRY_SEMANTICS_ID` moved to `41c29e6c…` (the rounded_box / counterbore /
+/// stdlib corrections): the scene is `sphere(1.0)`, so only the producer stamp in each file changed
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "ffb23a0fcec1c1722cbfdbf6380f59cce742a0bd6f873b6ef20f151685e56407",
+        "0ca2607003e442239c02f21d80b31f9d4f6a1daf04a420f399d05bfaa8a9307c",
     ),
     (
         "node_to_3mf",
-        "79e6238e1305d474915b8be181ca527ca7acb243a9ac17bd2d5c124a0b325d78",
+        "0871c10ecfea09351bb75564fc02416558b13ce0632e21e485c286d311e99fb8",
     ),
     (
         "node_to_fbx",
-        "4d4793747eddcb2f5de85b908dbf5cb2eb1f9ab85f403492cf2fa3e54c44e418",
+        "6967298bc1c21e2e5e905592bab15382bac544d8950f0979d796a3ec4dec8e51",
     ),
     (
         "node_to_stl_dual_contouring",
-        "57b64c1c34679967ee112243fa95313f0837aa95838ad8621d58b8fabfbbdbe0",
+        "e8fad1694a27a7fb175c72bdae31e2c79d367b4028775a9c61692495a507bf23",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "37d4f1bda01a1b608ab1f8aea79ed197dabc4b4e892cec2713d2a26854797f8b",
+        "e3d15b6e655ba9139142682b7ab8e848c3f6653d554d55994bb6433594c10f78",
     ),
     (
         "node_to_fbx_roblox",
