@@ -53,9 +53,23 @@ const fn n_f32(n: u32) -> f32 {
 // 共通 helpers (Arc wrap 簡略化)
 // ────────────────────────────────────────────────────────
 
-const fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
+/// 外寸の半分が `(hx, hy, hz)` で、角を `r` で丸めた箱
+///
+/// `SdfNode::RoundedBox` は `|box(half_extents)| - round_radius` なので、外寸は `half_extents + round_radius`
+/// になる (`mount.rs` の `skadis_peg_compat`、`skadis_sdf.rs` の panel と同じ扱い) この helper の呼び出しは全部
+/// 外寸を渡しているので、内側の寸法 `half - r` を渡して外寸をちょうど `(hx, hy, hz)` にする `r` は最小の
+/// 半寸法を超えない (超えると内側の寸法が負になる)
+///
+/// LOL の primitive `rounded_box(hx, hy, hz, r)` (`runtime_parser.rs`) は `SdfNode::RoundedBox` をそのまま作るので、
+/// その外寸は `hx + r` (この helper とは数値の意味が違う)
+fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
+    let half = Vec3::new(hx, hy, hz);
+    let r = crate::det_math::max(
+        crate::det_math::min(r, crate::det_vec::min_element(half)),
+        0.0,
+    );
     SdfNode::RoundedBox {
-        half_extents: Vec3::new(hx, hy, hz),
+        half_extents: half - Vec3::splat(r),
         round_radius: r,
     }
 }
@@ -535,6 +549,8 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     let mut cavities: Option<SdfNode> = None;
     let mut x_cursor = neg_inner_width * 0.5;
     let cavity_z_offset = spec.floor_thickness * 0.5;
+    // 仕切りは slot と slot の間だけ (total_slots - 1 枚、scale の計算と同じ数) 最後の slot の後には置かない
+    let mut placed: u32 = 0;
     for slot in &spec.slots {
         let sw = slot.width * scale;
         let sd = crate::det_math::min(
@@ -543,7 +559,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
         );
         let sd_half = sd * 0.5;
         let sw_half = sw * 0.5 - 0.5; // pipeline drawer.rs の inset 相当
-        for i in 0..slot.count {
+        for _ in 0..slot.count {
             let slot_cx = x_cursor + sw * 0.5;
             let cav = translate(
                 rounded_box(sw_half, sd_half, inner_hz, spec.fillet_radius),
@@ -554,12 +570,10 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
                 None => cav,
             });
             x_cursor += sw;
-            if i < slot.count - 1 || slot.count > 1 {
+            placed += 1;
+            if placed < total_slots {
                 x_cursor += spec.divider_thickness;
             }
-        }
-        if x_cursor < inner_width * 0.5 {
-            x_cursor += spec.divider_thickness;
         }
     }
 
@@ -5390,11 +5404,14 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let full_x = 2.0f32.mul_add(spec.wall_thickness, spec.outer_diameter);
     let full_z = 2.0f32.mul_add(spec.wall_thickness, outer_r + spec.roll_width);
 
-    // Base plate: 全体を底面に敷く
+    // Base plate: 全体を底面に敷く (y = 0 から wall_thickness まで、back と hood はこの上面 y = wall_thickness に載る)
     let base_hx = full_x * 0.5;
     let base_hy = spec.wall_thickness * 0.5;
     let base_hz = full_z * 0.5;
-    let base = rounded_box(base_hx, base_hy, base_hz, 2.0);
+    let base = translate(
+        rounded_box(base_hx, base_hy, base_hz, 2.0),
+        Vec3::new(0.0, base_hy, 0.0),
+    );
 
     // Back wall: base 後端 (Z-)、roll 支え
     let back_hy = outer_r * 0.5;
@@ -7808,6 +7825,57 @@ pub fn servo_mount(spec: &ServoMountSpec) -> SdfNode {
 mod tests {
     use super::*;
     use alice_sdf::eval;
+
+    /// The helper's box reaches exactly (hx, hy, hz) along each axis (the fillet does not grow it),
+    /// and its corners are rounded by r
+    #[test]
+    fn rounded_box_extent_is_the_given_half_extents() {
+        let (hx, hy, hz, r) = (10.0_f32, 6.0_f32, 4.0_f32, 1.5_f32);
+        let b = rounded_box(hx, hy, hz, r);
+        let mut compared = 0;
+        for (axis, h) in [(Vec3::X, hx), (Vec3::Y, hy), (Vec3::Z, hz)] {
+            for sign in [1.0_f32, -1.0] {
+                let face = axis * h * sign;
+                assert!(
+                    eval::eval(&b, face * (1.0 - 1e-3)).abs() < 0.02,
+                    "face {face}"
+                );
+                assert!(
+                    eval::eval(&b, face + axis * sign * 0.05) > 0.0,
+                    "grows past {face}"
+                );
+                assert!(
+                    eval::eval(&b, face - axis * sign * 0.05) < 0.0,
+                    "shrinks inside {face}"
+                );
+                compared += 1;
+            }
+        }
+        assert_eq!(compared, 6);
+        // the corner: the box corner point is r (√3 - 1) outside the rounded surface
+        let corner = Vec3::new(hx, hy, hz);
+        let want = r * (3.0_f32.sqrt() - 1.0);
+        assert!(
+            (eval::eval(&b, corner) - want).abs() < 1e-3,
+            "corner {}",
+            eval::eval(&b, corner)
+        );
+    }
+
+    /// A radius larger than the smallest half-extent is bounded by it (the box stays its size)
+    #[test]
+    fn rounded_box_radius_is_bounded_by_the_smallest_half_extent() {
+        let b = rounded_box(10.0, 10.0, 0.5, 2.0);
+        assert!(
+            eval::eval(&b, Vec3::new(0.0, 0.0, 0.55)) > 0.0,
+            "grew past z = 0.5"
+        );
+        assert!(eval::eval(&b, Vec3::new(0.0, 0.0, 0.45)) < 0.0);
+        assert!(
+            eval::eval(&b, Vec3::new(10.05, 0.0, 0.0)) > 0.0,
+            "grew past x = 10"
+        );
+    }
 
     #[test]
     fn wall_hook_default_produces_smooth_union_tree() {
