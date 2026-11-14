@@ -607,7 +607,7 @@ fn assert_capped_matches(row: &Row) {
 /// 到達性の判定の解像度: セルが最小肉厚の半分以下になる最小の解像度 (`base` 以上、上限つき)
 ///
 /// 到達性は経路が通る肉の中を区間で証明するので、壁がセルより薄いと決着しない (2026-11-14 実測:
-/// rounded_box の外寸を正しくして壁が仕様どおり薄くなり、固定の res 4 で決着率が 18.6 % → 11.6 %)
+/// `rounded_box` の外寸を正しくして壁が仕様どおり薄くなり、固定の res 4 で決着率が 18.6 % → 11.6 %)
 /// 返り値は (解像度, 上限に当たったか)
 fn reachable_resolution(node: &SdfNode, base: usize) -> (usize, Option<f32>) {
     let Some(wall) = min_wall_in_box(node).filter(|w| *w > 0.0) else {

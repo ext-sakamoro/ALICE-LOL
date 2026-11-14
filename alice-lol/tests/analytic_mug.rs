@@ -4,6 +4,8 @@
 //! y = +height/2). Each probe is a point whose inside / outside follows from the specification
 //! alone: inside the side wall in every horizontal direction, inside the floor, and empty in the
 //! cavity right above the floor, right inside the wall on both sides, and just below the rim.
+// the probes spell the specification's closed forms (a * b + c) as written; these tests are not under the bit rule of src/
+#![allow(clippy::suboptimal_flops)]
 
 use alice_lol::stdlib::products::mug_sdf;
 use alice_sdf::eval::eval;

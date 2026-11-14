@@ -3,6 +3,8 @@
 //! On a thick plate the bore is the head height + 0.5 mm deep (the head sinks 0.5 mm), exactly as
 //! before. On a plate too thin for that, the bore stops where the floor begins and the head stands
 //! proud by `head height - depth`.
+// the probes spell the specification's closed forms (a * b + c) as written; these tests are not under the bit rule of src/; depth 0 is an exact value, compared exactly
+#![allow(clippy::suboptimal_flops, clippy::manual_midpoint, clippy::float_cmp)]
 
 use alice_lol::stdlib::hardsurface::cavity::subtract_through_counterbore;
 use alice_lol::stdlib::hardsurface::fastener::{

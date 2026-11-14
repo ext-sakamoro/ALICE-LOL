@@ -70,8 +70,8 @@ pub fn mug_sdf(dia: f32, height: f32) -> SdfNode {
     let half_h = height * 0.5;
     // 内側くぼみ: y = -height/2 + 底厚 から y = +height/2 + TOP_CLEARANCE まで (底を残し、上端は貫通)
     // 円筒は Y 軸なので、くぼみは Y 方向にだけずらす 中心 = (底厚 + 余り) / 2、半分の高さ = (height - 底厚 + 余り) / 2
-    let hollow_y_offset = (DEFAULT_BOTTOM_THICKNESS + TOP_CLEARANCE) * 0.5;
-    let hollow_half_h = (height - DEFAULT_BOTTOM_THICKNESS + TOP_CLEARANCE) * 0.5;
+    let hollow_y_offset = f32::midpoint(DEFAULT_BOTTOM_THICKNESS, TOP_CLEARANCE);
+    let hollow_half_h = f32::midpoint(height - DEFAULT_BOTTOM_THICKNESS, TOP_CLEARANCE);
 
     let outer = Arc::new(SdfNode::Cylinder {
         radius: outer_r,
