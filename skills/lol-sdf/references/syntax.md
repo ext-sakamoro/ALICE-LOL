@@ -37,7 +37,7 @@ Exported with a declaration, the scale is the unit and the bounds are the shape'
 ### Basic solids
 - `sphere(r)` — radius
 - `box3d(hx, hy, hz)` — half-extents
-- `rounded_box(hx, hy, hz, r)` — half-extents + round radius
+- `rounded_box(hx, hy, hz, r)` — outer half-extents (as for `box3d`) + corner radius r (rounded inside the box, r capped at the smallest half-extent)
 - `cylinder(r, h)` — radius, half-height (Y-axis)
 - `torus(R, r)` — major, minor (XZ plane)
 - `cone(r, h)` — radius, half-height

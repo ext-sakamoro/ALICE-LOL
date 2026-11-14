@@ -41,7 +41,7 @@ The language has <!-- num: syntax.core -->126 constructs, or <!-- num: syntax.al
 |--------|------|-------------|
 | `sphere(r)` | radius | Sphere centered at origin |
 | `box3d(hx, hy, hz)` | half-extents X, Y, Z | Axis-aligned box — **Rust `SdfNode::box3d` takes full dimensions**; when porting LOL → Rust use `SdfNode::box3d_half_extents` |
-| `rounded_box(hx, hy, hz, r)` | half-extents + round radius | Box with rounded edges |
+| `rounded_box(hx, hy, hz, r)` | outer half-extents X, Y, Z + corner radius | Box with rounded edges — the same outer size as `box3d(hx, hy, hz)`, the corners rounded by `r` inside it (`r` is capped at the smallest half-extent) |
 | `cylinder(r, h)` | radius, half-height | Cylinder along Y-axis |
 | `torus(R, r)` | major radius, minor radius | Torus in XZ plane |
 | `cone(r, h)` | radius, half-height | Cone along Y-axis |
@@ -875,7 +875,7 @@ LOL is 3-5x shorter in tokens, easier for LLMs to generate correctly, and less p
 "Half" parameters mean HALF the total dimension:
 - A box 4 units wide → `box3d(2.0, ...)` (half = 2.0)
 - A cylinder 3 units tall → `cylinder(r, 1.5)` (half_height = 1.5)
-- `rounded_box(hx, hy, hz, r)` — **all are half-extents**
+- `rounded_box(hx, hy, hz, r)` — **hx / hy / hz are the outer half-extents** (as for `box3d`); `r` rounds the corners inside that box
 - `cylinder(r, half_h)` — second arg is **half-height** (LOL runtime parser)
 
 ## Coordinate System
