@@ -87,7 +87,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 16] = [
+pub const FIELDS: [&str; 17] = [
     "density",
     "friction",
     "static_friction",
@@ -104,6 +104,7 @@ pub const FIELDS: [&str; 16] = [
     "adhesion",
     "contact_area",
     "contact_angle",
+    "backing",
 ];
 
 const DENSITY: usize = 0;
@@ -122,6 +123,7 @@ const POISSON_RATIO: usize = 12;
 const ADHESION: usize = 13;
 const CONTACT_AREA: usize = 14;
 const CONTACT_ANGLE: usize = 15;
+const BACKING: usize = 16;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -453,6 +455,11 @@ pub struct BoundMaterial {
     pub contact_angle: Option<f64>,
     /// how `contact_angle` was obtained, when the law says
     pub contact_angle_basis: Option<Basis>,
+    /// how stiffly the material is held where it stands: the foundation's stiffness per area of a sheet of it, per
+    /// metre of its depth (N/m^3 per m), above 0: what brings a pulled piece of it back
+    pub backing: Option<f64>,
+    /// how `backing` was obtained, when the law says
+    pub backing_basis: Option<Basis>,
     /// the dynamic-modulus table, when the law states one
     pub dynamic: Option<DynamicModulus>,
 }
@@ -548,7 +555,7 @@ pub struct BoundWorld {
 
 const fn field_range(slot: usize) -> &'static str {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA => "above 0 and at most 2^53",
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA | BACKING => "above 0 and at most 2^53",
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
@@ -560,7 +567,7 @@ const fn field_range(slot: usize) -> &'static str {
 
 fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
-        DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
+        DENSITY | SHEAR_MODULUS | CONTACT_AREA | BACKING => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
         CONTACT_ANGLE => v > 0.0 && v <= 180.0,
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
@@ -987,11 +994,12 @@ impl WorldLaw {
             "adhesion" => ADHESION,
             "contact_area" => CONTACT_AREA,
             "contact_angle" => CONTACT_ANGLE,
+            "backing" => BACKING,
             _ => {
                 return Err(err(
                     line,
                     format!(
-                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion, contact_area and contact_angle)"
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion, contact_area, contact_angle and backing)"
                     ),
                 ))
             }
@@ -1246,6 +1254,8 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         contact_area_basis: basis_of(m, CONTACT_AREA),
         contact_angle: v[CONTACT_ANGLE],
         contact_angle_basis: basis_of(m, CONTACT_ANGLE),
+        backing: v[BACKING],
+        backing_basis: basis_of(m, BACKING),
         dynamic: match &m.dynamic {
             None => None,
             Some(d) => Some(bind_dynamic(d, slots)?),

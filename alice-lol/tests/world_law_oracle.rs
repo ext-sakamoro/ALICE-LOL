@@ -659,7 +659,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "93b383d77be0d512faefaa424182de1c20160a72e330479f990b5d204ee745c2"
+        "f63d1e77f9cbba9402500d5c27b02a4efb28e948d181c0867b17f6733ef05e2e"
     );
     let w = law.bind(&[("strength", Number(7.5))]).unwrap();
     // 7.5/3600 as its exact f64 bits
@@ -1103,4 +1103,26 @@ fn a_contact_angle_is_stated_with_its_basis_and_range() {
     );
     // the mochi law reads
     assert!(WorldLaw::from_file(MOCHI).is_ok());
+}
+
+/// A material may state how stiffly it is held where it stands (its backing, N/m^3 per metre of depth), with its basis:
+/// what brings a pulled piece of it back. Above 0; a law that does not state it keeps its identifier
+#[test]
+fn a_backing_is_stated_with_its_basis_and_range() {
+    let w = WorldLaw::from_file(&format!("{ONE}material a backing = 20000\nmaterial a backing basis assumed\n"))
+        .unwrap()
+        .bind(&[])
+        .unwrap();
+    let m = w.material("a").unwrap();
+    assert_eq!(m.backing, Some(20000.0));
+    assert_eq!(m.backing_basis, Some(Basis::Assumed));
+    for out in ["0", "-5"] {
+        let refused = WorldLaw::from_file(&format!("{ONE}material a backing = {out}\n"))
+            .map_or(true, |l| l.bind(&[]).is_err());
+        assert!(refused, "{out} is not a backing");
+    }
+    let one = WorldLaw::from_file(ONE).unwrap();
+    assert_eq!(one.bind(&[]).unwrap().material("a").unwrap().backing, None);
+    let stated = WorldLaw::from_file(&format!("{ONE}material a backing = 20000\n")).unwrap();
+    assert_ne!(one.law_id(), stated.law_id(), "stating the backing is part of the identifier");
 }

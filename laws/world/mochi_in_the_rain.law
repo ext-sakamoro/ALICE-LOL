@@ -81,6 +81,9 @@ material mochi adhesion = 2
 material mochi adhesion basis assumed
 material mochi contact_area = 0.0002
 material mochi contact_area basis assumed
+source backing: how stiffly the letters are held where they stand is a design value, not a measurement: a loose backing so that a hand's pull shows the mochi stretch at the default view (2e4 N/m^3 per metre of depth; at 2e5 a pull moved a letter about 3 px there)
+material mochi backing = 20000
+material mochi backing basis assumed
 source hand: finger skin Young's modulus about 310 kPa by cylindrical indentation with a Hertzian model ("Insights into the Young's modulus of human finger skin: evaluating contact area and indentation creep behaviour", Acta Technica Napocensis, atna-mam.utcluj.ro article 2661); reported values span about 40 to 300 kPa by method, so it is used as assumed
 source hand Poisson's ratio 0.48 is assumed for a water-rich soft tissue and was not measured
 source grip: the stiffness is derived (flat contact on a half-space, the mochi and the skin in series); the contact radius about 8 mm is small next to a letter 160 mm deep, so the half-space holds
