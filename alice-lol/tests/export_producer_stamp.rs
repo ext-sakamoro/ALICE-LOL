@@ -93,7 +93,7 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 }
 
 /// file 全体の SHA-256 (書き出し関数ごと) 識別子の位置・値が変わると変わる
-/// Re-recorded when `LOL_GEOMETRY_SEMANTICS_ID` moved to `41c29e6c…` (the rounded_box / counterbore /
+/// Re-recorded when `LOL_GEOMETRY_SEMANTICS_ID` moved to `41c29e6c…` (the `rounded_box` / counterbore /
 /// stdlib corrections): the scene is `sphere(1.0)`, so only the producer stamp in each file changed
 const GOLDEN: &[(&str, &str)] = &[
     (
@@ -118,11 +118,11 @@ const GOLDEN: &[(&str, &str)] = &[
     ),
     (
         "node_to_fbx_roblox",
-        "3023808dcb730d6df78543eb39e483693a63880c31086e3ba6f781977782eb0f",
+        "d38fd2c444b363307fb960f1197a5635ebb75b6f0723eed7d2604a40f104e9cf",
     ),
     (
         "node_to_obj_roblox",
-        "e82092b03a46d51fea5a20da8ae1f4637eebe664477e2bc2b10a3a7337241037",
+        "561be2712edd856697af2585c219fa45caf031e390b697bab64a301220ff6a9a",
     ),
 ];
 
