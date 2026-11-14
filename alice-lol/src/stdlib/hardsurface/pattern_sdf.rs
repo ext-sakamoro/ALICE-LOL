@@ -74,6 +74,25 @@ pub(crate) fn rounded_box(hx: f32, hy: f32, hz: f32, r: f32) -> SdfNode {
     }
 }
 
+/// 上が開いた容器の外殻: 外寸の半分 `(hx, hy, hz)`、縦の辺と底の辺は `r` で丸め、`up` 側の面 (縁) は平ら
+///
+/// [`rounded_box`] は縁の辺も丸めるので、`r` が壁厚に近いと縁で壁が 0 まで細る (外側の丸みが内側の面に届く)
+/// ここでは `up` 方向に `r` だけ伸ばした角丸の箱を外寸ちょうどの箱で切るので、縁の断面は壁厚のまま `up` は
+/// 軸の単位 vector (`Vec3::Y` / `Vec3::NEG_Y` / `Vec3::Z` など、開いた側)
+fn rounded_box_flat_top(hx: f32, hy: f32, hz: f32, r: f32, up: Vec3) -> SdfNode {
+    let half = Vec3::new(hx, hy, hz);
+    let r = crate::det_math::max(
+        crate::det_math::min(r, crate::det_vec::min_element(half)),
+        0.0,
+    );
+    let grown = half + up.abs() * r;
+    let extended = translate(rounded_box(grown.x, grown.y, grown.z, r), up * r);
+    SdfNode::Intersection {
+        a: Arc::new(extended),
+        b: Arc::new(box3d(hx, hy, hz)),
+    }
+}
+
 const fn box3d(hx: f32, hy: f32, hz: f32) -> SdfNode {
     SdfNode::Box3d {
         half_extents: Vec3::new(hx, hy, hz),
@@ -784,13 +803,21 @@ pub fn sticky_note_holder(spec: &StickyNoteHolderSpec) -> SdfNode {
     let outer_hz = spec.height * 0.5;
     let inner_hx = spec.pad_width * 0.5;
     let inner_hy = spec.pad_depth * 0.5;
-    let cavity_h = spec.height - spec.floor_thickness;
+    // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切らない)
+    let cavity_h = spec.height - spec.floor_thickness + 1.0;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = spec.floor_thickness * 0.5;
+    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 殻の角は外 2 mm / 内 (2 - 壁厚) mm で同心に丸め、角でも壁厚を保つ 縁 (+Z) は平ら
+    let corner = 2.0;
+    let outer = rounded_box_flat_top(outer_hx, outer_hy, outer_hz, corner, Vec3::Z);
     let cavity = translate(
-        box3d(inner_hx, inner_hy, inner_hz),
+        rounded_box(
+            inner_hx,
+            inner_hy,
+            inner_hz,
+            crate::det_math::max(corner - spec.wall_thickness, 0.0),
+        ),
         Vec3::new(0.0, 0.0, cavity_offset_z),
     );
     subtract(outer, cavity)
@@ -851,13 +878,21 @@ pub fn business_card_holder(spec: &BusinessCardHolderSpec) -> SdfNode {
     let outer_hz = spec.slot_depth * 0.5;
     let inner_hx = spec.card_width * 0.5;
     let inner_hy = spec.slot_thickness * 0.5;
-    let cavity_h = spec.slot_depth - spec.floor_thickness;
+    // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切らない)
+    let cavity_h = spec.slot_depth - spec.floor_thickness + 1.0;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = spec.floor_thickness * 0.5;
+    let cavity_offset_z = (spec.floor_thickness + 1.0) * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 殻の角は外 2 mm / 内 (2 - 壁厚) mm で同心に丸め、角でも壁厚を保つ 縁 (+Z) は平ら
+    let corner = 2.0;
+    let outer = rounded_box_flat_top(outer_hx, outer_hy, outer_hz, corner, Vec3::Z);
     let cavity = translate(
-        box3d(inner_hx, inner_hy, inner_hz),
+        rounded_box(
+            inner_hx,
+            inner_hy,
+            inner_hz,
+            crate::det_math::max(corner - spec.wall_thickness, 0.0),
+        ),
         Vec3::new(0.0, 0.0, cavity_offset_z),
     );
     subtract(outer, cavity)
@@ -1498,9 +1533,12 @@ pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
 
     // Cavity: 底面 (Y-) を開口したいので Y- 方向オフセット、Y+ (top wall) 残す
     let cavity_hx = spec.internal_length * 0.5;
-    let cavity_hy = (spec.internal_height + spec.wall_thickness + 10.0) * 0.5;
+    // くぼみは開いた側 (-Y) の 10 mm 外から、上の壁の内側 (y = outer_hy - 壁厚) まで (上の壁を残す)
+    let cavity_top = outer_hy - spec.wall_thickness;
+    let cavity_bottom = -outer_hy - 10.0;
+    let cavity_hy = (cavity_top - cavity_bottom) * 0.5;
     let cavity_hz = spec.internal_width * 0.5;
-    let cavity_offset_y = -(spec.wall_thickness + 0.5) * 0.5;
+    let cavity_offset_y = f32::midpoint(cavity_top, cavity_bottom);
 
     // Top slot (Y+ 面貫通): X 方向 slot_length、Y 方向 wall_thickness+margin、Z 方向 slot_width
     let slot_hx = spec.slot_length * 0.5;
@@ -1508,9 +1546,16 @@ pub fn tissue_box_cover(spec: &TissueBoxCoverSpec) -> SdfNode {
     let slot_hz = spec.slot_width * 0.5;
     let slot_offset_y = outer_hy - slot_hy + 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 殻の角は外 3 mm / 内 (3 - 壁厚) mm で同心に丸め、角でも壁厚を保つ 開いた側 (-Y、反転後の底) の縁は平ら
+    let corner = 3.0;
+    let outer = rounded_box_flat_top(outer_hx, outer_hy, outer_hz, corner, Vec3::NEG_Y);
     let cavity = translate(
-        box3d(cavity_hx, cavity_hy, cavity_hz),
+        rounded_box(
+            cavity_hx,
+            cavity_hy,
+            cavity_hz,
+            crate::det_math::max(corner - spec.wall_thickness, 0.0),
+        ),
         Vec3::new(0.0, cavity_offset_y, 0.0),
     );
     let slot = translate(
@@ -1592,7 +1637,8 @@ pub fn storage_box(spec: &StorageBoxSpec) -> SdfNode {
     let cavity_hz = spec.internal_width * 0.5;
     let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 縁は平ら (縁の辺を丸めると壁が縁で 0 まで細る)、縦の辺と底は 2 mm で丸める
+    let outer = rounded_box_flat_top(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
     let cavity = translate(
         box3d(cavity_hx, cavity_hy, cavity_hz),
         Vec3::new(0.0, cavity_offset_y, 0.0),
@@ -4167,8 +4213,9 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
         box3d(slot_hx, slot_hy, slot_hz),
         Vec3::new(0.0, slot_offset_y, 0.0),
     );
+    // 取付穴は板の厚み (Z) を貫通する (Y 軸の cylinder だと板の中を縦に通る溝になっていた)
     let mount = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(0.0, mount_offset_y, 0.0),
     );
 
@@ -4421,12 +4468,13 @@ pub fn tp_holder(spec: &TpHolderSpec) -> SdfNode {
         cylinder_z(axle_r, axle_half_h),
         Vec3::new(0.0, 0.0, axle_z_center),
     );
+    // 取付穴は板の厚み (Z) を貫通する (Y 軸の cylinder だと板の中を横に通り、上下に 0.25 mm の皮が残っていた)
     let mount_left = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
     );
     let mount_right = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(mount_x_offset, mount_y_offset, 0.0),
     );
 
@@ -7859,6 +7907,40 @@ mod tests {
             (eval::eval(&b, corner) - want).abs() < 1e-3,
             "corner {}",
             eval::eval(&b, corner)
+        );
+    }
+
+    /// The open-top shell keeps the full wall at the rim plane and rounds the vertical edges
+    #[test]
+    fn rounded_box_flat_top_keeps_the_rim_square_and_the_size_exact() {
+        let (hx, hy, hz, r) = (20.0_f32, 10.0_f32, 15.0_f32, 2.0_f32);
+        let b = rounded_box_flat_top(hx, hy, hz, r, Vec3::Y);
+        // faces at exactly the half-extents
+        for p in [
+            Vec3::new(hx, 0.0, 0.0),
+            Vec3::new(0.0, hy, 0.0),
+            Vec3::new(0.0, -hy, 0.0),
+            Vec3::new(0.0, 0.0, hz),
+        ] {
+            assert!(
+                eval::eval(&b, p * (1.0 - 1e-4)) < 0.0 && eval::eval(&b, p * 1.01) > 0.0,
+                "face {p}"
+            );
+        }
+        // the rim (top) edge is square: just inside the top edge is material
+        assert!(
+            eval::eval(&b, Vec3::new(hx - 0.05, hy - 0.05, 0.0)) < 0.0,
+            "the rim edge is rounded"
+        );
+        // the vertical edge is rounded by r: the corner point is outside
+        assert!(
+            eval::eval(&b, Vec3::new(hx - 0.05, 0.0, hz - 0.05)) > 0.0,
+            "the vertical edge is not rounded"
+        );
+        // the bottom edge is rounded too
+        assert!(
+            eval::eval(&b, Vec3::new(hx - 0.05, -hy + 0.05, 0.0)) > 0.0,
+            "the bottom edge is not rounded"
         );
     }
 
