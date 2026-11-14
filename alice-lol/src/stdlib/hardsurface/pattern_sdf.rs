@@ -545,8 +545,10 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     // Law form: negate both mul_add operands instead of the call result,
     // used below as `x_cursor`'s starting (negative-half) position.
     let neg_inner_width = 2.0f32.mul_add(spec.wall_thickness, -spec.width);
-    let inner_hz = (spec.height - spec.floor_thickness) * 0.5;
-    let outer = rounded_box(tray_hx, tray_hy, tray_hz, spec.fillet_radius);
+    // くぼみは床の上から縁の 1 mm 上まで (縁と同じ面で切ると、くぼみの丸い上の辺が縁に薄い唇を残す)
+    let inner_hz = (spec.height - spec.floor_thickness + 1.0) * 0.5;
+    // 外殻の縁 (+Z) は平ら、縦の辺と底は fillet で丸める
+    let outer = rounded_box_flat_top(tray_hx, tray_hy, tray_hz, spec.fillet_radius, Vec3::Z);
 
     // slot 幅の scale (総幅 > drawer 内寸なら圧縮)
     let total_slots: u32 = spec.slots.iter().map(|s| s.count).sum();
@@ -567,7 +569,7 @@ pub fn drawer_organizer(spec: &DrawerSpec) -> SdfNode {
     // 全 cavity を Union で組立て、最後に outer から subtract
     let mut cavities: Option<SdfNode> = None;
     let mut x_cursor = neg_inner_width * 0.5;
-    let cavity_z_offset = spec.floor_thickness * 0.5;
+    let cavity_z_offset = (spec.floor_thickness + 1.0) * 0.5;
     // 仕切りは slot と slot の間だけ (total_slots - 1 枚、scale の計算と同じ数) 最後の slot の後には置かない
     let mut placed: u32 = 0;
     for slot in &spec.slots {
@@ -4910,12 +4912,13 @@ pub fn clamp_rack(spec: &ClampRackSpec) -> SdfNode {
     let mount_hy = spec.wall_thickness + 1.0;
     let mount_y_offset = outer_hy * 0.7;
     let mount_x_offset = outer_hx * 0.85;
+    // 取付穴は背板の厚み (Z) を貫通する (Y 軸の cylinder だと板の中を縦に通っていた)
     let mount_left = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
     );
     let mount_right = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(mount_x_offset, mount_y_offset, 0.0),
     );
     result = subtract(result, mount_left);
@@ -5615,17 +5618,26 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
         );
         let tier_z = bp_hz + tier_outer_hz;
 
-        let outer = rounded_box(tier_outer_hx, tier_outer_hy, tier_outer_hz, 3.0);
+        // 棚の奥行は前の壁 1 枚ぶん (後ろは背板) なので、くぼみは背板の側 (-Z) に壁厚の半分ずらす
+        // (+Z にずらすと前の壁が 0 になり、角丸の太りだけが前の壁を作っていた) 縁 (+Y) は平ら
+        let rounded =
+            rounded_box_flat_top(tier_outer_hx, tier_outer_hy, tier_outer_hz, 3.0, Vec3::Y);
+        // 背板に付く面の縦の辺は角のまま (丸めると背板の丸い縁との間に溝ができ、継ぎ目で 1.7 mm まで細る)
+        let back_square = translate(
+            box3d(tier_outer_hx, tier_outer_hy, 1.5),
+            Vec3::new(0.0, 0.0, -tier_outer_hz + 1.5),
+        );
+        let outer = union(rounded, back_square);
         let cavity = translate(
             box3d(cavity_hx, cavity_hy, cavity_hz),
-            Vec3::new(0.0, cavity_offset_y, spec.wall_thickness * 0.5),
+            Vec3::new(0.0, cavity_offset_y, -spec.wall_thickness * 0.5),
         );
         let mut tier = subtract(outer, cavity);
         for k in 0..drains {
             let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (n_f32(k) + 1.0));
             let drain = translate(
                 cylinder(drain_r, drain_hy),
-                Vec3::new(x, drain_offset_y, spec.wall_thickness * 0.5),
+                Vec3::new(x, drain_offset_y, -spec.wall_thickness * 0.5),
             );
             tier = subtract(tier, drain);
         }
@@ -5641,12 +5653,13 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let mount_hy = spec.wall_thickness + 1.0;
     let mount_y_offset = spec.wall_thickness.mul_add(-2.0, bp_hy);
     let mount_x_offset = bp_hx * 0.85;
+    // 取付穴は背板の厚み (Z) を貫通する (Y 軸の cylinder だと板の中を縦に通っていた)
     let mount_left = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(-mount_x_offset, mount_y_offset, 0.0),
     );
     let mount_right = translate(
-        cylinder(mount_r, mount_hy),
+        cylinder_z(mount_r, mount_hy),
         Vec3::new(mount_x_offset, mount_y_offset, 0.0),
     );
     result = subtract(result, mount_left);
