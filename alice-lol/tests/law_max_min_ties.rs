@@ -235,3 +235,49 @@ fn density_hatch_first_line_takes_the_law_min_of_mixed_zero_projections() {
     let got = lines(Bounds::new(1.0, 0.0, 2.0, 0.0));
     assert_eq!(got[0].1, 0.0f64.to_bits());
 }
+
+/// LOL `rounded_box(hx, hy, hz, r)` radius (`pattern_sdf::rounded_box`, `max(min(r, min_element(half)), 0)`):
+/// a -0 radius is the pair (-0, +0) at the floor, which gives +0; a -0 half extent is carried by
+/// `min_element` and min, and the floor again gives +0; a non-finite argument is refused by the
+/// parser, so no NaN operand reaches the primitive from LOL text
+#[test]
+fn lol_rounded_box_radius_floor_of_negative_zero() {
+    let parse = |s: &str| alice_lol::runtime_parser::parse_lol(s).expect("parses");
+    assert_eq!(
+        field_bits(&parse("rounded_box(1, 1, 1, -0)"), "round_radius"),
+        vec![POS_ZERO]
+    );
+    assert_eq!(
+        field_bits(&parse("rounded_box(-0, 1, 1, 0.5)"), "round_radius"),
+        vec![POS_ZERO]
+    );
+    assert!(
+        alice_lol::runtime_parser::parse_lol("rounded_box(1, 1, 1, 1e39)").is_err(),
+        "an infinite radius is refused"
+    );
+}
+
+/// Drawer fillet (`pattern_sdf::rounded_box_flat_top` for the shell and `rounded_box` for the slots,
+/// both `max(min(r, min_element(half)), 0)`): a -0 fillet gives +0 at every radius and the same node
+/// as a +0 fillet; a NaN fillet is
+/// skipped by the min, so the node is the one an infinite fillet gives (capped by the half extents)
+#[test]
+fn drawer_fillet_floor_of_negative_zero_and_nan() {
+    let with = |fillet: f32| {
+        let mut s = DrawerSpec::default_chopsticks_set();
+        s.fillet_radius = fillet;
+        drawer_organizer(&s)
+    };
+    let zero = field_bits(&with(-0.0), "round_radius");
+    assert!(
+        zero.iter().all(|b| *b == POS_ZERO),
+        "a -0 fillet left a radius that is not +0: {zero:x?}"
+    );
+    // the shell's floored radius also moves the shell (`translate(up * r)`): a -0 radius would
+    // give a -0 offset, so the -0 fillet must build the same node as a +0 fillet
+    assert_eq!(debug(&with(-0.0)), debug(&with(0.0)), "a -0 fillet");
+    let capped = debug(&with(f32::INFINITY));
+    for nan in [POS_NAN, NEG_NAN] {
+        assert_eq!(debug(&with(nan)), capped, "a NaN fillet");
+    }
+}
