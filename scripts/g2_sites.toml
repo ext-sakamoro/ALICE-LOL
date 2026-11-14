@@ -179,3 +179,9 @@ file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
 fn = "tissue_box_cover"
 calls = 1
 reason = "max(corner - wall, 0) with corner the constant 3.0: a positive constant minus anything is never -0 (an exact cancellation gives +0), and a NaN wall gives a NaN first operand, which the Law and the platform both drop for the floor +0"
+
+[[site]]
+file = "alice-lol/src/emit.rs"
+fn = "write_node_inner"
+calls = 1
+reason = "min_element(half_extents) is only compared `>= 0.0` to choose between `rounded_box` and `round(r, box3d(half))`: -0 and +0 both pass, so the zero sign cannot be observed; a NaN lane (not reachable from LOL text, the parser refuses non-finite numbers) is skipped by the Law fold and written as NaN by either branch"
