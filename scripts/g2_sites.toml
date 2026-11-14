@@ -137,3 +137,45 @@ file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
 fn = "skadis_panel_sdf"
 calls = 1
 reason = "max(size * 0.5, 0) after the size is checked to be finite and > 0: size * 0.5 is > 0 or rounds to +0, never -0 or NaN"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/fastener.rs"
+fn = "counterbore_depth"
+calls = 2
+reason = "max(min(sink, plate - floor), 0): sink = head height + 0.5 and floor = counterbore_floor(size) are positive constants of the size, so plate - floor is never -0 (an exact cancellation gives +0) and the min never sees an equal pair of zeros; a NaN plate gives sink from the min under the Law and the platform alike, and the floor's +0 meets only +0 or a non-zero"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/fastener.rs"
+fn = "counterbore_floor"
+calls = 1
+reason = "max(0.5 * nominal diameter, 1.2): the nominal diameter is a positive constant of the size enum, so no zero and no NaN reaches the max, and no input reaches it"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "rounded_box"
+calls = 3
+tests = ["alice-lol/tests/law_max_min_ties.rs::lol_rounded_box_radius_floor_of_negative_zero", "alice-lol/tests/law_max_min_ties.rs::drawer_fillet_floor_of_negative_zero_and_nan"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "rounded_box_flat_top"
+calls = 3
+tests = ["alice-lol/tests/law_max_min_ties.rs::drawer_fillet_floor_of_negative_zero_and_nan"]
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "business_card_holder"
+calls = 1
+reason = "max(corner - wall, 0) with corner the constant 2.0: a positive constant minus anything is never -0 (an exact cancellation gives +0), and a NaN wall gives a NaN first operand, which the Law and the platform both drop for the floor +0"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "sticky_note_holder"
+calls = 1
+reason = "max(corner - wall, 0) with corner the constant 2.0: a positive constant minus anything is never -0 (an exact cancellation gives +0), and a NaN wall gives a NaN first operand, which the Law and the platform both drop for the floor +0"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "tissue_box_cover"
+calls = 1
+reason = "max(corner - wall, 0) with corner the constant 3.0: a positive constant minus anything is never -0 (an exact cancellation gives +0), and a NaN wall gives a NaN first operand, which the Law and the platform both drop for the floor +0"
