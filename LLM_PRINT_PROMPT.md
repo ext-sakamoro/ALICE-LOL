@@ -549,7 +549,7 @@ When the object exceeds the printer build volume, split into multiple parts and 
 - Side panels with arch cutouts: solid bridge zone (35mm) first, then corner pillars only
 - No thin wall instability (3mm walls 120mm tall will collapse from fan/vibration)
 - Cross rib at the top connects side panels for lateral stability
-- This is the proven pattern from popular MakerWorld models (13.6kg load tested)
+- This mirrors a common layout in published printable models (no load test is recorded in this repository)
 - PLA is sufficient with this pattern (no need for PETG)
 
 **Wrong**: Full thin walls standing from bed → spaghetti detection / collapse
