@@ -5208,7 +5208,7 @@ impl OutdoorEnclosureSpec {
 /// 屋外用 IP54 密閉筐体 (`sbc_case` pattern + gasket groove for O-ring seal、`to_z_up` wrap)
 ///
 /// 構造 (electronics § 5 準拠、Y-up 設計):
-/// - Outer: `RoundedBox` (`(width+2×wall) × (height+floor) × (depth+2×wall)`)
+/// - Outer: `open_shell` (`(width+2×wall) × (height+floor) × (depth+2×wall)`、縦の辺だけ丸め、縁は平ら)
 /// - Cavity: `Box3d` (`width × height+1 × depth`)、Y+ 開口 (lid で seal)
 /// - Gasket groove: 4× `Box3d` slot、outer top rim を囲む矩形溝
 ///
@@ -5549,6 +5549,15 @@ pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
 // 58. tape_dispenser (organizer-bathroom-garage § 8.3 Tape Dispenser)
 // ────────────────────────────────────────────────────────
 
+/// テープのロールと底板・フードの間の隙間 (mm) ロールが回るための自由な間隔で、印刷で塞がらない
+/// (FDM の最小の穴 2 mm 以上)
+const TAPE_ROLL_CLEARANCE: f32 = 2.0;
+
+/// テープを切る前縁の平らな幅 (mm、フードの前面に残す高さ) 刃を 0 まで尖らせると印刷できない
+/// (0.4 mm ノズルでは 2 周回 0.8 mm 未満が印刷不能、3 周回 1.2 mm 未満が注意) ので、3 周回分を残す
+/// テープを切る用途の縁で、この幅で実際に切れるかは印刷して確かめていない
+const TAPE_TEAR_LAND: f32 = 1.2;
+
 /// テープ dispenser spec (base + Z-axis axle + integrated hood + tear edge、multi-part composite)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TapeDispenserSpec {
@@ -5581,11 +5590,15 @@ impl TapeDispenserSpec {
 /// テープ dispenser (base plate + Z-axis axle + hood over roll + tear edge、`to_z_up` wrap)
 ///
 /// 構造 (garage § 8.3 準拠、Y-up 設計、multi-component composite):
-/// - Base plate: `RoundedBox` (`(outer_dia+2×wall) × wall × (outer_dia/2+roll_width+2×wall)`)、bed に設置
-/// - Hood: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 上方 (Y+) 覆い
-/// - Back wall: `RoundedBox` (`(outer_dia+2×wall) × outer_dia/2 × wall`)、roll 後方 (Z-) 支え
-/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2-0.5`、h=`roll_width/2`)、`Y=outer_dia/2` 中央、Z=0
-/// - Tear edge: `Box3d` 傾斜 slot、hood 前端 (Y+ 上部)
+/// - Base plate: `rounded_plate` (板の面内の角だけ丸め)、`(outer_dia+2×wall) × wall × (outer_dia/2+roll_width+2×wall)`、
+///   bed に設置
+/// - ロールの中心: 底板の上面から `TAPE_ROLL_CLEARANCE + outer_dia/2` の高さ (ロールの外周が底板から隙間だけ浮く)
+/// - Back wall: `rounded_plate`、底板の後端 (Z-) に立ち、底板の上面からフードの下面まで
+/// - Hood: `rounded_plate`、厚さ `wall`、下面はロールの上端から `TAPE_ROLL_CLEARANCE` 上、Z は底板と同じ全長
+/// - Axle: Z-axis `cylinder_z` (r=`inner_dia/2-0.5`)、ロールの中心の高さで背板の厚みの中から背板の内面 +
+///   `TAPE_ROLL_CLEARANCE` + `roll_width` まで (背板からの片持ち、ロールはその区間に掛かる)
+/// - Tear edge: hood 前端を `tear_angle_deg` で斜めに落とし、前面に平らな縁 (`TAPE_TEAR_LAND`) を残す テープを
+///   切るための縁 (切れ味は印刷で未確認)
 ///
 /// 単一 print で 4 component (base + hood + back + axle) を union `で結合、cotton_dispenser` より複雑
 ///
@@ -5606,56 +5619,64 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let base_hy = spec.wall_thickness * 0.5;
     let base_hz = full_z * 0.5;
     let base = translate(
-        rounded_box(base_hx, base_hy, base_hz, 2.0),
+        rounded_plate(base_hx, base_hy, base_hz, 2.0, Vec3::Y),
         Vec3::new(0.0, base_hy, 0.0),
     );
 
-    // Back wall: base 後端 (Z-)、roll 支え
-    let back_hy = outer_r * 0.5;
+    // ロールの中心は底板の上面からロールの半径 + 隙間の高さ (ロールの外周が底板に触れない)、フードの下面は
+    // ロールの上端から隙間だけ上 (前は軸の高さ・フード・背板がロールの直径でなく半径で置かれ、軸の下端が
+    // 底板に接し、ロールの外周は底板とフードを貫いていた)
+    let roll_centre_y = spec.wall_thickness + TAPE_ROLL_CLEARANCE + outer_r;
+    let hood_bottom_y = roll_centre_y + outer_r + TAPE_ROLL_CLEARANCE;
+
+    // Back wall: base 後端 (Z-)、底板の上面からフードの下面まで立ち、軸を片持ちで支える
+    let back_hy = (hood_bottom_y - spec.wall_thickness) * 0.5;
     let back_hz = spec.wall_thickness * 0.5;
     let back_offset_y = spec.wall_thickness + back_hy;
     let back_offset_z = -base_hz + back_hz;
     let back = translate(
-        rounded_box(base_hx, back_hy, back_hz, 2.0),
+        rounded_plate(base_hx, back_hy, back_hz, 2.0, Vec3::Z),
         Vec3::new(0.0, back_offset_y, back_offset_z),
     );
 
     // Hood: roll 上方 (Y+) 覆い、Z 方向は base と同じ全長
     let hood_hy = spec.wall_thickness * 0.5;
-    let hood_offset_y = spec.wall_thickness + outer_r;
+    let hood_offset_y = hood_bottom_y + hood_hy;
     let hood = translate(
-        rounded_box(base_hx, hood_hy, base_hz, 2.0),
+        rounded_plate(base_hx, hood_hy, base_hz, 2.0, Vec3::Y),
         Vec3::new(0.0, hood_offset_y, 0.0),
     );
 
-    // Axle: Z-axis cylinder、roll 中央 (Y=outer_r + wall、Z=roll 中央)
+    // Axle: Z-axis cylinder、ロールの中心の高さ 背板の厚みの中から、背板の内面 + 隙間 + ロール幅まで
     let axle_r = spec.inner_diameter.mul_add(0.5, -0.5);
-    let axle_half_h = spec.roll_width * 0.5;
-    let axle_offset_y = spec.wall_thickness + outer_r * 0.5;
-    let axle_offset_z = spec.wall_thickness.mul_add(2.0, -base_hz) + outer_r + axle_half_h;
+    let back_inner_z = -base_hz + spec.wall_thickness;
+    let axle_z0 = spec.wall_thickness.mul_add(-0.5, back_inner_z);
+    let axle_z1 = back_inner_z + TAPE_ROLL_CLEARANCE + spec.roll_width;
+    let axle_half_h = (axle_z1 - axle_z0) * 0.5;
     let axle = translate(
         cylinder_z(axle_r, axle_half_h),
-        Vec3::new(0.0, axle_offset_y, axle_offset_z),
+        Vec3::new(0.0, roll_centre_y, axle_z0 + axle_half_h),
     );
 
     let combined = union(union(union(base, back), hood), axle);
 
-    // Tear edge: hood 前端 (Y+ の front)、傾斜 box3d subtract で刃形状
-    let tear_hx = base_hx + 1.0;
-    let tear_hy = 3.0;
-    let tear_hz = 2.0;
-    let tear_offset_y = spec.wall_thickness + outer_r * 2.0 - 1.0;
-    let tear_offset_z = base_hz - 2.0;
+    // Tear edge: フードの前端を tear_angle で斜めに落とし、前面に高さ TAPE_TEAR_LAND の平らな縁を残す
+    // 切り取る側は、前面の点 (y = フード下面 + land、z = 前端) を通り tear_angle だけ後ろへ上がる平面の上
+    // (面の法線 (0, cos θ, sin θ)) 平面に下面を合わせた箱を θ だけ回して置く (前は刃を 0 まで尖らせる形で、
+    // しかもフードより上の空間を切っていた)
+    let land = crate::det_math::min(TAPE_TEAR_LAND, spec.wall_thickness);
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tear_rad = crate::angle::canon_angle_deg(spec.tear_angle_deg).to_radians();
-    let tear_rotation = crate::angle::quat_from_rotation_x(tear_rad);
-    let tear_raw = box3d(tear_hx, tear_hy, tear_hz);
+    let (sin_t, cos_t) = alice_det_math::sin_cos(tear_rad);
+    let tear_h = 2.0f32.mul_add(spec.wall_thickness, 10.0);
+    let plane_y = hood_bottom_y + land;
+    let plane_z = base_hz;
     let tear = translate(
         SdfNode::Rotate {
-            child: Arc::new(tear_raw),
-            rotation: tear_rotation,
+            child: Arc::new(box3d(base_hx + 1.0, tear_h, tear_h)),
+            rotation: crate::angle::quat_from_rotation_x(tear_rad),
         },
-        Vec3::new(0.0, tear_offset_y, tear_offset_z),
+        Vec3::new(0.0, cos_t.mul_add(tear_h, plane_y), sin_t.mul_add(tear_h, plane_z)),
     );
 
     to_z_up(subtract(combined, tear))
@@ -6218,7 +6239,7 @@ pub fn led_hub_box(spec: &LedHubBoxSpec) -> SdfNode {
     let cavity_hz = spec.internal_depth * 0.5;
     let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let outer = open_shell(outer_hx, outer_hy, outer_hz, 3.0, spec.wall_thickness);
     let cavity = translate(
         box3d(cavity_hx, cavity_hy, cavity_hz),
         Vec3::new(0.0, cavity_offset_y, 0.0),
