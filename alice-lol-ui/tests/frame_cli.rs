@@ -80,6 +80,7 @@ fn the_reported_defects_are_found_in_the_measured_frame() {
         "control-cover",
         "control-overlap",
         "text",
+        "text-cover",
         "offscreen",
         "chrome-share",
         "text-size",
@@ -199,8 +200,37 @@ fn an_empty_report_fails_every_check() {
             .iter()
             .filter(|l| l.ends_with("compared nothing"))
             .count(),
-        8,
+        alice_lol_ui::frame::FrameCheck::ALL.len(),
         "{out}"
     );
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_probe_text_box_missing_a_side_is_refused_not_read_as_no_box() {
+    // the collector keeps a side the probe left out as not-a-number, which JSON writes as null:
+    // the report is refused, so a canvas label never passes the text checks by having no box
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("frame-cli-half-box");
+    std::fs::create_dir_all(&dir).unwrap();
+    let half = dir.join("half.json");
+    std::fs::write(
+        &half,
+        r#"{"version":1,"viewport":{"w":390,"h":844,"dpr":3},"items":[{"id":"half","source":"probe","role":"readout","rect":[0,0,10,10],"text":{"scroll_w":46,"client_w":100,"scroll_h":null,"client_h":null}}],"samples":[]}"#,
+    )
+    .unwrap();
+    let (code, out, err) = check(&[half.to_str().unwrap()]);
+    let said = format!("{out}{err}");
+    let whole = dir.join("whole.json");
+    std::fs::write(
+        &whole,
+        r#"{"version":1,"viewport":{"w":390,"h":844,"dpr":3},"items":[{"id":"half","source":"probe","role":"readout","rect":[0,0,10,10],"text":{"scroll_w":46,"client_w":100,"scroll_h":17,"client_h":20}}],"samples":[]}"#,
+    )
+    .unwrap();
+    let (whole_code, whole_out, _) = check(&[whole.to_str().unwrap()]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(code, 2, "{said}");
+    assert!(said.contains("cannot read the report"), "{said}");
+    // the same report with every side read: checked (and failing only on what it lacks)
+    assert_eq!(whole_code, 1, "{whole_out}");
+    assert!(whole_out.contains("text 1"), "{whole_out}");
 }

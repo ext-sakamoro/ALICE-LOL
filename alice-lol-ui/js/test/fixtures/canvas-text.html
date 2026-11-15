@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>canvas text fixture</title>
+<style>
+  html, body { margin: 0; background: #fff; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="world" data-ui="scene"></canvas>
+<script>
+  // A canvas that draws its labels itself: the DOM holds no text, so the page reports each label
+  // through its probe with the box the text is meant to fit (`text`) and the drawn text's extent.
+  // Values are fixed so the collector tests can compare them exactly.
+  const c = document.getElementById('world');
+  const g = c.getContext('2d');
+  c.width = innerWidth;
+  c.height = innerHeight;
+  g.fillStyle = '#ccc';
+  g.fillRect(40, 200, 120, 120);
+  g.fillStyle = '#000';
+  g.font = '14px sans-serif';
+  g.fillText('a label', 180, 240);
+  g.fillText('over it', 60, 250);
+  const items = [
+    // the exhibit the labels describe
+    { id: 'exhibit', role: 'subject', rect: [40, 200, 120, 120] },
+    // a label beside it whose text fits its box
+    { id: 'beside', role: 'readout', rect: [180, 226, 100, 20], text_px: 14,
+      text: { scroll_w: 46, client_w: 100, scroll_h: 17, client_h: 20 } },
+    // a label drawn over it
+    { id: 'over', role: 'readout', rect: [60, 236, 100, 20], text_px: 14,
+      text: { scroll_w: 44, client_w: 100, scroll_h: 17, client_h: 20 } },
+    // a hint whose text is wider than its box
+    { id: 'long', role: 'hint', rect: [180, 300, 40, 20], text_px: 14,
+      text: { scroll_w: 120, client_w: 40, scroll_h: 17, client_h: 20 } },
+    // an item drawing no text
+    { id: 'marker', role: 'decor', rect: [10, 10, 8, 8] },
+    // a text box missing a side: the report keeps it as not-a-number, so the law refuses the
+    // report instead of reading the label as having no box
+    { id: 'half', role: 'readout', rect: [180, 360, 100, 20], text_px: 14,
+      text: { scroll_w: 46, client_w: 100 } },
+  ];
+  window.__uiProbe = () => items;
+</script>
+</body>
+</html>

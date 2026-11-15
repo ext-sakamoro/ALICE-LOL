@@ -90,3 +90,32 @@ test('a link inside a sentence is inline text', async () => {
   assert.equal(item('#inlink').inline_text, true);
   assert.equal(item('#clipped').inline_text, false);
 });
+
+// fixtures/canvas-text.html: a canvas drawing its own labels, reported through its probe
+async function probeReport() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.goto(pathToFileURL(path.join(here, 'fixtures', 'canvas-text.html')).href);
+  const r = await collectFrame(page, {});
+  await ctx.close();
+  const probed = new Map(r.items.filter((i) => i.source === 'probe').map((i) => [i.id, i]));
+  return { r, item: (id) => { assert.ok(probed.has(id), `probe item ${id} in the report`); return probed.get(id); } };
+}
+
+test('a probe item carries the text box its canvas reports', async () => {
+  const { r, item } = await probeReport();
+  assert.equal(r.probe, 'present');
+  assert.deepEqual(item('beside').text, { scroll_w: 46, client_w: 100, scroll_h: 17, client_h: 20 });
+  assert.deepEqual(item('long').text, { scroll_w: 120, client_w: 40, scroll_h: 17, client_h: 20 });
+  assert.equal(item('beside').text_px, 14);
+  assert.equal(item('marker').text, null, 'an item drawing no text has no box');
+  assert.equal(item('exhibit').role, 'subject');
+});
+
+test('a probe text box missing a side is kept as not-a-number, not dropped', async () => {
+  const { item } = await probeReport();
+  const t = item('half').text;
+  assert.ok(t, 'the box is in the report');
+  assert.equal(t.scroll_w, 46);
+  assert.ok(Number.isNaN(t.scroll_h) && Number.isNaN(t.client_h), JSON.stringify(t));
+});

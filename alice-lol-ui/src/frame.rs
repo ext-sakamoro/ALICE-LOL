@@ -20,7 +20,10 @@
 //!   is meant to cover the scene, so its buttons are not counted).
 //! - [`FrameCheck::ControlOverlap`]: no two interactive hit rects intersect.
 //! - [`FrameCheck::Text`]: no text item (`readout`, `hint`, `control` with text) overflows its box,
-//!   and no two text items intersect unless one contains the other.
+//!   and no two text items intersect unless one contains the other. A canvas reports a drawn
+//!   label's box through its probe ([`FrameItem::text`]), read as a DOM element's.
+//! - [`FrameCheck::TextCover`]: no label (`readout`, `hint`) intersects a `subject` item,
+//!   containment included (a label whose box holds a small subject hides it).
 //! - [`FrameCheck::Offscreen`]: the page is not laid out wider than the screen (when the report
 //!   knows the screen width), and every item other than `scene` fits the viewport across; down, a
 //!   pinned item (fixed / sticky), or any item of a page that does not scroll.
@@ -104,7 +107,8 @@ pub struct FrameItem {
     /// whether the item takes input
     #[cfg_attr(feature = "serde", serde(default))]
     pub interactive: bool,
-    /// the text box, for a DOM item holding text
+    /// the text box: a DOM item holding text, or a label a canvas reports through its probe (the
+    /// drawn text's extent against the box it is meant to fit)
     #[cfg_attr(feature = "serde", serde(default))]
     pub text: Option<TextBox>,
     /// whether the item is inside a visible overlay (a sheet or dialog meant to cover the scene)
@@ -184,6 +188,8 @@ pub enum FrameCheck {
     ControlOverlap,
     /// text fits its box and text items do not overlap
     Text,
+    /// a label does not cover a subject
+    TextCover,
     /// items lie inside the viewport
     Offscreen,
     /// the chrome takes a bounded share of the viewport
@@ -194,12 +200,13 @@ pub enum FrameCheck {
 
 impl FrameCheck {
     /// every check, in report order
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::LayerOrder,
         Self::HitTarget,
         Self::ControlCover,
         Self::ControlOverlap,
         Self::Text,
+        Self::TextCover,
         Self::Offscreen,
         Self::ChromeShare,
         Self::TextSize,
@@ -214,6 +221,7 @@ impl FrameCheck {
             Self::ControlCover => "control-cover",
             Self::ControlOverlap => "control-overlap",
             Self::Text => "text",
+            Self::TextCover => "text-cover",
             Self::Offscreen => "offscreen",
             Self::ChromeShare => "chrome-share",
             Self::TextSize => "text-size",
@@ -282,6 +290,15 @@ pub enum FrameViolation {
         content: [f32; 2],
         /// box width × height
         boxed: [f32; 2],
+    },
+    /// a label (a `readout` or `hint`, drawn by the DOM or a canvas) intersects a subject
+    TextCoversSubject {
+        /// the label
+        text: String,
+        /// the subject
+        subject: String,
+        /// the intersection's area in CSS px²
+        area: f32,
     },
     /// two text items intersect
     TextOverlaps {
@@ -356,6 +373,7 @@ impl FrameViolation {
             Self::ControlCovers { .. } => Some(FrameCheck::ControlCover),
             Self::ControlsOverlap { .. } => Some(FrameCheck::ControlOverlap),
             Self::TextOverflows { .. } | Self::TextOverlaps { .. } => Some(FrameCheck::Text),
+            Self::TextCoversSubject { .. } => Some(FrameCheck::TextCover),
             Self::Offscreen { .. } | Self::PageWiderThanScreen { .. } => {
                 Some(FrameCheck::Offscreen)
             }
@@ -394,6 +412,7 @@ impl FrameViolation {
             Self::ControlCovers {
                 control, subject, ..
             } => vec![control.as_str(), subject.as_str()],
+            Self::TextCoversSubject { text, subject, .. } => vec![text.as_str(), subject.as_str()],
             Self::ControlsOverlap { a, b, .. } | Self::TextOverlaps { a, b, .. } => {
                 vec![a.as_str(), b.as_str()]
             }
@@ -429,6 +448,9 @@ impl core::fmt::Display for FrameViolation {
                 content[0], content[1], boxed[0], boxed[1]
             ),
             Self::TextOverlaps { a, b, area } => write!(f, "text: {a} and {b} overlap by {area:.0} px²"),
+            Self::TextCoversSubject { text, subject, area } => {
+                write!(f, "text-cover: {text} covers {area:.0} px² of {subject}")
+            }
             Self::PageWiderThanScreen { layout_w, screen_w } => write!(
                 f,
                 "offscreen: the page is laid out {layout_w:.0} px wide on a {screen_w:.0} px screen (zoomed out to fit)"
@@ -616,6 +638,7 @@ impl FrameLaw {
                 FrameCheck::ControlCover => self.control_cover(report, &mut v.violations),
                 FrameCheck::ControlOverlap => control_overlap(report, &mut v.violations),
                 FrameCheck::Text => text(report, &mut v.violations),
+                FrameCheck::TextCover => text_cover(report, &mut v.violations),
                 FrameCheck::Offscreen => offscreen(report, &mut v.violations),
                 FrameCheck::ChromeShare => self.chrome_share(report, &mut v.violations),
                 FrameCheck::TextSize => self.text_size(report, &mut v.violations),
@@ -804,6 +827,36 @@ fn control_overlap(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize
         }
     }
     hits.len()
+}
+
+/// labels (`readout`, `hint`; DOM or probe) against subjects: any intersection above the edge
+/// tolerance is a violation, containment included (a label whose box holds a small subject hides
+/// all of it); compared = the (label, subject) pairs. A `trajectory` is a run of path segments a
+/// label beside the path touches, so it is left to `control-cover`, which weighs the share covered
+fn text_cover(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
+    let labels: Vec<&FrameItem> = report
+        .items
+        .iter()
+        .filter(|i| matches!(i.role.as_str(), "readout" | "hint"))
+        .collect();
+    let subjects: Vec<&FrameItem> = report
+        .items
+        .iter()
+        .filter(|i| i.role == "subject")
+        .collect();
+    for s in &subjects {
+        for l in &labels {
+            let area = intersection_area(l.rect, s.rect);
+            if area > EDGE_EPS * EDGE_EPS {
+                out.push(FrameViolation::TextCoversSubject {
+                    text: l.id.clone(),
+                    subject: s.id.clone(),
+                    area,
+                });
+            }
+        }
+    }
+    labels.len() * subjects.len()
 }
 
 fn text(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
@@ -1127,6 +1180,7 @@ mod tests {
                 (FrameCheck::ControlCover, 1),
                 (FrameCheck::ControlOverlap, 1),
                 (FrameCheck::Text, 1),
+                (FrameCheck::TextCover, 1),
                 (FrameCheck::Offscreen, 5),
                 (FrameCheck::ChromeShare, 1),
                 (FrameCheck::TextSize, 1),
@@ -1297,6 +1351,123 @@ mod tests {
                 b: "#b".into(),
                 area: 500.0
             }]
+        );
+    }
+
+    #[test]
+    fn a_label_over_its_subject_fails_and_a_label_beside_it_passes() {
+        let exhibit = item("exhibit", "subject", [40.0, 200.0, 120.0, 120.0], false);
+        let over = texted("over", "readout", [60.0, 236.0, 100.0, 20.0], [44.0, 17.0]);
+        let v = only(FrameCheck::TextCover).check(&report(vec![exhibit.clone(), over], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::TextCoversSubject {
+                text: "over".into(),
+                subject: "exhibit".into(),
+                area: 2000.0
+            }]
+        );
+        assert_eq!(v.compared, vec![(FrameCheck::TextCover, 1)]);
+        let beside = texted(
+            "beside",
+            "readout",
+            [180.0, 226.0, 100.0, 20.0],
+            [46.0, 17.0],
+        );
+        let v = only(FrameCheck::TextCover).check(&report(vec![exhibit, beside], vec![]));
+        assert!(v.passed(), "{:?}", v.violations);
+        assert_eq!(v.compared, vec![(FrameCheck::TextCover, 1)]);
+    }
+
+    #[test]
+    fn a_label_hiding_its_whole_subject_or_inside_it_fails() {
+        // containment is no excuse here: a label whose box holds the subject hides all of it
+        let small = item("letter", "subject", [100.0, 100.0, 10.0, 10.0], false);
+        let wide = texted("caption", "hint", [90.0, 95.0, 60.0, 20.0], [50.0, 17.0]);
+        let v = only(FrameCheck::TextCover).check(&report(vec![small, wide], vec![]));
+        assert!(
+            matches!(&v.violations[..], [FrameViolation::TextCoversSubject { area, .. }] if (*area - 100.0).abs() < 1e-6),
+            "{:?}",
+            v.violations
+        );
+        let big = item("panel", "subject", [0.0, 0.0, 300.0, 300.0], false);
+        let inside = texted("inside", "readout", [10.0, 10.0, 50.0, 20.0], [40.0, 17.0]);
+        let v = only(FrameCheck::TextCover).check(&report(vec![big, inside], vec![]));
+        assert_eq!(v.violations.len(), 1, "{:?}", v.violations);
+    }
+
+    #[test]
+    fn text_cover_reads_canvas_labels_and_only_text_roles() {
+        // a probe label counts as a DOM one; a control or a decor item over the subject is not a
+        // label (control-cover reads controls); an edge touch under the tolerance is not covering
+        let exhibit = item("exhibit", "subject", [40.0, 200.0, 120.0, 120.0], false);
+        let probe_label = FrameItem {
+            source: "probe".into(),
+            ..texted("name", "readout", [150.0, 300.0, 60.0, 20.0], [40.0, 17.0])
+        };
+        let control = texted("#go", "control", [50.0, 210.0, 60.0, 30.0], [40.0, 17.0]);
+        let decor = item("dot", "decor", [50.0, 210.0, 8.0, 8.0], false);
+        let touching = texted("edge", "hint", [160.0, 200.0, 60.0, 20.0], [40.0, 17.0]);
+        let path = item("trail:9", "trajectory", [150.0, 300.0, 30.0, 4.0], false);
+        let v = only(FrameCheck::TextCover).check(&report(
+            vec![exhibit, probe_label, control, decor, touching, path],
+            vec![],
+        ));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::TextCoversSubject {
+                text: "name".into(),
+                subject: "exhibit".into(),
+                area: 200.0
+            }]
+        );
+        assert_eq!(v.compared, vec![(FrameCheck::TextCover, 2)]);
+    }
+
+    #[test]
+    fn text_cover_with_no_label_or_no_subject_compared_nothing() {
+        let exhibit = item("exhibit", "subject", [40.0, 200.0, 120.0, 120.0], false);
+        let label = texted("name", "readout", [180.0, 226.0, 100.0, 20.0], [46.0, 17.0]);
+        for items in [vec![exhibit], vec![label], vec![]] {
+            let v = only(FrameCheck::TextCover).check(&report(items, vec![]));
+            assert_eq!(
+                v.violations,
+                vec![FrameViolation::NothingCompared(FrameCheck::TextCover)]
+            );
+        }
+    }
+
+    #[test]
+    fn canvas_labels_with_a_text_box_are_read_by_the_text_check() {
+        // the text check reads a probe item's box as a DOM element's: before the collector passed
+        // it through, a page whose only text is drawn on a canvas compared nothing
+        let fits = FrameItem {
+            source: "probe".into(),
+            ..texted(
+                "beside",
+                "readout",
+                [180.0, 226.0, 100.0, 20.0],
+                [46.0, 17.0],
+            )
+        };
+        let long = FrameItem {
+            source: "probe".into(),
+            ..texted("long", "hint", [180.0, 300.0, 40.0, 20.0], [120.0, 17.0])
+        };
+        let v = only(FrameCheck::Text).check(&report(vec![fits.clone(), long], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::TextOverflows {
+                id: "long".into(),
+                content: [120.0, 17.0],
+                boxed: [40.0, 20.0]
+            }]
+        );
+        let no_box = FrameItem { text: None, ..fits };
+        let v = only(FrameCheck::Text).check(&report(vec![no_box], vec![]));
+        assert_eq!(
+            v.violations,
+            vec![FrameViolation::NothingCompared(FrameCheck::Text)]
         );
     }
 

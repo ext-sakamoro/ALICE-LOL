@@ -6,8 +6,11 @@
 //   [role=button], [tabindex]) as `control`.
 // - probe items: what the page's canvas drew this frame, from `window.<probe>()` (default
 //   `__uiProbe`), each `{ id, role, rect: [x, y, w, h], hit?: [x, y, w, h], interactive?, layer?,
-//   text_px?, text_min_px?, text_min_reason?, text_expected?, text_lines? }`
-//   in CSS px. A page without a probe contributes no probe items (the report says so).
+//   text_px?, text_min_px?, text_min_reason?, text_expected?, text_lines?,
+//   text?: { scroll_w, client_w, scroll_h, client_h } }` in CSS px. `text` is a drawn label's
+//   box: the text's extent (`scroll_*`) against the box it is meant to fit (`client_*`), read by
+//   the `text` and `text-cover` checks as for a DOM element. A page without a probe contributes no
+//   probe items (the report says so).
 // - text sizes: every visible element holding text of its own carries `text_px` (font size x
 //   transform scale, or the page's own `data-ui-text-px` for canvas / SDF text); elements with no
 //   role become `text` items, read only by the text-size check. An element marked as drawing text
@@ -185,7 +188,17 @@ export async function collectFrame(page, cfg = {}) {
             rect: it.rect,
             hit: it.hit || (it.interactive ? it.rect : null),
             interactive: !!it.interactive,
-            text: null,
+            // the box the drawn text is meant to fit and the text's extent, as for a DOM item;
+            // a side the probe leaves out is not-a-number, so the law refuses the report rather
+            // than reading the label as having no box
+            text: it.text == null
+              ? null
+              : {
+                  scroll_w: Number(it.text.scroll_w),
+                  client_w: Number(it.text.client_w),
+                  scroll_h: Number(it.text.scroll_h),
+                  client_h: Number(it.text.client_h),
+                },
             layer: Number.isFinite(it.layer) ? it.layer : null,
             text_px: Number.isFinite(it.text_px) ? it.text_px : null,
             text_min_px: Number.isFinite(it.text_min_px) ? it.text_min_px : null,
