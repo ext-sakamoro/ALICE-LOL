@@ -205,19 +205,25 @@ pub fn honeycomb_infill(
     count: u32,
 ) -> SdfNode {
     // 6 角形 hex_radius (中心から頂点までの距離) = cell_size / √3 (flat-to-flat / √3)
-    // hex_prism は Y 軸押出、板は Y = 板厚方向想定 (rib と揃える)
+    // 板は Y = 板厚方向想定 (rib と揃える)、`HexPrism` は Z 押出なので下で Y に回す
     let hex_r = cell_size / 3.0_f32.sqrt();
     // wall_thickness 分だけ hex を縮小して壁を残す (cell 間ギャップ = wall)
     let cell_effective_r = crate::det_math::max(wall_thickness.mul_add(-0.5, hex_r), 0.0);
-    let hex = SdfNode::HexPrism {
-        hex_radius: cell_effective_r,
-        half_height: 1000.0, // container で切るので大きめに取る
+    // `HexPrism` は Z に押し出す: X の周りに 90° 回して板の厚み (Y) の方向に抜く
+    let hex = SdfNode::Rotate {
+        child: Arc::new(SdfNode::HexPrism {
+            hex_radius: cell_effective_r,
+            half_height: 1000.0, // container で切るので大きめに取る
+        }),
+        rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     };
     // 6 角形千鳥は複雑なので Phase A.3 では rect grid で単純化 (Phase A.4 で hex 千鳥化検討)
     // X 方向 pitch = cell_size × √3 (行間)、Z 方向 pitch = cell_size × 1.5 (列間)
     let repeated = SdfNode::RepeatFinite {
         child: Arc::new(hex),
-        count: [count, 0, count],
+        // RepeatFinite は軸ごとに原点中心の 2·floor(N/2) + 1 個 (偶数 N で N + 1 個): 文書の
+        // 2·count + 1 個には 2·count を渡す
+        count: [count.saturating_mul(2), 0, count.saturating_mul(2)],
         spacing: Vec3::new(cell_size * 3.0_f32.sqrt(), 1.0, cell_size * 1.5),
     };
     SdfNode::Subtraction {
