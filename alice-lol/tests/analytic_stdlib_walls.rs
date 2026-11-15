@@ -10,6 +10,8 @@
 //! Families and the fix each row depends on:
 //! - open shells (cavity open at +Y): `open_shell` (flat rim and floor, vertical edges rounded with
 //!   `r <= wall`)
+//! - blocks and racks whose wells, holes or slots open through the top: `rounded_plate` on Y (only the
+//!   vertical edges rounded) — a rounded top edge eats the wall between the opening and the side
 //! - plates: `rounded_plate` (only the edges along the plate's thickness rounded)
 //! - mount holes through Z-thin plates: `cylinder_z` (`caliper_holder`, `wall_hook`)
 //! - `esp32_enclosure`: the USB opening is cut through the rim when the lip above it would be thinner
@@ -137,6 +139,75 @@ const ROWS: &[(&str, f32, &str)] = &[
         "t_slot_bracket_2020(20, 20)",
         2.5,
         "counterbore floor of M5 (max(0.5 d, 1.2))",
+    ),    (
+        "sock_divider(4, 80, 89)",
+        2.0,
+        "open box: partition and side walls (the same shape with square edges reaches it)",
+    ),
+    (
+        "led_hub_box(120, 80, 50)",
+        3.0,
+        "open box: wall_thickness 3.0 (the same shape with square edges reaches it)",
+    ),
+    (
+        "led_hub_box(80, 60, 30)",
+        2.5,
+        "open box: the LED window's lip (the same shape with square edges reaches it)",
+    ),
+    (
+        "dry_box(2, 2, 68)",
+        3.0,
+        "block with wells: well to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "battery_18650_holder(4, 2.5, 0)",
+        2.5,
+        "block with cell holes: hole to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "token_well(20, 20, 4)",
+        1.5,
+        "block with wells: floor_thickness 1.5 (the same shape with square edges reaches it)",
+    ),
+    (
+        "nozzle_holder(12, 8, 6)",
+        3.0,
+        "block with holes: hole to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "kcup_holder(2, 5, 39)",
+        3.0,
+        "block with wells: well to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "utensil_caddy(3, 50, 120)",
+        4.0,
+        "block with compartments: floor_thickness 4.0 (the same shape with square edges reaches it)",
+    ),
+    (
+        "cutting_board_rack(3, 12, 220)",
+        4.0,
+        "slotted rack: slot to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "pliers_rack(6, 15, 60)",
+        5.0,
+        "slotted rack: slot to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "build_plate_rack(5, 15, 200)",
+        5.0,
+        "slotted rack: slot to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "cable_clip(9, 36)",
+        1.9,
+        "clip: cable bore and slot to side (the same shape with square edges reaches it)",
+    ),
+    (
+        "razor_holder(12, 22, 4.5)",
+        3.0,
+        "backplate: wall_thickness 3.0 at the slot (the same shape with square edges reaches it)",
     ),
 ];
 
@@ -144,7 +215,7 @@ const ROWS: &[(&str, f32, &str)] = &[
 #[test]
 #[cfg_attr(
     debug_assertions,
-    ignore = "meshes 25 shapes at real size: runs in release (release-profile.yml)"
+    ignore = "meshes 39 shapes at real size: runs in release (release-profile.yml)"
 )]
 fn stdlib_shapes_keep_their_spec_walls_at_real_size() {
     // one thread per row (the rows are independent; the slowest row bounds the test)

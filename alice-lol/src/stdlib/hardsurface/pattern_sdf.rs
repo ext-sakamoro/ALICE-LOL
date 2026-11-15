@@ -377,7 +377,7 @@ impl GridfinitySpec {
 /// Gridfinity bin (pipeline `gridfinity.rs` LOL DSL 生成と等価な `SdfNode` を返す)
 ///
 /// 構造:
-/// - 外形 `RoundedBox` (`units × GRID_UNIT - 2 × BIN_CLEARANCE` 幅)
+/// - 外形 `rounded_plate` on Z (縦の辺だけ丸め、上面と底面は平ら、`units × GRID_UNIT - 2 × BIN_CLEARANCE` 幅)
 /// - dividers あり → `RepeatFinite` cavity grid を `subtract`
 /// - dividers なし → 単一 cavity `RoundedBox` を `subtract`
 ///
@@ -419,7 +419,7 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
     let inner_hy = bin_hy - spec.wall_thickness;
     let cavity_offset_z = f32::midpoint(spec.floor_thickness, 10.0);
 
-    let outer = rounded_box(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET);
+    let outer = rounded_plate(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET, Vec3::Z);
 
     if let Some((dx, dy)) = spec.dividers {
         if dx > 1 && dy > 1 {
@@ -1748,7 +1748,7 @@ impl CableClipSpec {
 /// ケーブルクリップ (Y-axis 沿い cable、+Z 開口 snap-fit)
 ///
 /// 構造 (hobby-diy § 2 準拠、Z-up 直接設計、wrapper なし):
-/// - Outer: `RoundedBox` (`(cable+2w) × length × (cable+2w)`)
+/// - Outer: `rounded_plate` on Y (`(cable+2w) × length × (cable+2w)`、穴の軸に平行な辺だけ丸め)
 /// - Cavity: Y-axis `Cylinder` (r = `cable/2 + 0.1` clearance、cable 走行方向)
 /// - Opening: `Box3d` slot (X 狭 opening、Z+ 上端から中央下へ)、snap-fit で cable を押し込む
 ///
@@ -1776,7 +1776,7 @@ pub fn cable_clip(spec: &CableClipSpec) -> SdfNode {
     let slot_hz = (slot_top_z - slot_bottom_z) * 0.5;
     let slot_offset_z = f32::midpoint(slot_top_z, slot_bottom_z);
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness * 0.5);
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, spec.wall_thickness * 0.5, Vec3::Y);
     let cavity = cylinder(cavity_r, cavity_hy);
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
@@ -1987,7 +1987,7 @@ impl TokenWellSpec {
 /// トークン井戸 (row 状 count well、top 開口、印刷正立、`to_z_up` wrap)
 ///
 /// 構造 (hobby-diy § 6 Token Well Design 準拠、Y-up 設計):
-/// - Outer: `RoundedBox` (`(count×(dia+2×clear)+2×wall) × (depth+floor) × (dia+2×(clear+wall))`)
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら) (`(count×(dia+2×clear)+2×wall) × (depth+floor) × (dia+2×(clear+wall))`)
 /// - Wells: Y-axis `Cylinder` × count、X 方向等間隔、Y+ 上端開口
 ///
 /// # 使用例
@@ -2017,7 +2017,8 @@ pub fn token_well(spec: &TokenWellSpec) -> SdfNode {
     let well_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, spec.wall_thickness, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -2634,7 +2635,7 @@ const CELL_18650_LENGTH: f32 = 68.0;
 /// 18650 バッテリーホルダー (row 状 cylindrical cavity、`to_z_up` wrap)
 ///
 /// 構造 (electronics-enclosure § 3 準拠、Y-up 設計):
-/// - Outer: `RoundedBox`
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら)
 /// - Cavities: N× Y-axis `Cylinder` (r=`CELL/2`, h=`(CELL_LEN+1)/2`)、X 方向等間隔
 /// - `floor_thickness = 0` なら両端貫通 (cell 挿入両端 open)
 /// - `floor_thickness > 0` なら片端閉塞 (positive terminal spring 保持用)
@@ -2663,7 +2664,8 @@ pub fn battery_18650_holder(spec: &Battery18650HolderSpec) -> SdfNode {
     let cell_hy = f32::midpoint(CELL_18650_LENGTH, 10.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -2714,7 +2716,7 @@ impl ToothbrushHolderSpec {
 /// 歯ブラシホルダー (row 状 cylindrical hole、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (bathroom § 7.1 準拠、Y-up 設計):
-/// - Outer: `RoundedBox`
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら)
 /// - Holes: N× Y-axis `Cylinder` (r=`dia/2`, h=`(depth+1)/2`)、X 方向等間隔
 /// - top 開口 (Y+)、floor 部分は material (drainage 穴は user 側で加工推奨)
 ///
@@ -2742,7 +2744,7 @@ pub fn toothbrush_holder(spec: &ToothbrushHolderSpec) -> SdfNode {
     let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -2894,7 +2896,7 @@ impl PliersRackSpec {
 /// プライヤーラック (row 状 rectangular slot、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (garage § 8.4 準拠、Y-up 設計):
-/// - Outer: `RoundedBox` (`(count×pitch+2×wall) × (depth+floor) × slot_height`)
+/// - Outer: `Box3d` (角の箱、溝が上面と前後の面を貫くので丸めない) (`(count×pitch+2×wall) × (depth+floor) × slot_height`)
 /// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 開口
 ///
 /// # 使用例
@@ -2920,7 +2922,9 @@ pub fn pliers_rack(spec: &PliersRackSpec) -> SdfNode {
     let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 溝は上面と前後の面を貫くので外形は角の箱 どの辺を丸めても開口の面に接し、端の壁 (縦の辺) か溝の下の
+    // 床 (前後の下の辺) を丸みの分だけ削る (実測: 縦の辺の丸めで端の壁 5 → 3.4、X 方向の辺で床 5 → 2.3 mm)
+    let outer = box3d(outer_hx, outer_hy, outer_hz);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -3097,7 +3101,7 @@ const EGG_CUP_DIAMETER: f32 = 40.0;
 /// 卵トレー (2D grid 状 cup、egg cup diameter 40mm 固定、`to_z_up` wrap)
 ///
 /// 構造 (kitchen § 6.5 準拠、Y-up `設計、hex_bit_holder` の 2D grid pattern の cyl 版):
-/// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (cup_depth+floor) × (rows×pitch+2×wall)`)
+/// - Outer: `rounded_plate` on Y (`(cols×pitch+2×wall) × (cup_depth+floor) × (rows×pitch+2×wall)`、縦の辺だけ丸め)
 /// - Cups: (rows×cols)× Y-axis `Cylinder` (r=`20mm`, h=`cup_depth+1`)、grid 配置
 ///
 /// # 使用例
@@ -3127,7 +3131,7 @@ pub fn egg_tray(spec: &EggTraySpec) -> SdfNode {
     let x_start = -(cols_f - 1.0) * spec.pitch * 0.5;
     let z_start = -(rows_f - 1.0) * spec.pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
@@ -3181,7 +3185,7 @@ impl UtensilCaddySpec {
 /// キッチンツールキャディ (row 状 large cylindrical compartment、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (kitchen § 6.8 準拠、Y-up `設計、toothbrush_holder` pattern の大径 kitchen version):
-/// - Outer: `RoundedBox`
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら)
 /// - Compartments: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
 /// - Drainage holes は user 側で加工推奨 (sink 側で使う場合)
 ///
@@ -3209,7 +3213,8 @@ pub fn utensil_caddy(spec: &UtensilCaddySpec) -> SdfNode {
     let comp_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -3334,7 +3339,7 @@ impl NozzleHolderSpec {
 /// ノズルホルダー (row 状 hole、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (printer § 9.5 準拠、Y-up `設計、drill_bit_holder` pattern の単一サイズ版):
-/// - Outer: `RoundedBox`
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら)
 /// - Holes: N× Y-axis `Cylinder`、X 方向等間隔、Y+ 開口
 ///
 /// # 使用例
@@ -3361,7 +3366,8 @@ pub fn nozzle_holder(spec: &NozzleHolderSpec) -> SdfNode {
     let hole_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -3418,7 +3424,7 @@ impl BuildPlateRackSpec {
 /// ビルドプレートラック (row 状 vertical slot、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (printer § 9.6 準拠、Y-up `設計、pliers_rack` pattern の taller version):
-/// - Outer: `RoundedBox` (`(count×spacing+2×wall) × (height+floor) × depth`)
+/// - Outer: `Box3d` (角の箱、溝が上面と前後の面を貫くので丸めない) (`(count×spacing+2×wall) × (height+floor) × depth`)
 /// - Slots: N× `Box3d` slot、X 方向等間隔、Y+ 全高貫通
 ///
 /// # 使用例
@@ -3443,7 +3449,9 @@ pub fn build_plate_rack(spec: &BuildPlateRackSpec) -> SdfNode {
     let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * spec.slot_spacing * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 溝は上面と前後の面を貫くので外形は角の箱 どの辺を丸めても開口の面に接し、端の壁 (縦の辺) か溝の下の
+    // 床 (前後の下の辺) を丸みの分だけ削る (実測: 縦の辺の丸めで端の壁 5 → 3.4、X 方向の辺で床 5 → 2.3 mm)
+    let outer = box3d(outer_hx, outer_hy, outer_hz);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -3836,7 +3844,7 @@ impl KcupHolderSpec {
 /// K-Cup ホルダー (2D grid cylindrical wells、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (kitchen § 6.7 準拠、Y-up `設計、egg_tray` pattern の K-Cup サイズ版):
-/// - Outer: `RoundedBox` (`(cols×pitch+2×wall) × (depth+floor) × (rows×pitch+2×wall)`)
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら) (`(cols×pitch+2×wall) × (depth+floor) × (rows×pitch+2×wall)`)
 /// - Wells: (rows×cols)× Y-axis `Cylinder` (r=`capsule/2`, h=`depth+1`)、grid 配置
 ///
 /// # 使用例
@@ -3867,7 +3875,8 @@ pub fn kcup_holder(spec: &KcupHolderSpec) -> SdfNode {
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
@@ -4021,7 +4030,7 @@ impl WrapHolderSpec {
 /// wrap/foil ロールホルダー (長 body + 上端 半円 cradle、Y-up 設計 + `to_z_up`)
 ///
 /// 構造 (kitchen § 6.2 準拠):
-/// - Outer: `RoundedBox` (`(roll_width+2×wall) × body_height × (roll_dia+2×(clear+wall))`)
+/// - Outer: `rounded_plate` on Y (`(roll_width+2×wall) × body_height × (roll_dia+2×(clear+wall))`、縦の辺だけ丸め)
 /// - Cradle: X-axis `Cylinder` (r=`roll_dia/2 + clearance`), 上端 (Y+) 位置に subtract
 ///   → 上方から見て半円 (or 60%) の cavity、roll がここに置かれる
 ///
@@ -4056,7 +4065,7 @@ pub fn wrap_holder(spec: &WrapHolderSpec) -> SdfNode {
                                         // cavity_depth 分だけ埋め込むには: cylinder 中心 Y = outer_hy - cavity_depth + cradle_r
     let cradle_offset_y = outer_hy - cavity_depth + cradle_r;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, spec.wall_thickness);
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, spec.wall_thickness, Vec3::Y);
     let cradle_yaxis = cylinder(cradle_r, cradle_half_h);
     // Y-axis → X-axis: Z 軸回りに π/2 回転
     let cradle_xaxis = SdfNode::Rotate {
@@ -4107,7 +4116,7 @@ impl SockDividerSpec {
 /// 靴下 divider (外周 frame + (count-1) partition walls、top 開口、`to_z_up` wrap)
 ///
 /// 構造 (drawer § 3.7 準拠、Y-up 設計):
-/// - Outer: `RoundedBox` (`(count×cell_w+(count+1)×wall) × (height+floor) × (depth+2×wall)`)
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら) (`(count×cell_w+(count+1)×wall) × (height+floor) × (depth+2×wall)`)
 /// - Cavity: `Box3d` (`(count×cell_w+(count-1)×wall) × height+1 × depth`)、Y+ 開口 (frame 形成)
 /// - Partition walls: (count-1)× `Box3d` (X 方向 thin)、cell 境界に union で追加
 ///
@@ -4141,7 +4150,8 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     let cavity_hz = spec.cell_depth * 0.5;
     let cavity_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
     let cavity = translate(
         box3d(cavity_hx, cavity_hy, cavity_hz),
         Vec3::new(0.0, cavity_offset_y, 0.0),
@@ -4315,7 +4325,7 @@ impl RazorHolderSpec {
 /// カミソリホルダー (wall-mount narrow slot + mount hole、`to_z_up` wrap)
 ///
 /// 構造 (bathroom § 7.2 準拠、Y-up 設計):
-/// - Backplate: `RoundedBox` (`backplate_w × total_h × wall`)
+/// - Backplate: `rounded_plate` on Z (`backplate_w × total_h × wall`、板の面内の角だけ丸め)
 /// - Slot: `Box3d` slot (`slot_w × slot_depth × wall+1`)、backplate 中央 Z+ 開口
 /// - Mount hole: Y-axis `Cylinder` (r=`mount_hole/2`, h=wall+1)、backplate 上部 中央
 ///
@@ -4356,7 +4366,7 @@ pub fn razor_holder(spec: &RazorHolderSpec) -> SdfNode {
     let mount_hy = punch_z;
     let mount_offset_y = spec.wall_thickness.mul_add(-2.0, outer_hy);
 
-    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, backplate_radius);
+    let backplate = rounded_plate(outer_hx, outer_hy, outer_hz, backplate_radius, Vec3::Z);
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
         Vec3::new(0.0, slot_offset_y, 0.0),
@@ -5112,7 +5122,7 @@ impl DryBoxSpec {
 /// フィラメント dry box (2D grid cyl cavity for spools、`to_z_up` wrap)
 ///
 /// 構造 (printer § 9.3 準拠、Y-up 設計、`utensil_caddy` の 2D grid 版):
-/// - Outer: `RoundedBox` (`(cols×pitch+wall) × (width+floor) × (rows×pitch+wall)`)
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら) (`(cols×pitch+wall) × (width+floor) × (rows×pitch+wall)`)
 /// - Cavities: (rows×cols)× Y-axis `Cylinder` (r=`dia/2`、h=`width-floor`)、Y+ 開口
 ///
 /// lid + 除湿剤 slot は separate print (本 primitive は base のみ)
@@ -5145,7 +5155,8 @@ pub fn dry_box(spec: &DryBoxSpec) -> SdfNode {
     let x_start = -(cols_f - 1.0) * pitch * 0.5;
     let z_start = -(rows_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for r in 0..rows {
@@ -5497,7 +5508,7 @@ impl CuttingBoardRackSpec {
 /// まな板ラック (tall vertical slots、`build_plate_rack` の kitchen tall + deep 版、`to_z_up` wrap)
 ///
 /// 構造 (kitchen § 6.6 準拠、Y-up 設計、multi-component:base + N 垂直 slot):
-/// - Outer: `RoundedBox` (`(count×pitch+wall) × height × (slot_depth+2×wall)`)
+/// - Outer: `rounded_plate` on Y (縦の辺だけ丸め、上面と底面は平ら) (`(count×pitch+wall) × height × (slot_depth+2×wall)`)
 /// - Slots: N× `Box3d` slot (X thin、Y height-floor、Z `slot_depth)、Y`+ 開口 + X 貫通で挿入
 ///
 /// `build_plate_rack` との違い: `slot_depth` (Z) が大幅 deep = まな板の長辺方向、height (Y) が tall (200+mm)
@@ -5527,7 +5538,8 @@ pub fn cutting_board_rack(spec: &CuttingBoardRackSpec) -> SdfNode {
     let slot_offset_y = spec.floor_thickness.mul_add(0.5, 5.0);
     let x_start = -(count_f - 1.0) * pitch * 0.5;
 
-    let outer = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    // 縦の辺だけ丸め、上面は平ら (上から開けた穴・溝と側面の間の壁を上の辺の丸みが削らない)
+    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Y);
     let mut result = outer;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..count {
@@ -6421,7 +6433,7 @@ impl VesaMountSpec {
 
 /// VESA モニターマウント板 (75/100 規格、4 隅にネジ穴、Z-up viewer 向き)
 ///
-/// 構造: `RoundedBox` 板 (Y 軸厚) から 4 隅 (X/Z 平面) に `screw_hole` / `counterbore` / `countersink` を Subtraction
+/// 構造: `rounded_plate` 板 (Y 軸厚、面内の角だけ `corner_radius` で丸め) から 4 隅 (X/Z 平面) に `screw_hole` / `counterbore` / `countersink` を Subtraction
 /// `to_z_up` で Z-up viewer に整列 (板が bed 上に flat 置き)
 ///
 /// # 使用例
@@ -6441,7 +6453,7 @@ pub fn vesa_mount(spec: &VesaMountSpec) -> SdfNode {
     let outer_hy = spec.plate_thickness * 0.5;
     let outer_hz = plate_extent * 0.5;
 
-    let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
+    let plate = rounded_plate(outer_hx, outer_hy, outer_hz, spec.corner_radius, Vec3::Y);
 
     let half_pcd = spec.vesa_size * 0.5;
     let corners = [
@@ -6845,7 +6857,7 @@ impl HeatSetArraySpec {
 
 /// Heat-set insert boss array (板 + 格子状 heat-set 穴、Z-up viewer 向き)
 ///
-/// 構造: 板 (`RoundedBox`) から `heat_set_insert_hole` を rows×cols grid で Subtraction
+/// 構造: 板 (`rounded_plate`、面内の角だけ丸め) から `heat_set_insert_hole` を rows×cols grid で Subtraction
 /// 穴は板上面 (Y+) 側から埋込深さまで
 ///
 /// # 使用例
@@ -6868,7 +6880,7 @@ pub fn heat_set_array(spec: &HeatSetArraySpec) -> SdfNode {
     let outer_hy = spec.base_thickness * 0.5;
     let outer_hz = plate_extent_z * 0.5;
 
-    let plate = rounded_box(outer_hx, outer_hy, outer_hz, 2.0);
+    let plate = rounded_plate(outer_hx, outer_hy, outer_hz, 2.0, Vec3::Y);
 
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
@@ -7385,7 +7397,7 @@ impl BearingSeatSpec {
 
 /// 軸受マウント板 (板 + bearing pocket + shaft 貫通穴、Z-up viewer 向き)
 ///
-/// 構造: `RoundedBox` 板 中心に bearing OD の cylinder pocket を Subtraction
+/// 構造: `rounded_plate` 板 (面内の角だけ `corner_radius` で丸め) 中心に bearing OD の cylinder pocket を Subtraction
 /// style=0 (press-fit): pocket dia = OD - 0.05mm (圧入)、shaft 貫通穴 = `inner_dia` + 0.5mm clearance
 /// style=1 (slip fit): pocket dia = OD + 0.1mm (はめ込み)、shaft 貫通穴 = `inner_dia` + 0.5mm
 /// style=2 (through with shoulder): 板厚 > bearing width の場合のみ shoulder 残す、それ以外は貫通
@@ -7409,7 +7421,7 @@ pub fn bearing_seat(spec: &BearingSeatSpec) -> SdfNode {
     let outer_hy = spec.plate_thickness * 0.5;
     let outer_hz = plate_extent * 0.5;
 
-    let plate = rounded_box(outer_hx, outer_hy, outer_hz, spec.corner_radius);
+    let plate = rounded_plate(outer_hx, outer_hy, outer_hz, spec.corner_radius, Vec3::Y);
 
     // Bearing pocket (cavity margin rule intrinsic in helper)
     let pocket_dia = match spec.style {
