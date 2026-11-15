@@ -222,7 +222,7 @@ fn check_export(p: &Program) -> Result<(), String> {
 }
 
 /// how many documents hold tagged programs, and how many programs of each kind they hold
-const EXPECTED_DOCUMENTS_PRINT_RENDER_FRAGMENT: (usize, usize, usize, usize) = (5, 33, 6, 10);
+const EXPECTED_DOCUMENTS_PRINT_RENDER_FRAGMENT: (usize, usize, usize, usize) = (5, 34, 6, 10);
 
 /// every leg: the fences are found, tagged, comment-free and parse (cheap)
 #[test]
