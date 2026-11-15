@@ -134,9 +134,21 @@ tests = ["alice-lol/tests/law_max_min_ties.rs::honeycomb_cell_radius_floor_of_ne
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
-fn = "skadis_panel_sdf"
+fn = "build_panel"
 calls = 1
-reason = "max(size * 0.5, 0) after the size is checked to be finite and > 0: size * 0.5 is > 0 or rounds to +0, never -0 or NaN"
+reason = "max(size * 0.5, 0) after SkadisPanelSpec::validate (via skadis_panel_sdf's size check or try_skadis_panel): size * 0.5 is > 0 or rounds to +0, never -0 or NaN"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
+fn = "gap"
+calls = 2
+reason = "max(|dc| - (a + a'), 0) per axis feeds only a square (dx * dx), so the zero's sign is not observable; the hole centres and sizes come from a spec that SkadisPanelSpec::validate checked to be finite, so no NaN operand reaches it (tests/skadis_panel_spec.rs a_bound_the_panel_cannot_meet_is_an_error_and_builds_nothing refuses NaN fields first)"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
+fn = "panel_min_wall"
+calls = 7
+reason = "the min fold starts from +inf and takes finite gaps (validated spec, see gap); the clamp of the corner radius is max(size * 0.5, 0) after the size check (> 0); the container SDF's max(q, 0) feeds a square, and min(max(qx, qz), 0) is added to a length, where -0 + x == +0 + x for x != 0 and the final -sdf - r compares against the bound, so neither the zero's sign nor a NaN (excluded by validate) is observable"
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/fastener.rs"
