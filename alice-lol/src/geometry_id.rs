@@ -375,14 +375,16 @@ pub fn stdlib_transcendental_probe_digest() -> [u8; 32] {
     h.finalize().into()
 }
 
-/// `stdlib` の template を 1 つずつ呼ぶ LOL の文 (parser が `stdlib` に渡す呼び出しの全部、
-/// 名前 1 つにつき 1 つ、引数は parse corpus の値か文書の例)
+/// `stdlib` の template を呼ぶ LOL の文 (parser が `stdlib` に渡す呼び出しの全部)
+///
+/// 1 組目は名前 1 つにつき 1 つ (引数は parse corpus の値か文書の例)、2 組目は引数のある template に
+/// 1 つずつ (1 組目の数値を 10 倍、断られたら 4 倍 1 組目と違う木になる組を選んだ) 1 組の引数では、
+/// 別の分岐 (厚い板・現実的な個数・上限で丸められる値) だけを変える変更が識別子に出ない
 ///
 /// 一覧と parser の対応は `tests/stdlib_template_probe_coverage.rs` が `runtime_parser.rs` の
 /// 呼び出しの分岐を数えて突き合わせる (probe の無い分岐・分岐の無い probe・比較 0 件は失敗)
 pub const STDLIB_TEMPLATE_PROBE_LOL: &[&str] = &[
     "rounded_box(40, 20, 10, 2)",
-    "sweep_bezier(2.0, 2.0, 1.0, 3.0, 3.0, 3.0, sphere(1.0))",
     "shopping_cart_coin(22.8, 1.7)",
     "skadis_panel(300, 5, 5)",
     "skadis_hook_l()",
@@ -495,6 +497,111 @@ pub const STDLIB_TEMPLATE_PROBE_LOL: &[&str] = &[
     "pixhawk_mount(3.0, 2.0)",
     "servo_mount(3.0)",
     "jst_ph_slot(3.0)",
+    // 2 組目: 引数のある template は 1 組目の数値を 10 倍 (断られたら 4 倍) した文 (現実の寸法に近い分岐と
+    // 個数を通す)、servo_mount は別の種類 (1 = SG90)
+    "rounded_box(400, 200, 100, 20)",
+    "shopping_cart_coin(228, 17)",
+    "skadis_panel(1200, 20, 20)",
+    "mug(30, 20)",
+    "gridfinity_bin(30, 20, 10)",
+    "gridfinity_bin_ex(30, 20, 10, 40, 20, 30, 20)",
+    "sticky_note_holder(30, 20, 10)",
+    "business_card_holder(30, 20, 10)",
+    "pen_cup(30, 20)",
+    "phone_stand(30, 20, 10)",
+    "headphone_holder(30, 20, 10)",
+    "under_desk_mount(30, 20, 10)",
+    "desk_shelf(30, 20, 10)",
+    "monitor_riser(30, 20, 10)",
+    "coaster(30, 20)",
+    "tissue_box_cover(30, 20, 10)",
+    "storage_box(30, 20, 10)",
+    "cable_clip(30, 20)",
+    "led_channel(30, 20)",
+    "card_tray(30, 20, 10)",
+    "token_well(30, 20, 10)",
+    "wrench_holder(30, 20, 10)",
+    "socket_rail(30, 20, 10)",
+    "hex_bit_holder(30, 20, 10)",
+    "sbc_case(30, 20, 10)",
+    "esp32_enclosure(516, 284, 150)",
+    "battery_18650_holder(30, 20, 10)",
+    "toothbrush_holder(30, 20, 10)",
+    "drill_bit_holder(30, 20, 10)",
+    "pliers_rack(30, 20, 10)",
+    "spice_rack(30, 20, 10)",
+    "egg_tray(30, 20, 10)",
+    "utensil_caddy(30, 20, 10)",
+    "filament_spool_holder(30, 20, 10)",
+    "nozzle_holder(30, 20, 10)",
+    "build_plate_rack(30, 20, 10)",
+    "cutlery_tray(30, 20, 10)",
+    "pill_organizer(30, 20, 10)",
+    "magnetic_strip(30, 20, 10)",
+    "hairdryer_holder(30, 20, 10)",
+    "kcup_holder(30, 20, 10)",
+    "hex_key_holder(30, 20, 10)",
+    "wrap_holder(30, 20, 10)",
+    "sock_divider(30, 20, 10)",
+    "soap_tray(30, 20, 10)",
+    "razor_holder(30, 20, 10)",
+    "chopstick_holder(30, 20, 10)",
+    "swatch_holder(30, 20, 10)",
+    "tp_holder(30, 20, 10)",
+    "sd_card_holder(30, 20, 10)",
+    "driver_rack(30, 20, 10)",
+    "cotton_dispenser(30, 20, 10)",
+    "sink_caddy(30, 20, 10)",
+    "clamp_rack(12, 8, 4)",
+    "dry_box(30, 20, 10)",
+    "outdoor_enclosure(30, 20, 10)",
+    "jewelry_stand(30, 20, 10)",
+    "phone_dock(30, 20, 10)",
+    "cutting_board_rack(30, 20, 10)",
+    "tape_dispenser(30, 20, 10)",
+    "shower_caddy(30, 20, 10)",
+    "caliper_holder(30, 20, 10)",
+    "bag_clip_org(30, 20, 10)",
+    "can_rack(30, 20, 10)",
+    "led_hub_box(30, 20, 10)",
+    "makeup_organizer(30, 20, 10)",
+    "vesa_mount(30, 20, 10)",
+    "l_bracket(30, 20, 10, 40, 20)",
+    "t_slot_bracket_2020(30, 20)",
+    "sbc_mount_plate(30, 20)",
+    "heat_set_array(30, 20, 10, 40, 20)",
+    "flange_mount(30, 20, 10)",
+    "dovetail_pair(30, 20, 10, 40)",
+    "profile_extrusion(30, 20)",
+    "snap_fit_pair(30, 20, 10, 40)",
+    "boss_array(30, 20, 10, 40, 20, 30)",
+    "screw_hole(30, 20)",
+    "tap_hole(30, 20)",
+    "counterbore(30, 20)",
+    "countersink(30, 20)",
+    "heat_set_hole(30)",
+    "bolt(30, 20)",
+    "bracket_l(600, 400, 40, 400, 30)",
+    "flange_circular(30, 20, 10, 40, 20, 30)",
+    "t_slot_2020(30)",
+    "profile_2020(30)",
+    "profile_3030(30)",
+    "dovetail(30, 20, 10)",
+    "slot(30, 20, 10)",
+    "snap_fit_annular(30, 20, 10, 40)",
+    "pin_hinge_knuckle(30, 20, 10)",
+    "boss(30, 20)",
+    "rib(30, 20, 10)",
+    "bearing_seat(30, 20, 10)",
+    "rack_shelf(30, 20, 10, 40, 20, 30)",
+    "cable_grommet(30, 20)",
+    "curtain_rod_bracket(30, 20)",
+    "dowel_hole(30, 20)",
+    "wood_screw_pilot(30, 20)",
+    "arduino_mount_plate(30, 20)",
+    "pixhawk_mount(30, 20)",
+    "servo_mount(1.0)",
+    "jst_ph_slot(30)",
 ];
 
 /// `stdlib` の template が作る木の pin: [`STDLIB_TEMPLATE_PROBE_LOL`] の各文を parse し、
@@ -569,7 +676,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
     ),
     (
         "stdlib: template trees (canonical text)",
-        hex32("b4f99ace6ff016732a24a291cb5d7d8afd60cb7d6da60c2783aa503da84b6ba0"),
+        hex32("ff61e497a35ea72fc723a16c22b12bf99731e1f26d076276a2b5217e07653397"),
     ),
     (
         "emit: fmt_f32 round-trip fidelity class",
@@ -580,7 +687,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
 /// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` と `tests/semantics_id_from_function_pins.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    hex32("0fc25d270dc38ef491868c94b2fde847f8995106e46d80080aab28e3644293d3");
+    hex32("72eced2bdbe1978a25e04a86872610a4e9cf9f1bbd6fb0fb252487b1367cea80");
 
 /// 以前の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
 ///

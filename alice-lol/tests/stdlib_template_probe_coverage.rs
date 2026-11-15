@@ -12,7 +12,7 @@ use alice_lol::geometry_id::STDLIB_TEMPLATE_PROBE_LOL;
 
 const PARSER: &str = include_str!("../src/runtime_parser.rs");
 
-/// 行頭の空白の後が `"a"` か `"a" | "b"` の並びで `=>` が続く行を分岐の頭とし、次の頭までを本体とする
+/// 行頭の空白の後が `"a"` か `"a" | "b"` の並びで `=>` が続く行を分岐の頭とする (本体は頭の `{` と対の `}` まで)
 fn arm_names(line: &str) -> Option<Vec<String>> {
     let rest = line.trim_start();
     let (head, _) = rest.split_once("=>")?;
@@ -32,43 +32,166 @@ fn arm_names(line: &str) -> Option<Vec<String>> {
     Some(names)
 }
 
-fn stdlib_arms(src: &str) -> BTreeSet<String> {
-    let lines: Vec<&str> = src.lines().collect();
-    let heads: Vec<(usize, Vec<String>)> = lines
-        .iter()
-        .enumerate()
-        .filter_map(|(i, l)| arm_names(l).map(|n| (i, n)))
-        .collect();
-    let mut out = BTreeSet::new();
-    for (k, (i, names)) in heads.iter().enumerate() {
-        let end = heads.get(k + 1).map_or(lines.len(), |(j, _)| *j);
-        if lines[*i..end].iter().any(|l| l.contains("stdlib::")) {
-            out.extend(names.iter().cloned());
+/// `src` から comment と文字列・文字の literal を空白に置き換えた写し (byte の位置は同じ)
+fn code_only(src: &str) -> Vec<u8> {
+    let b = src.as_bytes();
+    let mut out = b.to_vec();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    out[i] = b' ';
+                    i += 1;
+                }
+            }
+            b'"' => {
+                out[i] = b' ';
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    if b[i] == b'\\' {
+                        out[i] = b' ';
+                        i += 1;
+                    }
+                    if i < b.len() && b[i] != b'\n' {
+                        out[i] = b' ';
+                    }
+                    i += 1;
+                }
+                if i < b.len() {
+                    out[i] = b' ';
+                    i += 1;
+                }
+            }
+            b'\'' if b.get(i + 2) == Some(&b'\'') => {
+                out[i..i + 3].fill(b' ');
+                i += 3;
+            }
+            _ => i += 1,
         }
     }
     out
+}
+
+/// 分岐の頭 (`"名前" => {` の 1 行) ごとに、`{` と対になる `}` までの byte 範囲を返す
+fn arm_bodies(src: &str) -> Vec<(Vec<String>, std::ops::Range<usize>)> {
+    let code = code_only(src);
+    let mut out = Vec::new();
+    let mut start = 0;
+    for line in src.split_inclusive('\n') {
+        if let Some(names) = arm_names(line) {
+            let arrow = start + line.find("=>").expect("a head has =>");
+            if let Some(open) = (arrow..start + line.len()).find(|&k| code[k] == b'{') {
+                let mut depth = 0i32;
+                let mut k = open;
+                while k < code.len() {
+                    match code[k] {
+                        b'{' => depth += 1,
+                        b'}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    k += 1;
+                }
+                out.push((names, open..k + 1));
+            }
+        }
+        start += line.len();
+    }
+    out
+}
+
+/// 分岐の外で `stdlib::` を使ってよい関数 (形を作らないもの) と理由 形を作る呼び出しは分岐の中に置く
+const HELPERS_OUTSIDE_ARMS: &[(&str, &str)] = &[(
+    "metric_size",
+    "maps a parsed number to the fastener size enum; the arms that build the screw holes call stdlib themselves and are probed",
+)];
+
+/// 位置 `k` を含む関数の名前 (`fn 名前` を後ろ向きに探す)
+fn enclosing_fn(code: &[u8], k: usize) -> Option<String> {
+    let before = std::str::from_utf8(&code[..k]).ok()?;
+    let at = before.rfind("fn ")?;
+    let name: String = before[at + 3..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// `stdlib::` を本体に持つ分岐の名前と、どの分岐の本体にも入らない `stdlib::` の位置 (行番号)
+fn stdlib_arms_and_strays(src: &str) -> (BTreeSet<String>, Vec<usize>) {
+    let code = code_only(src);
+    let bodies = arm_bodies(src);
+    let hits: Vec<usize> = code
+        .windows(b"stdlib::".len())
+        .enumerate()
+        .filter(|(_, w)| *w == b"stdlib::")
+        .map(|(k, _)| k)
+        .collect();
+    let mut arms = BTreeSet::new();
+    let mut strays = Vec::new();
+    for k in hits {
+        if let Some((names, _)) = bodies.iter().find(|(_, r)| r.contains(&k)) {
+            arms.extend(names.iter().cloned());
+        } else {
+            let allowed = enclosing_fn(&code, k)
+                .is_some_and(|f| HELPERS_OUTSIDE_ARMS.iter().any(|(n, _)| *n == f));
+            if !allowed {
+                strays.push(src[..k].matches('\n').count() + 1);
+            }
+        }
+    }
+    (arms, strays)
+}
+
+fn stdlib_arms(src: &str) -> BTreeSet<String> {
+    stdlib_arms_and_strays(src).0
 }
 
 fn probe_name(text: &str) -> &str {
     text.split_once('(').map_or(text, |(n, _)| n).trim()
 }
 
+/// 分岐の外 (複数行の pattern・guard 付きの頭・stdlib を呼ぶ helper・`use` ・macro) から stdlib を呼ぶと、
+/// 上の走査が名前を拾えずその template の形が識別子に入らない その形を書いたら失敗にして、分岐の頭の
+/// 形に直すか probe を数える方法を足すまで通さない parser の試験 module (`#[cfg(test)]` 以降) は数えない
 #[test]
-fn every_stdlib_arm_has_exactly_one_template_probe() {
+fn every_stdlib_call_in_the_parser_is_inside_a_parsed_arm() {
+    let dispatch = PARSER
+        .split_once("#[cfg(test)]\nmod tests")
+        .map_or(PARSER, |(head, _)| head);
+    let (arms, strays) = stdlib_arms_and_strays(dispatch);
+    assert!(arms.len() >= 100, "only {} arms", arms.len());
+    assert!(
+        strays.is_empty(),
+        "runtime_parser.rs calls stdlib outside a single-line `\"name\" => {{` arm at lines {strays:?}"
+    );
+}
+
+/// 引数の無い template は probe 1 つ、引数のある template は 2 つ (違う引数の組) 同じ文は 2 度置かない
+#[test]
+fn every_stdlib_arm_has_its_template_probes() {
     let arms = stdlib_arms(PARSER);
     assert!(
         arms.len() >= 100,
         "only {} stdlib arms were found in runtime_parser.rs (the scan no longer reads the dispatch)",
         arms.len()
     );
-    let mut probes = BTreeSet::new();
+    let mut texts = BTreeSet::new();
+    let mut per_name: std::collections::BTreeMap<String, Vec<&str>> =
+        std::collections::BTreeMap::new();
     for text in STDLIB_TEMPLATE_PROBE_LOL {
-        assert!(
-            probes.insert(probe_name(text).to_owned()),
-            "two probes call {}",
-            probe_name(text)
-        );
+        assert!(texts.insert(*text), "the probe {text} is listed twice");
+        per_name
+            .entry(probe_name(text).to_owned())
+            .or_default()
+            .push(text);
     }
+    let probes: BTreeSet<String> = per_name.keys().cloned().collect();
     let unprobed: Vec<_> = arms.difference(&probes).collect();
     let orphan: Vec<_> = probes.difference(&arms).collect();
     assert!(
@@ -79,7 +202,12 @@ fn every_stdlib_arm_has_exactly_one_template_probe() {
         orphan.is_empty(),
         "template probes whose name is not a stdlib arm of the parser: {orphan:?}"
     );
-    assert_eq!(arms.len(), STDLIB_TEMPLATE_PROBE_LOL.len());
+    for (name, list) in &per_name {
+        let takes_arguments = list.iter().any(|t| !t.ends_with("()"));
+        let want = if takes_arguments { 2 } else { 1 };
+        assert_eq!(list.len(), want, "{name}: probes {list:?}");
+    }
+    assert_eq!(arms.len(), per_name.len());
 }
 
 #[test]
