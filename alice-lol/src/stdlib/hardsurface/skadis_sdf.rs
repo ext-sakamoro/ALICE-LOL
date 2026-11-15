@@ -598,6 +598,128 @@ pub fn try_skadis_panel_sdf(
 }
 
 // ────────────────────────────────────────────────────────
+// 板どうしを繋ぐ connector (V10、印刷の pipeline の `generate.py`
+// の `generate_connector_2x2` / `generate_connector_4x4` と同じ形)
+//
+// 座標は板と同じ: 板の面は X-Z、厚みは Y (中心が原点)
+// ────────────────────────────────────────────────────────
+
+/// 2 枚を繋ぐ connector の外寸の幅 (mm、X、穴の間隔 40 + 両側の余白)
+pub const SKADIS_CONN_2X2_W: f32 = 50.0;
+
+/// 2 枚を繋ぐ connector の外寸の高さ (mm、Z) = 穴から縁まで [`SKADIS_CONN_INSET`] を両側 +
+/// 穴の間 12 (generate.py `CONN_INSET * 2 + 12`)
+pub const SKADIS_CONN_2X2_H: f32 = 2.0 * SKADIS_CONN_INSET + 12.0;
+
+/// 2 枚を繋ぐ connector の縦の辺の丸み (mm)
+pub const SKADIS_CONN_2X2_R: f32 = 2.0;
+
+/// 2 枚を繋ぐ connector の中央の溝 (mm、幅 = 本体の半分、高さ、角の丸み)
+pub const SKADIS_CONN_2X2_SLOT: (f32, f32, f32) = (SKADIS_CONN_2X2_W * 0.5, 1.5, 0.5);
+
+/// 4 枚の角を繋ぐ connector の半幅 (mm) = 穴の inset + 6 (generate.py `arm_reach`)
+pub const SKADIS_CONN_4X4_REACH: f32 = SKADIS_CONN_INSET + 6.0;
+
+/// 4 枚の角を繋ぐ connector の凹角の丸み (mm、generate.py の `buffer(2).buffer(-2)`)
+pub const SKADIS_CONN_4X4_FILLET: f32 = 2.0;
+
+/// 貫通穴: 半径 `r`、Y 軸の円柱、板の厚みより [`HOLE_THROUGH_MARGIN`] ずつ長い
+fn through_hole(r: f32, thickness: f32, x: f32, z: f32) -> SdfNode {
+    SdfNode::Translate {
+        child: Arc::new(SdfNode::Cylinder {
+            radius: r,
+            half_height: HOLE_THROUGH_MARGIN.mul_add(1.0, thickness * 0.5),
+        }),
+        offset: Vec3::new(x, 0.0, z),
+    }
+}
+
+/// 縦の辺 (厚みの方向 Y に平行な辺) だけを半径 `r` で丸めた板: 外寸 `2hx × thickness × 2hz`
+///
+/// `RoundedBox` は全ての辺を丸めるので、Y を `r` 伸ばした角丸の箱を厚み `thickness` の箱で切る
+fn plate_vertical_edges_rounded(hx: f32, hz: f32, thickness: f32, r: f32) -> SdfNode {
+    let ty = thickness * 0.5;
+    SdfNode::Intersection {
+        a: Arc::new(SdfNode::RoundedBox {
+            half_extents: Vec3::new(hx - r, ty, hz - r),
+            round_radius: r,
+        }),
+        b: Arc::new(SdfNode::Box3d {
+            half_extents: Vec3::new(hx, ty, hz),
+        }),
+    }
+}
+
+/// 2 枚の板を横に繋ぐ connector (V10): 50 × 24 mm、縦の辺 R2、穴 4 つ (X ±20、Z ±6、Ø2.7)、
+/// 中央に 25 × 1.5 mm R0.5 の溝 厚み `thickness` (板と同じ 5 mm が既定の用途)
+///
+/// 穴の位置は板の縁の connector 穴 ([`SKADIS_CONN_INSET`] = 6 mm、pitch 40) と重なる
+#[must_use]
+pub fn skadis_connector_2x2_sdf(thickness: f32) -> SdfNode {
+    let hx = SKADIS_CONN_2X2_W * 0.5;
+    let hz = SKADIS_CONN_2X2_H * 0.5;
+    let body = plate_vertical_edges_rounded(hx, hz, thickness, SKADIS_CONN_2X2_R);
+    let r = SKADIS_CONN_SCREW_D * 0.5;
+    let pitch_half = SKADIS_GRID_PITCH * 0.5;
+    let mut cuts = Vec::new();
+    for x in [-pitch_half, pitch_half] {
+        for z in [-SKADIS_CONN_INSET, SKADIS_CONN_INSET] {
+            cuts.push(through_hole(r, thickness, x, z));
+        }
+    }
+    let (slot_w, slot_h, slot_r) = SKADIS_CONN_2X2_SLOT;
+    // 溝の丸みは厚みの方向にも付くが、その部分は板の外 (Y を HOLE_THROUGH_MARGIN 伸ばす)
+    cuts.push(SdfNode::RoundedBox {
+        half_extents: Vec3::new(
+            slot_w.mul_add(0.5, -slot_r),
+            HOLE_THROUGH_MARGIN.mul_add(1.0, thickness * 0.5),
+            slot_h.mul_add(0.5, -slot_r),
+        ),
+        round_radius: slot_r,
+    });
+    match super::balanced_union_fold(cuts) {
+        Some(c) => SdfNode::Subtraction {
+            a: Arc::new(body),
+            b: Arc::new(c),
+        },
+        None => body,
+    }
+}
+
+/// 4 枚の板の角を繋ぐ connector (V10): 外形は幅 20 mm の十字 (中心から 12 mm) の凹角を R2 で
+/// 埋めたもの = 24 × 24 mm の正方形から 4 隅に中心を置く R2 の円を引いた形、穴 4 つ
+/// (X・Z ±6、Ø2.7、板の 4 隅の connector 穴と重なる)
+///
+/// generate.py は十字 (`box(-10,-10,10,10)` + 長さ 12 の腕 4 本) を `buffer(2).buffer(-2)` で閉じる
+/// 腕の幅 20 と半幅 12 では凹角の切欠きが 2 × 2 mm なので、閉じた形は上の正方形と一致する
+#[must_use]
+pub fn skadis_connector_4x4_sdf(thickness: f32) -> SdfNode {
+    let reach = SKADIS_CONN_4X4_REACH;
+    let body = SdfNode::Box3d {
+        half_extents: Vec3::new(reach, thickness * 0.5, reach),
+    };
+    let mut cuts = Vec::new();
+    for x in [-reach, reach] {
+        for z in [-reach, reach] {
+            cuts.push(through_hole(SKADIS_CONN_4X4_FILLET, thickness, x, z));
+        }
+    }
+    let r = SKADIS_CONN_SCREW_D * 0.5;
+    for x in [-SKADIS_CONN_INSET, SKADIS_CONN_INSET] {
+        for z in [-SKADIS_CONN_INSET, SKADIS_CONN_INSET] {
+            cuts.push(through_hole(r, thickness, x, z));
+        }
+    }
+    match super::balanced_union_fold(cuts) {
+        Some(c) => SdfNode::Subtraction {
+            a: Arc::new(body),
+            b: Arc::new(c),
+        },
+        None => body,
+    }
+}
+
+// ────────────────────────────────────────────────────────
 // Phase 5.2: SKADIS 残 4 accessory SDF (container/clip/shelf/elastic_cord)
 //
 // pipeline Python `python generator`
