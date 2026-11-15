@@ -29,7 +29,7 @@ fn build_skadis_panel(size: f32) {
 fn build_shelf_divider(hex_hole_pitch: f32) {
     let spec = ShelfDividerSpec {
         hex_hole_pitch,
-        ..ShelfDividerSpec::field_tested_560x250x120()
+        ..ShelfDividerSpec::assembled_560x250x120()
     };
     match try_shelf_divider(&spec) {
         Ok(_divider) => println!("shelf divider pitch={hex_hole_pitch}: built"),
