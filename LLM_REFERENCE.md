@@ -167,8 +167,8 @@ skadis_hook_l()
 )
 ```
 
-これらは実プリント合格 baseline (pipeline canonical Python 版と同 spec) を LOL DSL で
-1 word で呼び出せる形にしたもの mesh 化経路は必ず Dual Contouring 経由
+これらは pipeline の Python 版と同じ spec を LOL DSL で 1 word で呼び出せる形にしたもの
+(LOL の出力を実際に印刷した記録は無い、`certifications.yaml`) mesh 化経路は必ず Dual Contouring 経由
 (polygon_extrude Phase 4 で削除済)
 
 ### 3D Print Structural Intent (<!-- num: syntax.print -->3)

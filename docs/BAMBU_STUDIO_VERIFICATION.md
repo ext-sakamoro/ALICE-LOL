@@ -29,14 +29,14 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 |--|--|--|--|--|--|
 | shopping_cart_coin_100yen | DC | 49K / 99K | 23×2×23 | 779 | 88 Excellent |
 | skadis_panel_300x300 | DC | 422K / 749K | 306×11×306 | 6204 | 88 Excellent (RepeatFinite→Union で完全 fix) |
-| skadis_hook_j | DC | 140K / 280K | 36×86×8 | 3262 | 79 Good (Field test 通過、極微 NME 0.02% real-world tolerance) |
-| skadis_hook_l | DC | 60K / 120K | 86×16×8 | 1211 | 79 Good (Field test 通過) |
+| skadis_hook_j | DC | 140K / 280K | 36×86×8 | 3262 | 79 Good (極微 NME 0.02% real-world tolerance、実プリントの記録なし) |
+| skadis_hook_l | DC | 60K / 120K | 86×16×8 | 1211 | 79 Good (実プリントの記録なし) |
 | skadis_hook_s | DC | 57K / 113K | 32×58×5 | 1317 | 88 Excellent |
 | skadis_container | DC | 150K / 300K | 68×72×81 | 2340 | 76 Good (tight_aabb 修正で mesh 生成復活) |
 | skadis_clip | DC | 94K / 188K | 11×60×15 | 1504 | 88 Excellent |
-| skadis_shelf | DC | 87K / 171K | 260×26×82 | 1297 | 70 Good (Field test 通過) |
+| skadis_shelf | DC | 87K / 171K | 260×26×82 | 1297 | 70 Good (実プリントの記録なし) |
 | skadis_elastic_cord | DC | 66K / 132K | 19×48×8 | 1207 | 88 Excellent (tight_aabb 修正で NME 212→0) |
-| shelf_divider_560x250x120 | MC | 98K / 197K | 281×251×120 | 1486 | 60 Acceptable (30lbs 実荷重 baseline) |
+| shelf_divider_560x250x120 | MC | 98K / 197K | 281×251×120 (560 の片方) | 1486 | 60 Acceptable (実プリントの記録なし) |
 | wall_hook | MC | 63K / 125K | 26×82×50 | 1008 | 79 Good (Sim only、CI gate 未通過) |
 | gridfinity_bin | MC | 155K / 309K | 92×92×41 | 2357 | 79 Good (tight_aabb 修正で mesh 生成復活、Sim only) |
 | drawer_organizer | MC | 159K / 318K | 252×202×42 | 2468 | 72 Good (Sim only、CI gate 未通過) |
@@ -101,7 +101,7 @@ skadis_elastic_cord / skadis_hook_j / skadis_clip) を **全完全 fix**、**13/
 | K1 | `wall_hook_pla_1kgf.3mf` | `pattern_sdf::wall_hook(&WallHookSpec::pla_1kgf())` | 63K vert / 125K tri / 1008KB | ~1.5 hours |
 | K2 | `gridfinity_bin_2x2.3mf` | `pattern_sdf::gridfinity_bin(&GridfinitySpec::default_2x2())` | 155K vert / 309K tri / 2357KB | ~2 hours |
 | K3 | `drawer_organizer_chopsticks.3mf` | `pattern_sdf::drawer_organizer(&DrawerSpec::default_chopsticks_set())` | 159K vert / 318K tri / 2468KB | ~4-6 hours (250mm 幅) |
-| K4 | `shelf_divider_560x250x120.3mf` | `pattern_sdf::shelf_divider(&ShelfDividerSpec::field_tested_560x250x120())` | 98K vert / 197K tri / 1486KB | ~12+ hours (実プリント合格 spec) |
+| K4 | `shelf_divider_560x250x120.3mf` | `pattern_sdf::shelf_divider(&ShelfDividerSpec::assembled_560x250x120())` | 98K vert / 197K tri / 1486KB | ~12+ hours (片方 1 つ) |
 
 ### 1.3 pipeline CLI 経路 (4 品目、pipeline 側の出力 dir、Phase 5.5)
 
@@ -214,15 +214,13 @@ Bambu Studio で開くと「印刷設定なし」で表示される、user が m
 - Support: slot 内壁不要 (垂直)
 - 250mm 幅、H2D 単一プレート OK (315mm)
 
-**K4 shelf_divider_560×250×120mm (**実プリント合格 baseline**)**:
+**K4 shelf_divider_560×250×120mm (組み立てて 560、印刷するのは 280 幅の片方 × 2、実プリントの記録なし)**:
 - 印刷向き: **逆さ印刷**、天板を bed 面に
 - Bambu Studio で **auto-orient で逆さ配置**、または manual で Z 軸 180° 回転
-- **560mm 幅は H2D 単一プレート超過** (H2D 315mm) = 分割印刷要
-  - 分割方式: ラップジョイント
-  - Bambu Studio Cut tool で 2 分割 (280mm × 2)、ラップジョイント 5mm
+- 部品は 280 mm 幅 (H2D の 315 mm に収まる) 同じ部品を 2 つ印刷し、側板の面で繋いで 560 mm にする
 - Material: **PETG 推奨** (棚荷重、PLA 非推奨)、Nylon も可
 - Infill: 15% gyroid、Support: brim 推奨
-- 実プリント合格 30lbs (13.6kg) 荷重テスト済
+- 荷重試験の記録は無い
 
 ### 3.3 CLI 素の 3MF (C1-C4)
 
