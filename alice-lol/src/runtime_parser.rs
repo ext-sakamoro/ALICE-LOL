@@ -1847,7 +1847,7 @@ impl<'a> Parser<'a> {
             "shelf_divider" => {
                 self.expect_rparen()?;
                 crate::stdlib::hardsurface::pattern_sdf::try_shelf_divider(
-                    &crate::stdlib::hardsurface::pattern_sdf::ShelfDividerSpec::field_tested_560x250x120(),
+                    &crate::stdlib::hardsurface::pattern_sdf::ShelfDividerSpec::assembled_560x250x120(),
                 )
                 .map_err(|e| self.spec_error(e))
             }

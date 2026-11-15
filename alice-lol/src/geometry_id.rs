@@ -375,6 +375,156 @@ pub fn stdlib_transcendental_probe_digest() -> [u8; 32] {
     h.finalize().into()
 }
 
+/// `stdlib` の template を 1 つずつ呼ぶ LOL の文 (parser が `stdlib` に渡す呼び出しの全部、
+/// 名前 1 つにつき 1 つ、引数は parse corpus の値か文書の例)
+///
+/// 一覧と parser の対応は `tests/stdlib_template_probe_coverage.rs` が `runtime_parser.rs` の
+/// 呼び出しの分岐を数えて突き合わせる (probe の無い分岐・分岐の無い probe・比較 0 件は失敗)
+pub const STDLIB_TEMPLATE_PROBE_LOL: &[&str] = &[
+    "rounded_box(40, 20, 10, 2)",
+    "sweep_bezier(2.0, 2.0, 1.0, 3.0, 3.0, 3.0, sphere(1.0))",
+    "shopping_cart_coin(22.8, 1.7)",
+    "skadis_panel(300, 5, 5)",
+    "skadis_hook_l()",
+    "skadis_hook_j()",
+    "skadis_hook_s()",
+    "skadis_container()",
+    "skadis_clip()",
+    "skadis_shelf()",
+    "skadis_elastic_cord()",
+    "mug(3.0, 2.0)",
+    "gridfinity_bin(3.0, 2.0, 1.0)",
+    "gridfinity_bin_ex(3.0, 2.0, 1.0, 4.0, 2.0, 3.0, 2.0)",
+    "wall_hook()",
+    "drawer_organizer()",
+    "shelf_divider()",
+    "sticky_note_holder(3.0, 2.0, 1.0)",
+    "business_card_holder(3.0, 2.0, 1.0)",
+    "pen_cup(3.0, 2.0)",
+    "phone_stand(3.0, 2.0, 1.0)",
+    "headphone_holder(3.0, 2.0, 1.0)",
+    "under_desk_mount(3.0, 2.0, 1.0)",
+    "desk_shelf(3.0, 2.0, 1.0)",
+    "monitor_riser(3.0, 2.0, 1.0)",
+    "coaster(3.0, 2.0)",
+    "tissue_box_cover(3.0, 2.0, 1.0)",
+    "storage_box(3.0, 2.0, 1.0)",
+    "cable_clip(3.0, 2.0)",
+    "led_channel(3.0, 2.0)",
+    "card_tray(3.0, 2.0, 1.0)",
+    "token_well(3.0, 2.0, 1.0)",
+    "wrench_holder(3.0, 2.0, 1.0)",
+    "socket_rail(3.0, 2.0, 1.0)",
+    "hex_bit_holder(3.0, 2.0, 1.0)",
+    "sbc_case(3.0, 2.0, 1.0)",
+    "esp32_enclosure(51.6, 28.4, 15)",
+    "battery_18650_holder(3.0, 2.0, 1.0)",
+    "toothbrush_holder(3.0, 2.0, 1.0)",
+    "drill_bit_holder(3.0, 2.0, 1.0)",
+    "pliers_rack(3.0, 2.0, 1.0)",
+    "spice_rack(3.0, 2.0, 1.0)",
+    "egg_tray(3.0, 2.0, 1.0)",
+    "utensil_caddy(3.0, 2.0, 1.0)",
+    "filament_spool_holder(3.0, 2.0, 1.0)",
+    "nozzle_holder(3.0, 2.0, 1.0)",
+    "build_plate_rack(3.0, 2.0, 1.0)",
+    "cutlery_tray(3.0, 2.0, 1.0)",
+    "pill_organizer(3.0, 2.0, 1.0)",
+    "magnetic_strip(3.0, 2.0, 1.0)",
+    "hairdryer_holder(3.0, 2.0, 1.0)",
+    "kcup_holder(3.0, 2.0, 1.0)",
+    "hex_key_holder(3.0, 2.0, 1.0)",
+    "wrap_holder(3.0, 2.0, 1.0)",
+    "sock_divider(3.0, 2.0, 1.0)",
+    "soap_tray(3.0, 2.0, 1.0)",
+    "razor_holder(3.0, 2.0, 1.0)",
+    "chopstick_holder(3.0, 2.0, 1.0)",
+    "swatch_holder(3.0, 2.0, 1.0)",
+    "tp_holder(3.0, 2.0, 1.0)",
+    "sd_card_holder(3.0, 2.0, 1.0)",
+    "driver_rack(3.0, 2.0, 1.0)",
+    "cotton_dispenser(3.0, 2.0, 1.0)",
+    "sink_caddy(3.0, 2.0, 1.0)",
+    "clamp_rack(3.0, 2.0, 1.0)",
+    "dry_box(3.0, 2.0, 1.0)",
+    "outdoor_enclosure(3.0, 2.0, 1.0)",
+    "jewelry_stand(3.0, 2.0, 1.0)",
+    "phone_dock(3.0, 2.0, 1.0)",
+    "cutting_board_rack(3.0, 2.0, 1.0)",
+    "tape_dispenser(3.0, 2.0, 1.0)",
+    "shower_caddy(3.0, 2.0, 1.0)",
+    "caliper_holder(3.0, 2.0, 1.0)",
+    "bag_clip_org(3.0, 2.0, 1.0)",
+    "can_rack(3.0, 2.0, 1.0)",
+    "led_hub_box(3.0, 2.0, 1.0)",
+    "makeup_organizer(3.0, 2.0, 1.0)",
+    "vesa_mount(3.0, 2.0, 1.0)",
+    "l_bracket(3.0, 2.0, 1.0, 4.0, 2.0)",
+    "t_slot_bracket_2020(3.0, 2.0)",
+    "sbc_mount_plate(3.0, 2.0)",
+    "heat_set_array(3.0, 2.0, 1.0, 4.0, 2.0)",
+    "flange_mount(3.0, 2.0, 1.0)",
+    "dovetail_pair(3.0, 2.0, 1.0, 4.0)",
+    "profile_extrusion(3.0, 2.0)",
+    "snap_fit_pair(3.0, 2.0, 1.0, 4.0)",
+    "boss_array(3.0, 2.0, 1.0, 4.0, 2.0, 3.0)",
+    "screw_hole(3.0, 2.0)",
+    "tap_hole(3.0, 2.0)",
+    "counterbore(3.0, 2.0)",
+    "countersink(3.0, 2.0)",
+    "heat_set_hole(3.0)",
+    "bolt(3.0, 2.0)",
+    "bracket_l(60, 40, 4, 40, 3)",
+    "flange_circular(3.0, 2.0, 1.0, 4.0, 2.0, 3.0)",
+    "t_slot_2020(3.0)",
+    "profile_2020(3.0)",
+    "profile_3030(3.0)",
+    "dovetail(3.0, 2.0, 1.0)",
+    "slot(3.0, 2.0, 1.0)",
+    "snap_fit_annular(3.0, 2.0, 1.0, 4.0)",
+    "pin_hinge_knuckle(3.0, 2.0, 1.0)",
+    "boss(3.0, 2.0)",
+    "rib(3.0, 2.0, 1.0)",
+    "bearing_seat(3.0, 2.0, 1.0)",
+    "rack_shelf(3.0, 2.0, 1.0, 4.0, 2.0, 3.0)",
+    "cable_grommet(3.0, 2.0)",
+    "curtain_rod_bracket(3.0, 2.0)",
+    "dowel_hole(3.0, 2.0)",
+    "wood_screw_pilot(3.0, 2.0)",
+    "arduino_mount_plate(3.0, 2.0)",
+    "pixhawk_mount(3.0, 2.0)",
+    "servo_mount(3.0)",
+    "jst_ph_slot(3.0)",
+];
+
+/// `stdlib` の template が作る木の pin: [`STDLIB_TEMPLATE_PROBE_LOL`] の各文を parse し、
+/// 返る `SdfNode` を正規形の文 ([`crate::emit::to_lol_unstamped`]) に書いて hash した digest
+///
+/// 依存するもの: template の木の構造と数値 (既定の引数・寸法・穴の数と位置・CSG の組み方)
+/// と、正規形の書き方 (`fmt_f32` は別の pin が固定する) template の中で超越関数を呼ぶ物は、その
+/// 値も木の数値に入る ⚠️ `alice_sdf::eval` は呼ばないので、alice-sdf の距離の評価や
+/// alice-det-math の関数が変わってもこの digest は動かない (それらは alice-det-math の関数の pin
+/// と [`stdlib_transcendental_probe_digest`] が畳む) 動くのは template の作る形が変わった時と、
+/// `SdfNode` の型 (variant と field) が変わり正規形の文が変わった時
+///
+/// # Panics
+///
+/// probe の文が parse できない時、または正規形に書けない時 (probe の一覧の誤り、build の度に検出される)
+#[must_use]
+pub fn stdlib_template_probe_digest() -> [u8; 32] {
+    let mut h = Sha256::new();
+    for lol in STDLIB_TEMPLATE_PROBE_LOL {
+        let node = crate::runtime_parser::parse_lol(lol)
+            .unwrap_or_else(|e| panic!("stdlib template probe {lol:?} does not parse: {e:?}"));
+        let text = crate::emit::to_lol_unstamped(&node).unwrap_or_else(|e| {
+            panic!("stdlib template probe {lol:?} has no canonical text: {e:?}")
+        });
+        length_prefixed(&mut h, lol.as_bytes());
+        length_prefixed(&mut h, text.as_bytes());
+    }
+    h.finalize().into()
+}
+
 /// 幾何評価の算術・受理境界・canonical form の pin
 ///
 /// ⚠️ 値は振る舞いから計算する (各 probe digest 関数の現在の出力)
@@ -418,6 +568,10 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         hex32("1afa100d797e0f472763b89bd8830f470139dd11eff4612afb126624e8835a4e"),
     ),
     (
+        "stdlib: template trees (canonical text)",
+        hex32("b4f99ace6ff016732a24a291cb5d7d8afd60cb7d6da60c2783aa503da84b6ba0"),
+    ),
+    (
         "emit: fmt_f32 round-trip fidelity class",
         hex32("4744995b02057f35d13e18e149c8f1d9880cf0b3f4ebab3515f5529d99a70553"),
     ),
@@ -426,7 +580,7 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
 /// ⚠️ 定数と fold の一致は `tests/geometry_id_oracle.rs` と `tests/semantics_id_from_function_pins.rs` が検査する
 pub const LOL_GEOMETRY_SEMANTICS_ID: [u8; 32] =
-    hex32("41c29e6c73afd270a653b779a416b97fff8139eddb1a1770dd43cf1dc8c70791");
+    hex32("0fc25d270dc38ef491868c94b2fde847f8995106e46d80080aab28e3644293d3");
 
 /// 以前の世代の [`LOL_GEOMETRY_SEMANTICS_ID`] のうち、今と同じ bit を出すと確かめたもの
 ///

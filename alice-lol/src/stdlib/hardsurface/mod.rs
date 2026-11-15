@@ -21,11 +21,11 @@
 //! | ヒートセットインサート下穴径 | `insert_od + 0.2` | pipeline `heat_insert_hole()` |
 //! | クリアランス穴径 (H2D 0.4 nozzle FDM) | `screw_dia + 0.2` | H2D 実測 |
 //!
-//! ## 実プリント合格の baseline
+//! ## 骨格の generator
 //!
 //! umbrella 削除後 (2026-08-06、pipeline commit `6727f3f`) 残った 5 generator
-//! (drawer / gridfinity / hook / `shelf_divider` / skadis) が本 module の骨格となる
-//! ハードサーフェス pattern の実プリント合格 baseline
+//! (drawer / gridfinity / hook / `shelf_divider` / skadis) が本 module の骨格
+//! 実プリントの記録 (日付と証跡) は `certifications.yaml` の項目ごとに持ち、ここでは主張しない
 
 pub mod cavity;
 pub mod fastener;

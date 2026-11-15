@@ -1,10 +1,10 @@
 //! The law of a LOL program's shape as a law reference v2 (`alice_lol::program_law`)
 //!
 //! Oracle: the expected bytes and law identifiers were written by ALICE-Zip's independent
-//! implementation (`scripts/law_ref_v2_reference.py` at ad06e53c, standard-library Python) for kind
-//! `lol.law.program/v1`, the geometry semantics identifier folded from the alice-det-math functions this
-//! crate calls (f7b59df6) and one `source` row; they are not computed by the code under test (the same
-//! script reproduces the earlier values under 8ee0c1a3).
+//! implementation (`scripts/law_ref_v2_reference.py` at 5218641, standard-library Python) for kind
+//! `lol.law.program/v1`, the geometry semantics identifier (0fc25d27, the fold that includes the stdlib
+//! template trees) and one `source` row; they are not computed by the code under test (the same script
+//! reproduces the earlier values under 41c29e6c and 8ee0c1a3).
 
 use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use alice_lol::program_law::{
@@ -21,10 +21,10 @@ fn unhex(s: &str) -> Vec<u8> {
 }
 
 const SPHERE: &str = "sphere(1.0)";
-const SPHERE_LAW_ID: &str = "e3a2b41d49ac0bf7f1d1d8b8cf57c1603e6abd581c4a0b3807d2cd4b119811a4";
-const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f763141c29e6c73afd270a653b779a416b97fff8139eddb1a1770dd43cf1dc8c70791e3a2b41d49ac0bf7f1d1d8b8cf57c1603e6abd581c4a0b3807d2cd4b119811a40106736f7572636505000000000000000b73706865726528312e3029";
+const SPHERE_LAW_ID: &str = "d7710b69bcd2a2ae352886a03c91f2d89fbe534e91dd7de6e421837779760092";
+const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f76310fc25d270dc38ef491868c94b2fde847f8995106e46d80080aab28e3644293d3d7710b69bcd2a2ae352886a03c91f2d89fbe534e91dd7de6e4218377797600920106736f7572636505000000000000000b73706865726528312e3029";
 const BOX: &str = "box3d(1.0, 1.0, 1.0)";
-const BOX_LAW_ID: &str = "8337d19ac794741139c67c10d9e5f14fc22710769f41f3c99792a305ea3b5fb6";
+const BOX_LAW_ID: &str = "9858253f514441c245f2cf5c56ab21bb7f5e51efa9a623450759f2a31aa3d7c5";
 
 #[test]
 fn the_kind_and_the_semantics_are_the_program_law_s() {

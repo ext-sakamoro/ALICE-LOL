@@ -9,8 +9,8 @@
 use alice_lol::geometry_id::{
     canon_angle_deg_probe_digest, euler_xyz_quat_probe_digest, fmt_f32_fidelity_probe_digest,
     fold_geometry_pins, rotation_axis_quat_probe_digest, rotation_quat_boundary_probe_digest,
-    stdlib_transcendental_probe_digest, tpms_validity_probe_digest, LOL_GEOMETRY_SEMANTICS_ID,
-    LOL_GEOMETRY_SEMANTICS_PINS,
+    stdlib_template_probe_digest, stdlib_transcendental_probe_digest, tpms_validity_probe_digest,
+    LOL_GEOMETRY_SEMANTICS_ID, LOL_GEOMETRY_SEMANTICS_PINS,
 };
 
 fn pin(name: &str) -> [u8; 32] {
@@ -56,6 +56,10 @@ fn every_pin_matches_its_live_behaviour_digest() {
         (
             "stdlib: transcendental routing through alice_det_math",
             stdlib_transcendental_probe_digest(),
+        ),
+        (
+            "stdlib: template trees (canonical text)",
+            stdlib_template_probe_digest(),
         ),
         (
             "emit: fmt_f32 round-trip fidelity class",

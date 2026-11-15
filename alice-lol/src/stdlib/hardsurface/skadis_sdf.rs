@@ -1090,8 +1090,8 @@ pub fn skadis_connector_4x4_sdf(thickness: f32) -> SdfNode {
 // Phase 5.2: SKADIS 残 4 accessory SDF (container/clip/shelf/elastic_cord)
 //
 // pipeline Python `python generator`
-// の実プリント合格 spec を SDF に近似移植 装飾 (fillet / 肉抜き穴 / テーパー) は省略、
-// DC の Hermite で自然滑らか化 実プリント品質は Phase 5.6 user 検証で判定
+// の寸法を SDF に近似移植 装飾 (fillet / 肉抜き穴 / テーパー) は省略、
+// DC の Hermite で自然滑らか化 4 種とも実プリントの記録はない
 // ────────────────────────────────────────────────────────
 
 // ── container 定数 (pipeline skadis-container/generate.py 準拠) ──
@@ -1106,7 +1106,7 @@ pub const CONTAINER_WALL_T: f32 = 1.6;
 /// container 底厚 (mm)
 pub const CONTAINER_BOTTOM_T: f32 = 1.6;
 
-/// SKADIS container SDF (小物入れ、2 peg、pipeline `skadis-container` 実プリント合格 spec)
+/// SKADIS container SDF (小物入れ、2 peg、pipeline `skadis-container` の寸法、実プリントの記録なし)
 ///
 /// 構造: 外形 Box3d - 内部 Box3d + 底 Box3d + 背面 ペグ 2 個
 /// 装飾 (肉抜き穴 4 個 / R フィレット / ガセット補強) は省略 (近似実装)
@@ -1178,7 +1178,7 @@ pub const CLIP_BODY_T: f32 = 3.0;
 /// clip スロット幅 (mm、紙 1-3 枚)
 pub const CLIP_SLOT_W: f32 = 1.2;
 
-/// SKADIS clip SDF (単 peg、差込 slot 式クリップ、pipeline `skadis-clip` 実プリント合格 spec)
+/// SKADIS clip SDF (単 peg、差込 slot 式クリップ、pipeline `skadis-clip` の寸法、実プリントの記録なし)
 ///
 /// 構造: 前板 + 背板 (`SLOT_W` 離間) + root 結合部 + 先端凸 + ペグ
 /// PLA 弾性限界内で使う想定 (0.1kgf メモ・写真、バネなし)
@@ -1253,7 +1253,7 @@ pub const SHELF_BOTTOM_T: f32 = 2.0;
 /// shelf ペグ間隔 (mm、6 × `GRID_PITCH`)
 pub const SHELF_PEG_SPACING: f32 = 240.0;
 
-/// SKADIS shelf SDF (2 peg 棚、pipeline `skadis-shelf` 実プリント合格 spec)
+/// SKADIS shelf SDF (2 peg 棚、pipeline `skadis-shelf` の寸法、実プリントの記録なし)
 ///
 /// 構造: U 字断面 (底 + 背 + 前リップ) を W 方向に extrude + 2 peg (両端)
 /// 底面リブ 3 本は省略 (近似実装、DC で watertight 保証)
@@ -1318,7 +1318,7 @@ pub const ELASTIC_CORD_HOOK_REACH: f32 = 12.0;
 /// `elastic_cord` フック R (mm、折れ防止)
 pub const ELASTIC_CORD_HOOK_R: f32 = 3.0;
 
-/// SKADIS elastic cord holder SDF (2 peg 上下、pipeline `skadis-elastic-cord` 実プリント合格 spec)
+/// SKADIS elastic cord holder SDF (2 peg 上下、pipeline `skadis-elastic-cord` の寸法、実プリントの記録なし)
 ///
 /// 構造: 上下 2 ペグ (`GRID_PITCH` 離間) + 縦背骨 + 2 hook (上下対称、R カーブ)
 /// バンド溝は省略 (近似実装)

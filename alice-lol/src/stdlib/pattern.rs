@@ -1,6 +1,6 @@
-//! # pattern — LOL pattern registry (Phase B.1.a、実プリント合格 baseline metadata)
+//! # pattern — LOL pattern registry (Phase B.1.a、certification の metadata)
 //!
-//! [`LolPattern`] 型で実プリント合格資産 (pipeline `models/` 配下 10 品目) と
+//! [`LolPattern`] 型で pipeline `models/` 配下 10 品目に当たる pattern と
 //! 未実地検証の pattern (pipeline Rust generator 3 種) の metadata を統一管理する
 //!
 //! ## 目的
@@ -76,7 +76,7 @@ impl CertificationSource {
         }
     }
 
-    /// `UserFieldTest` を含むか (実プリント合格 baseline 判定)
+    /// `UserFieldTest` を含むか (実プリントの記録がある)
     #[must_use]
     pub const fn includes_field_test(self) -> bool {
         matches!(self, Self::UserFieldTest | Self::Both)
@@ -129,20 +129,21 @@ pub struct LolPattern {
 // registry — 12 pattern metadata
 // ────────────────────────────────────────────────────────
 
-/// pattern registry (実プリント合格 baseline + 未検証 pattern 全 12 件)
+/// pattern registry (全 13 件、実プリントの記録のある pattern は 0 件: 2026-11-15 に日付と証跡の無い
+/// `UserFieldTest` / `Both` を外した)
 pub mod registry {
     use super::{CertificationSource, LolPattern, PatternRoute};
 
-    // ── 実プリント合格 baseline (pipeline models/ 配下 .3mf 記録あり + pipeline simulation で追加検証済) ──
+    // ── pipeline models/ 配下に .3mf のある pattern (実プリントの記録は無い) ──
     // Phase B.2 代替 (2026-08-06): pipeline `examples/compute_pattern_scores.rs` で全 13 pattern の
     // Simulation score 実測、UserFieldTest + Simulation Excellent の pattern は Both に昇格
 
     /// 100yen 型 shopping cart coin (pipeline `python generator`)
     pub const SHOPPING_CART_COIN_100YEN: LolPattern = LolPattern {
         name: "shopping_cart_coin_100yen",
-        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (pipeline 実プリント合格 + Sim Excellent 88)",
+        description: "Φ22.8 × 1.7mm 100 円硬貨型キーホルダーコイン (Sim Excellent 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::Both,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(88),
         field_test: None, // Phase B.2 で date/material/printer/notes 埋め込み
         source_crate: "alice-lol",
@@ -154,9 +155,9 @@ pub mod registry {
     pub const SKADIS_PANEL_300X300: LolPattern = LolPattern {
         name: "skadis_panel_300x300",
         description:
-            "IKEA SKADIS 互換 300×300×5mm ペグボード + 千鳥ペグ穴 98 個 (Sim Excellent 88、tight_aabb 修正 + RepeatFinite→Union で watertight 保証)",
+            "IKEA SKADIS 互換 300×300×5mm ペグボード + 千鳥ペグ穴 85 個 (板の中心に揃えた格子) (Sim Excellent 88、tight_aabb 修正 + RepeatFinite→Union で watertight 保証)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::Both,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
@@ -167,13 +168,14 @@ pub mod registry {
     /// U 字棚仕切り (pipeline `python generator`、Rust generator canonical)
     ///
     /// Sim 60 Acceptable (warp Critical + overhang 40、560mm 幅で env open-air PLA warp 高判定)
-    /// だが 30lbs 荷重実プリント合格 baseline のため `UserFieldTest` 維持 (CI gate は field test 経由通過)
+    /// 実プリントの記録 (日付と証跡) が無いので `None` (2026-11-15、CI gate は通らない)
+    /// 作るのは組み立てて 560 幅になる片方 (280 幅の U 字) で、同じ部品を 2 つ印刷する
     pub const SHELF_DIVIDER_560X250X120: LolPattern = LolPattern {
         name: "shelf_divider_560x250x120",
         description:
-            "U 字棚仕切り 560×250×120mm + hex 抜き穴 (板反り対策、30lbs 実荷重合格、Sim 60)",
+            "U 字棚仕切り 560×250×120mm の片方 (280 幅) + Ø15 の抜き穴 (板反り対策、Sim 60)",
         route: PatternRoute::SdfMarchingCubes,
-        certified_by: CertificationSource::UserFieldTest,
+        certified_by: CertificationSource::None,
         printability_score: Some(60),
         field_test: None,
         source_crate: "alice-lol",
@@ -183,12 +185,12 @@ pub mod registry {
 
     // ── SKADIS アクセサリー 6 種 (pipeline python generator、Phase B.1.c で primitive 実装予定) ──
 
-    /// SKADIS J 型 hook (Sim 79 Good、hook 形状 overhang 30%+ が主因、Field test で通過)
+    /// SKADIS J 型 hook (Sim 79 Good、hook 形状 overhang 30%+ が主因、実プリントの記録なし)
     pub const SKADIS_HOOK_J: LolPattern = LolPattern {
         name: "skadis_hook_j",
         description: "IKEA SKADIS 互換 J 型 hook (pipeline Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
+        certified_by: CertificationSource::None,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
@@ -196,13 +198,13 @@ pub mod registry {
         canonical_kind: Some("python generator"),
     };
 
-    /// SKADIS L 型 hook (Sim 79 Good、直角曲げの overhang が主因、Field test で通過)
+    /// SKADIS L 型 hook (Sim 79 Good、直角曲げの overhang が主因、実プリントの記録なし)
     pub const SKADIS_HOOK_L: LolPattern = LolPattern {
         name: "skadis_hook_l",
         description:
             "IKEA SKADIS 互換 L 型 hook (直角曲げ、pipeline Python 2D+extrude canonical、Sim 79)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
+        certified_by: CertificationSource::None,
         printability_score: Some(79),
         field_test: None,
         source_crate: "alice-lol",
@@ -216,7 +218,7 @@ pub mod registry {
         description:
             "IKEA SKADIS 互換 S 型 hook (S 字曲げ、pipeline Python 2D+extrude canonical、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::Both,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
@@ -224,13 +226,13 @@ pub mod registry {
         canonical_kind: Some("python generator"),
     };
 
-    /// SKADIS container (小物入れ、2 peg、Sim 76 Good、Field test で通過)
+    /// SKADIS container (小物入れ、2 peg、Sim 76 Good、実プリントの記録なし)
     /// `tight_aabb` 修正で真の bbox (68×72×81mm) 取得後 overhang 40 で score 降格
     pub const SKADIS_CONTAINER: LolPattern = LolPattern {
         name: "skadis_container",
         description: "IKEA SKADIS 互換 container (2 peg、gusset ribs で補強、Sim 76)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
+        certified_by: CertificationSource::None,
         printability_score: Some(76),
         field_test: None,
         source_crate: "alice-lol",
@@ -243,7 +245,7 @@ pub mod registry {
         name: "skadis_clip",
         description: "IKEA SKADIS 互換 clip (単 peg、細物ホルダー、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::Both,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
@@ -251,14 +253,13 @@ pub mod registry {
         canonical_kind: Some("python generator"),
     };
 
-    /// SKADIS shelf (2 peg 棚、Sim 70 Good、Field test で通過)
+    /// SKADIS shelf (2 peg 棚、Sim 70 Good、実プリントの記録なし)
     /// `tight_aabb` 修正で真の bbox (260×26×82mm) 取得後 overhang 10 で score 降格
-    /// PETG 棚荷重 30 lbs 実プリント baseline のため `UserFieldTest` 維持
     pub const SKADIS_SHELF: LolPattern = LolPattern {
         name: "skadis_shelf",
         description: "IKEA SKADIS 互換 shelf (2 peg、rib 補強棚板、Sim 70)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::UserFieldTest,
+        certified_by: CertificationSource::None,
         printability_score: Some(70),
         field_test: None,
         source_crate: "alice-lol",
@@ -271,7 +272,7 @@ pub mod registry {
         name: "skadis_elastic_cord",
         description: "IKEA SKADIS 互換 elastic cord holder (伸縮バンドで固定、Sim 88)",
         route: PatternRoute::SdfDualContouring,
-        certified_by: CertificationSource::Both,
+        certified_by: CertificationSource::SimulationOnly,
         printability_score: Some(88),
         field_test: None,
         source_crate: "alice-lol",
@@ -355,7 +356,7 @@ pub mod registry {
 /// pattern の CI merge gate 判定
 ///
 /// 通過条件 (OR): `printability_score >= 85` (pipeline `PrintabilityScore::Excellent`)
-/// または `certified_by` が `UserFieldTest` を含む (実プリント合格 baseline)
+/// または `certified_by` が `UserFieldTest` を含む (実プリントの記録がある)
 ///
 /// 未検証 (score None + `certified_by = None`) の pattern は **通過しない**
 ///
@@ -391,7 +392,7 @@ pub fn patterns_failing_ci_gate() -> Vec<&'static LolPattern> {
 // filter helpers
 // ────────────────────────────────────────────────────────
 
-/// 実プリント合格 baseline pattern のみを filter (`certified_by.includes_field_test()`)
+/// 実プリントの記録のある pattern のみを filter (`certified_by.includes_field_test()`)
 #[must_use]
 pub fn field_tested_patterns() -> Vec<&'static LolPattern> {
     registry::ALL
@@ -422,29 +423,28 @@ mod tests {
 
     #[test]
     fn registry_has_expected_pattern_count() {
-        // Phase B.1.a: 12 pattern (実プリント合格 baseline 10 + 未検証 3)、待って 13
-        // 実プリント合格 = SHOPPING_CART_COIN + SKADIS_PANEL + SHELF_DIVIDER + SKADIS_HOOK_J/L/S + CONTAINER + CLIP + SHELF + ELASTIC_CORD = 10
-        // 未検証 = WALL_HOOK + GRIDFINITY_BIN + DRAWER_ORGANIZER = 3
-        // 合計 13
+        // pipeline models/ に .3mf のある 10 (SHOPPING_CART_COIN + SKADIS_PANEL + SHELF_DIVIDER +
+        // SKADIS_HOOK_J/L/S + CONTAINER + CLIP + SHELF + ELASTIC_CORD) + WALL_HOOK + GRIDFINITY_BIN +
+        // DRAWER_ORGANIZER = 13
         assert_eq!(registry::ALL.len(), 13);
     }
 
     #[test]
     fn field_tested_patterns_count() {
-        // 実プリント合格 = 10 品目 (pipeline models/ 配下)
+        // 実プリントの記録 (日付と証跡) のある pattern は 0 (2026-11-15 にラベルを外した)
         let ft = field_tested_patterns();
-        assert_eq!(ft.len(), 10);
+        assert_eq!(ft.len(), 0);
     }
 
     #[test]
     fn uncertified_patterns_count() {
-        // Phase B.2 代替 (2026-08-06): pipeline simulation 反映後、全 13 pattern が
-        // UserFieldTest / Both / SimulationOnly のいずれかで certified、None は 0
+        // 2026-11-15: UserFieldTest だった 5 件 (hook_l / hook_j / container / shelf / shelf_divider)
+        // は記録が無いので None
         let uncertified = registry::ALL
             .iter()
             .filter(|p| p.certified_by == CertificationSource::None)
             .count();
-        assert_eq!(uncertified, 0);
+        assert_eq!(uncertified, 5);
     }
 
     #[test]
@@ -472,8 +472,8 @@ mod tests {
     fn find_shopping_cart_coin() {
         let p = find_by_name("shopping_cart_coin_100yen").expect("registered");
         assert_eq!(p.route, PatternRoute::SdfDualContouring);
-        // Phase B.2 代替 (2026-08-06): pipeline Sim Excellent 88 + UserFieldTest = Both 昇格
-        assert_eq!(p.certified_by, CertificationSource::Both);
+        // 実プリントの記録が無いので simulation だけ (2026-11-15 に Both から外した)
+        assert_eq!(p.certified_by, CertificationSource::SimulationOnly);
         assert_eq!(p.printability_score, Some(88));
     }
 
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn ci_gate_field_tested_patterns_pass() {
-        // 実プリント合格 baseline (UserFieldTest) は score なしでも通過
+        // 日付と証跡のある field test (UserFieldTest / Both) は score なしでも通過
         for p in registry::ALL {
             if p.certified_by.includes_field_test() {
                 assert!(
@@ -552,15 +552,16 @@ mod tests {
 
     #[test]
     fn patterns_failing_ci_gate_matches_uncertified_count() {
-        // Phase B.2 代替 (2026-08-07): tight_aabb 修正で全 pattern score 再測、
-        // gridfinity_bin が Sim 97 → 79 で gate 通過 → 未通過に降格
-        // gate 通過: UserFieldTest 系 10 pattern = 10
-        // gate 未通過: wall_hook (Sim 79) + gridfinity_bin (Sim 79) + drawer_organizer (Sim 72) = 3
+        // 実プリントの記録 (日付と証跡) のある pattern は 0 (2026-11-15 に 10 件の UserFieldTest / Both を
+        // 外した) ので、gate を通るのは score >= 85 の 5 件 (coin / skadis_panel / hook_s / clip /
+        // elastic_cord)、通らないのは hook_l 79 / hook_j 79 / container 76 / shelf 70 /
+        // shelf_divider 60 / wall_hook 79 / gridfinity_bin 79 / drawer_organizer 72 の 8 件
         let failing = patterns_failing_ci_gate();
         assert_eq!(
             failing.len(),
-            3,
-            "tight_aabb 修正で真 bbox 反映、wall_hook + gridfinity_bin + drawer_organizer が Sim < 85"
+            8,
+            "{:?}",
+            failing.iter().map(|p| p.name).collect::<Vec<_>>()
         );
     }
 

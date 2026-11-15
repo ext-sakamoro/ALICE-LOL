@@ -8,8 +8,8 @@
 use alice_lol::geometry_id::{
     canon_angle_deg_probe_digest, euler_xyz_quat_probe_digest, fmt_f32_fidelity_probe_digest,
     fold_geometry_pins, rotation_axis_quat_probe_digest, rotation_quat_boundary_probe_digest,
-    stdlib_transcendental_probe_digest, tpms_validity_probe_digest, LOL_GEOMETRY_SEMANTICS_ID,
-    LOL_GEOMETRY_SEMANTICS_PINS,
+    stdlib_template_probe_digest, stdlib_transcendental_probe_digest, tpms_validity_probe_digest,
+    LOL_GEOMETRY_SEMANTICS_ID, LOL_GEOMETRY_SEMANTICS_PINS, STDLIB_TEMPLATE_PROBE_LOL,
 };
 
 fn hex(id: &[u8; 32]) -> String {
@@ -63,6 +63,11 @@ fn main() {
     println!(
         "  stdlib: transcendental routing (alice_det_math)  = {}",
         hex(&stdlib_transcendental_probe_digest())
+    );
+    println!(
+        "  stdlib: template trees ({} templates)           = {}",
+        STDLIB_TEMPLATE_PROBE_LOL.len(),
+        hex(&stdlib_template_probe_digest())
     );
     println!(
         "  emit: fmt_f32 round-trip fidelity class          = {}",

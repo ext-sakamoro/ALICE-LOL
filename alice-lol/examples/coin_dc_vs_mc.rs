@@ -37,7 +37,7 @@ fn main() {
     println!("pipeline 実測: SDF+MC で 1.7mm 設計 → 5.1mm 出力、6177 non-manifold edges");
     println!("本 example で MC 再現 + DC の watertight 実現を実測\n");
 
-    // Coin SDF (100 円型、Φ22.8 × 1.7mm、pipeline 実プリント合格 spec)
+    // Coin SDF (100 円型、Φ22.8 × 1.7mm、pipeline の寸法)
     let coin = shopping_cart_coin_sdf(COIN_100YEN_DIAMETER, COIN_100YEN_THICKNESS);
     // Bounding box (Φ22.8 → hx=hz=13、Y=1.7 → hy=1.5)
     let bounds_min = Vec3::new(-13.0, -1.5, -13.0);
