@@ -653,9 +653,11 @@ pub struct ShelfDividerSpec {
 }
 
 impl ShelfDividerSpec {
-    /// pipeline `python generator` と同 spec (実プリント合格)
+    /// 組み立てて 560 × 250 × 120 mm の棚仕切り: [`shelf_divider`] が作るのはその片方 (幅 280 の U 字)
+    /// で、同じ部品を 2 つ印刷して側板の面で繋ぐ (印刷の pipeline の生成器の
+    /// 「Each half … Same part x2」) 実プリントの記録は無い
     #[must_use]
-    pub const fn field_tested_560x250x120() -> Self {
+    pub const fn assembled_560x250x120() -> Self {
         Self {
             total_width: 560.0,
             depth: 250.0,
@@ -677,6 +679,7 @@ impl ShelfDividerSpec {
     /// [`MIN_PITCH_MM`].
     pub fn validate(&self) -> Result<(), SpecError> {
         checked_positive_finite(self.hex_hole_pitch, MIN_PITCH_MM, "pitch")?;
+        shelf_divider_hole_centres(self)?;
         Ok(())
     }
 }
@@ -687,19 +690,21 @@ impl ShelfDividerSpec {
 /// - 天板 `Box3d` (Z=+t、hx × depth × thickness)
 /// - 左右 側板 `Box3d` (X=±(hx-t)、Y=depth `中央、Z=wall+wall_hz`)
 /// - 上記 3 面を `SmoothUnion` (k = wall × 0.5)
-/// - 天板に千鳥 hex cutout (`RepeatFinite` × 2 + Y offset)
-/// - `Subtraction` で hex holes を刳り抜き
+/// - 天板に Ø15 の丸穴 (三角格子 pitch 20、穴の間の肉 5 mm、縁の肉の枠 15 mm) を厚み (Z) の方向に抜く
+///
+/// 作るのは組み立てた棚仕切り (`total_width`) の片方 (幅 `total_width / 2` の U 字) で、同じ部品を 2 つ
+/// 印刷する
 ///
 /// # 引数
 ///
-/// [`ShelfDividerSpec`] で全パラメータ指定 [`ShelfDividerSpec::field_tested_560x250x120`]
-/// で pipeline 実プリント合格 spec を利用可
+/// [`ShelfDividerSpec`] で全パラメータ指定 [`ShelfDividerSpec::assembled_560x250x120`]
+/// は組み立てて 560 × 250 × 120 mm の寸法
 ///
 /// # 使用例
 ///
 /// ```
 /// use alice_lol::stdlib::hardsurface::pattern_sdf::{shelf_divider, ShelfDividerSpec};
-/// let s = shelf_divider(&ShelfDividerSpec::field_tested_560x250x120());
+/// let s = shelf_divider(&ShelfDividerSpec::assembled_560x250x120());
 /// ```
 ///
 /// # Panics
@@ -729,41 +734,69 @@ pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
     let wall_r = translate(box3d(t, hy, wall_hz), Vec3::new(side_right_x, 0.0, wall_cz));
     let structure = smooth_union(smooth_union(plate, wall_l, fillet_k), wall_r, fillet_k);
 
-    // Hex cutout (千鳥、pipeline `shelf_divider.rs::71-100` と等価)
-    let grid_hx = hx - spec.hex_border;
-    let grid_hy = hy - spec.hex_border;
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    let count_x = (grid_hx / spec.hex_hole_pitch).floor() as u32;
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    let count_y = (grid_hy / spec.hex_hole_pitch).floor() as u32;
-    let stagger_x = spec.hex_hole_pitch * 0.5;
-    let stagger_y = spec.hex_hole_pitch * 0.866;
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    let count_x2 = ((grid_hx - stagger_x) / spec.hex_hole_pitch).floor() as u32;
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    let count_y2 = ((grid_hy - stagger_y * 0.5) / stagger_y).floor() as u32;
+    // 天板の抜き穴 (Ø15 の丸穴、三角格子): 中心は shelf_divider_hole_centres、穴は天板の厚み (Z) を貫く
     let hole_half_h = t + 1.0;
-    let hole_shape = cylinder(spec.hex_hole_radius, hole_half_h);
-
-    let grid1 = SdfNode::RepeatFinite {
-        child: Arc::new(hole_shape.clone()),
-        count: [count_x, count_y, 0],
-        spacing: Vec3::new(spec.hex_hole_pitch, spec.hex_hole_pitch, 1.0),
+    let hole_shape = cylinder_z(spec.hex_hole_radius, hole_half_h);
+    let holes: Vec<SdfNode> = shelf_divider_hole_centres(spec)
+        .expect("validate() checked the hole count")
+        .into_iter()
+        .map(|(x, y)| translate(hole_shape.clone(), Vec3::new(x, y, plate_z)))
+        .collect();
+    let Some(all_holes) = super::balanced_union_fold(holes) else {
+        return structure;
     };
-    let grid1_placed = translate(grid1, Vec3::new(0.0, 0.0, plate_z));
-    let grid2 = SdfNode::RepeatFinite {
-        child: Arc::new(hole_shape),
-        count: [count_x2, count_y2, 0],
-        spacing: Vec3::new(spec.hex_hole_pitch, stagger_y, 1.0),
-    };
-    let grid2_placed = translate(grid2, Vec3::new(stagger_x, stagger_y * 0.5, plate_z));
-    let all_holes = union(grid1_placed, grid2_placed);
-
     subtract(structure, all_holes)
+}
+
+/// shelf divider の天板の抜き穴の中心 (天板の中心が原点、X は幅、Y は奥行)
+///
+/// 三角格子: pitch `p`、行の間 `p·√3/2`、1 行おきに `p/2` ずらす (隣り合う穴の中心は全部 `p` 離れ、
+/// Ø15 / pitch 20 で穴の間の肉は 5 mm) 穴の縁から天板の縁までは `hex_border` の肉の枠
+/// (書かれた意図: LLM_REFERENCE.md「Large Flat Plate Anti-Warp: Hex Cutout Pattern」)
+fn shelf_divider_hole_centres(spec: &ShelfDividerSpec) -> Result<Vec<(f32, f32)>, SpecError> {
+    let p = spec.hex_hole_pitch;
+    let r = spec.hex_hole_radius;
+    let gx = spec.total_width * 0.25 - spec.hex_border - r;
+    let gy = spec.depth * 0.5 - spec.hex_border - r;
+    if !(gx.is_finite() && gy.is_finite()) {
+        return Err(crate::limits::FloatLimitError {
+            kind: "shelf_divider_size",
+            limit: f32::MAX,
+            value: if gx.is_finite() { gy } else { gx },
+            unit: "mm",
+        }
+        .into());
+    }
+    if gx < 0.0 || gy < 0.0 {
+        return Ok(Vec::new());
+    }
+    let row = p * 3.0_f32.sqrt() * 0.5;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let (nj, nk) = ((gy / row).floor() as u32, (gx / p).floor() as u32);
+    checked_product(
+        nj.saturating_mul(2).saturating_add(1),
+        nk.saturating_mul(2).saturating_add(2),
+        crate::limits::MAX_NODE_EXPANSION,
+        "hex_hole_count",
+    )?;
+    let mut v = Vec::new();
+    #[allow(clippy::cast_possible_wrap)]
+    let nj = nj as i32;
+    for j in -nj..=nj {
+        #[allow(clippy::cast_precision_loss)]
+        let y = j as f32 * row;
+        let off = if j.rem_euclid(2) == 1 { p * 0.5 } else { 0.0 };
+        #[allow(clippy::cast_possible_truncation)]
+        let (k0, k1) = (
+            ((-gx - off) / p).ceil() as i32,
+            ((gx - off) / p).floor() as i32,
+        );
+        for k in k0..=k1 {
+            #[allow(clippy::cast_precision_loss)]
+            v.push((k as f32 * p + off, y));
+        }
+    }
+    Ok(v)
 }
 
 /// [`shelf_divider`] の fallible 版: `hex_hole_pitch` が検査を通らない時は `panic` でなく
@@ -8209,23 +8242,21 @@ mod tests {
 
     #[test]
     fn shelf_divider_field_tested_spec_is_subtraction() {
-        let s = shelf_divider(&ShelfDividerSpec::field_tested_560x250x120());
+        let s = shelf_divider(&ShelfDividerSpec::assembled_560x250x120());
         // hex holes subtracted なので Subtraction
         assert!(matches!(s, SdfNode::Subtraction { .. }));
     }
 
     #[test]
     fn shelf_divider_spec_validate_accepts_the_field_tested_spec() {
-        assert!(ShelfDividerSpec::field_tested_560x250x120()
-            .validate()
-            .is_ok());
+        assert!(ShelfDividerSpec::assembled_560x250x120().validate().is_ok());
     }
 
     #[test]
     fn shelf_divider_spec_validate_refuses_a_zero_pitch() {
         let spec = ShelfDividerSpec {
             hex_hole_pitch: 0.0,
-            ..ShelfDividerSpec::field_tested_560x250x120()
+            ..ShelfDividerSpec::assembled_560x250x120()
         };
         let e = spec.validate().unwrap_err();
         assert_eq!(
@@ -8241,7 +8272,7 @@ mod tests {
         // accepted) -- this must be refused instead.
         let spec = ShelfDividerSpec {
             hex_hole_pitch: f32::NAN,
-            ..ShelfDividerSpec::field_tested_560x250x120()
+            ..ShelfDividerSpec::assembled_560x250x120()
         };
         let e = try_shelf_divider(&spec).unwrap_err();
         let SpecError::FloatLimit(e) = e else {
@@ -8256,14 +8287,14 @@ mod tests {
     fn shelf_divider_panics_with_its_documented_message_on_a_negative_pitch() {
         let spec = ShelfDividerSpec {
             hex_hole_pitch: -5.0,
-            ..ShelfDividerSpec::field_tested_560x250x120()
+            ..ShelfDividerSpec::assembled_560x250x120()
         };
         let _ = shelf_divider(&spec);
     }
 
     #[test]
     fn shelf_divider_plate_center_is_inside() {
-        let s = shelf_divider(&ShelfDividerSpec::field_tested_560x250x120());
+        let s = shelf_divider(&ShelfDividerSpec::assembled_560x250x120());
         // plate 中央 (X 中央、Y 中央、Z=+2.5=plate 中心) は材料
         // ただし hex hole がある位置は空間、中央 X=0 Y=0 は千鳥 grid1 の中心なので hex 内
         // grid1 中心の外側 (X=5, Y=5) で判定
@@ -8278,7 +8309,7 @@ mod tests {
             wall_hook(&WallHookSpec::pla_1kgf()),
             gridfinity_bin(&GridfinitySpec::default_2x2()),
             drawer_organizer(&DrawerSpec::default_chopsticks_set()),
-            shelf_divider(&ShelfDividerSpec::field_tested_560x250x120()),
+            shelf_divider(&ShelfDividerSpec::assembled_560x250x120()),
         ];
         for (i, node) in nodes.iter().enumerate() {
             let d = eval(node, Vec3::new(0.1, 0.1, 0.1));

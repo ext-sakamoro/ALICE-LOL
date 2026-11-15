@@ -39,7 +39,9 @@ include!("data/parse_corpus_bbb6539.rs");
 /// position): the dump differs in the 5 lines of each of 24 constructs (the 23 shapes whose walls the
 /// outer-size change had thinned, and `sbc_mount_plate`), and `esp32_enclosure` at the small corpus
 /// arguments is now a parse error (a USB opening wider than its wall face is refused)
-const DIGEST: &str = "9f900914bab866af7f550fdea5b069352e45d6fd2e93e07a640e4da80da2d7fa";
+/// Re-recorded when `shelf_divider` cut its plate holes as round Ø15 through-holes on a triangular
+/// lattice (each hole placed by itself): the dump differs in the 5 lines of `shelf_divider` only
+const DIGEST: &str = "6c569c4b823f106db30ec38d15e7418d09fdd41e71b16643511176cd7cb3d734";
 
 fn err(e: &ParseError) -> String {
     format!("Err({:?} @ {})", e.message, e.position)

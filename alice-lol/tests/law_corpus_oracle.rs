@@ -569,7 +569,7 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("skadis_shelf", 1.6001),
     ("skadis_elastic_cord", 1.5001),
     ("drawer_organizer", 1.5001),
-    ("shelf_divider", 0.0269),
+    ("shelf_divider", 5.0001),
     ("octahedron", 0.1037),
     ("pyramid", 0.0165),
     ("tetrahedron", 3.6438),

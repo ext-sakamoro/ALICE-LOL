@@ -266,7 +266,7 @@ open(p, 'w', encoding='utf-8').write(t.replace(old, new, 1))
 # ── M4: ShelfDividerSpec::validate() skipped (hex_hole_pitch's layer-2
 # check deleted) -- expected red via the named unit test, NOT the grid:
 # shelf_divider is only ever called from .lol text with the fixed
-# field_tested_560x250x120() spec (hex_hole_pitch always 20.0, never
+# assembled_560x250x120() spec (hex_hole_pitch always 20.0, never
 # degenerate), so this hazard is unreachable from the parser-facing grid by
 # design; only a direct Rust caller of the Spec API can trigger it
 run_mutant "M4" \

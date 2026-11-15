@@ -35,7 +35,10 @@ include!("data/parse_corpus_bbb6539.rs");
 /// position): the dump differs in the 5 lines of each of 24 constructs (the 23 shapes whose walls the
 /// outer-size change had thinned, and `sbc_mount_plate`), and `esp32_enclosure` at the small corpus
 /// arguments is now a parse error (a USB opening wider than its wall face is refused)
-const DIGEST: &str = "b7e24a2376634fc4e6178554ae3ba9f78171d282a8facd3c657554be7a91c2b0";
+/// Re-recorded when `shelf_divider` cut its plate holes as round Ø15 through-holes on a triangular
+/// lattice (each hole placed by itself, not a `RepeatFinite` read as anchored at a corner): the dump
+/// differs in the 5 lines of `shelf_divider` only
+const DIGEST: &str = "725e822fa3a49d097134a277b7782ad6631ffc515f2593143155d6c98e44e49f";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {
