@@ -644,9 +644,7 @@ fn panel_min_wall(spec: &SkadisPanelSpec, plan: &PanelPlan) -> f32 {
             m = crate::det_math::min(m, h.gap(o));
         }
     }
-    let r = spec
-        .corner_radius
-        .clamp(0.0, crate::det_math::max(spec.size * 0.5, 0.0));
+    let r = panel_corner_radius(spec.size, spec.corner_radius);
     let inner = spec.size.mul_add(0.5, -r);
     for h in &holes {
         for (sx, sz) in [(-1.0f32, -1.0f32), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)] {
@@ -659,6 +657,19 @@ fn panel_min_wall(spec: &SkadisPanelSpec, plan: &PanelPlan) -> f32 {
         }
     }
     m
+}
+
+/// 板の外周の角の丸み: `[0, size/2]` に収め、零は `+0` にする (LOL の `rounded_box` の helper と同じ規則)
+///
+/// `f32::clamp(0.0, ..)` は `-0.0` を `-0.0` のまま返す 板の `RoundedBox` に `-0.0` が入ると `emit` が
+/// `rounded_box(…, -0.0)` と書き、それを読むと helper が `+0` にするので、正規形の文が 1 回目と 2 回目で違う
+/// (`skadis_panel(21, 9, -0)`、fuzz `fuzz_lol_emit_parity` が見つけた) `det_math::max(_, 0.0)` は等しい零の
+/// 組で `+0` を返す 上限は先に 0 以上にする (size が 0 以下でも上限が負にならない)
+fn panel_corner_radius(size: f32, corner_radius: f32) -> f32 {
+    crate::det_math::max(
+        crate::det_math::min(corner_radius, crate::det_math::max(size * 0.5, 0.0)),
+        0.0,
+    )
 }
 
 fn build_panel(spec: &SkadisPanelSpec) -> SdfNode {
@@ -675,8 +686,7 @@ fn build_panel(spec: &SkadisPanelSpec) -> SdfNode {
     // `RoundedBox` の外寸は `half_extents + round_radius` なので、X/Z は内側の寸法
     // `size/2 - R` を渡して外寸をちょうど `size` にする (旧実装は `size/2` を渡して一辺が
     // `size + 2R` になっていた)  Y は下の cutter で `thickness` に切り戻す
-    // `clamp` panics when its upper bound is below 0 (a size of 0 or less): bound it first
-    let r = corner_radius.clamp(0.0, crate::det_math::max(size * 0.5, 0.0));
+    let r = panel_corner_radius(size, corner_radius);
     let panel_infl = SdfNode::RoundedBox {
         half_extents: Vec3::new(
             size.mul_add(0.5, -r),

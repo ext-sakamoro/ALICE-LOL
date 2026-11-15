@@ -412,3 +412,25 @@ fn v10_mount_keepout_removes_the_cells_near_a_mount() {
         assert!(eval(&n, at(p, 0.0, 0.0)) > 0.0, "peg {p:?} missing");
     }
 }
+
+/// 角の丸みが `-0` の板も、正規形の文を読んで書き戻すと同じ文になる (fuzz `fuzz_lol_emit_parity` の
+/// `skadis_panel(21,9,-0)`: 1 回目は `rounded_box(…, -0.0)`、読み直した 2 回目は `0.0` だった)
+#[test]
+fn a_negative_zero_corner_radius_emits_a_fixed_point() {
+    use alice_lol::emit::to_lol_unstamped;
+    use alice_lol::runtime_parser::parse_lol;
+    for text in [
+        "skadis_panel(21,9,-0)",
+        "skadis_panel(300,5,-0)",
+        "skadis_panel(300,5,0)",
+    ] {
+        let first = to_lol_unstamped(&parse_lol(text).unwrap()).unwrap();
+        let second = to_lol_unstamped(&parse_lol(&first).unwrap()).unwrap();
+        assert_eq!(first, second, "{text}");
+        assert!(!first.contains("-0.0)"), "{text}: {first}");
+    }
+    assert_eq!(
+        digest(&skadis_panel_sdf(300.0, 5.0, -0.0)),
+        digest(&skadis_panel_sdf(300.0, 5.0, 0.0))
+    );
+}

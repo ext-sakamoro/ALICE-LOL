@@ -134,9 +134,9 @@ tests = ["alice-lol/tests/law_max_min_ties.rs::honeycomb_cell_radius_floor_of_ne
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
-fn = "build_panel"
-calls = 1
-reason = "max(size * 0.5, 0) after SkadisPanelSpec::validate (via skadis_panel_sdf's size check or try_skadis_panel): size * 0.5 is > 0 or rounds to +0, never -0 or NaN"
+fn = "panel_corner_radius"
+calls = 3
+reason = "the corner radius is bounded to [0, max(size / 2, 0)] with the same rule as the rounded_box helper: max(size * 0.5, 0) keeps the upper bound >= 0, min(r, bound) and then max(_, 0) put r in range, and max(-0, 0) is +0 (IEEE maximumNumber), so a corner radius of -0 becomes +0 and the emitted rounded_box reads back to the same text (fuzz_lol_emit_parity found skadis_panel(21, 9, -0) writing -0.0 then 0.0); a NaN corner radius, possible only through the unchecked skadis_panel_sdf, becomes the bound as in the rounded_box helper, and SkadisPanelSpec::validate refuses it on the checked path"
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
@@ -159,8 +159,8 @@ reason = "max(|dc| - (a + a'), 0) per axis feeds only a square (dx * dx), so the
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/skadis_sdf.rs"
 fn = "panel_min_wall"
-calls = 7
-reason = "the min fold starts from +inf and takes finite gaps (validated spec, see gap); the clamp of the corner radius is max(size * 0.5, 0) after the size check (> 0); the container SDF's max(q, 0) feeds a square, and min(max(qx, qz), 0) is added to a length, where -0 + x == +0 + x for x != 0 and the final -sdf - r compares against the bound, so neither the zero's sign nor a NaN (excluded by validate) is observable"
+calls = 6
+reason = "the min fold starts from +inf and takes finite gaps (validated spec, see gap); the corner radius comes from panel_corner_radius; the container SDF's max(q, 0) feeds a square, and min(max(qx, qz), 0) is added to a length, where -0 + x == +0 + x for x != 0 and the final -sdf - r compares against the bound, so neither the zero's sign nor a NaN (excluded by validate) is observable"
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/fastener.rs"
