@@ -413,11 +413,12 @@ When generating organizer/storage items, use these standard dimensions.
 **MANDATORY**: Use `repeat_finite` for any repeating pattern. Never duplicate nodes manually.
 
 ```lol fragment
-// Grid of holes: translate to grid origin, repeat_finite for pattern
+// Grid of holes: translate to the MIDDLE hole (repeat_finite is centred, not anchored at a corner),
+// pass an even count 2m for 2m + 1 holes per axis
 subtract(
   rounded_box(base_hx, base_hy, base_hz, fillet),
   translate(grid_cx, grid_cy, 0,
-    repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hole_shape))
+    repeat_finite(2 * mx, 2 * my, 0, pitch_x, pitch_y, 0, hole_shape))
 )
 ```
 
