@@ -126,7 +126,7 @@ The language has <!-- num: syntax.core -->126 constructs, or <!-- num: syntax.al
 | `polar_repeat(n, child)` | count, child | Radial repetition around Y |
 | `shear(xy, xz, yz, child)` | shear factors, child | Shear deformation |
 | `noise(amp, freq, seed, child)` | amplitude, frequency, seed, child | Perlin noise displacement |
-| `repeat_finite(cx, cy, cz, sx, sy, sz, child)` | count X,Y,Z, spacing X,Y,Z, child | Bounded repetition |
+| `repeat_finite(cx, cy, cz, sx, sy, sz, child)` | count X,Y,Z, spacing X,Y,Z, child | Bounded repetition **centred on the origin** (not from a corner): per axis, copies at `k * spacing` with `k` clamped to `±count/2`, so an even count N gives N+1 copies; an odd count is defective (being redefined), do not use one; see "repeat_finite for Pattern Generation" |
 | `octant_mirror(child)` | child | Mirror in all 8 octants |
 | `icosahedral_symmetry(child)` | child | 60-fold icosahedral symmetry |
 | `with_material(id, child)` | material ID, child | Assign material |
@@ -925,13 +925,38 @@ translate(cx, cy, 0, repeat_finite(count_x, count_y, 0, pitch_x, pitch_y, 0, hol
 
 **Effect**: 93% DSL size reduction, 58% mesh reduction, dramatically faster generation. <!-- measured: 2026-03-19, one organizer written both ways (explicit union of holes vs repeat_finite), recorded in 3d9f401 -->
 
+**What the count means** (measured on the evaluator): the copies are **centred on the point the
+`translate` moves the pattern to**, at `k * spacing` with `k` clamped to `-count/2 .. count/2` on each
+axis. An even count `N` gives `N + 1` copies (`repeat_finite(6, ...)` = 7 copies, 3 on each side). It
+does **not** start at a corner: `translate(corner, repeat_finite(n, ...))` puts half the copies outside
+the part. A count of 0 on an axis means no repetition along it. **An odd count is defective in the
+evaluator this version builds on** (it cuts the copies at both ends, at `±(count/2) * spacing`, in half) **and its meaning is being
+redefined: do not use one**; the even-count rule above holds before and after that change.
+
+**Recipe** — `2m + 1` copies with pitch `p` starting at `x0`: translate to the middle copy,
+`x0 + m * p`, and pass `2m`:
+
+```lol fragment
+translate(x0 + m * p, y0 + n * q, 0, repeat_finite(2 * m, 2 * n, 0, p, q, 0, hole))
+```
+
 ### Staggered Grid (e.g. SKADIS)
 
-Two `repeat_finite` with `translate` offset:
-```lol fragment
+Two `repeat_finite` grids, each translated to its own middle copy. A 300 × 300 × 5 mm board with
+checkerboard holes 40 mm apart, the first row 20 mm from the edge (`20, 60, ..., 260` and
+`40, 80, ..., 280`, 7 × 7 each = 98 holes), centre of the board at the origin: the first grid's middle
+copy is `20 + 3 * 40 - 150 = -10`, the second's `40 + 3 * 40 - 150 = 10` (this exact program is checked
+by `alice-lol/tests/repeat_finite_callers.rs`: all 98 holes open, none outside):
+
+```lol print
+units(mm, print,
+subtract(
+box3d(150, 150, 2.5),
 union(
-translate(g1_cx, g1_cy, 0, repeat_finite(n, n, 0, pitch, pitch, 0, shape)),
-translate(g2_cx, g2_cy, 0, repeat_finite(m, m, 0, pitch, pitch, 0, shape))
+translate(-10, -10, 0, repeat_finite(6, 6, 0, 40, 40, 0, rotate(90, 0, 0, cylinder(2.5, 3.5)))),
+translate(10, 10, 0, repeat_finite(6, 6, 0, 40, 40, 0, rotate(90, 0, 0, cylinder(2.5, 3.5))))
+)
+)
 )
 ```
 
@@ -1089,27 +1114,32 @@ translate(SIDE_X, 0, ARCH_CZ, rounded_box(T+1, ARCH_HY, ARCH_HZ, R))
 Large flat plates (e.g. 280×250mm) warp and detach from the bed during cooling.
 **Always add hex cutout holes** to break up continuous area and reduce shrinkage stress.
 
-Hex grid cutouts on the top plate — staggered (千鳥) pattern via two `repeat_finite` grids offset by half a pitch:
+Round cutouts on a triangular lattice (every hole `PITCH` from its neighbours, so the wall between
+holes is `PITCH - 2 * HOLE_R` everywhere): two grids with rows `PITCH * 1.7320508` apart, the second
+shifted by half a pitch and half a row, both centred on the plate (even counts, see "What the count
+means"); `HOLE` is a hole through the plate's thickness, e.g. `rotate(90, 0, 0, cylinder(HOLE_R, PLATE_T))`
+for a plate thin along Z:
 
 ```lol fragment
 subtract(
 PLATE,
 union(
 translate(0, 0, PLATE_Z,
-repeat_finite(COUNT_X, COUNT_Y, 0, PITCH, PITCH, 0,
-cylinder(HOLE_R, PLATE_T+1))),
-translate(PITCH/2, PITCH*0.433, PLATE_Z,
-repeat_finite(COUNT_X2, COUNT_Y2, 0, PITCH, PITCH*0.866, 0,
-cylinder(HOLE_R, PLATE_T+1)))
+repeat_finite(2 * NX, 2 * NY, 0, PITCH, PITCH * 1.7320508, 0, HOLE)),
+translate(PITCH / 2, PITCH * 0.8660254, PLATE_Z,
+repeat_finite(2 * NX2, 2 * NY2, 0, PITCH, PITCH * 1.7320508, 0, HOLE))
 )
 )
 ```
 
+Pick `NX`, `NY` (and `NX2`, `NY2` for the shifted grid) so that every hole stays `border` from the
+plate edge. `stdlib::hardsurface::pattern_sdf::shelf_divider` builds this layout.
+
 **Proven parameters**:
 - `HOLE_R = 7.5mm` (⌀15mm holes)
 - `PITCH = 20mm` (5mm walls between holes)
-- `border = 15mm` (solid frame around plate edge)
-- `0.866 = √3/2` (hex packing row offset)
+- `border = 15mm` (solid frame from the hole edge to the plate edge)
+- `0.8660254 = √3/2` (row spacing of the triangular lattice, as a fraction of the pitch)
 
 **Also recommended**: Add brim (5-10mm) in slicer settings for extra bed adhesion.
 
