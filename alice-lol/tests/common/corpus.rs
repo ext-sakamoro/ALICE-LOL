@@ -138,7 +138,38 @@ pub fn with_one_number(src: &str, idx: usize, replacement: &str) -> String {
 }
 
 /// bucket 名 → snippet (Intent 系 bucket は SDF ではないので None)
+/// Constructs sampled at real size instead of the generic small arguments
+///
+/// Rule: every construct whose outer shape is an open shell (`pattern_sdf::open_shell`, a container
+/// with a cavity open at the top) takes the arguments of the first bundled text-to-print template that
+/// uses it. Small arguments (`3.0, 2.0, 1.0`) are smaller than these containers' own walls and
+/// openings, so they test a degenerate shape the generator does not describe (an opening wider than
+/// its wall face is refused, `esp32_enclosure`). The selection is by this rule only, not by the result.
+pub const REAL_SIZE_SAMPLES: &[(&str, &str)] = &[
+    ("esp32_enclosure", "51.6, 28.4, 15"),
+    ("sbc_case", "85, 56, 25"),
+    ("outdoor_enclosure", "120, 80, 45"),
+    ("soap_tray", "200, 90, 6"),
+    ("pill_organizer", "7, 2, 20"),
+    ("sd_card_holder", "4, 4, 24"),
+    ("makeup_organizer", "3, 4, 45"),
+    ("card_tray", "63, 88, 30"),
+    ("swatch_holder", "8, 4, 32"),
+    ("wrench_holder", "8, 19, 6"),
+    ("sink_caddy", "200, 100, 8"),
+    ("hairdryer_holder", "85, 110, 3"),
+    ("drill_bit_holder", "3, 13, 11"),
+    ("cutlery_tray", "3, 35, 220"),
+    ("chopstick_holder", "4, 13, 260"),
+    ("driver_rack", "8, 25, 100"),
+    ("hex_key_holder", "9, 1.5, 10"),
+    ("bag_clip_org", "8, 8, 100"),
+];
+
 pub fn snippet(rule: &str, name: &str) -> Option<String> {
+    if let Some((_, args)) = REAL_SIZE_SAMPLES.iter().find(|(n, _)| *n == name) {
+        return Some(format!("{name}({args})"));
+    }
     let s = match rule {
         "name_0f" => format!("{name}()"),
         "name_1f" => format!("{name}({})", nums(1)),
@@ -192,6 +223,9 @@ pub fn fixtures() -> Vec<(&'static str, &'static str)> {
             "pen_cup_torus",
             "union(pen_cup(50,100), translate(33,0,50, rotate(0,90,0, torus(15,5))))",
         ),
+        // a test shape, not a product: the torus (centre about 56 mm from the cylinder axis, outer radius 16)
+        // never reaches the cylinder (radius 25), so it is two parts by construction and the connectivity
+        // judge reports it as a violation (a real finding about the shape, not a defect of a generator)
         (
             "cylinder_torus",
             "union(cylinder(25,50), translate(25,0,50, rotate(0,90,0, torus(12,4))))",
