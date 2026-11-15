@@ -419,7 +419,7 @@ oracle: [`alice-lol/tests/analytic_research_law.rs`](alice-lol/tests/analytic_re
 | [`print_demo`](alice-lol/examples/print_demo.rs) | 3D プリント向けの構造意図 |
 | [`royal_crown`](alice-lol/examples/royal_crown.rs) | 装飾的な王冠を OBJ で出力 |
 | [`skadis_panel_dc_vs_mc`](alice-lol/examples/skadis_panel_dc_vs_mc.rs) | 穴あきパネルで marching cubes と dual contouring を比較 |
-| [`skadis_v10_panel`](alice-lol/examples/skadis_v10_panel.rs) | SKADIS の板どうしを繋ぐ 2x2 / 4x4 の connector |
+| [`skadis_v10_panel`](alice-lol/examples/skadis_v10_panel.rs) | spec (格子・抜き穴) から作る SKADIS の板と最も薄い肉の検査、板どうしを繋ぐ 2x2 / 4x4 の connector |
 | [`verify_customizers`](alice-lol/examples/verify_customizers.rs) | customizer の原型が期待した形になることの確認 |
 | [`llm_bench`](alice-lol/examples/llm_bench.rs) | 文法制約デコードと think→文法の pass 率の比較 (feature `llm-bridge`) |
 | [`gridfinity_untrusted_input`](alice-lol/examples/gridfinity_untrusted_input.rs) | dividers の個数が退化している時、panic でなく `try_gridfinity_bin` が拒否で返す例 |

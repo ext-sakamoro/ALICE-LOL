@@ -388,11 +388,285 @@ pub const SKADIS_OUTER_FRAME: f32 = 12.0;
 /// しているが、この pub fn を直接呼ぶ Rust 呼び出し元は検査されない)
 /// untrusted な入力は [`try_skadis_panel_sdf`] を使うこと
 #[must_use]
-#[allow(clippy::too_many_lines)] // 1 枚の板の SDF 構成を直列に記述 (分割すると寸法の対応が追いにくい)
 pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNode {
     checked_bounded(size, 0.0, MAX_SKADIS_PANEL_MM, "panel_size").expect(
         "skadis_panel_sdf の size が検査を通らない (0 より大きく MAX_SKADIS_PANEL_MM mm 以下の有限値でなければならない): untrusted な入力は try_skadis_panel_sdf を使うこと",
     );
+    build_panel(&SkadisPanelSpec::classic(size, thickness, corner_radius))
+}
+
+/// 板の穴の並べ方 (中心の位置) と、その位置から作る 2D の穴の形
+///
+/// 位置の計算 (浮動小数の演算の順序も) は `skadis_panel_sdf` の旧実装と同じ: 既定の spec
+/// ([`SkadisPanelSpec::classic`]) の出力は byte 一致 (`tests/skadis_panel_spec.rs` の golden)
+struct PanelPlan {
+    pegs: Vec<(f32, f32)>,
+    cutouts: Vec<(f32, f32)>,
+    conns: Vec<(f32, f32)>,
+    mounts: Vec<(f32, f32)>,
+}
+
+/// 穴の 2D の形 (板の面 X-Z): 中心 `c`、内側の長方形の半寸法 `a`、その周りの丸み `r`
+/// (`a` = 0 で円、`r` = 0 で長方形、stadium は `a = (0, (H - W) / 2)`、`r = W / 2`)
+#[derive(Clone, Copy)]
+struct Hole2 {
+    c: (f32, f32),
+    a: (f32, f32),
+    r: f32,
+}
+
+impl Hole2 {
+    /// 2 つの穴の間の肉の幅 (重なれば負)
+    fn gap(&self, o: &Self) -> f32 {
+        let dx = crate::det_math::max((self.c.0 - o.c.0).abs() - (self.a.0 + o.a.0), 0.0);
+        let dz = crate::det_math::max((self.c.1 - o.c.1).abs() - (self.a.1 + o.a.1), 0.0);
+        dx.mul_add(dx, dz * dz).sqrt() - self.r - o.r
+    }
+}
+
+fn panel_plan(spec: &SkadisPanelSpec) -> PanelPlan {
+    let size = spec.size;
+    let edge_margin = spec.edge_margin;
+    let mut pegs = Vec::new();
+    match spec.grid {
+        SkadisGrid::Centred => {
+            // 穴の中心は使用可能範囲 |c| <= (size - 2 * EDGE_MARGIN) / 2 に収める
+            // base 格子 (原点中心) と stagger 格子 (base を GRID_OFFSET ずらす) のそれぞれで、
+            // 範囲に入る添字だけを並べる
+            let usable_half = size.mul_add(0.5, -edge_margin);
+            // Law form: negate both mul_add operands instead of negating `usable_half` itself
+            // (`-usable_half` is the fneg(fma(...)) shape the no-outer-fneg-of-fma gate forbids)
+            let neg_usable_half = size.mul_add(-0.5, edge_margin);
+            #[allow(clippy::cast_possible_truncation)]
+            let index_range = |offset: f32| {
+                let lo = ((neg_usable_half - offset) / SKADIS_GRID_PITCH).ceil() as i32;
+                let hi = ((usable_half - offset) / SKADIS_GRID_PITCH).floor() as i32;
+                lo..=hi
+            };
+            for (grid_x, grid_z) in [(0.0, 0.0), (SKADIS_GRID_OFFSET, SKADIS_GRID_OFFSET)] {
+                for ix in index_range(grid_x) {
+                    for iz in index_range(grid_z) {
+                        #[allow(clippy::cast_precision_loss)]
+                        let cx = (ix as f32).mul_add(SKADIS_GRID_PITCH, grid_x);
+                        #[allow(clippy::cast_precision_loss)]
+                        let cz = (iz as f32).mul_add(SKADIS_GRID_PITCH, grid_z);
+                        pegs.push((cx, cz));
+                    }
+                }
+            }
+        }
+        SkadisGrid::CornerV10 => {
+            // generate.py `get_peg_positions`: 角から EDGE_MARGIN の位置に base 格子、GRID_OFFSET
+            // ずらした格子、どちらも size - EDGE_MARGIN まで (板の座標は中心が原点)
+            for (gx, gz, _) in corner_lattice(size, edge_margin).filter(|&(_, _, k)| k.is_peg()) {
+                pegs.push((gx, gz));
+            }
+        }
+    }
+
+    let half_size = size * 0.5;
+    let conn_inset_from_center = half_size - SKADIS_CONN_INSET; // 中央から縁-inset 距離
+
+    let mut cutouts = Vec::new();
+    if spec.cutouts == SkadisCutouts::V10 {
+        let mounts = mount_centres(half_size, conn_inset_from_center);
+        let (cw, ch, _) = SKADIS_V10_CUTOUT;
+        let frame_lo = -half_size + SKADIS_OUTER_FRAME;
+        let frame_hi = half_size - SKADIS_OUTER_FRAME;
+        let cells: Vec<(f32, f32)> = match spec.grid {
+            SkadisGrid::CornerV10 => corner_lattice(size, edge_margin)
+                .filter(|&(_, _, k)| !k.is_peg())
+                .map(|(x, z, _)| (x, z))
+                .collect(),
+            SkadisGrid::Centred => centred_lattice(size, edge_margin)
+                .filter(|&(_, _, k)| !k.is_peg())
+                .map(|(x, z, _)| (x, z))
+                .collect(),
+        };
+        for (cx, cz) in cells {
+            // generate.py `build_panel`: mount から MOUNT_KEEPOUT 以内の cell と、外周の frame に
+            // 掛かる cutout は作らない
+            if mounts.iter().any(|&(mx, mz)| {
+                let (ex, ez) = (cx - mx, cz - mz);
+                ex.mul_add(ex, ez * ez).sqrt() < SKADIS_V10_MOUNT_KEEPOUT
+            }) {
+                continue;
+            }
+            if cw.mul_add(-0.5, cx) < frame_lo
+                || cw.mul_add(0.5, cx) > frame_hi
+                || ch.mul_add(-0.5, cz) < frame_lo
+                || ch.mul_add(0.5, cz) > frame_hi
+            {
+                continue;
+            }
+            cutouts.push((cx, cz));
+        }
+    }
+
+    // Connector holes (M2.5 Ø2.7mm、4 辺 + 4 角、generate.py `get_conn_positions`)
+    // Python `(x, y)` (板 origin 左下) → `(cx, cz)` = `(x - size/2, y - size/2)`
+    let mut conns = Vec::new();
+    // 4 辺 (Python np.arange(GRID_PITCH, PANEL_W, GRID_PITCH) = 40, 80, ..., <size)
+    let mut i = 1i32;
+    loop {
+        #[allow(clippy::cast_precision_loss)]
+        let pos = i as f32 * SKADIS_GRID_PITCH;
+        if pos >= size {
+            break;
+        }
+        let center_shift = pos - half_size; // Python x → Rust cx
+        conns.push((center_shift, -conn_inset_from_center));
+        conns.push((center_shift, conn_inset_from_center));
+        conns.push((-conn_inset_from_center, center_shift));
+        conns.push((conn_inset_from_center, center_shift));
+        i += 1;
+    }
+    // 4 角
+    for &(sx, sz) in &[
+        (-conn_inset_from_center, -conn_inset_from_center),
+        (conn_inset_from_center, -conn_inset_from_center),
+        (-conn_inset_from_center, conn_inset_from_center),
+        (conn_inset_from_center, conn_inset_from_center),
+    ] {
+        conns.push((sx, sz));
+    }
+
+    PanelPlan {
+        pegs,
+        cutouts,
+        conns,
+        mounts: mount_centres(half_size, conn_inset_from_center),
+    }
+}
+
+/// Mount holes (Ø5mm 壁掛け、上下辺 3 穴、generate.py `get_mount_positions`):
+/// X = 60 / 150 / 220 (板の左端から)、Z = 縁から `CONN_INSET`
+fn mount_centres(half_size: f32, conn_inset_from_center: f32) -> Vec<(f32, f32)> {
+    let mut v = Vec::new();
+    for &x in &[60.0f32, 150.0, 220.0] {
+        let cx = x - half_size;
+        v.push((cx, -conn_inset_from_center));
+        v.push((cx, conn_inset_from_center));
+    }
+    v
+}
+
+/// 20 mm の副格子の cell の種類 (偶数 × 偶数 = base の peg、奇数 × 奇数 = 千鳥の peg、
+/// それ以外 = 空いた cell = cutout の候補、generate.py `get_empty_cells`)
+#[derive(Clone, Copy)]
+struct CellKind(bool);
+
+impl CellKind {
+    const fn is_peg(self) -> bool {
+        self.0
+    }
+}
+
+/// generate.py の副格子 (角から `EDGE_MARGIN`、step `GRID_OFFSET`、size - `EDGE_MARGIN` まで)
+fn corner_lattice(size: f32, edge_margin: f32) -> impl Iterator<Item = (f32, f32, CellKind)> {
+    let half = size * 0.5;
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let n = crate::det_math::max(
+        (2.0f32.mul_add(-edge_margin, size) / SKADIS_GRID_OFFSET).floor(),
+        -1.0,
+    ) as i32;
+    (0..=n).flat_map(move |j| {
+        (0..=n).map(move |i| {
+            #[allow(clippy::cast_precision_loss)]
+            let x = (i as f32).mul_add(SKADIS_GRID_OFFSET, edge_margin) - half;
+            #[allow(clippy::cast_precision_loss)]
+            let z = (j as f32).mul_add(SKADIS_GRID_OFFSET, edge_margin) - half;
+            (x, z, CellKind((i + j) % 2 == 0))
+        })
+    })
+}
+
+/// 中心に揃えた副格子 (原点から step `GRID_OFFSET`、|c| <= size/2 - `EDGE_MARGIN`)
+fn centred_lattice(size: f32, edge_margin: f32) -> impl Iterator<Item = (f32, f32, CellKind)> {
+    let usable = size.mul_add(0.5, -edge_margin);
+    #[allow(clippy::cast_possible_truncation)]
+    let n = crate::det_math::max((usable / SKADIS_GRID_OFFSET).floor(), -1.0) as i32;
+    (-n..=n).flat_map(move |j| {
+        (-n..=n).map(move |i| {
+            #[allow(clippy::cast_precision_loss)]
+            let (x, z) = (i as f32 * SKADIS_GRID_OFFSET, j as f32 * SKADIS_GRID_OFFSET);
+            (x, z, CellKind((i + j).rem_euclid(2) == 0))
+        })
+    })
+}
+
+/// 板の穴の 2D の形の一覧 (肉の幅の検査用)
+fn panel_holes(spec: &SkadisPanelSpec, plan: &PanelPlan) -> Vec<Hole2> {
+    let peg_w = SKADIS_PEG_W + spec.peg_clearance_mm;
+    let peg_h = SKADIS_PEG_H + spec.peg_clearance_mm;
+    let (cw, ch, cr) = SKADIS_V10_CUTOUT;
+    let mut v = Vec::new();
+    for &c in &plan.pegs {
+        v.push(Hole2 {
+            c,
+            a: (0.0, (peg_h - peg_w) * 0.5),
+            r: peg_w * 0.5,
+        });
+    }
+    for &c in &plan.cutouts {
+        v.push(Hole2 {
+            c,
+            a: (cw.mul_add(0.5, -cr), ch.mul_add(0.5, -cr)),
+            r: cr,
+        });
+    }
+    for &c in &plan.conns {
+        v.push(Hole2 {
+            c,
+            a: (0.0, 0.0),
+            r: SKADIS_CONN_SCREW_D * 0.5,
+        });
+    }
+    for &c in &plan.mounts {
+        v.push(Hole2 {
+            c,
+            a: (0.0, 0.0),
+            r: SKADIS_MOUNT_HOLE_R,
+        });
+    }
+    v
+}
+
+/// 板の最も薄い肉 (mm): 穴と穴の間と、穴と外周の間の最小 全ての穴が角丸の長方形 (円・stadium を
+/// 含む) なので 2 つの穴の間は内側の長方形どうしの距離 − 丸み 2 つ (厳密) 外周は角丸の正方形
+/// (内側の半寸法 `size/2 - R`、丸み `R`) で、穴の内側の長方形の 4 隅で外周の SDF を測る (外周は凸
+/// なので、長方形の上の最小は隅にある)
+fn panel_min_wall(spec: &SkadisPanelSpec, plan: &PanelPlan) -> f32 {
+    let holes = panel_holes(spec, plan);
+    let mut m = f32::INFINITY;
+    for (k, h) in holes.iter().enumerate() {
+        for o in &holes[k + 1..] {
+            m = crate::det_math::min(m, h.gap(o));
+        }
+    }
+    let r = spec
+        .corner_radius
+        .clamp(0.0, crate::det_math::max(spec.size * 0.5, 0.0));
+    let inner = spec.size.mul_add(0.5, -r);
+    for h in &holes {
+        for (sx, sz) in [(-1.0f32, -1.0f32), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)] {
+            let (px, pz) = (sx.mul_add(h.a.0, h.c.0), sz.mul_add(h.a.1, h.c.1));
+            let (qx, qz) = (px.abs() - inner, pz.abs() - inner);
+            let (ox, oz) = (crate::det_math::max(qx, 0.0), crate::det_math::max(qz, 0.0));
+            let outside = ox.mul_add(ox, oz * oz).sqrt();
+            let sdf = outside + crate::det_math::min(crate::det_math::max(qx, qz), 0.0) - r;
+            m = crate::det_math::min(m, -sdf - h.r);
+        }
+    }
+    m
+}
+
+fn build_panel(spec: &SkadisPanelSpec) -> SdfNode {
+    let size = spec.size;
+    let thickness = spec.thickness;
+    let corner_radius = spec.corner_radius;
+    let peg_w = SKADIS_PEG_W + spec.peg_clearance_mm;
+    let peg_h = SKADIS_PEG_H + spec.peg_clearance_mm;
     // 外形 (原点中心の RoundedBox、Y 軸方向 = 板厚)
     // 2026-08-08 fix: RoundedBox は 6 面全てに round_radius を追加する仕様のため、
     // 素朴に使うと Y 方向にも corner_radius が加算されて板厚が (thickness + 2*corner_radius)
@@ -427,12 +701,12 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
     // 2026-08-08 fix: 旧実装は Box3d rectangle だったが production は stadium (semicircular ends)
     // Stadium 構成 = 中央 Box (5 × T+2m × 10、Z 方向 10mm) + 端 Cylinder 2 個 (radius 2.5、Y 軸)
     let t_pass = 2.0f32.mul_add(HOLE_THROUGH_MARGIN, thickness);
-    let stadium_middle_z = (SKADIS_PEG_H - SKADIS_PEG_W) * 0.5; // (15-5)/2 = 5mm
+    let stadium_middle_z = (peg_h - peg_w) * 0.5; // (15-5)/2 = 5mm (V10: 5.3 x 15.3 でも 5mm)
     let peg_middle = SdfNode::Box3d {
-        half_extents: Vec3::new(SKADIS_PEG_W * 0.5, t_pass * 0.5, stadium_middle_z),
+        half_extents: Vec3::new(peg_w * 0.5, t_pass * 0.5, stadium_middle_z),
     };
     let peg_end_cyl = SdfNode::Cylinder {
-        radius: SKADIS_PEG_W * 0.5, // 2.5mm = 半円 end
+        radius: peg_w * 0.5, // 2.5mm = 半円 end (V10 2.65)
         half_height: t_pass * 0.5,
     };
     let peg_end_top = SdfNode::Translate {
@@ -451,120 +725,46 @@ pub fn skadis_panel_sdf(size: f32, thickness: f32, corner_radius: f32) -> SdfNod
         b: Arc::new(peg_end_bot),
     };
 
-    // 穴の中心は使用可能範囲 |c| <= (size - 2 * EDGE_MARGIN) / 2 に収める
-    // base 格子 (原点中心) と stagger 格子 (base を GRID_OFFSET ずらす) のそれぞれで、
-    // 範囲に入る添字だけを並べる (旧実装は両方とも ix ∈ [-3, 3] で、stagger の +140 が余白に
-    // 入り、-140 は無い左右非対称だった)
-    let usable_half = size.mul_add(0.5, -SKADIS_EDGE_MARGIN);
-    // Law form: negate both mul_add operands instead of negating
-    // `usable_half` itself (`-usable_half` is the fneg(fma(...)) shape the
-    // no-outer-fneg-of-fma gate forbids, even buried inside `-usable_half -
-    // offset`; `size.mul_add(-0.5, SKADIS_EDGE_MARGIN)` is the bit-exact
-    // equivalent).
-    let neg_usable_half = size.mul_add(-0.5, SKADIS_EDGE_MARGIN);
-    #[allow(clippy::cast_possible_truncation)]
-    let index_range = |offset: f32| {
-        let lo = ((neg_usable_half - offset) / SKADIS_GRID_PITCH).ceil() as i32;
-        let hi = ((usable_half - offset) / SKADIS_GRID_PITCH).floor() as i32;
-        lo..=hi
-    };
-
-    // 2026-08-07 fix: RepeatFinite → 明示 Union へ置換 (Phase 5.8 gridfinity 同 pattern)
-    // 理由: RepeatFinite の distance field は要素間 bound-only 保証で exact metric ではない
-    // DC の Hermite data sampling で boundary 精度不足による watertight 破綻 (NME 163) 発生
-    // 明示 Union で真の distance field を得て DC で完全 watertight 達成 (NME 0 実測)
-    //
-    // 2026-08-07 fix 2: 線形左入れ子 fold → balanced fold で eval recursion depth 削減
-    // (98-deep 線形 fold は test thread 2 MB stack を超過して stack overflow の実測 CI 事故)
+    let plan = panel_plan(spec);
     let mut hole_list: Vec<SdfNode> = Vec::new();
-    for (grid_x, grid_z) in [(0.0, 0.0), (SKADIS_GRID_OFFSET, SKADIS_GRID_OFFSET)] {
-        for ix in index_range(grid_x) {
-            for iz in index_range(grid_z) {
-                #[allow(clippy::cast_precision_loss)]
-                let cx = (ix as f32).mul_add(SKADIS_GRID_PITCH, grid_x);
-                #[allow(clippy::cast_precision_loss)]
-                let cz = (iz as f32).mul_add(SKADIS_GRID_PITCH, grid_z);
-                hole_list.push(SdfNode::Translate {
-                    child: Arc::new(peg_hole.clone()),
-                    offset: Vec3::new(cx, 0.0, cz),
-                });
-            }
+    for &(cx, cz) in &plan.pegs {
+        hole_list.push(SdfNode::Translate {
+            child: Arc::new(peg_hole.clone()),
+            offset: Vec3::new(cx, 0.0, cz),
+        });
+    }
+    if !plan.cutouts.is_empty() {
+        let (cw, ch, cr) = SKADIS_V10_CUTOUT;
+        // 丸みは厚みの方向にも付くが、その部分は板の外 (Y は t_pass)
+        let cutout = SdfNode::RoundedBox {
+            half_extents: Vec3::new(cw.mul_add(0.5, -cr), t_pass * 0.5, ch.mul_add(0.5, -cr)),
+            round_radius: cr,
+        };
+        for &(cx, cz) in &plan.cutouts {
+            hole_list.push(SdfNode::Translate {
+                child: Arc::new(cutout.clone()),
+                offset: Vec3::new(cx, 0.0, cz),
+            });
         }
     }
-
-    // 2026-08-08 add: Connector holes (M2.5 Ø2.7mm、4 辺 + 4 角、pipeline canonical 準拠)
-    // production `python generator::get_conn_positions`
-    // 板 origin=中央のため、Python `(x, y)` (板 origin 左下) を Rust `(cx, cz)` に座標変換:
-    // cx = x - size/2、cz = y - size/2 (Python Y-up plane = Rust X-Z plane)
     let conn_cyl = SdfNode::Cylinder {
         radius: SKADIS_CONN_SCREW_D * 0.5, // 1.35mm
         half_height: t_pass * 0.5,
     };
-    let half_size = size * 0.5;
-    let conn_inset_from_center = half_size - SKADIS_CONN_INSET; // 中央から縁-inset 距離
-
-    // 4 辺 (Python np.arange(GRID_PITCH, PANEL_W, GRID_PITCH) = 40, 80, ..., <size)
-    let mut i = 1i32;
-    loop {
-        #[allow(clippy::cast_precision_loss)]
-        let pos = i as f32 * SKADIS_GRID_PITCH;
-        if pos >= size {
-            break;
-        }
-        let center_shift = pos - half_size; // Python x → Rust cx
-
-        // 上辺 (Y=CONN_INSET 相当 = Z=-conn_inset_from_center) と 下辺
+    for &(cx, cz) in &plan.conns {
         hole_list.push(SdfNode::Translate {
             child: Arc::new(conn_cyl.clone()),
-            offset: Vec3::new(center_shift, 0.0, -conn_inset_from_center),
-        });
-        hole_list.push(SdfNode::Translate {
-            child: Arc::new(conn_cyl.clone()),
-            offset: Vec3::new(center_shift, 0.0, conn_inset_from_center),
-        });
-        // 左辺 / 右辺
-        hole_list.push(SdfNode::Translate {
-            child: Arc::new(conn_cyl.clone()),
-            offset: Vec3::new(-conn_inset_from_center, 0.0, center_shift),
-        });
-        hole_list.push(SdfNode::Translate {
-            child: Arc::new(conn_cyl.clone()),
-            offset: Vec3::new(conn_inset_from_center, 0.0, center_shift),
-        });
-        i += 1;
-    }
-    // 4 角
-    for &(sx, sz) in &[
-        (-conn_inset_from_center, -conn_inset_from_center),
-        (conn_inset_from_center, -conn_inset_from_center),
-        (-conn_inset_from_center, conn_inset_from_center),
-        (conn_inset_from_center, conn_inset_from_center),
-    ] {
-        hole_list.push(SdfNode::Translate {
-            child: Arc::new(conn_cyl.clone()),
-            offset: Vec3::new(sx, 0.0, sz),
+            offset: Vec3::new(cx, 0.0, cz),
         });
     }
-
-    // 2026-08-08 add: Mount holes (Ø5mm 壁掛け、上下辺 3 穴、pipeline canonical 準拠)
-    // production `get_mount_positions`: X=60/150/220 (peg X=20+40k と非重複)、Y=CONN_INSET/PANEL_H-CONN_INSET
-    // 板 origin=中央: cx = x - size/2 (Python origin 左下)
     let mount_cyl = SdfNode::Cylinder {
         radius: SKADIS_MOUNT_HOLE_R, // 2.5mm
         half_height: t_pass * 0.5,
     };
-    let mount_x_positions = [60.0, 150.0, 220.0];
-    for &x in &mount_x_positions {
-        let cx = x - half_size;
-        // 上辺 (Python Y=CONN_INSET → Rust Z=-conn_inset_from_center)
+    for &(cx, cz) in &plan.mounts {
         hole_list.push(SdfNode::Translate {
             child: Arc::new(mount_cyl.clone()),
-            offset: Vec3::new(cx, 0.0, -conn_inset_from_center),
-        });
-        // 下辺
-        hole_list.push(SdfNode::Translate {
-            child: Arc::new(mount_cyl.clone()),
-            offset: Vec3::new(cx, 0.0, conn_inset_from_center),
+            offset: Vec3::new(cx, 0.0, cz),
         });
     }
 
@@ -595,6 +795,173 @@ pub fn try_skadis_panel_sdf(
 ) -> Result<SdfNode, SpecError> {
     checked_bounded(size, 0.0, MAX_SKADIS_PANEL_MM, "panel_size")?;
     Ok(skadis_panel_sdf(size, thickness, corner_radius))
+}
+
+/// SKADIS の板の peg 穴の格子
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkadisGrid {
+    /// 板の中心に揃える: base 40k と千鳥 20 + 40k、|c| <= size/2 - `edge_margin`
+    /// (300 で 7 × 7 + 6 × 6 = 85 穴、`skadis_panel(...)` の文の形)
+    Centred,
+    /// 角から揃える (V10、generate.py `get_peg_positions`): base は角から
+    /// `edge_margin`、千鳥はさらに 20、どちらも size - `edge_margin` まで (300 で 7 × 7 × 2 = 98 穴)
+    CornerV10,
+}
+
+/// SKADIS の板の cutout (材料を減らす抜き穴)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SkadisCutouts {
+    /// 抜き穴なし
+    None,
+    /// V10 (generate.py `build_panel`): peg の無い 20 mm の副格子の cell に 28 × 18 mm R4 の
+    /// 角丸の長方形 mount から [`SKADIS_V10_MOUNT_KEEPOUT`] 以内の cell と、外周の frame
+    /// ([`SKADIS_OUTER_FRAME`]) に掛かるものは作らない
+    V10,
+}
+
+/// V10 の cutout の (幅、高さ、角の丸み) (mm、generate.py `CUTOUT_W` / `CUTOUT_H` / `CUTOUT_R`)
+pub const SKADIS_V10_CUTOUT: (f32, f32, f32) = (28.0, 18.0, 4.0);
+
+/// V10 の cutout を作らない mount からの距離 (mm、generate.py `MOUNT_KEEPOUT`)
+pub const SKADIS_V10_MOUNT_KEEPOUT: f32 = 25.0;
+
+/// V10 の FDM の clearance (mm、peg 穴の幅と高さに足す) 出典: V10 の設計資料
+/// `SKADIS_SPEC.md` §1 / §8 (0.4 mm nozzle、Bambu H2D)
+pub const SKADIS_V10_PEG_CLEARANCE: f32 = 0.3;
+
+/// V10 の板の角の丸み (mm、`SKADIS_SPEC.md` §3「Corner fillet ~9 mm」、IKEA の板に合わせる)
+pub const SKADIS_V10_CORNER_R: f32 = 9.0;
+
+/// SKADIS の板の spec
+///
+/// 寸法の出典 (V10 の設計資料 `SKADIS_SPEC.md`、IKEA の製品
+/// page / franpoli `OpenSCADutil` / legna-namor Mount Generator / Onefinity CNC Forum の実測 5 × 15 /
+/// Printables #271676 / community の計測): 穴は stadium 5.0 × 15.0 (R = 幅の半分)、pitch は縦横
+/// 40、千鳥 20、板厚 5、板の角 ~9 縁から最初の穴の中心 (`edge_margin`) だけは IKEA が公表して
+/// いない (community 15〜20、V10 は 20、実物の計測待ち)
+///
+/// V10 (generate.py) との既知の差 (どちらも意図した差): generate.py の peg 穴は
+/// `rounded_rect(5.3, 15.3, R2.5)` (幅 5.3 の半分 2.65 に 0.15 足りない、この spec は R = 幅の半分)
+/// と、2D の形を `buffer(0.5).buffer(-0.5)` で閉じる (凹角 R0.5、この spec には無い)
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct SkadisPanelSpec {
+    /// 一辺 (mm)
+    pub size: f32,
+    /// 板厚 (mm)
+    pub thickness: f32,
+    /// 外周の角の丸み (mm)
+    pub corner_radius: f32,
+    /// 縁から最初の peg 穴の中心まで (mm、IKEA 非公表、既定 [`SKADIS_EDGE_MARGIN`] 20)
+    pub edge_margin: f32,
+    /// peg 穴の幅と高さに足す clearance (mm、nominal 0、V10 は FDM の 0.3)
+    pub peg_clearance_mm: f32,
+    /// peg 穴の格子
+    pub grid: SkadisGrid,
+    /// 抜き穴
+    pub cutouts: SkadisCutouts,
+}
+
+impl SkadisPanelSpec {
+    /// `skadis_panel(size, thickness, corner_radius)` の文と同じ板 (中心に揃えた格子、nominal の
+    /// 穴、抜き穴なし、丸い Ø5 の mount)
+    #[must_use]
+    pub const fn classic(size: f32, thickness: f32, corner_radius: f32) -> Self {
+        Self {
+            size,
+            thickness,
+            corner_radius,
+            edge_margin: SKADIS_EDGE_MARGIN,
+            peg_clearance_mm: 0.0,
+            grid: SkadisGrid::Centred,
+            cutouts: SkadisCutouts::None,
+        }
+    }
+
+    /// V10 の板 (V10 の generate.py): 角から揃えた格子、FDM の clearance 0.3、28 × 18 R4 の
+    /// 抜き穴、角 R9、板厚 5
+    #[must_use]
+    pub const fn v10(size: f32) -> Self {
+        Self {
+            size,
+            thickness: SKADIS_PANEL_THICKNESS,
+            corner_radius: SKADIS_V10_CORNER_R,
+            edge_margin: SKADIS_EDGE_MARGIN,
+            peg_clearance_mm: SKADIS_V10_PEG_CLEARANCE,
+            grid: SkadisGrid::CornerV10,
+            cutouts: SkadisCutouts::V10,
+        }
+    }
+
+    /// spec の数の field が有限で範囲内か (一辺は 0 より大きく [`MAX_SKADIS_PANEL_MM`] 以下、板厚と
+    /// 縁の余白は 0 より大きく一辺以下、角の丸みと clearance は 0 以上で一辺以下)
+    ///
+    /// 数でない値を通すと穴の位置が全部 `NaN` になり、Law の `min` は `NaN` の側を捨てるので
+    /// 最も薄い肉の計算が `NaN` の穴を数えずに通してしまう
+    ///
+    /// # Errors
+    ///
+    /// [`SpecError::FloatLimit`] (`kind` = `"panel_size"` / `"panel_thickness"` / `"panel_edge_margin"`
+    /// / `"panel_corner_radius"` / `"panel_peg_clearance"`)
+    pub fn validate(&self) -> Result<(), SpecError> {
+        checked_bounded(self.size, 0.0, MAX_SKADIS_PANEL_MM, "panel_size")?;
+        checked_bounded(self.thickness, 0.0, self.size, "panel_thickness")?;
+        checked_bounded(self.edge_margin, 0.0, self.size, "panel_edge_margin")?;
+        // 0 を許す 2 つ: 0 より大きいかでなく -0 / 負 / 数でない値を拒む (下限 -1 の開区間に 0 を入れ、
+        // 負を別に拒む)
+        for (v, kind) in [
+            (self.corner_radius, "panel_corner_radius"),
+            (self.peg_clearance_mm, "panel_peg_clearance"),
+        ] {
+            checked_bounded(v, -1.0, self.size, kind)?;
+            if v < 0.0 {
+                return Err(crate::limits::FloatLimitError {
+                    kind,
+                    limit: 0.0,
+                    value: v,
+                    unit: "mm",
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// 板の最も薄い肉 (mm、穴と穴・穴と外周の間、2D で厳密)
+    ///
+    /// # Errors
+    ///
+    /// [`SpecError`] (`kind = "panel_size"`) if `size` does not pass the size check.
+    pub fn min_wall_mm(&self) -> Result<f32, SpecError> {
+        self.validate()?;
+        Ok(panel_min_wall(self, &panel_plan(self)))
+    }
+}
+
+/// spec から SKADIS の板を作る: 最も薄い肉 ([`SkadisPanelSpec::min_wall_mm`]) が `wall_min_mm`
+/// 以上の時だけ (板の面は X-Z、厚みは Y、中心が原点)
+///
+/// # Errors
+///
+/// - [`SpecError::FloatLimit`] (`kind = "panel_size"`): `size` が検査を通らない
+/// - [`SpecError::FloatLimit`] (`kind = "skadis_wall_bound"`): `wall_min_mm` が有限の正の数でない
+/// - [`SpecError::Geometry`] (`kind = "skadis_panel_wall"`): 最も薄い肉が `wall_min_mm` 未満
+pub fn try_skadis_panel(spec: &SkadisPanelSpec, wall_min_mm: f32) -> Result<SdfNode, SpecError> {
+    spec.validate()?;
+    checked_bounded(wall_min_mm, 0.0, f32::MAX, "skadis_wall_bound")?;
+    let plan = panel_plan(spec);
+    let measured = panel_min_wall(spec, &plan);
+    if measured.is_nan() || measured < wall_min_mm {
+        return Err(crate::limits::GeometryError {
+            kind: "skadis_panel_wall",
+            limit_mm: wall_min_mm,
+            measured_mm: measured,
+        }
+        .into());
+    }
+    Ok(build_panel(spec))
 }
 
 // ────────────────────────────────────────────────────────

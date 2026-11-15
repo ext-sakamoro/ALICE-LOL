@@ -175,6 +175,35 @@ impl std::fmt::Display for FloatLimitError {
 
 impl std::error::Error for FloatLimitError {}
 
+/// A spec's fields are each in range, but the shape they build breaks a
+/// geometric bound: a quantity **derived** from the geometry (not a value the
+/// caller typed) is below the bound the caller asked for.
+///
+/// Unlike [`FloatLimitError`], `measured` is computed by the builder from the
+/// whole shape (e.g. the thinnest wall between two holes), so the message
+/// names what was measured, not what was requested.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GeometryError {
+    /// Which bound was broken, e.g. `"skadis_panel_wall"`.
+    pub kind: &'static str,
+    /// The bound the caller asked for, in mm.
+    pub limit_mm: f32,
+    /// What the builder measured on the shape, in mm.
+    pub measured_mm: f32,
+}
+
+impl std::fmt::Display for GeometryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "geometric bound broken: kind={} bound={} mm measured={} mm",
+            self.kind, self.limit_mm, self.measured_mm
+        )
+    }
+}
+
+impl std::error::Error for GeometryError {}
+
 /// A `Spec` struct's `validate()` refused its fields, and the matching
 /// `try_*` builder refused to construct an `SdfNode` from them.
 ///
@@ -187,6 +216,14 @@ pub enum SpecError {
     ResourceLimit(ResourceLimitError),
     /// A named float-valued resource limit was exceeded; see [`FloatLimitError`].
     FloatLimit(FloatLimitError),
+    /// The built shape breaks a geometric bound; see [`GeometryError`].
+    Geometry(GeometryError),
+}
+
+impl From<GeometryError> for SpecError {
+    fn from(e: GeometryError) -> Self {
+        Self::Geometry(e)
+    }
 }
 
 impl From<ResourceLimitError> for SpecError {
@@ -206,6 +243,7 @@ impl std::fmt::Display for SpecError {
         match self {
             Self::ResourceLimit(e) => write!(f, "{e}"),
             Self::FloatLimit(e) => write!(f, "{e}"),
+            Self::Geometry(e) => write!(f, "{e}"),
         }
     }
 }
