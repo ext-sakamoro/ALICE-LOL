@@ -1,7 +1,7 @@
 //! # Standard Library — LOL 標準パターンライブラリ
 //!
-//! LOL DSL の 71 primitive を組み合わせて構築した、実プリント検証済みの
-//! ハードサーフェス pattern を提供する
+//! LOL DSL の 71 primitive を組み合わせて構築した
+//! ハードサーフェス pattern を提供する (印刷の記録は `certifications.yaml` の項目ごと)
 //!
 //! - [`hardsurface`] — メカ / 建築 / パーツ / 道具 / 家具 の構造要素
 //!   (Phase A.1: fastener 締結 6 primitive)

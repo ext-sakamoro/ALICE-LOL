@@ -987,7 +987,7 @@ fn is_safe_for_pla_uses_a_strict_inequality_at_exactly_half_the_yield_stress() {
         riskier.peak_stress_mpa(PLA_ELASTIC_MODULUS_GPA)
     );
 
-    // PLA_STANDARD は安全率 2 未満 (doc の自己申告と一致、= 実プリント baseline)
+    // PLA_STANDARD は安全率 2 未満 (doc の自己申告と一致)
     let std_stress = SnapFitCantileverSpec::PLA_STANDARD.peak_stress_mpa(PLA_ELASTIC_MODULUS_GPA);
     assert!(
         std_stress > threshold && !SnapFitCantileverSpec::PLA_STANDARD.is_safe_for_pla(),

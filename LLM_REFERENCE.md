@@ -1081,7 +1081,7 @@ Correct (upside down):             Wrong (right-side up):
 - No thin walls standing from Z=0: solid bridge zone (35mm) provides stable foundation
 - Side panels have arch cutouts → corner pillars (25mm wide) are sturdy
 - Cross rib connects side panels for lateral stability
-- This is the proven pattern from popular MakerWorld/Printables models (30lbs/13.6kg tested)
+- This mirrors a common layout in published printable models (no load test is recorded in this repository)
 
 ### Shelf Organizer Arch Pattern (proven design)
 

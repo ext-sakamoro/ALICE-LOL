@@ -154,7 +154,7 @@ mod syntax_table;
 pub mod intent;
 
 // ── Standard Library (Phase A.1、hardsurface primitive collection) ──
-// 実プリント検証済みの機械要素 primitive (fastener/joint/reinforcement/mount) を SdfNode helper で提供
+// 機械要素 primitive (fastener/joint/reinforcement/mount) を SdfNode helper で提供 (印刷の記録は certifications.yaml の項目ごと)
 pub mod stdlib;
 
 // ── crate 内専用の決定論的 max / min (clippy-lib gate が f32/f64::max/min 直呼びを禁止) ──

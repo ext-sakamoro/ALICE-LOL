@@ -470,7 +470,7 @@ mod tests {
         //   E = 3.5 GPa = 3500 MPa
         //   σ = 3 · 3500 · 2 · 0.5 / (2 · 100) = 10500/200 = 52.5 MPa
         // 60 / 2 = 30 MPa 閾値、52.5 > 30 → unsafe と判定される
-        // → PLA_STANDARD は実は安全率 2 未満、これは pipeline baseline (実プリント動作した pattern の記録)
+        // → PLA_STANDARD は実は安全率 2 未満、これは印刷の pipeline から移した値 (印刷の記録はない)
         //   spec.is_safe_for_pla() は false を返すが、これは "spec 通り"
         let spec = SnapFitCantileverSpec::PLA_STANDARD;
         let stress = spec.peak_stress_mpa(PLA_ELASTIC_MODULUS_GPA);

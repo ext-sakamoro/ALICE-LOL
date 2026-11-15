@@ -8241,14 +8241,14 @@ mod tests {
     }
 
     #[test]
-    fn shelf_divider_field_tested_spec_is_subtraction() {
+    fn shelf_divider_assembled_spec_is_subtraction() {
         let s = shelf_divider(&ShelfDividerSpec::assembled_560x250x120());
         // hex holes subtracted なので Subtraction
         assert!(matches!(s, SdfNode::Subtraction { .. }));
     }
 
     #[test]
-    fn shelf_divider_spec_validate_accepts_the_field_tested_spec() {
+    fn shelf_divider_spec_validate_accepts_the_assembled_spec() {
         assert!(ShelfDividerSpec::assembled_560x250x120().validate().is_ok());
     }
 

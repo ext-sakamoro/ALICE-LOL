@@ -1,6 +1,6 @@
 //! # hardsurface — メカ / 建築 / パーツ / 道具 / 家具 の構造要素 primitive library
 //!
-//! 実プリント検証で確立された formulas を LOL の `SdfNode` として提供する
+//! 印刷の pipeline の formulas を LOL の `SdfNode` として提供する (下の表の出典列が由来、印刷の記録は持たない)
 //!
 //! ## モジュール
 //!

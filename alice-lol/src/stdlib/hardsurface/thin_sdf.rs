@@ -28,7 +28,7 @@ use alice_sdf::SdfNode;
 /// 100 円硬貨型 shopping cart coin 直径 (mm、実測)
 pub const COIN_100YEN_DIAMETER: f32 = 22.8;
 
-/// 100 円硬貨型 shopping cart coin 厚 (mm、pipeline 実プリント検証済、極薄物)
+/// 100 円硬貨型 shopping cart coin 厚 (mm、100 円硬貨の厚み、極薄物)
 pub const COIN_100YEN_THICKNESS: f32 = 1.7;
 
 // ────────────────────────────────────────────────────────

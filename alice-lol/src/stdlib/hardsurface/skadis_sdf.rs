@@ -331,7 +331,7 @@ pub const SKADIS_GRID_OFFSET: f32 = 20.0;
 /// SKADIS edge margin (mm、pipeline `EDGE_MARGIN`)
 pub const SKADIS_EDGE_MARGIN: f32 = 20.0;
 
-/// SKADIS panel 標準厚 (mm、実プリント検証済)
+/// SKADIS panel 標準厚 (mm、IKEA の板の厚み)
 pub const SKADIS_PANEL_THICKNESS: f32 = 5.0;
 
 /// 貫通穴 depth margin (mm、subtract 用に peg 穴を板より少し長く取る)
