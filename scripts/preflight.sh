@@ -467,7 +467,7 @@ if [[ $quick -eq 1 ]]; then
   echo "no --quick, runs all of them):"
   echo "  - cargo test (default + llm-bridge/glsl,wgsl,hlsl/physics/roblox features)"
   echo "  - law oracles (default + physics)"
-  echo "  - release-profile.yml: law oracles under --release (default + physics)"
+  echo "  - release-profile.yml: law oracles under --release (default + physics) + stdlib wall oracle"
   echo "  - geometry-digest: identifier and digest oracles (debug + release)"
   echo "  - gpu-parity (CPU/GPU grammar-corpus parity)"
   echo "  - doc-programs (export of every lol print program in the documents, release)"
@@ -513,6 +513,9 @@ step "ci.yml / test: Law oracles (physics, each target ran at least one test)"
 
 step "release-profile.yml / release: Law tests (release, default + physics)"
 ( export CARGO_TERM_COLOR="always"; scripts/law_tests.sh default --release && scripts/law_tests.sh physics --release )
+
+step "release-profile.yml / release: Stdlib wall oracle (release)"
+scripts/cargo_test_nonzero.sh -p alice-lol --release --test analytic_stdlib_walls
 
 for prof in "" "--release"; do
   step "ci.yml / geometry-digest: Geometry identifier and digest oracles ${prof:-(debug)}"

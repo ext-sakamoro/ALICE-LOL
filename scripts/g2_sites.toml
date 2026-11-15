@@ -185,3 +185,9 @@ file = "alice-lol/src/emit.rs"
 fn = "write_node_inner"
 calls = 1
 reason = "min_element(half_extents) is only compared `>= 0.0` to choose between `rounded_box` and `round(r, box3d(half))`: -0 and +0 both pass, so the zero sign cannot be observed; a NaN lane (not reachable from LOL text, the parser refuses non-finite numbers) is skipped by the Law fold and written as NaN by either branch"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "open_shell"
+calls = 1
+reason = "min(r, wall) only caps the corner radius handed to rounded_plate, which caps it again with max(min(r, min_element(half)), 0) (tested in law_max_min_ties.rs: a -0 radius ends +0); the callers pass a constant radius or the spec's wall, so a NaN reaches the min only through a NaN spec and is dropped for the other operand under the Law and the platform alike"
