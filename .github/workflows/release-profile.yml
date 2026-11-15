@@ -102,6 +102,11 @@ jobs:
         working-directory: ALICE-LOL
         run: scripts/law_tests.sh physics --release
 
+      # the stdlib shapes at real size keep their spec walls (meshes 25 shapes; ignored in debug builds)
+      - name: Stdlib wall oracle (release)
+        working-directory: ALICE-LOL
+        run: scripts/cargo_test_nonzero.sh -p alice-lol --release --test analytic_stdlib_walls
+
   # the required check: run=false (no source change) passes, run=true needs the release job to succeed
   # (a skipped, cancelled or failed job after run=true is red)
   gate:

@@ -29,7 +29,13 @@ include!("data/parse_corpus_bbb6539.rs");
 /// a time (the tree was too deep for the debug build's transpiler, the value is the same
 /// max(a, -b, -c, ...) since the holes are plain cylinders under a plain union): the dump differs in
 /// the 5 lines of `shower_caddy` only
-const DIGEST: &str = "5485faed304872522af03f6ed90dd41ec715ef7a29b8965e27da5ca294a10cdc";
+/// Re-recorded when the stdlib containers and plates were corrected for the outer-size `rounded_box` (open
+/// shells with a flat rim and vertical edges rounded with r <= wall, plates rounded only along their
+/// thickness, mount holes through Z-thin plates along Z, the esp32 USB notch and the pixhawk damper
+/// position): the dump differs in the 5 lines of each of 24 constructs (the 23 shapes whose walls the
+/// outer-size change had thinned, and `sbc_mount_plate`), and `esp32_enclosure` at the small corpus
+/// arguments is now a parse error (a USB opening wider than its wall face is refused)
+const DIGEST: &str = "b7e24a2376634fc4e6178554ae3ba9f78171d282a8facd3c657554be7a91c2b0";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {

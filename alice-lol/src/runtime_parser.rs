@@ -2144,9 +2144,8 @@ impl<'a> Parser<'a> {
                     usb_opening_width: 9.0,
                     usb_opening_height: 5.0,
                 };
-                Ok(crate::stdlib::hardsurface::pattern_sdf::esp32_enclosure(
-                    &spec,
-                ))
+                crate::stdlib::hardsurface::pattern_sdf::try_esp32_enclosure(&spec)
+                    .map_err(|e| self.spec_error(e))
             }
             "battery_18650_holder" => {
                 // battery_18650_holder(count, wall_thickness, floor_thickness) 3 param
