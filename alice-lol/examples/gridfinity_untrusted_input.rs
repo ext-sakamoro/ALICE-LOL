@@ -4,7 +4,7 @@
 //! not an uncontrolled allocation or an infinite loop.
 
 use alice_lol::stdlib::hardsurface::pattern_sdf::{
-    try_gridfinity_bin, try_shelf_divider, GridfinitySpec, ShelfDividerSpec,
+    shelf_divider, try_gridfinity_bin, try_shelf_divider, GridfinitySpec, ShelfDividerSpec,
 };
 use alice_lol::stdlib::hardsurface::skadis_sdf::try_skadis_panel_sdf;
 
@@ -48,4 +48,8 @@ fn main() {
     build_shelf_divider(20.0); // a normal request
     build_shelf_divider(0.0); // a degenerate one: refused, not a garbage count
     build_shelf_divider(f32::NAN); // same, refused instead of a saturated cast
+
+    // a spec you wrote yourself (a fixed preset) can use the infallible builder
+    let _preset = shelf_divider(&ShelfDividerSpec::assembled_560x250x120());
+    println!("shelf divider preset: built");
 }

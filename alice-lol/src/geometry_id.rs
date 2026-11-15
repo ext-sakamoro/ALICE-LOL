@@ -614,23 +614,44 @@ pub const STDLIB_TEMPLATE_PROBE_LOL: &[&str] = &[
 /// と [`stdlib_transcendental_probe_digest`] が畳む) 動くのは template の作る形が変わった時と、
 /// `SdfNode` の型 (variant と field) が変わり正規形の文が変わった時
 ///
-/// # Panics
+/// # Errors
 ///
-/// probe の文が parse できない時、または正規形に書けない時 (probe の一覧の誤り、build の度に検出される)
-#[must_use]
-pub fn stdlib_template_probe_digest() -> [u8; 32] {
+/// [`TemplateProbeError`]: probe の文が parse できない、または正規形に書けない (probe の一覧の誤り
+/// `tests/geometry_id_oracle.rs` が pin と突き合わせるので build の度に検出される)
+pub fn stdlib_template_probe_digest() -> Result<[u8; 32], TemplateProbeError> {
     let mut h = Sha256::new();
-    for lol in STDLIB_TEMPLATE_PROBE_LOL {
+    for &lol in STDLIB_TEMPLATE_PROBE_LOL {
         let node = crate::runtime_parser::parse_lol(lol)
-            .unwrap_or_else(|e| panic!("stdlib template probe {lol:?} does not parse: {e:?}"));
-        let text = crate::emit::to_lol_unstamped(&node).unwrap_or_else(|e| {
-            panic!("stdlib template probe {lol:?} has no canonical text: {e:?}")
-        });
+            .map_err(|_| TemplateProbeError::DoesNotParse(lol))?;
+        let text = crate::emit::to_lol_unstamped(&node)
+            .map_err(|_| TemplateProbeError::NoCanonicalText(lol))?;
         length_prefixed(&mut h, lol.as_bytes());
         length_prefixed(&mut h, text.as_bytes());
     }
-    h.finalize().into()
+    Ok(h.finalize().into())
 }
+
+/// [`stdlib_template_probe_digest`] が digest を作れなかった probe
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TemplateProbeError {
+    /// probe の文が parse できない
+    DoesNotParse(&'static str),
+    /// parse した木を正規形の文に書けない
+    NoCanonicalText(&'static str),
+}
+
+impl std::fmt::Display for TemplateProbeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DoesNotParse(lol) => write!(f, "stdlib template probe {lol:?} does not parse"),
+            Self::NoCanonicalText(lol) => {
+                write!(f, "stdlib template probe {lol:?} has no canonical text")
+            }
+        }
+    }
+}
+
+impl std::error::Error for TemplateProbeError {}
 
 /// 幾何評価の算術・受理境界・canonical form の pin
 ///

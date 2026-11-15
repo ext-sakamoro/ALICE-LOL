@@ -59,7 +59,7 @@ fn every_pin_matches_its_live_behaviour_digest() {
         ),
         (
             "stdlib: template trees (canonical text)",
-            stdlib_template_probe_digest(),
+            stdlib_template_probe_digest().expect("every template probe parses and emits"),
         ),
         (
             "emit: fmt_f32 round-trip fidelity class",

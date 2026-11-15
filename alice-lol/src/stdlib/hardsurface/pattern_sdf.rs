@@ -678,9 +678,14 @@ impl ShelfDividerSpec {
     /// [`SpecError`] (`kind = "pitch"`) if `hex_hole_pitch` is not finite or is below
     /// [`MIN_PITCH_MM`].
     pub fn validate(&self) -> Result<(), SpecError> {
+        self.checked_hole_centres().map(|_| ())
+    }
+
+    /// [`Self::validate`] の検査を通った時の天板の抜き穴の中心 (検査と穴の数え上げを 1 回で行い、
+    /// 作る側は検査済みの一覧を受け取る)
+    fn checked_hole_centres(&self) -> Result<Vec<(f32, f32)>, SpecError> {
         checked_positive_finite(self.hex_hole_pitch, MIN_PITCH_MM, "pitch")?;
-        shelf_divider_hole_centres(self)?;
-        Ok(())
+        shelf_divider_hole_centres(self)
     }
 }
 
@@ -713,9 +718,14 @@ impl ShelfDividerSpec {
 /// untrusted な入力は [`try_shelf_divider`] を使うこと
 #[must_use]
 pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
-    spec.validate().expect(
+    let centres = spec.checked_hole_centres().expect(
         "ShelfDividerSpec が検査を通らない (hex_hole_pitch が退化している): untrusted な入力は try_shelf_divider を使うこと",
     );
+    build_shelf_divider(spec, centres)
+}
+
+/// 検査済みの穴の中心から shelf divider を作る ([`shelf_divider`] / [`try_shelf_divider`] の本体)
+fn build_shelf_divider(spec: &ShelfDividerSpec, centres: Vec<(f32, f32)>) -> SdfNode {
     let half_width = spec.total_width * 0.5;
     let hx = half_width * 0.5;
     let hy = spec.depth * 0.5;
@@ -737,8 +747,7 @@ pub fn shelf_divider(spec: &ShelfDividerSpec) -> SdfNode {
     // 天板の抜き穴 (Ø15 の丸穴、三角格子): 中心は shelf_divider_hole_centres、穴は天板の厚み (Z) を貫く
     let hole_half_h = t + 1.0;
     let hole_shape = cylinder_z(spec.hex_hole_radius, hole_half_h);
-    let holes: Vec<SdfNode> = shelf_divider_hole_centres(spec)
-        .expect("validate() checked the hole count")
+    let holes: Vec<SdfNode> = centres
         .into_iter()
         .map(|(x, y)| translate(hole_shape.clone(), Vec3::new(x, y, plate_z)))
         .collect();
@@ -806,8 +815,8 @@ fn shelf_divider_hole_centres(spec: &ShelfDividerSpec) -> Result<Vec<(f32, f32)>
 ///
 /// [`SpecError`] (`kind = "pitch"`) if `spec.hex_hole_pitch` is degenerate.
 pub fn try_shelf_divider(spec: &ShelfDividerSpec) -> Result<SdfNode, SpecError> {
-    spec.validate()?;
-    Ok(shelf_divider(spec))
+    let centres = spec.checked_hole_centres()?;
+    Ok(build_shelf_divider(spec, centres))
 }
 
 // ────────────────────────────────────────────────────────

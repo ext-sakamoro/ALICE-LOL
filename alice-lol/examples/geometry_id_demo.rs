@@ -64,11 +64,14 @@ fn main() {
         "  stdlib: transcendental routing (alice_det_math)  = {}",
         hex(&stdlib_transcendental_probe_digest())
     );
-    println!(
-        "  stdlib: template trees ({} templates)           = {}",
-        STDLIB_TEMPLATE_PROBE_LOL.len(),
-        hex(&stdlib_template_probe_digest())
-    );
+    match stdlib_template_probe_digest() {
+        Ok(d) => println!(
+            "  stdlib: template trees ({} templates)           = {}",
+            STDLIB_TEMPLATE_PROBE_LOL.len(),
+            hex(&d)
+        ),
+        Err(e) => println!("  stdlib: template trees: {e}"),
+    }
     println!(
         "  emit: fmt_f32 round-trip fidelity class          = {}",
         hex(&fmt_f32_fidelity_probe_digest())

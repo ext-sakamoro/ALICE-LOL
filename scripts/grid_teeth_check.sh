@@ -275,9 +275,7 @@ run_mutant "M4" \
 p = 'alice-lol/src/stdlib/hardsurface/pattern_sdf.rs'
 t = open(p, encoding='utf-8').read()
 old = '''    pub fn validate(&self) -> Result<(), SpecError> {
-        checked_positive_finite(self.hex_hole_pitch, MIN_PITCH_MM, \"pitch\")?;
-        shelf_divider_hole_centres(self)?;
-        Ok(())
+        self.checked_hole_centres().map(|_| ())
     }'''
 new = '''    pub fn validate(&self) -> Result<(), SpecError> {
         Ok(())
