@@ -16,6 +16,16 @@
 //! requires the axle to be solid along the whole span and joined to the back wall. Every expected value
 //! comes from the stated dimensions above, none from the generator.
 
+// sample grids: small loop counters as f32, short coordinate names, and plain a·b + c where the test
+// compares against millimetre tolerances (no bit-exact result is claimed here)
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names,
+    clippy::suboptimal_flops,
+    clippy::manual_midpoint,
+    clippy::map_unwrap_or
+)]
+
 use alice_lol::runtime_parser::parse_lol;
 use alice_sdf::eval::eval;
 use alice_sdf::SdfNode;
@@ -152,12 +162,18 @@ fn the_axle_is_solid_over_the_span_and_joins_the_back_wall() {
             let z = from + (l.z1 - from) * i as f32 / 100.0;
             let v = d(&node, 0.0, l.centre_y, z);
             compared += 1;
-            assert!(v < 0.0, "{lol}: the axle line is empty at z = {z:.2} (d = {v:.3})");
+            assert!(
+                v < 0.0,
+                "{lol}: the axle line is empty at z = {z:.2} (d = {v:.3})"
+            );
         }
         // and its surface is at the stated radius in the middle of the span
         let zm = 0.5 * (l.z0 + l.z1);
         let surface = d(&node, l.axle_r, l.centre_y, zm);
-        assert!(surface.abs() <= 0.02, "{lol}: axle surface d = {surface:.3}");
+        assert!(
+            surface.abs() <= 0.02,
+            "{lol}: axle surface d = {surface:.3}"
+        );
         assert_eq!(compared, 101);
     }
 }
@@ -173,10 +189,8 @@ const TEAR_ANGLE_DEG: f32 = 30.0;
 /// behind the front face: a flat land of `TEAR_LAND`, then the bevel at the tear angle up to the hood's top
 #[test]
 fn the_tear_edge_bevels_down_to_a_printable_land() {
-    let tan_t = 30.0_f32.to_radians();
-    let (s, c) = alice_det_math::sin_cos(tan_t);
+    let (s, c) = alice_det_math::sin_cos(TEAR_ANGLE_DEG.to_radians());
     let tan_t = s / c;
-    assert!((TEAR_ANGLE_DEG - 30.0).abs() < f32::EPSILON);
     for &(inner, width, wall) in CASES {
         let lol = format!("tape_dispenser({inner}, {width}, {wall})");
         let node = parse_lol(&lol).unwrap_or_else(|e| panic!("{lol}: {e}"));

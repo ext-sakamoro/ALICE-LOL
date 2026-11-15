@@ -419,7 +419,13 @@ pub fn gridfinity_bin(spec: &GridfinitySpec) -> SdfNode {
     let inner_hy = bin_hy - spec.wall_thickness;
     let cavity_offset_z = f32::midpoint(spec.floor_thickness, 10.0);
 
-    let outer = rounded_plate(bin_hx, bin_hy, bin_hz, gridfinity_spec::CORNER_FILLET, Vec3::Z);
+    let outer = rounded_plate(
+        bin_hx,
+        bin_hy,
+        bin_hz,
+        gridfinity_spec::CORNER_FILLET,
+        Vec3::Z,
+    );
 
     if let Some((dx, dy)) = spec.dividers {
         if dx > 1 && dy > 1 {
@@ -1199,7 +1205,7 @@ pub fn headphone_holder(spec: &HeadphoneHolderSpec) -> SdfNode {
     let arm_hz = spec.arm_length * 0.5;
     let tip_hy = spec.hook_tip_up * 0.5;
 
-    let mount = rounded_box(mp_hx, mp_hy, mp_hz, 3.0);
+    let mount = rounded_plate(mp_hx, mp_hy, mp_hz, 3.0, Vec3::Z);
     let arm = translate(
         rounded_box(arm_hx, arm_hy, arm_hz, 2.0),
         Vec3::new(0.0, 0.0, mp_hz + arm_hz),
@@ -1459,7 +1465,7 @@ pub fn monitor_riser(spec: &MonitorRiserSpec) -> SdfNode {
     let leg_x = plat_hx - leg_hx;
 
     let platform = translate(
-        rounded_box(plat_hx, plat_hy, plat_hz, 4.0),
+        rounded_plate(plat_hx, plat_hy, plat_hz, 4.0, Vec3::Z),
         Vec3::new(0.0, 0.0, plat_z),
     );
     let leg_l = translate(
@@ -1776,7 +1782,13 @@ pub fn cable_clip(spec: &CableClipSpec) -> SdfNode {
     let slot_hz = (slot_top_z - slot_bottom_z) * 0.5;
     let slot_offset_z = f32::midpoint(slot_top_z, slot_bottom_z);
 
-    let outer = rounded_plate(outer_hx, outer_hy, outer_hz, spec.wall_thickness * 0.5, Vec3::Y);
+    let outer = rounded_plate(
+        outer_hx,
+        outer_hy,
+        outer_hz,
+        spec.wall_thickness * 0.5,
+        Vec3::Y,
+    );
     let cavity = cylinder(cavity_r, cavity_hy);
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
@@ -3022,7 +3034,7 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     let base_offset_y = -outer_hy + base_hy;
 
     let base = translate(
-        rounded_box(outer_hx, base_hy, outer_hz, 2.0),
+        rounded_plate(outer_hx, base_hy, outer_hz, 2.0, Vec3::Y),
         Vec3::new(0.0, base_offset_y, 0.0),
     );
 
@@ -4621,7 +4633,7 @@ pub fn tp_holder(spec: &TpHolderSpec) -> SdfNode {
     let mount_y_offset = outer_hy * 0.6;
     let mount_x_offset = outer_hx * 0.7;
 
-    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let backplate = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Z);
     let axle = translate(
         cylinder_z(axle_r, axle_half_h),
         Vec3::new(0.0, 0.0, axle_z_center),
@@ -5034,7 +5046,7 @@ pub fn clamp_rack(spec: &ClampRackSpec) -> SdfNode {
     let outer_hy = spec.height * 0.5;
     let outer_hz = spec.wall_thickness * 0.5;
 
-    let backplate = rounded_box(outer_hx, outer_hy, outer_hz, 3.0);
+    let backplate = rounded_plate(outer_hx, outer_hy, outer_hz, 3.0, Vec3::Z);
 
     // Hooks: X 方向等間隔、backplate 下部から arm 前方 (+Z) 突出
     let arm_hx = spec.hook_width * 0.5;
@@ -5445,7 +5457,7 @@ pub fn phone_dock(spec: &PhoneDockSpec) -> SdfNode {
     let upright_offset_y = base_hy + upright_hy * cos_tilt;
     let upright_offset_z = -base_hz + upright_hz + upright_hy * sin_tilt;
 
-    let base = rounded_box(base_hx, base_hy, base_hz, 2.0);
+    let base = rounded_plate(base_hx, base_hy, base_hz, 2.0, Vec3::Y);
     let upright_raw = rounded_box(upright_hx, upright_hy, upright_hz, 2.0);
     let upright = translate(
         SdfNode::Rotate {
@@ -5688,7 +5700,11 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
             child: Arc::new(box3d(base_hx + 1.0, tear_h, tear_h)),
             rotation: crate::angle::quat_from_rotation_x(tear_rad),
         },
-        Vec3::new(0.0, cos_t.mul_add(tear_h, plane_y), sin_t.mul_add(tear_h, plane_z)),
+        Vec3::new(
+            0.0,
+            cos_t.mul_add(tear_h, plane_y),
+            sin_t.mul_add(tear_h, plane_z),
+        ),
     );
 
     to_z_up(subtract(combined, tear))
@@ -5772,7 +5788,7 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     let bp_hy = bp_ext_y * 0.5;
     let bp_hz = bp_ext_z * 0.5;
 
-    let backplate = rounded_box(bp_hx, bp_hy, bp_hz, 3.0);
+    let backplate = rounded_plate(bp_hx, bp_hy, bp_hz, 3.0, Vec3::Z);
     let mut result = backplate;
 
     // tier X 方向 outer / cavity 定数
