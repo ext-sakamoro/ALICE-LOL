@@ -34,6 +34,7 @@
 #[path = "common/mod.rs"]
 mod common;
 use alice_lol::runtime_parser::parse_lol;
+use alice_lol::stdlib::hardsurface::mount::profile_2020;
 use alice_lol::stdlib::hardsurface::skadis_sdf::{
     skadis_peg_and_shoulder, BOARD_T, PEG_BLADE_T, SHOULDER_DEPTH, SHOULDER_H,
 };
@@ -253,4 +254,22 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
         recs.len() - seams - cuts
     );
     assert!(failures.is_empty(), "{} recorded pairs not fixed:\n{}", failures.len(), failures.join("\n"));
+}
+
+#[test]
+fn the_profile_slot_has_no_membrane_and_keeps_its_section() {
+    // profile_2020: 20 x 20, slot on the +x face at x = 10 (opening along z, 6 wide; neck 1.8 deep;
+    // cavity 11 wide under the neck, closing 1:1 to 6.1 deep); length along y
+    let p = profile_2020(50.0);
+    let d = |x: f32, z: f32| eval(&p, Vec3::new(x, 0.0, z));
+    // the mouth was a zero-thickness membrane (field exactly 0 across it); now open air
+    assert!(d(10.0, 0.0) > 1e-3, "mouth centre {}", d(10.0, 0.0));
+    assert!(d(9.0, 0.0) > 1e-3, "neck {}", d(9.0, 0.0));
+    // the wall beside the 6-wide opening is material
+    assert!(d(9.5, 3.6) < -1e-3, "neck wall {}", d(9.5, 3.6));
+    // the cavity 3 below the face is 4.3 half-wide (5.5 + 1.8 - 3): air at 4.0, rib at 4.6
+    assert!(d(7.0, 4.0) > 1e-3, "cavity {}", d(7.0, 4.0));
+    assert!(d(7.0, 4.6) < -1e-3, "rib {}", d(7.0, 4.6));
+    // and the analysis finds no pair in it
+    assert!(coplanar_faces(&p).pairs.is_empty(), "{:?}", coplanar_faces(&p).pairs);
 }
