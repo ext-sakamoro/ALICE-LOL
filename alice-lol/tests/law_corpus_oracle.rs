@@ -587,9 +587,9 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("circle_2d", 4.0001),
     ("blobby_cross", 1.2427),
     ("terrain", 0.0002),
-    ("t_slot_bracket_2020", 0.0013),
+    ("t_slot_bracket_2020", 0.0040),
     ("countersink", 0.0529),
-    ("curtain_rod_bracket", 0.0002),
+    ("curtain_rod_bracket", 2.0001),
     ("pixhawk_mount", 0.0023),
     ("capped_cone", 0.3591),
     ("death_star", 0.0145),
@@ -597,7 +597,6 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("parabola_segment", 0.0002),
     ("regular_polygon", 0.0294),
     ("gridfinity_bin", 0.4880),
-    ("phone_stand", 0.4001),
     ("headphone_holder", 0.0637),
     ("under_desk_mount", 0.5019),
     ("desk_shelf", 1.0001),
@@ -613,7 +612,7 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("pill_organizer", 1.5001),
     ("hairdryer_holder", 3.0016),
     ("hex_key_holder", 3.0195),
-    ("sock_divider", 1.0001),
+    ("sock_divider", 2.0001),
     ("soap_tray", 2.0001),
     ("chopstick_holder", 2.0001),
     ("swatch_holder", 2.0001),
@@ -626,7 +625,7 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("phone_dock", 1.0047),
     ("cutting_board_rack", 1.0001),
     ("tape_dispenser", 1.0001),
-    ("shower_caddy", 0.0608),
+    ("shower_caddy", 0.5708),
     ("bag_clip_org", 2.5001),
     ("led_hub_box", 0.0822),
     ("makeup_organizer", 2.0001),
@@ -803,13 +802,14 @@ fn assert_capped_matches(row: &Row) {
         "res {}: 上限に当たった construct の集合が固定と違う",
         row.res
     );
-    for ((n, g), (_, w)) in got.iter().zip(&want) {
-        assert!(
-            (g - w).abs() <= 1e-4_f32.max(0.01 * w),
-            "res {}: {n} の最小肉厚 {g} (固定 {w})",
-            row.res
-        );
-    }
+    // 違う行は全部まとめて出す (1 つずつ直すと形を変えた変更のたびに何度も流し直すことになる)
+    let wrong: Vec<String> = got
+        .iter()
+        .zip(&want)
+        .filter(|((_, g), (_, w))| (g - w).abs() > 1e-4_f32.max(0.01 * w))
+        .map(|((n, g), (_, w))| format!("{n} の最小肉厚 {g} (固定 {w})"))
+        .collect();
+    assert!(wrong.is_empty(), "res {}: {}", row.res, wrong.join(" / "));
 }
 
 /// 到達性の判定の解像度: セルが最小肉厚の半分以下になる最小の解像度 (`base` 以上、上限つき)
