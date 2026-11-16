@@ -2426,6 +2426,11 @@ pub fn sbc_case(spec: &SbcCaseSpec) -> SdfNode {
     let standoff_r = spec.standoff_diameter * 0.5;
     let standoff_hy = spec.standoff_height * 0.5;
     let standoff_offset_y = -outer_hy + spec.floor_thickness + standoff_hy;
+    // standoff は床の上面に載せるだけだと底の円が面だけで接する継ぎ目になるので、床の厚みの半分だけ床の
+    // 中へ下ろした柱で組む (上端と下穴の位置は不変、延びた分は床の中)
+    let into_floor = spec.floor_thickness * 0.5;
+    let peg_hy = standoff_hy + into_floor * 0.5;
+    let peg_offset_y = standoff_offset_y - into_floor * 0.5;
     // Standoff 位置: PCB corner から standoff_inset だけ内側
     let sx = spec.pcb_width.mul_add(0.5, -spec.standoff_inset);
     let sz = spec.pcb_depth.mul_add(0.5, -spec.standoff_inset);
@@ -2460,8 +2465,8 @@ pub fn sbc_case(spec: &SbcCaseSpec) -> SdfNode {
     // 4 corner standoffs
     for (dx, dz) in [(neg_sx, neg_sz), (sx, neg_sz), (neg_sx, sz), (sx, sz)] {
         let peg = translate(
-            cylinder(standoff_r, standoff_hy),
-            Vec3::new(dx, standoff_offset_y, dz),
+            cylinder(standoff_r, peg_hy),
+            Vec3::new(dx, peg_offset_y, dz),
         );
         result = union(result, peg);
         let pilot = translate(
