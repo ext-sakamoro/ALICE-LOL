@@ -84,13 +84,20 @@ pub const SHOULDER_H: f32 = 8.0;
 /// - `hook_width`: hook 部の Z 方向厚 (mm、通常 `hook_l/j=8mm、hook_s=5mm`)
 #[must_use]
 pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
-    // Blade (X = -BOARD_T .. 0)
+    // Blade (X = -BOARD_T - SHOULDER_DEPTH / 2 .. 0): it reaches half the shoulder's depth back into the
+    // shoulder. Two boxes that only touch along the shoulder's face give a field of exactly 0 on that face
+    // inside the part (a seam a mesher turns into faces with material on both sides); the blade's
+    // cross-section (PEG_BLADE_T x hook_width) lies inside the shoulder's (SHOULDER_H x hook_width), so
+    // the overlap adds no material and the field outside the part is unchanged. Half the shoulder's
+    // depth, not the cut margin: a union's overlap has to stay inside the other solid (the cut margin,
+    // 5 mm, would come out of the shoulder's back)
+    let blade_len = SHOULDER_DEPTH.mul_add(0.5, BOARD_T);
     let blade = SdfNode::Box3d {
-        half_extents: Vec3::new(BOARD_T * 0.5, PEG_BLADE_T * 0.5, hook_width * 0.5),
+        half_extents: Vec3::new(blade_len * 0.5, PEG_BLADE_T * 0.5, hook_width * 0.5),
     };
     let blade_placed = SdfNode::Translate {
         child: Arc::new(blade),
-        offset: Vec3::new(-BOARD_T * 0.5, 0.0, 0.0),
+        offset: Vec3::new(-blade_len * 0.5, 0.0, 0.0),
     };
     // Shoulder (X = -BOARD_T-SHOULDER_DEPTH .. -BOARD_T)
     let shoulder = SdfNode::Box3d {
