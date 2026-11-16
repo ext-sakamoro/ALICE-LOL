@@ -15,8 +15,10 @@
 //! pair is; here, the property that the corpus has none.
 //!
 //! The pairs the corpus had before the fix are recorded in `tests/data/coplanar_pairs_at_e21b5c2.txt`
-//! (template, kind, normal, overlap polygon), and each is checked on today's tree from the field itself:
-//! a former union seam must now be material (the field's maximum over the polygon, sampled at least
+//! (template, kind, side, normal, overlap polygon), and each is checked on today's tree from the field itself.
+//! The side is read from the tree before the fix (the field just off the pair's plane, both ways): a
+//! sheet that lay inside material must now be material, one that lay in the part's air (a cut's mouth,
+//! a seam inside a cutter) must now be air. A former material sheet must now be material (the field's maximum over the polygon, sampled at least
 //! `2δ` in from its edges, is `≤ −δ`, and the inside test at its centre answers inside, below
 //! `-SURFACE_HIT_EPS`); a former flush cut or contact must now be air (minimum `≥ +δ`). `δ` is `1e-3`
 //! of the part's extent (a quarter of the polygon's inradius for a strip thinner than that, never below
@@ -136,6 +138,9 @@ fn the_skadis_peg_has_no_seam_and_keeps_its_shape_and_fit() {
 struct Recorded {
     name: String,
     kind: String,
+    /// "material", "air" or "surface": the side of the part's surface the pair lay on before the fix
+    /// (a seam inside a cutter lies in the part's air)
+    side: String,
     n: Vec3,
     poly: Vec<Vec3>,
 }
@@ -148,10 +153,11 @@ fn recorded() -> Vec<Recorded> {
             let mut it = l.split_whitespace();
             let name = it.next().unwrap().to_string();
             let kind = it.next().unwrap().to_string();
+            let side = it.next().unwrap().to_string();
             let v: Vec<f32> = it.map(|x| x.parse().unwrap()).collect();
             let n = Vec3::new(v[0], v[1], v[2]);
             let poly = v[3..].chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])).collect();
-            Recorded { name, kind, n, poly }
+            Recorded { name, kind, side, n, poly }
         })
         .collect()
 }
@@ -193,6 +199,7 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
     assert!(recs.len() >= 20, "only {} recorded pairs", recs.len());
     let (mut seams, mut seams_inside, mut cuts) = (0usize, 0usize, 0usize);
     let (mut thin, mut smallest_delta) = (0usize, f32::MAX);
+    let (mut cleared_air, mut on_surface) = (0usize, 0usize);
     let mut failures = Vec::new();
     for r in &recs {
         let Some((_, src)) = corpus.iter().find(|(n, _)| *n == r.name) else {
@@ -229,27 +236,33 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
         }
         let ds: Vec<f32> = pts.iter().map(|p| eval(&node, *p)).collect();
         let (mx, mn) = ds.iter().fold((f32::MIN, f32::MAX), |(a, b), d| (a.max(*d), b.min(*d)));
-        if r.kind == "UnionSeam" {
-            seams += 1;
-            let c = r.poly.iter().fold(Vec3::ZERO, |a, q| a + *q) / r.poly.len() as f32;
-            let dc = eval(&node, c);
-            if dc < -SURFACE_HIT_EPS {
-                seams_inside += 1;
-            } else {
-                failures.push(format!("{} seam: inside test at its centre {c} reads {dc:e} (not inside)", r.name));
+        let c = r.poly.iter().fold(Vec3::ZERO, |a, q| a + *q) / r.poly.len() as f32;
+        let dc = eval(&node, c);
+        if r.kind == "UnionSeam" { seams += 1; } else { cuts += 1; }
+        match r.side.as_str() {
+            // the sheet lay inside material: it must be material now, and read inside
+            "material" => {
+                if dc < -SURFACE_HIT_EPS { seams_inside += 1; } else {
+                    failures.push(format!("{} {} (material): inside test at {c} reads {dc:e}", r.name, r.kind));
+                }
+                if mx > -delta {
+                    failures.push(format!("{} {} (material): field max {mx:e} over {} points > -δ = {:e}", r.name, r.kind, pts.len(), -delta));
+                }
             }
-            if mx > -delta {
-                failures.push(format!("{} seam: field max {mx:e} over {} points > -δ = {:e}", r.name, pts.len(), -delta));
+            // the sheet lay in the part's air (a cut's mouth, a seam inside a cutter): it must be air now
+            "air" => {
+                if dc > SURFACE_HIT_EPS { cleared_air += 1; } else {
+                    failures.push(format!("{} {} (air): inside test at {c} reads {dc:e}", r.name, r.kind));
+                }
+                if mn < delta {
+                    failures.push(format!("{} {} (air): field min {mn:e} over {} points < δ = {delta:e}", r.name, r.kind, pts.len()));
+                }
             }
-        } else {
-            cuts += 1;
-            if mn < delta {
-                failures.push(format!("{} {}: field min {mn:e} over {} points < δ = {delta:e}", r.name, r.kind, pts.len()));
-            }
+            _ => on_surface += 1,
         }
     }
     eprintln!(
-        "recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}, not sampled {}, thin-strip δ {thin}, smallest δ {smallest_delta:e}",
+        "recorded pairs {}: seams {seams}, cuts / contacts {cuts}; now inside (material) {seams_inside}, now air {cleared_air}, on the surface (no sheet, not field-checked) {on_surface}; not sampled {}, thin-strip δ {thin}, smallest δ {smallest_delta:e}",
         recs.len(),
         recs.len() - seams - cuts
     );
