@@ -6156,8 +6156,12 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
         Vec3::new(side_offset_x, 0.0, 0.0),
     );
 
+    // 背板・棚・前の lip は側壁の内面 (x = ±shelf_width/2) でちょうど止めると面が接するだけの継ぎ目に
+    // なるので、側壁の厚みの半分まで側壁の中へ延ばす (延びた分は側壁の中なので外形は不変)
+    let into_wall = spec.wall_thickness * 0.5;
+
     // Back wall
-    let back_hx = shelf_width * 0.5;
+    let back_hx = shelf_width.mul_add(0.5, into_wall);
     let back_hy = outer_hy;
     let back_hz = spec.wall_thickness * 0.5;
     let back_offset_z = -outer_hz + back_hz;
@@ -6171,7 +6175,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     // N tilted shelves + front lips
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
-    let shelf_hx = shelf_width * 0.5;
+    let shelf_hx = shelf_width.mul_add(0.5, into_wall);
     let shelf_hy = spec.shelf_thickness * 0.5;
     let shelf_hz = shelf_depth * 0.5;
     let lip_hy = spec.front_lip_height * 0.5;
