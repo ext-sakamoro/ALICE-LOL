@@ -203,10 +203,18 @@ fn intersect(a: SdfNode, b: SdfNode) -> SdfNode {
 /// host, and the host raised by `into`, which covers its footprint from its top up to `into` above it).
 /// `host` must be a prism along Y (its footprint the same at every height), as the plates and beams
 /// here are; `into` must not exceed its thickness
-pub(crate) fn clip_to_host(attached: SdfNode, host: &SdfNode, host_top_y: f32, into: f32) -> SdfNode {
+pub(crate) fn clip_to_host(
+    attached: SdfNode,
+    host: &SdfNode,
+    host_top_y: f32,
+    into: f32,
+) -> SdfNode {
     // above the host's top: a box far larger than any part, its bottom face on the host's top
     let reach = 1.0e4;
-    let above = translate(box3d(reach, reach, reach), Vec3::new(0.0, host_top_y + reach, 0.0));
+    let above = translate(
+        box3d(reach, reach, reach),
+        Vec3::new(0.0, host_top_y + reach, 0.0),
+    );
     let raised = translate(host.clone(), Vec3::new(0.0, into, 0.0));
     intersect(attached, union(union(host.clone(), raised), above))
 }
