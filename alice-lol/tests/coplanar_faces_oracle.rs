@@ -8,8 +8,10 @@
 //! template of the grammar corpus and the fixtures.
 //!
 //! Remaining pairs need an entry in `ALLOWED` with a reason a reader can check; the list starts empty.
-//! Nodes the analysis cannot follow are counted and ratcheted separately (`not_analysed` below), so a
-//! template the analysis cannot see into does not pass as clean.
+//! Nodes the analysis cannot follow hide any pair below them: they are counted per template, printed
+//! ("pairs possibly hidden under not-analysed nodes") and held to `tests/data/coplanar_not_analysed.txt`
+//! by `templates_with_nodes_the_analysis_cannot_follow_are_listed_and_ratcheted`, so a template the
+//! analysis cannot see into does not pass as clean.
 //!
 //! oracle: the analysis's own closed-form tests in ALICE-SDF (`tests/test_coplanar_faces.rs`) for what a
 //! pair is; here, the property that the corpus has none.
@@ -1017,5 +1019,62 @@ fn the_shower_caddy_tiers_reach_into_the_backplate() {
         d(0.0, -1.5, -118.5) < -0.5,
         "the old seam is inside {}",
         d(0.0, -1.5, -118.5)
+    );
+}
+
+/// Templates whose tree has nodes the analysis cannot follow, with the count, as
+/// `tests/data/coplanar_not_analysed.txt` records them. The analysis does not look below such a node,
+/// so a pair there is not found: the zero-pair test above is complete only for the templates not listed.
+/// The list must match exactly (a new or grown entry fails; an entry that shrank or went away fails
+/// until the file is edited by hand, so a change in coverage is always seen)
+#[test]
+fn templates_with_nodes_the_analysis_cannot_follow_are_listed_and_ratcheted() {
+    let recorded: std::collections::BTreeMap<String, usize> =
+        include_str!("data/coplanar_not_analysed.txt")
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+            .map(|l| {
+                let mut it = l.split_whitespace();
+                (
+                    it.next().unwrap().to_string(),
+                    it.next().unwrap().parse().unwrap(),
+                )
+            })
+            .collect();
+    let mut now = std::collections::BTreeMap::new();
+    let mut checked = 0usize;
+    for (name, src) in corpus().into_iter().chain(template_sizes()) {
+        let Ok(node) = parse_lol(&src) else { continue };
+        checked += 1;
+        let r = coplanar_faces(&node);
+        let n = r.ops_not_analysed + r.leaves_not_analysed;
+        if n > 0 {
+            println!(
+                "{name}: pairs possibly hidden under not-analysed nodes: {n} nodes {:?}",
+                r.not_analysed_kinds
+            );
+            now.insert(name, n);
+        }
+    }
+    assert!(checked > 200, "only {checked} templates parsed");
+    println!(
+        "{} of {checked} templates have nodes the analysis cannot follow",
+        now.len()
+    );
+    let mut diff = Vec::new();
+    for (name, n) in &now {
+        match recorded.get(name) {
+            Some(r) if r == n => {}
+            Some(r) => diff.push(format!("{name}: {r} recorded, {n} now")),
+            None => diff.push(format!("{name}: not recorded, {n} now")),
+        }
+    }
+    for name in recorded.keys().filter(|k| !now.contains_key(*k)) {
+        diff.push(format!("{name}: recorded, none now (remove the line)"));
+    }
+    assert!(
+        diff.is_empty(),
+        "not-analysed nodes differ from the record:\n{}",
+        diff.join("\n")
     );
 }
