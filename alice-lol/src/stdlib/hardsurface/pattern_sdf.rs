@@ -5817,7 +5817,10 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
     // tier X 方向 outer / cavity 定数
     let tier_outer_hx = 2.0f32.mul_add(spec.wall_thickness, spec.tier_length) * 0.5;
     let tier_outer_hy = f32::midpoint(spec.tier_height, spec.floor_thickness);
-    let tier_outer_hz = f32::midpoint(spec.tier_depth, spec.wall_thickness);
+    // 棚の背面を背板の前面に合わせるだけだと面だけで接する継ぎ目になるので、棚を背板の厚みの半分だけ背板の
+    // 中へ延ばす (前面・くぼみ・水抜き穴の位置は不変、延びた分は背板の中)
+    let into_backplate = bp_hz;
+    let tier_outer_hz = f32::midpoint(spec.tier_depth, spec.wall_thickness) + into_backplate * 0.5;
     let cavity_hx = spec.tier_length * 0.5;
     let cavity_hy = f32::midpoint(spec.tier_height, 10.0);
     let cavity_hz = spec.tier_depth * 0.5;
@@ -5834,21 +5837,22 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
             spec.tier_spacing,
             -bp_hy + spec.wall_thickness + tier_outer_hy,
         );
-        let tier_z = bp_hz + tier_outer_hz;
+        let tier_z = bp_hz + tier_outer_hz - into_backplate;
 
         // 棚の奥行は前の壁 1 枚ぶん (後ろは背板) なので、くぼみは背板の側 (-Z) に壁厚の半分ずらす
         // (+Z にずらすと前の壁が 0 になり、角丸の太りだけが前の壁を作っていた) 縁 (+Y) は平ら
         let rounded =
             rounded_box_flat_top(tier_outer_hx, tier_outer_hy, tier_outer_hz, 3.0, Vec3::Y);
         // 背板に付く面の縦の辺は角のまま (丸めると背板の丸い縁との間に溝ができ、継ぎ目で 1.7 mm まで細る)
+        let back_square_hz = 1.5 + into_backplate * 0.5;
         let back_square = translate(
-            box3d(tier_outer_hx, tier_outer_hy, 1.5),
-            Vec3::new(0.0, 0.0, -tier_outer_hz + 1.5),
+            box3d(tier_outer_hx, tier_outer_hy, back_square_hz),
+            Vec3::new(0.0, 0.0, -tier_outer_hz + back_square_hz),
         );
         let outer = union(rounded, back_square);
         let cavity = translate(
             box3d(cavity_hx, cavity_hy, cavity_hz),
-            Vec3::new(0.0, cavity_offset_y, -spec.wall_thickness * 0.5),
+            Vec3::new(0.0, cavity_offset_y, (into_backplate - spec.wall_thickness) * 0.5),
         );
         let mut tier = subtract(outer, cavity);
         // 水抜き穴は 1 つの和集合にして 1 回で引く (順に引くと木の深さが穴の数だけ伸び、debug build の
@@ -5858,7 +5862,7 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
                 let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (n_f32(k) + 1.0));
                 translate(
                     cylinder(drain_r, drain_hy),
-                    Vec3::new(x, drain_offset_y, -spec.wall_thickness * 0.5),
+                    Vec3::new(x, drain_offset_y, (into_backplate - spec.wall_thickness) * 0.5),
                 )
             })
             .collect();
