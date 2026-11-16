@@ -14,19 +14,24 @@
 //! oracle: the analysis's own closed-form tests in ALICE-SDF (tests/test_coplanar_faces.rs) for what a
 //! pair is; here, the property that the corpus has none.
 //!
-//! The pairs the corpus had before the fix are recorded in `tests/data/coplanar_pairs_at_e21b5c2.txt`
-//! (template, kind, side, normal, overlap polygon), and each is checked on today's tree from the field itself.
-//! The side is read from the tree before the fix (the field just off the pair's plane, both ways): a
-//! sheet that lay inside material must now be material, one that lay in the part's air (a cut's mouth,
-//! a seam inside a cutter) must now be air. The side is recorded once, from the tree before the fix; a
-//! fix that legitimately moves a pair to the other side fails here and is re-recorded by hand in the
-//! data file with its reason on a `#` line (never regenerated automatically, which would accept any
-//! change). A former material sheet must now be material (the field's maximum over the polygon, sampled at least
-//! `2δ` in from its edges, is `≤ −δ`, and the inside test at its centre answers inside, below
-//! `-SURFACE_HIT_EPS`); a former flush cut or contact must now be air (minimum `≥ +δ`). `δ` is `1e-3`
-//! of the part's extent (a quarter of the polygon's inradius for a strip thinner than that, never below
-//! `DELTA_FLOOR_ULPS` ulp at the extent: a strip too thin for that fails as "overlap too thin to verify"): well above f32 rounding at the largest part and well below the overlaps the
-//! fixes add (each stated at its constant).
+//! The pairs the corpus had before the fix, at the corpus's numbers and at each part's printed size
+//! (`template_sizes.txt`, named `<template>@size`), are recorded in
+//! `tests/data/coplanar_pairs_at_e21b5c2.txt`: template, kind, the side at the overlap's centroid (kept
+//! for reading only), one class per sample point, normal, overlap polygon. The classes are read from the
+//! tree before the fix, the field just off the plane both ways at each point of the shared grid
+//! (`common/seam_grid.rs`): `m` a sheet inside material, `a` a sheet in the part's air (a cut's mouth,
+//! a seam inside a cutter), `s` a real surface, `x` not on a sheet (the overlap polygon is a convex hull
+//! and can cover points where the two faces never met, such as a boss's bore inside its ring seam).
+//! Per point, a former material sheet must now be material (`≤ −δ`) and a former air sheet air
+//! (`≥ +δ`), sampled at least `2δ` in from the polygon's edges; the deepest point of each kind also
+//! takes the inside / outside test at `SURFACE_HIT_EPS`. A per-pair verdict would let a sheet hide
+//! behind a surface majority, or a surface fail a sheet's test. The classes are recorded once, from the
+//! tree before the fix; a fix that legitimately moves a point to another class fails here and is
+//! re-recorded by hand in the data file with its reason on a `#` line (never regenerated
+//! automatically, which would accept any change). `δ` is `1e-3` of the part's extent (a quarter of the
+//! polygon's inradius for a strip thinner than that, never below `DELTA_FLOOR_ULPS` ulp at the extent:
+//! a strip too thin for that fails as "overlap too thin to verify"): well above f32 rounding at the
+//! largest part and well below the overlaps the fixes add (each stated at its constant).
 //!
 //! **Why mesh triangle counts are not the gate** (tried and discarded): marching cubes emits no faces
 //! across a seam's interior — the field is 0 only exactly on the plane, and samples almost never land
@@ -38,6 +43,9 @@
 
 #[path = "common/mod.rs"]
 mod common;
+#[path = "common/seam_grid.rs"]
+mod seam_grid;
+use seam_grid::grid_points;
 use alice_lol::runtime_parser::parse_lol;
 use alice_lol::stdlib::hardsurface::fastener::{counterbore, counterbore_depth, MetricSize};
 use alice_lol::stdlib::hardsurface::joint::{snap_fit_cantilever, SnapFitCantileverSpec};
@@ -185,9 +193,10 @@ fn the_skadis_peg_has_no_seam_and_keeps_its_shape_and_fit() {
 struct Recorded {
     name: String,
     kind: String,
-    /// "material", "air" or "surface": the side of the part's surface the pair lay on before the fix
-    /// (a seam inside a cutter lies in the part's air)
-    side: String,
+    /// the class of each sample point of `grid_points` before the fix (`seam_grid::classify`): `m` a
+    /// sheet in material, `a` a sheet in air, `s` a real surface, `x` not on a sheet (the convex-hull
+    /// polygon can cover points where the faces did not meet, e.g. a boss's bore inside its ring seam)
+    classes: Vec<char>,
     n: Vec3,
     poly: Vec<Vec3>,
 }
@@ -200,48 +209,32 @@ fn recorded() -> Vec<Recorded> {
             let mut it = l.split_whitespace();
             let name = it.next().unwrap().to_string();
             let kind = it.next().unwrap().to_string();
-            let side = it.next().unwrap().to_string();
+            let _side_at_centroid = it.next().unwrap();
+            let classes = it.next().unwrap().chars().collect();
             let v: Vec<f32> = it.map(|x| x.parse().unwrap()).collect();
             let n = Vec3::new(v[0], v[1], v[2]);
             let poly = v[3..].chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])).collect();
-            Recorded { name, kind, side, n, poly }
+            Recorded { name, kind, classes, n, poly }
         })
         .collect()
 }
 
-/// Points of the polygon on a 21 x 21 grid over its extent, each with its distance to the nearest edge
-fn grid_points(poly: &[Vec3], n: Vec3) -> Vec<(Vec3, f32)> {
-    let u = n.any_orthonormal_vector();
-    let v = n.cross(u);
-    let o = poly[0];
-    let uv: Vec<(f32, f32)> = poly.iter().map(|p| ((*p - o).dot(u), (*p - o).dot(v))).collect();
-    let (u0, u1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.0), b.max(q.0)));
-    let (v0, v1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.1), b.max(q.1)));
-    let mut out = Vec::new();
-    for i in 0..=20 {
-        for j in 0..=20 {
-            let (a, b) = (u0 + (u1 - u0) * i as f32 / 20.0, v0 + (v1 - v0) * j as f32 / 20.0);
-            let p = o + u * a + v * b;
-            // inside, and at least `inset` from every edge (convex polygon, either orientation)
-            let mut sign = 0.0_f32;
-            let mut nearest = f32::MAX;
-            let inside = (0..poly.len()).all(|k| {
-                let (e0, e1) = (poly[k], poly[(k + 1) % poly.len()]);
-                let e = (e1 - e0).normalize_or_zero();
-                let side = e.cross(p - e0).dot(n);
-                if sign == 0.0 && side.abs() > 1e-9 { sign = side.signum(); }
-                nearest = nearest.min((p - e0 - e * (p - e0).dot(e)).length());
-                side * sign >= 0.0
-            });
-            if inside { out.push((p, nearest)); }
+/// The spacing of a recorded pair's grid (the smallest distance between two of its points)
+fn grid_step(grid: &[(Vec3, f32)]) -> f32 {
+    let mut step = f32::MAX;
+    for (i, (p, _)) in grid.iter().enumerate() {
+        for (q, _) in &grid[i + 1..] {
+            let d = (*q - *p).length();
+            if d > 0.0 { step = step.min(d); }
         }
     }
-    out
+    step
 }
 
 #[test]
 fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
-    let corpus = corpus();
+    let mut corpus = corpus();
+    corpus.extend(template_sizes());
     let recs = recorded();
     assert!(recs.len() >= 20, "only {} recorded pairs", recs.len());
     let (mut seams, mut seams_inside, mut cuts) = (0usize, 0usize, 0usize);
@@ -276,36 +269,72 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
             ));
             continue;
         }
-        let pts: Vec<Vec3> = grid.iter().filter(|(_, d)| *d >= 2.0 * delta).map(|(p, _)| *p).collect();
+        if r.classes.len() != grid.len() {
+            failures.push(format!("{} {}: {} recorded classes for {} grid points", r.name, r.kind, r.classes.len(), grid.len()));
+            continue;
+        }
+        // a point is checked only inside its sheet region, as it is only inside the polygon: at least 2δ
+        // from the polygon's edges, and every grid neighbour (one grid step, diagonals included) of the
+        // same class (next to a bore or a real surface the field is pulled toward 0 by that surface)
+        let step = grid_step(&grid);
+        let deep: Vec<(Vec3, char, f32)> = grid
+            .iter()
+            .zip(&r.classes)
+            .filter(|((_, d), _)| *d >= 2.0 * delta)
+            .filter(|((p, _), c)| {
+                grid.iter().zip(&r.classes).all(|((q, _), k)| k == *c || (*q - *p).length() > 1.5 * step)
+            })
+            .map(|((p, d), c)| (*p, *c, *d))
+            .collect();
+        let sheet_points = r.classes.iter().filter(|c| matches!(c, 'm' | 'a')).count();
+        if sheet_points > 0 && !deep.iter().any(|(_, c, _)| matches!(c, 'm' | 'a')) {
+            failures.push(format!(
+                "{} {}: {sheet_points} sheet points, none inside its region (a sheet narrower than the grid)",
+                r.name, r.kind
+            ));
+            continue;
+        }
+        let pts: Vec<Vec3> = deep.iter().map(|(p, _, _)| *p).collect();
         if pts.is_empty() {
             failures.push(format!("{} {}: polygon has no point 2δ inside (inradius {inradius:e})", r.name, r.kind));
             continue;
         }
-        let ds: Vec<f32> = pts.iter().map(|p| eval(&node, *p)).collect();
-        let (mx, mn) = ds.iter().fold((f32::MIN, f32::MAX), |(a, b), d| (a.max(*d), b.min(*d)));
-        let c = r.poly.iter().fold(Vec3::ZERO, |a, q| a + *q) / r.poly.len() as f32;
-        let dc = eval(&node, c);
         if r.kind == "UnionSeam" { seams += 1; } else { cuts += 1; }
-        match r.side.as_str() {
-            // the sheet lay inside material: it must be material now, and read inside
-            "material" => {
-                if dc < -SURFACE_HIT_EPS { seams_inside += 1; } else {
-                    failures.push(format!("{} {} (material): inside test at {c} reads {dc:e}", r.name, r.kind));
-                }
-                if mx > -delta {
-                    failures.push(format!("{} {} (material): field max {mx:e} over {} points > -δ = {:e}", r.name, r.kind, pts.len(), -delta));
-                }
+        // each point is held to its own class: a material sheet must be material now (<= -δ), an air
+        // sheet air (>= +δ); surface and off-sheet points are not sheets and are not checked
+        let mut bad_m = (0usize, f32::MIN);
+        let mut bad_a = (0usize, f32::MAX);
+        let (mut n_m, mut n_a) = (0usize, 0usize);
+        for (p, c, _) in &deep {
+            let d = eval(&node, *p);
+            match c {
+                'm' => { n_m += 1; if d > -delta { bad_m = (bad_m.0 + 1, bad_m.1.max(d)); } }
+                'a' => { n_a += 1; if d < delta { bad_a = (bad_a.0 + 1, bad_a.1.min(d)); } }
+                _ => {}
             }
-            // the sheet lay in the part's air (a cut's mouth, a seam inside a cutter): it must be air now
-            "air" => {
-                if dc > SURFACE_HIT_EPS { cleared_air += 1; } else {
-                    failures.push(format!("{} {} (air): inside test at {c} reads {dc:e}", r.name, r.kind));
-                }
-                if mn < delta {
-                    failures.push(format!("{} {} (air): field min {mn:e} over {} points < δ = {delta:e}", r.name, r.kind, pts.len()));
-                }
+        }
+        if bad_m.0 > 0 {
+            failures.push(format!("{} {} (material sheet): {} of {n_m} points above -δ = {:e}, max {:e}", r.name, r.kind, bad_m.0, -delta, bad_m.1));
+        }
+        if bad_a.0 > 0 {
+            failures.push(format!("{} {} (air sheet): {} of {n_a} points below δ = {delta:e}, min {:e}", r.name, r.kind, bad_a.0, bad_a.1));
+        }
+        // the inside / outside test at the sheet's deepest point (farthest from the polygon's edges)
+        let deepest = |want: char| deep.iter().filter(|(_, c, _)| *c == want).max_by(|a, b| a.2.total_cmp(&b.2)).map(|(p, _, _)| *p);
+        if let Some(p) = deepest('m') {
+            let d = eval(&node, p);
+            if d < -SURFACE_HIT_EPS { seams_inside += 1; } else {
+                failures.push(format!("{} {} (material sheet): inside test at {p} reads {d:e}", r.name, r.kind));
             }
-            _ => on_surface += 1,
+        }
+        if let Some(p) = deepest('a') {
+            let d = eval(&node, p);
+            if d > SURFACE_HIT_EPS { cleared_air += 1; } else {
+                failures.push(format!("{} {} (air sheet): outside test at {p} reads {d:e}", r.name, r.kind));
+            }
+        }
+        if n_m + n_a == 0 {
+            on_surface += 1;
         }
     }
     eprintln!(
