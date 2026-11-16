@@ -625,5 +625,7 @@ fn the_shower_caddy_tiers_reach_into_the_backplate() {
     }
     let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
     assert!(d(0.0, -61.5, -90.0) > 1.0, "the first tray's well {}", d(0.0, -61.5, -90.0));
-    assert!(d(0.0, -1.5, -110.0) < -0.5, "the old seam is inside {}", d(0.0, -1.5, -110.0));
+    // the tray's floor (z in [-120, -117]) where it met the backplate (the well's own back is the
+    // backplate's front face, a real surface, so the check is in the floor, not in the well)
+    assert!(d(0.0, -1.5, -118.5) < -0.5, "the old seam is inside {}", d(0.0, -1.5, -118.5));
 }
