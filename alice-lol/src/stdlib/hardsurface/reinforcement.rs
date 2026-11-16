@@ -177,15 +177,25 @@ pub fn chamfer(a: SdfNode, b: SdfNode, size: f32) -> SdfNode {
 // 5. honeycomb infill
 // ────────────────────────────────────────────────────────
 
-/// ハニカム infill (container を 6 角形 cell の repeat から Subtraction、壁だけ残す)
+/// 6 角形の穴を四角い格子に並べて container から抜く (千鳥でない、ハニカムではない)
 ///
-/// 内部を 6 角形 pattern で刳り抜いて軽量化しつつ剛性を確保する
+/// 今の形 (引数との関係、`HexPrism` の `hex_radius` は軸から平らな辺までの距離):
+/// - 穴: Y 方向に抜けた 6 角柱、平らな辺は ±Z を向き、角は ±X を向く 対辺の幅は
+///   `max(2·cell_size/√3 − wall_thickness, 0)` (≈ 1.155·cell_size − wall_thickness)、`cell_size` そのもの
+///   ではない
+/// - 穴の中心: X に `√3·cell_size`、Z に `1.5·cell_size` の間隔の四角い格子、各軸 `2·count + 1` 個
+/// - 穴と穴の間の壁: X 方向 (角と角) は `(√3 − 4/3)·cell_size + (2/√3)·wall_thickness`
+///   (≈ 0.399·cell_size + 1.155·wall_thickness)、Z 方向 (辺と辺) は `(1.5 − 2/√3)·cell_size + wall_thickness`
+///   (≈ 0.345·cell_size + wall_thickness) で、どちらも `wall_thickness` ではない
+///
+/// 引数の名前 (対辺の幅・壁の厚み) どおりの千鳥のハニカムに作り直すのは別の変更 (形が変わる) 今は
+/// 呼び出し元が無い
 ///
 /// # 引数
 ///
 /// - `container`: 中身を刳り抜く対象 `SdfNode` (bbox 内で cell を repeat)
-/// - `cell_size`: 6 角形 cell の対辺距離 (mm、hexagon flat-to-flat)
-/// - `wall_thickness`: 残す壁厚 (mm、cell 間の材料肉厚)
+/// - `cell_size`: 上の式の大きさの基準 (mm)
+/// - `wall_thickness`: 上の式で穴を縮める量 (mm)
 /// - `count`: 各軸方向の repeat 半径 (`2 * count + 1` 個生成、X-Z 平面)
 ///
 /// # 使用例
@@ -204,7 +214,8 @@ pub fn honeycomb_infill(
     wall_thickness: f32,
     count: u32,
 ) -> SdfNode {
-    // 6 角形 hex_radius (中心から頂点までの距離) = cell_size / √3 (flat-to-flat / √3)
+    // `HexPrism` の hex_radius は軸から平らな辺までの距離: ここで渡す cell_size / √3 は穴の対辺の半分になる
+    // (頂点までの距離のつもりで書かれていた、形はそのまま、上の doc が今の大きさを書く)
     // 板は Y = 板厚方向想定 (rib と揃える)、`HexPrism` は Z 押出なので下で Y に回す
     let hex_r = cell_size / 3.0_f32.sqrt();
     // wall_thickness 分だけ hex を縮小して壁を残す (cell 間ギャップ = wall)
