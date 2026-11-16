@@ -4182,9 +4182,12 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
 
     // Partition walls: (count-1) 個の thin vertical wall (X 方向 thin、Y 方向 height、Z 方向 cell_depth)
     // 配置: 各 wall は cell 境界に (x_start + wall/2 + cell_width, x_start + 3*wall/2 + 2*cell_width, ...)
-    let wall_hy = spec.height * 0.5;
-    let wall_hz = spec.cell_depth * 0.5;
-    let wall_offset_y = spec.floor_thickness + wall_hy;
+    // 床の上面と前後の壁の内面でちょうど止めると面が接するだけの継ぎ目になるので、床の厚みの半分と
+    // 壁の厚みの半分だけ中へ延ばす (延びた分は床と壁の中なので外形は不変、上端は外の上面と同じ高さ)
+    let into_floor = spec.floor_thickness * 0.5;
+    let wall_hy = (spec.height + into_floor) * 0.5;
+    let wall_hz = (spec.cell_depth + spec.wall_thickness) * 0.5;
+    let wall_offset_y = into_floor + wall_hy;
     let x_left = neg_inner_x * 0.5;
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 1..count {
