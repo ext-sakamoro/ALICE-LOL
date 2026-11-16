@@ -133,6 +133,13 @@ pub fn snap_fit_cantilever(spec: SnapFitCantileverSpec) -> SdfNode {
             0.0,
         ),
     };
+    // clipped so a hook longer than the beam adds nothing beside it below the beam's top
+    let hook_placed = crate::stdlib::hardsurface::pattern_sdf::clip_to_host(
+        hook_placed,
+        &beam,
+        spec.thickness * 0.5,
+        spec.thickness * 0.5,
+    );
     SdfNode::Union {
         a: Arc::new(beam),
         b: Arc::new(hook_placed),
