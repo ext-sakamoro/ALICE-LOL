@@ -3054,9 +3054,12 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     );
 
     // Front lip: -Z 側の壁 (前縁)
+    // 縁は底板の上面に載せるだけだと面だけで接する継ぎ目になるので、底板の厚みの半分だけ底板の中へ下ろす
+    // (上端は不変、延びた分は底板の中)
     let lip_hz = spec.lip_thickness * 0.5;
-    let lip_hy = lip_height * 0.5;
-    let lip_offset_y = -outer_hy + spec.base_thickness + lip_hy;
+    let into_base = spec.base_thickness * 0.5;
+    let lip_hy = (lip_height + into_base) * 0.5;
+    let lip_offset_y = -outer_hy + spec.base_thickness - into_base + lip_hy;
     let lip_offset_z = -outer_hz + lip_hz;
     let lip = translate(
         box3d(outer_hx, lip_hy, lip_hz),
