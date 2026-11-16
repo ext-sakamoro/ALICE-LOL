@@ -197,6 +197,20 @@ fn intersect(a: SdfNode, b: SdfNode) -> SdfNode {
     }
 }
 
+/// `attached` (a piece standing on `host`, already extended `into` down into it so the two do not meet
+/// face to face) clipped so the extension never adds material beside the host: it keeps the attached
+/// piece above the host's top face (`host_top_y`) as it is, and below it only where the host is (the
+/// host, and the host raised by `into`, which covers its footprint from its top up to `into` above it).
+/// `host` must be a prism along Y (its footprint the same at every height), as the plates and beams
+/// here are; `into` must not exceed its thickness
+pub(crate) fn clip_to_host(attached: SdfNode, host: &SdfNode, host_top_y: f32, into: f32) -> SdfNode {
+    // above the host's top: a box far larger than any part, its bottom face on the host's top
+    let reach = 1.0e4;
+    let above = translate(box3d(reach, reach, reach), Vec3::new(0.0, host_top_y + reach, 0.0));
+    let raised = translate(host.clone(), Vec3::new(0.0, into, 0.0));
+    intersect(attached, union(union(host.clone(), raised), above))
+}
+
 fn subtract(a: SdfNode, b: SdfNode) -> SdfNode {
     SdfNode::Subtraction {
         a: Arc::new(a),
@@ -3073,6 +3087,9 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
         Vec3::new(0.0, lip_offset_y, lip_offset_z),
     );
 
+    // clipped so a lip that overhangs the base (its square ends over the base's rounded corners) adds
+    // nothing beside it
+    let lip = clip_to_host(lip, &base, -outer_hy + spec.base_thickness, into_base);
     let mut result = union(base, lip);
 
     // jar recess: base 上面 (Y+) から下向きに subtract
@@ -7340,8 +7357,13 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
             bosses.push(translate(boss_template.clone(), Vec3::new(cx, boss_y, cz)));
         }
     }
+    // the bosses reach into_plate down into the plate; clipped so a boss that overhangs the plate's edge
+    // (a pitch smaller than a boss) adds nothing beside it
     let result = match super::balanced_union_fold(bosses) {
-        Some(all) => union(plate, all),
+        Some(all) => {
+            let clipped = clip_to_host(all, &plate, outer_hy, into_plate);
+            union(plate, clipped)
+        }
         None => plate,
     };
 
