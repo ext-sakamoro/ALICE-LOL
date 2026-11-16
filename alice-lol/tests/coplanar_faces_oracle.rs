@@ -445,3 +445,18 @@ fn the_can_rack_shelves_back_and_lips_reach_into_the_side_walls() {
     assert!(d(36.5, 0.0, gap_z) > 0.4, "air inside the wall between the tiers {}", d(36.5, 0.0, gap_z));
     assert!(d(37.5, 0.0, gap_z) < -0.4, "the wall itself {}", d(37.5, 0.0, gap_z));
 }
+
+#[test]
+fn the_sock_divider_partitions_reach_into_the_floor_and_the_walls() {
+    // sock_divider(4, 80, 89): 4 cells 80 wide, partitions 2.5 thick at x = -82.5, 0, 82.5, height 89
+    // over a 2 mm floor (z in [-45.5, 45.5] after the Z-up turn), cells 100 deep between 2.5 walls.
+    // Each partition stood on the floor and stopped at the front and back walls' inner faces (6 seams)
+    let part = parse_lol("sock_divider(4, 80, 89)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(-123.0, 0.0, 0.0) > 0.4, "a cell is air {}", d(-123.0, 0.0, 0.0));
+    assert!(d(-82.5, 0.0, 0.0) < -0.4, "a partition is material {}", d(-82.5, 0.0, 0.0));
+    assert!(d(-82.5, 0.0, 45.6) > 0.0, "air just above the partition's top {}", d(-82.5, 0.0, 45.6));
+    assert!(d(-82.5, 0.0, 45.4) < 0.0, "the partition up to the top {}", d(-82.5, 0.0, 45.4));
+    assert!(d(-80.5, 0.0, 0.0) > 0.4, "the cell beside the partition {}", d(-80.5, 0.0, 0.0));
+}
