@@ -65,6 +65,8 @@ fn every_pin_matches_its_live_behaviour_digest() {
             "emit: fmt_f32 round-trip fidelity class",
             fmt_f32_fidelity_probe_digest(),
         ),
+        // the alice-sdf this crate resolves: a move of its shape meaning moves LOL's geometry
+        ("alice-sdf::SDF_SEMANTICS_ID", alice_sdf::SDF_SEMANTICS_ID),
     ];
     cases.extend(own.iter().map(|(n, d)| ((*n).to_owned(), *d)));
     // ⚠️ 比較件数 0 件 fail (空振り防止、検査器自身の空振りを防ぐ既存の規律と同軸)

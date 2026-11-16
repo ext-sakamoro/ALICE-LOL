@@ -703,6 +703,13 @@ pub const LOL_GEOMETRY_SEMANTICS_PINS: &[(&str, [u8; 32])] = &[
         "emit: fmt_f32 round-trip fidelity class",
         hex32("4744995b02057f35d13e18e149c8f1d9880cf0b3f4ebab3515f5529d99a70553"),
     ),
+    // alice-sdf の形の意味 (`alice_sdf::SDF_SEMANTICS_ID`): LOL の幾何は alice-sdf の木として評価される
+    // ので、alice-sdf の形の意味が変わる (例: repeat_finite の奇数個の数え方) と同じ LOL の文が別の形に
+    // なる 値は literal で持ち、試験が解決した alice-sdf の値と突き合わせる (上げた時に必ず red になる)
+    (
+        "alice-sdf::SDF_SEMANTICS_ID",
+        hex32("443238e4a561285522719dad6a7cec11e988f39406108593c375cd5762cb133d"),
+    ),
 ];
 
 /// [`LOL_GEOMETRY_SEMANTICS_PINS`] の fold
