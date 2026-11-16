@@ -45,7 +45,7 @@
 mod common;
 #[path = "common/seam_grid.rs"]
 mod seam_grid;
-use seam_grid::grid_points;
+use seam_grid::{decode, grid_points, interior, margin, sheet_regions, Margin};
 use alice_lol::runtime_parser::parse_lol;
 use alice_lol::stdlib::hardsurface::fastener::{bolt, counterbore, counterbore_depth, MetricSize};
 use alice_lol::stdlib::hardsurface::joint::{
@@ -64,8 +64,6 @@ use alice_sdf::eval::eval;
 use alice_sdf::SdfNode;
 use glam::Vec3;
 
-/// Smallest δ allowed, in ulp of the part's extent: 1000 ulp is 0.015 mm at 250 mm (the largest part)
-const DELTA_FLOOR_ULPS: f32 = 1000.0;
 
 /// (template, reason) for a template allowed to keep a coplanar pair
 const ALLOWED: &[(&str, &str)] = &[];
@@ -200,6 +198,8 @@ struct Recorded {
     /// sheet in material, `a` a sheet in air, `s` a real surface, `x` not on a sheet (the convex-hull
     /// polygon can cover points where the faces did not meet, e.g. a boss's bore inside its ring seam)
     classes: Vec<char>,
+    /// the grid's step (the recorder refined it until every sheet region had a point inside it)
+    step: f32,
     n: Vec3,
     poly: Vec<Vec3>,
 }
@@ -213,25 +213,14 @@ fn recorded() -> Vec<Recorded> {
             let name = it.next().unwrap().to_string();
             let kind = it.next().unwrap().to_string();
             let _side_at_centroid = it.next().unwrap();
-            let classes = it.next().unwrap().chars().collect();
+            let step = it.next().unwrap().parse().unwrap();
+            let classes = decode(it.next().unwrap());
             let v: Vec<f32> = it.map(|x| x.parse().unwrap()).collect();
             let n = Vec3::new(v[0], v[1], v[2]);
             let poly = v[3..].chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])).collect();
-            Recorded { name, kind, classes, n, poly }
+            Recorded { name, kind, classes, step, n, poly }
         })
         .collect()
-}
-
-/// The spacing of a recorded pair's grid (the smallest distance between two of its points)
-fn grid_step(grid: &[(Vec3, f32)]) -> f32 {
-    let mut step = f32::MAX;
-    for (i, (p, _)) in grid.iter().enumerate() {
-        for (q, _) in &grid[i + 1..] {
-            let d = (*q - *p).length();
-            if d > 0.0 { step = step.min(d); }
-        }
-    }
-    step
 }
 
 #[test]
@@ -250,19 +239,9 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
             continue;
         };
         let node = parse_lol(src).unwrap();
-        let b = compute_tight_aabb_with_config(&node, &TightAabbConfig::preset_large());
-        // δ is 1e-3 of the part's extent, or a quarter of the polygon's inradius for a strip thinner
-        // than that (across a thin strip the field cannot go below about half its width); points are
-        // taken 2δ in from the edges, where the field is not pulled to 0 by the outer surface
-        let grid = grid_points(&r.poly, r.n);
-        let inradius = grid.iter().map(|(_, d)| *d).fold(0.0_f32, f32::max);
-        let extent = (b.max - b.min).max_element();
-        let plain = 1e-3 * extent;
-        let delta = plain.min(0.25 * inradius);
-        // floor: DELTA_FLOOR_ULPS ulp at the part's extent; a strip so thin that its δ would fall below
-        // it cannot tell a fix from "0 within rounding", and fails as its own kind (fixed by a larger
-        // overlap, not passed)
-        let floor = DELTA_FLOOR_ULPS * (extent.next_up() - extent);
+        // δ and the 2δ inset from the polygon's edges: `seam_grid::margin`, the same as the recorder's
+        let grid = grid_points(&r.poly, r.n, r.step);
+        let Margin { delta, plain, floor, inradius } = margin(&node, &r.poly, r.n);
         if delta < plain { thin += 1; }
         smallest_delta = smallest_delta.min(delta);
         if !(delta >= floor) {
@@ -272,34 +251,30 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
             ));
             continue;
         }
+        // a point is checked only inside its sheet region, as it is only inside the polygon: at least 2δ
+        // from the polygon's edges, and every grid neighbour (one grid step, diagonals included) of the
+        // same class (next to a bore or a real surface the field is pulled toward 0 by that surface)
         if r.classes.len() != grid.len() {
             failures.push(format!("{} {}: {} recorded classes for {} grid points", r.name, r.kind, r.classes.len(), grid.len()));
             continue;
         }
-        // a point is checked only inside its sheet region, as it is only inside the polygon: at least 2δ
-        // from the polygon's edges, and every grid neighbour (one grid step, diagonals included) of the
-        // same class (next to a bore or a real surface the field is pulled toward 0 by that surface)
-        let step = grid_step(&grid);
+        let inner = interior(&grid, &r.classes);
         let deep: Vec<(Vec3, char, f32)> = grid
             .iter()
             .zip(&r.classes)
-            .filter(|((_, d), _)| *d >= 2.0 * delta)
-            .filter(|((p, _), c)| {
-                grid.iter().zip(&r.classes).all(|((q, _), k)| k == *c || (*q - *p).length() > 1.5 * step)
-            })
-            .map(|((p, d), c)| (*p, *c, *d))
+            .zip(&inner)
+            .filter(|((_, c), inside)| **inside && **c != '-')
+            .map(|((g, c), _)| (g.p, *c, g.edge))
             .collect();
-        let sheet_points = r.classes.iter().filter(|c| matches!(c, 'm' | 'a')).count();
-        if sheet_points > 0 && !deep.iter().any(|(_, c, _)| matches!(c, 'm' | 'a')) {
-            failures.push(format!(
-                "{} {}: {sheet_points} sheet points, none inside its region (a sheet narrower than the grid)",
-                r.name, r.kind
-            ));
-            continue;
-        }
-        let pts: Vec<Vec3> = deep.iter().map(|(p, _, _)| *p).collect();
-        if pts.is_empty() {
-            failures.push(format!("{} {}: polygon has no point 2δ inside (inradius {inradius:e})", r.name, r.kind));
+        // every connected sheet region has a checked point (a sheet hiding behind a surface majority, or
+        // narrower than the grid, is not passed unchecked)
+        let unchecked: Vec<String> = sheet_regions(&grid, &r.classes)
+            .iter()
+            .filter(|(_, m)| !m.iter().any(|k| inner[*k]))
+            .map(|(c, m)| format!("{c}x{}", m.len()))
+            .collect();
+        if !unchecked.is_empty() {
+            failures.push(format!("{} {}: sheet regions without a point inside them: {unchecked:?}", r.name, r.kind));
             continue;
         }
         if r.kind == "UnionSeam" { seams += 1; } else { cuts += 1; }
