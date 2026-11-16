@@ -190,6 +190,13 @@ fn smooth_union(a: SdfNode, b: SdfNode, k: f32) -> SdfNode {
     }
 }
 
+fn intersect(a: SdfNode, b: SdfNode) -> SdfNode {
+    SdfNode::Intersection {
+        a: Arc::new(a),
+        b: Arc::new(b),
+    }
+}
+
 fn subtract(a: SdfNode, b: SdfNode) -> SdfNode {
     SdfNode::Subtraction {
         a: Arc::new(a),
@@ -6198,38 +6205,57 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let mut result = union(union(side_l, side_r), back);
 
     // N tilted shelves + front lips
+    // 各段の棚は前端 (Z+) で段の床の高さ y_front に上面が来るように置き、そこから後ろへ tilt で上がる
+    // (前は棚を中心で回したので前端が段の床より 35 mm 下がり、1 段目は底から突き出し、前の縁は棚の中ほどの
+    // 高さに浮いていた) 棚は背板の厚みの半分から縁の厚みの半分まで (両方の中へ入れて面だけで接しない)、
+    // 縁は棚の上面の下 (棚の厚み + 前端の傾きの分) から上へ front_lip_height 伸び、全体を外箱で切る
     // huge degree values reduced before to_radians() (crate::angle doc)
     let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
+    // X 軸周りに +tilt 回すと棚の +Z (前) は (0, -sin, cos) を向いて前へ下がる (前は -tilt で回しており、
+    // 前が上がっていたが、棚を中心で回していたので目立たなかった)
+    let tilt = crate::angle::quat_from_rotation_x(tilt_rad);
+    let along = tilt * Vec3::Z; // 棚の前向き (前へ下がる)
+    let up = tilt * Vec3::Y; // 棚の上面の法線
     let shelf_hx = shelf_width.mul_add(0.5, into_wall);
     let shelf_hy = spec.shelf_thickness * 0.5;
-    let shelf_hz = shelf_depth * 0.5;
-    let lip_hy = spec.front_lip_height * 0.5;
-    let lip_hz = spec.wall_thickness * 0.5;
+    let z_front = outer_hz - spec.wall_thickness; // 縁の内面
+    let z_back = -outer_hz + spec.wall_thickness; // 背板の内面
+    let half_wall = spec.wall_thickness * 0.5;
+    // 棚の上面の線に沿った長さ: 背板の厚みの半分の位置から縁の厚みの半分の位置まで
+    let s_back = (z_back - half_wall - z_front) / along.z;
+    let s_front = half_wall / along.z;
+    let shelf_hz = (s_front - s_back) * 0.5;
+    let s_mid = (s_front + s_back) * 0.5;
+    let lip_hz = half_wall;
+    // 縁の下端: 前端で棚の下面より下 (棚の上面から、棚の厚みを傾きで割った分と、縁の厚みの分の傾き)
+    let lip_below = spec.shelf_thickness / up.y + spec.wall_thickness * (along.y.abs() / along.z);
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..rows {
-        // Shelf Y offset (bottom → top、+X 軸傾斜で back → front 下がる)
-        let tier_y = -outer_hy + spec.wall_thickness + tier_spacing * (n_f32(i)) + shelf_hy;
-        // Shelf 傾斜 = X axis 周り negative rotation (back Z- 高 → front Z+ 低)
-        let shelf_raw = box3d(shelf_hx, shelf_hy, shelf_hz);
-        let shelf_rotated = SdfNode::Rotate {
-            child: Arc::new(shelf_raw),
-            rotation: crate::angle::quat_from_rotation_x(-tilt_rad),
-        };
-        let shelf = translate(shelf_rotated, Vec3::new(0.0, tier_y, 0.0));
+        let y_front = -outer_hy + spec.wall_thickness + tier_spacing * (n_f32(i));
+        let top_front = Vec3::new(0.0, y_front, z_front);
+        let centre = top_front + along * s_mid - up * shelf_hy;
+        let shelf = translate(
+            SdfNode::Rotate {
+                child: Arc::new(box3d(shelf_hx, shelf_hy, shelf_hz)),
+                rotation: tilt,
+            },
+            centre,
+        );
 
-        // Front lip: shelf 前端 (Z+) に垂直 wall
-        let lip_offset_z = outer_hz - lip_hz;
-        let lip_offset_y = tier_y + lip_hy;
+        // Front lip: 縁の内面から外面まで、棚の上面の下から front_lip_height 上まで
+        let lip_y0 = y_front - lip_below;
+        let lip_y1 = y_front + spec.front_lip_height;
         let lip = translate(
-            box3d(shelf_hx, lip_hy, lip_hz),
-            Vec3::new(0.0, lip_offset_y, lip_offset_z),
+            box3d(shelf_hx, (lip_y1 - lip_y0) * 0.5, lip_hz),
+            Vec3::new(0.0, (lip_y0 + lip_y1) * 0.5, outer_hz - lip_hz),
         );
 
         cutters.push(shelf);
         cutters.push(lip);
     }
     if let Some(all) = super::balanced_union_fold(cutters) {
-        result = union(result, all);
+        // 棚と縁は外箱で切る (傾いた棚の角が底や前後の外面から出ないように)
+        result = union(result, intersect(all, box3d(outer_hx, outer_hy, outer_hz)));
     }
 
     to_z_up(result)
