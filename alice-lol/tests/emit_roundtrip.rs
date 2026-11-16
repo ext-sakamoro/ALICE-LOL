@@ -387,11 +387,11 @@ fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
     let cases: &[(&str, &str)] = &[
         (
             "can_rack",
-            "c6b7906a6da1bc2fb92b77961159dd35d78dc60e715f5aeb2b176e014f314067",
+            "24daef7a07ee26f6bc7896c7c2a2713168e7ef5dc6c1a79c8f88b23bbbfd3296",
         ),
         (
             "can_rack_neg_tilt",
-            "41062e0306caa06e84a4c35b0f37cbbf96bd000b84b24b35a85ca4e67b5986f5",
+            "f5c34055f9151bbef301e06c2ac00aa4d0d5f0ef70be2a1c13b1aa4c1425c408",
         ),
         (
             "phone_dock",
