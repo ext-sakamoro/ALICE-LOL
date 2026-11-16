@@ -69,20 +69,61 @@ fn corpus() -> Vec<(String, String)> {
     s
 }
 
+/// Each part template at a size a person would print (`scripts/gen_template_sizes.py`): the corpus
+/// calls templates with stand-in numbers (3, 2, 1, ...) that empty many cavities, slots and walls, so a
+/// check run only there misses the shape that is printed (pen_cup's membrane over its mouth was found
+/// at its real size, not at the corpus numbers)
+fn template_sizes() -> Vec<(String, String)> {
+    std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/template_sizes.txt"))
+        .expect("tests/data/template_sizes.txt")
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .map(|l| {
+            let call = l.split("  #").next().unwrap().trim().to_string();
+            (format!("{}@size", call.split('(').next().unwrap()), call)
+        })
+        .collect()
+}
+
 #[test]
 fn no_template_has_a_seam_or_a_flush_cut() {
-    let mut checked = 0usize;
+    let (mut checked, mut sized) = (0usize, 0usize);
     let mut offenders = Vec::new();
-    for (name, src) in corpus() {
-        let Ok(node) = parse_lol(&src) else { continue };
+    let mut unparsed_sizes = Vec::new();
+    let sizes = template_sizes();
+    for (name, src) in corpus().into_iter().chain(sizes.iter().cloned()) {
+        let at_size = name.ends_with("@size");
+        let Ok(node) = parse_lol(&src) else {
+            if at_size { unparsed_sizes.push(src); }
+            continue;
+        };
         checked += 1;
+        sized += usize::from(at_size);
         let r = coplanar_faces(&node);
-        if !r.pairs.is_empty() && !ALLOWED.iter().any(|(n, _)| *n == name) {
+        let base = name.trim_end_matches("@size");
+        if !r.pairs.is_empty() && !ALLOWED.iter().any(|(n, _)| *n == base) {
             let kinds: Vec<String> = r.pairs.iter().map(|p| format!("{:?}@{:?}", p.kind, p.point)).collect();
             offenders.push(format!("{name}: {}", kinds.join(", ")));
         }
     }
     assert!(checked > 200, "only {checked} templates parsed");
+    assert!(sized > 80, "only {sized} templates checked at a printed size");
+    assert!(unparsed_sizes.is_empty(), "size rows that do not parse: {unparsed_sizes:?}");
+    // every part template (a composite whose corpus call takes numbers only, not child shapes) has a
+    // size row, or takes no arguments (its spec's defaults); operators take their children's shape
+    let mut without = Vec::new();
+    for (name, src) in common::corpus::grammar_corpus() {
+        let Ok(node) = parse_lol(&src) else { continue };
+        let r = coplanar_faces(&node);
+        let composite = r.ops_analysed + r.ops_not_analysed > 0;
+        let args = &src[src.find('(').map_or(src.len(), |i| i + 1)..];
+        let numbers_only = !args.contains('(');
+        let no_args = args.trim() == ")";
+        if composite && numbers_only && !no_args && !sizes.iter().any(|(n, _)| n.trim_end_matches("@size") == name) {
+            without.push(name);
+        }
+    }
+    assert!(without.is_empty(), "part templates without a size row: {without:?}");
     assert!(
         offenders.is_empty(),
         "{} templates with a seam or flush cut:\n{}",
