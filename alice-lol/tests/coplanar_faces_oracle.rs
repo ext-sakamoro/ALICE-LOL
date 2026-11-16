@@ -13,6 +13,22 @@
 //!
 //! oracle: the analysis's own closed-form tests in ALICE-SDF (tests/test_coplanar_faces.rs) for what a
 //! pair is; here, the property that the corpus has none.
+//!
+//! The pairs the corpus had before the fix are recorded in `tests/data/coplanar_pairs_at_e21b5c2.txt`
+//! (template, kind, normal, overlap polygon), and each is checked on today's tree from the field itself:
+//! a former union seam must now be material (the field's maximum over the polygon, sampled at least
+//! `2δ` in from its edges, is `≤ −δ`, and the inside test at its centre answers inside, below
+//! `-SURFACE_HIT_EPS`); a former flush cut or contact must now be air (minimum `≥ +δ`). `δ` is `1e-3`
+//! of the part's extent: well above f32 rounding at the largest part and well below the overlaps the
+//! fixes add (each stated at its constant).
+//!
+//! **Why mesh triangle counts are not the gate** (tried and discarded): marching cubes emits no faces
+//! across a seam's interior — the field is 0 only exactly on the plane, and samples almost never land
+//! there — so a seam's extra faces all lie on its polygon's edge, where it meets the outer surface, and
+//! so do the facets marching cubes cuts across any real concave corner there. Two criteria were tried to
+//! tell them apart, and both read 0 before the fix too (so they measure nothing): "centroid field ≈ 0"
+//! (seam facets also have slightly negative centroids) and "one cell inside the polygon" (there are no
+//! seam facets inside). Plane-clipped counts are reported as evidence only.
 
 #[path = "common/mod.rs"]
 mod common;
@@ -21,6 +37,8 @@ use alice_lol::stdlib::hardsurface::skadis_sdf::{
     skadis_peg_and_shoulder, BOARD_T, PEG_BLADE_T, SHOULDER_DEPTH, SHOULDER_H,
 };
 use alice_sdf::coplanar::coplanar_faces;
+use alice_sdf::raycast::SURFACE_HIT_EPS;
+use alice_sdf::tight_aabb::{compute_tight_aabb_with_config, TightAabbConfig};
 use alice_sdf::eval::eval;
 use alice_sdf::SdfNode;
 use glam::Vec3;
@@ -107,4 +125,98 @@ fn the_skadis_peg_has_no_seam_and_keeps_its_shape_and_fit() {
         }
         assert!(compared > 1000, "width {w}: only {compared} outside points compared");
     }
+}
+
+/// A recorded pair: template, kind, unit normal, overlap polygon
+struct Recorded {
+    name: String,
+    kind: String,
+    n: Vec3,
+    poly: Vec<Vec3>,
+}
+
+fn recorded() -> Vec<Recorded> {
+    include_str!("data/coplanar_pairs_at_e21b5c2.txt")
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .map(|l| {
+            let mut it = l.split_whitespace();
+            let name = it.next().unwrap().to_string();
+            let kind = it.next().unwrap().to_string();
+            let v: Vec<f32> = it.map(|x| x.parse().unwrap()).collect();
+            let n = Vec3::new(v[0], v[1], v[2]);
+            let poly = v[3..].chunks_exact(3).map(|c| Vec3::new(c[0], c[1], c[2])).collect();
+            Recorded { name, kind, n, poly }
+        })
+        .collect()
+}
+
+/// Points of the polygon at least `inset` from every edge, on a 21 x 21 grid over its extent
+fn interior_points(poly: &[Vec3], n: Vec3, inset: f32) -> Vec<Vec3> {
+    let u = n.any_orthonormal_vector();
+    let v = n.cross(u);
+    let o = poly[0];
+    let uv: Vec<(f32, f32)> = poly.iter().map(|p| ((*p - o).dot(u), (*p - o).dot(v))).collect();
+    let (u0, u1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.0), b.max(q.0)));
+    let (v0, v1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.1), b.max(q.1)));
+    let mut out = Vec::new();
+    for i in 0..=20 {
+        for j in 0..=20 {
+            let (a, b) = (u0 + (u1 - u0) * i as f32 / 20.0, v0 + (v1 - v0) * j as f32 / 20.0);
+            let p = o + u * a + v * b;
+            // inside, and at least `inset` from every edge (convex polygon, either orientation)
+            let mut sign = 0.0_f32;
+            let ok = (0..poly.len()).all(|k| {
+                let (e0, e1) = (poly[k], poly[(k + 1) % poly.len()]);
+                let e = (e1 - e0).normalize_or_zero();
+                let side = e.cross(p - e0).dot(n);
+                if sign == 0.0 && side.abs() > 1e-9 { sign = side.signum(); }
+                let dist = (p - e0 - e * (p - e0).dot(e)).length();
+                side * sign >= 0.0 && dist >= inset
+            });
+            if ok { out.push(p); }
+        }
+    }
+    out
+}
+
+#[test]
+fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
+    let corpus = corpus();
+    let recs = recorded();
+    assert!(recs.len() >= 20, "only {} recorded pairs", recs.len());
+    let (mut seams, mut seams_inside, mut cuts) = (0usize, 0usize, 0usize);
+    let mut failures = Vec::new();
+    for r in &recs {
+        let Some((_, src)) = corpus.iter().find(|(n, _)| *n == r.name) else {
+            failures.push(format!("{}: template no longer in the corpus", r.name));
+            continue;
+        };
+        let node = parse_lol(src).unwrap();
+        let b = compute_tight_aabb_with_config(&node, &TightAabbConfig::preset_large());
+        let delta = 1e-3 * (b.max - b.min).max_element();
+        let pts = interior_points(&r.poly, r.n, 2.0 * delta);
+        if pts.is_empty() {
+            failures.push(format!("{} {}: no point 2δ inside the polygon", r.name, r.kind));
+            continue;
+        }
+        let ds: Vec<f32> = pts.iter().map(|p| eval(&node, *p)).collect();
+        let (mx, mn) = ds.iter().fold((f32::MIN, f32::MAX), |(a, b), d| (a.max(*d), b.min(*d)));
+        if r.kind == "UnionSeam" {
+            seams += 1;
+            let c = r.poly.iter().fold(Vec3::ZERO, |a, q| a + *q) / r.poly.len() as f32;
+            if eval(&node, c) < -SURFACE_HIT_EPS { seams_inside += 1; }
+            if mx > -delta {
+                failures.push(format!("{} seam: field max {mx:e} over {} points > -δ = {:e}", r.name, pts.len(), -delta));
+            }
+        } else {
+            cuts += 1;
+            if mn < delta {
+                failures.push(format!("{} {}: field min {mn:e} over {} points < δ = {delta:e}", r.name, r.kind, pts.len()));
+            }
+        }
+    }
+    eprintln!("recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}", recs.len());
+    assert_eq!(seams_inside, seams, "inside test at seam centres: {seams_inside} of {seams}");
+    assert!(failures.is_empty(), "{} recorded pairs not fixed:\n{}", failures.len(), failures.join("\n"));
 }
