@@ -596,3 +596,18 @@ fn the_cable_grommet_body_reaches_into_its_flange() {
     assert!(d(30.0, 0.0).abs() < 1e-4, "the body's side {}", d(30.0, 0.0));
     assert!(d(10.0, 7.5) > 5.0, "the bore {}", d(10.0, 7.5));
 }
+
+#[test]
+fn the_curtain_rod_bracket_arm_stands_in_the_plate_and_the_cradle_is_open() {
+    // curtain_rod_bracket(25, 120): the arm started at the wall plate's face (a seam), and the rod hole
+    // was exactly as long as the cradle, leaving a membrane over each end of the cradle (2 flush cuts)
+    let part = parse_lol("curtain_rod_bracket(25, 120)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    // after the Z-up turn the rod runs along y; the cradle's ends are at y = +-12, its axis at
+    // x = 2 + 120, z = 4 + 12.75
+    let (cx, cz) = (122.0, 16.75);
+    assert!(d(cx, 12.0, cz) > 1.0, "the cradle's end is open {}", d(cx, 12.0, cz));
+    assert!(d(cx, 0.0, cz) > 1.0, "the rod's hole {}", d(cx, 0.0, cz));
+    assert!(d(2.0, 0.0, 0.0) < -1.0, "the old arm seam is inside {}", d(2.0, 0.0, 0.0));
+}
