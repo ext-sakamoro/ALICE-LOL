@@ -7664,11 +7664,13 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     let wall_plate = box3d(plate_hx, plate_hy, plate_hz);
 
     // arm: 壁面 plate から +X 方向に突出、中央 Y=0
-    let arm_hx = spec.projection * 0.5;
+    // 腕は壁面 plate の面から始めると面だけで接する継ぎ目になるので、plate の厚みの半分 (x = 0) から始める
+    // (先端 x = plate_hx + projection は不変、延びた分は plate の中)
+    let arm_hx = (spec.projection + plate_hx) * 0.5;
     let arm_hy = spec.arm_thickness * 0.5;
     let arm_hz = spec.arm_width * 0.5;
     let arm_raw = box3d(arm_hx, arm_hy, arm_hz);
-    let arm = translate(arm_raw, Vec3::new(plate_hx + arm_hx, 0.0, 0.0));
+    let arm = translate(arm_raw, Vec3::new(arm_hx, 0.0, 0.0));
 
     // rod cradle: arm 先端 (X = plate_hx + projection) に配置
     // rod は Z 軸方向 (床と平行)、cradle は upside-open (Y+ 側 open) の半円 pocket
@@ -7678,8 +7680,9 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     let cradle_x = plate_hx + spec.projection;
     let cradle_y = arm_hy + cradle_r;
     // cylinder Y-axis → rotate X 90° で Z-axis alignment (rod と同軸)
+    // 竿の穴は受けの両端より CAVITY_PUNCH_MARGIN ずつ長く (受けと同じ長さだと両端に厚み 0 の膜が残る)
     let cradle_hole = SdfNode::Rotate {
-        child: Arc::new(cylinder(cradle_r, cradle_hh)),
+        child: Arc::new(cylinder(cradle_r, cradle_hh + super::cavity::CAVITY_PUNCH_MARGIN)),
         rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     };
 
