@@ -557,3 +557,17 @@ fn the_tape_dispenser_back_wall_reaches_into_the_base_and_the_hood() {
     assert!(d(0.0, 0.0, 1.5) < -1.0, "the base {}", d(0.0, 0.0, 1.5));
     assert!(d(40.0, 0.0, 20.0) > 1.0, "the roll's space {}", d(40.0, 0.0, 20.0));
 }
+
+#[test]
+fn the_sbc_case_standoffs_stand_in_the_floor() {
+    // sbc_case(85, 56, 25) after the Z-up turn: floor top at z = -11, standoffs 6 across and 5 tall at
+    // (+-39, +-24.5) with a 2.2 pilot hole; each standoff stood on the floor's top (4 ring seams)
+    let part = parse_lol("sbc_case(85, 56, 25)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(0.0, 0.0, -11.0).abs() < 1e-4, "the floor's top {}", d(0.0, 0.0, -11.0));
+    let wall_r = (1.1 + 3.0) * 0.5; // between the pilot hole and the standoff's side
+    assert!(d(39.0 + wall_r, 24.5, -8.5) < -0.3, "the standoff's wall {}", d(39.0 + wall_r, 24.5, -8.5));
+    assert!(d(39.0 + wall_r, 24.5, -5.9) > 0.0, "air above the standoff {}", d(39.0 + wall_r, 24.5, -5.9));
+    assert!(d(39.0, 24.5, -8.5) > 0.3, "the pilot hole {}", d(39.0, 24.5, -8.5));
+}
