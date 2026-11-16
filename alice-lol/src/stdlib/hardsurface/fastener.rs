@@ -447,9 +447,15 @@ pub fn bolt(size: MetricSize, shank_length: f32) -> SdfNode {
     let shank_r = size.nominal_diameter() * 0.5;
     let head_r = size.head_diameter_socket() * 0.5;
     let head_h = size.head_height_socket();
-    let shank = SdfNode::Cylinder {
-        radius: shank_r,
-        half_height: shank_length * 0.5,
+    // 軸の上端で頭を載せるだけだと面が接するだけの継ぎ目になるので、軸を頭の高さの半分だけ頭の中へ延ばす
+    // (延びた分は頭の中なので外形は不変、軸の下端は -shank_length/2 のまま)
+    let into_head = head_h * 0.5;
+    let shank = SdfNode::Translate {
+        child: Arc::new(SdfNode::Cylinder {
+            radius: shank_r,
+            half_height: (shank_length + into_head) * 0.5,
+        }),
+        offset: Vec3::new(0.0, into_head * 0.5, 0.0),
     };
     let head = SdfNode::Cylinder {
         radius: head_r,
