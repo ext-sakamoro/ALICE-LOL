@@ -42,6 +42,7 @@ use alice_lol::runtime_parser::parse_lol;
 use alice_lol::stdlib::hardsurface::fastener::{counterbore, counterbore_depth, MetricSize};
 use alice_lol::stdlib::hardsurface::joint::{snap_fit_cantilever, SnapFitCantileverSpec};
 use alice_lol::stdlib::hardsurface::mount::profile_2020;
+use alice_lol::stdlib::hardsurface::pattern_sdf::{pen_cup, phone_stand, PenCupSpec, PhoneStandSpec};
 use alice_lol::stdlib::hardsurface::skadis_sdf::{
     skadis_peg_and_shoulder, BOARD_T, PEG_BLADE_T, SHOULDER_DEPTH, SHOULDER_H,
 };
@@ -348,4 +349,41 @@ fn the_snap_fit_hook_has_no_seam_and_keeps_its_shape() {
         }
     }
     assert!(compared > 1000, "only {compared} outside points compared");
+}
+
+#[test]
+fn the_pen_cup_mouth_is_open_and_its_floor_and_wall_stay() {
+    // standard 75 x 100: outer z in [-50, 50]; the cavity's top lay exactly on the rim (a membrane over
+    // the mouth); it now reaches past it, its floor unchanged
+    let spec = PenCupSpec::standard_75x100();
+    let cup = pen_cup(&spec);
+    assert!(coplanar_faces(&cup).pairs.is_empty(), "{:?}", coplanar_faces(&cup).pairs);
+    let h = spec.height * 0.5;
+    let floor = -h + spec.floor_thickness;
+    let d = |x: f32, z: f32| eval(&cup, Vec3::new(x, 0.0, z));
+    assert!(d(0.0, h) > 1e-3, "mouth at the rim {}", d(0.0, h));
+    assert!(d(10.0, floor + 0.01) > 0.0, "just above the floor {}", d(10.0, floor + 0.01));
+    assert!(d(10.0, floor - 0.01) < 0.0, "just below the floor {}", d(10.0, floor - 0.01));
+    let wall_mid = spec.inner_diameter * 0.5 + spec.wall_thickness * 0.5;
+    assert!(d(wall_mid, 0.0) < -0.5, "wall {}", d(wall_mid, 0.0));
+}
+
+#[test]
+fn the_phone_stand_slot_is_open_and_its_back_stands_in_the_base() {
+    // default: base 90 x 90 x 6 (z in [0, 6]); back 5 thick (y in [-45, -40]) up to z = 106; slot 14 wide
+    // cut 80 down from the top. The slot's top lay on the back's top (a membrane over it) and the back
+    // stood on the base's face (a seam)
+    let spec = PhoneStandSpec::phone_default();
+    let stand = phone_stand(&spec);
+    assert!(coplanar_faces(&stand).pairs.is_empty(), "{:?}", coplanar_faces(&stand).pairs);
+    let top = spec.base_thickness + spec.back_height;
+    let slot_floor = top - spec.back_height * 0.8;
+    let y = -spec.base_depth * 0.5 + spec.back_thickness * 0.5;
+    let d = |x: f32, z: f32| eval(&stand, Vec3::new(x, y, z));
+    assert!(d(0.0, top) > 1e-3, "slot mouth at the top {}", d(0.0, top));
+    assert!(d(0.0, slot_floor + 0.01) > 0.0, "just above the slot floor {}", d(0.0, slot_floor + 0.01));
+    assert!(d(0.0, slot_floor - 0.01) < 0.0, "just below the slot floor {}", d(0.0, slot_floor - 0.01));
+    assert!(d(spec.slot_width * 0.5 + 3.0, 60.0) < -0.5, "wall beside the slot {}", d(spec.slot_width * 0.5 + 3.0, 60.0));
+    let seam = d(20.0, spec.base_thickness);
+    assert!(seam < -0.4, "the old base / back seam is inside now: {seam}");
 }
