@@ -122,6 +122,7 @@ python3 scripts/test_check_pipe_grep_q.py
 python3 scripts/check_pipe_grep_q.py
 python3 scripts/test_g2_sites.py
 python3 scripts/g2_sites.py
+python3 scripts/gen_template_sizes.py --check
 python3 scripts/test_gen_rule_limits.py
 python3 scripts/gen_rule_limits.py --check
 

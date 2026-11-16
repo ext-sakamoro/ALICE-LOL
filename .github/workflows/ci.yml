@@ -600,6 +600,8 @@ jobs:
         run: python scripts/test_g2_sites.py
       - name: g2-sites (Law の max / min を呼ぶ library の関数が全て scripts/g2_sites.toml に tie 試験か理由つきで載っている)
         run: python scripts/g2_sites.py
+      - name: template-sizes (形の検査に使う、各部品テンプレートの印刷する大きさの表が parser と spec の既定値に一致している)
+        run: python scripts/gen_template_sizes.py --check
       - name: rule-limits manifest oracle (検査器自身の試験)
         run: python scripts/test_gen_rule_limits.py
       - name: rule-limits manifest (conformance/rule-limits.toml から生成した境界の manifest と fuzz の seed が今の表のもの)

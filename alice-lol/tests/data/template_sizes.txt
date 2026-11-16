@@ -1,0 +1,96 @@
+# each part template at a size a person would print; written by scripts/gen_template_sizes.py
+# name(args)  # where the numbers come from
+arduino_mount_plate(1, 0)  # board 1 = Uno, no extras (runtime_parser test)
+bag_clip_org(8, 8, 100)  # BagClipOrgSpec::standard_8
+battery_18650_holder(4, 2.5, 0)  # Battery18650HolderSpec::row_4_through
+bearing_seat(22, 5, 1)  # 608 bearing OD 22, 5 mm plate, slip fit (runtime_parser test)
+bolt(4, 20)  # fastener::bolt doc example (M4, 20 mm)
+boss(3, 8)  # reinforcement::boss doc example
+boss_array(2, 2, 3, 10, 20, 2)  # BossArraySpec::m3_2x2
+bracket_l(60, 40, 4, 40, 3)  # mount::bracket_l doc example
+build_plate_rack(5, 15, 200)  # BuildPlateRackSpec::standard_5
+business_card_holder(91, 55, 22)  # BusinessCardHolderSpec::jp_meishi
+cable_clip(7, 28)  # CableClipSpec::hdmi
+cable_grommet(60, 15)  # CableGrommetSpec::standard_60
+caliper_holder(150, 40, 3)  # CaliperHolderSpec::standard_3
+can_rack(2, 66, 10)  # CanRackSpec::standard_2_tier
+card_tray(63, 88, 30)  # CardTraySpec::poker
+chopstick_holder(4, 13, 260)  # ChopstickHolderSpec::adult_4
+clamp_rack(5, 30, 150)  # ClampRackSpec::standard_5
+coaster(95, 5)  # CoasterSpec::round_95x5
+cotton_dispenser(80, 90, 100)  # CottonDispenserSpec::standard_80
+counterbore(4, 8)  # fastener::counterbore doc example (M4, 8 mm plate)
+countersink(4, 8)  # fastener::countersink doc example (M4, 8 mm plate)
+curtain_rod_bracket(25, 120)  # CurtainRodBracketSpec::standard_25
+cutlery_tray(3, 35, 220)  # CutleryTraySpec::standard_3
+cutting_board_rack(3, 12, 220)  # CuttingBoardRackSpec::standard_3
+desk_shelf(400, 200, 100)  # DeskShelfSpec::desktop_400x200
+dovetail(10, 5, 20)  # joint::dovetail doc example
+dovetail_pair(20, 15, 10, 1)  # runtime_parser test (female)
+drill_bit_holder(3, 13, 11)  # DrillBitHolderSpec::metric_11_3to13
+driver_rack(8, 25, 100)  # DriverRackSpec::standard_8
+dry_box(2, 2, 68)  # DryBoxSpec::standard_2x2
+egg_tray(3, 4, 18)  # EggTraySpec::tray_4x3
+esp32_enclosure(51.6, 28.4, 15)  # Esp32EnclosureSpec::esp32_devkit_v1
+filament_spool_holder(200, 68, 52)  # FilamentSpoolHolderSpec::standard_1kg
+flange_circular(60, 20, 6, 45, 4, 4.2)  # mount::flange_circular doc example
+flange_mount(80, 5, 4)  # FlangeMountSpec::od80_m5_4
+gridfinity_bin(2, 2, 4)  # GridfinitySpec::default_2x2
+gridfinity_bin_ex(3, 3, 6, 2, 2, 1.5, 2)  # runtime_parser test
+hairdryer_holder(85, 110, 3)  # HairdryerHolderSpec::dyson_85
+headphone_holder(80, 50, 100)  # HeadphoneHolderSpec::wall_mount_default
+heat_set_array(2, 2, 3, 20, 6)  # HeatSetArraySpec::m3_2x2
+hex_bit_holder(5, 4, 12)  # HexBitHolderSpec::grid_4x5
+hex_key_holder(9, 1.5, 10)  # HexKeyHolderSpec::metric_9
+jewelry_stand(3, 100, 100)  # JewelryStandSpec::standard_3_tier
+kcup_holder(3, 4, 53)  # KcupHolderSpec::kcup_4x3
+l_bracket(60, 60, 4, 4, 2)  # LBracketSpec::m4_2holes
+led_channel(10, 300)  # LedChannelSpec::ws2812b_10mm
+led_hub_box(80, 60, 30)  # LedHubBoxSpec::standard_80x60
+magnetic_strip(8, 6, 30)  # MagneticStripSpec::knife_rail_8
+makeup_organizer(3, 4, 45)  # MakeupOrganizerSpec::standard_3x4
+monitor_riser(250, 180, 90)  # MonitorRiserSpec::compact_desk
+mug(80, 120)  # products::mug_sdf doc example
+nozzle_holder(8, 8, 6)  # NozzleHolderSpec::m6_row_8
+outdoor_enclosure(120, 80, 45)  # OutdoorEnclosureSpec::ip54_120x80
+pen_cup(75, 100)  # PenCupSpec::standard_75x100
+phone_dock(80, 100, 8)  # PhoneDockSpec::standard_80x100
+phone_stand(14, 100, 18)  # PhoneStandSpec::phone_default
+pill_organizer(7, 2, 20)  # PillOrganizerSpec::weekly_7x2
+pin_hinge_knuckle(3, 8, 8)  # joint::pin_hinge_knuckle doc example
+pixhawk_mount(45, 1)  # 45 mm hole pattern with dampers (runtime_parser test)
+pliers_rack(6, 15, 60)  # PliersRackSpec::standard_6
+profile_2020(100)  # the profiles' tests (100 mm)
+profile_3030(100)  # the profiles' tests (100 mm)
+profile_extrusion(20, 100)  # ProfileExtrusionSpec::p2020_100
+rack_shelf(200, 5, 30, 25, 6, 3)  # mount::rack_shelf doc example
+razor_holder(12, 22, 4.5)  # RazorHolderSpec::cartridge_razor
+sbc_case(85, 56, 25)  # SbcCaseSpec::sbc_85x56_active_cooler
+sbc_mount_plate(4, 4)  # SbcMountPlateSpec::holes_58x49_vesa
+sd_card_holder(4, 4, 24)  # SdCardHolderSpec::full_sd_4x4
+servo_mount(2)  # MG996R (runtime_parser test)
+shower_caddy(2, 250, 120)  # ShowerCaddySpec::standard_2_tier
+sink_caddy(200, 100, 8)  # SinkCaddySpec::standard_l200
+skadis_panel(300, 5, 5)  # the SKADIS canonical panel (parser doc)
+slot(20, 4, 6)  # joint::slot doc example
+snap_fit_annular(8, 20, 0.4, 7)  # joint::snap_fit_annular doc example
+snap_fit_pair(20, 5, 2, 1)  # SnapFitPairSpec::standard
+soap_tray(200, 90, 6)  # SoapTraySpec::dual_bottle_l200
+sock_divider(4, 80, 89)  # SockDividerSpec::standard_4
+socket_rail(12.4, 22, 6)  # SocketRailSpec::half_inch_6
+spice_rack(6, 48, 100)  # SpiceRackSpec::standard_6
+sticky_note_holder(76, 76, 30)  # StickyNoteHolderSpec::small_square
+storage_box(150, 100, 60)  # StorageBoxSpec::medium
+swatch_holder(8, 4, 32)  # SwatchHolderSpec::standard_8x4
+t_slot_2020(100)  # joint::t_slot_2020 doc example
+t_slot_bracket_2020(20, 20)  # TSlotBracket2020Spec::standard_20
+tape_dispenser(76, 50, 3)  # TapeDispenserSpec::packing_tape_standard
+tissue_box_cover(231, 116, 53)  # TissueBoxCoverSpec::rectangular_us
+token_well(20, 20, 4)  # TokenWellSpec::dice_4
+toothbrush_holder(4, 15, 70)  # ToothbrushHolderSpec::manual_4
+tp_holder(40, 110, 5)  # TpHolderSpec::standard
+under_desk_mount(25, 40, 4)  # UnderDeskMountSpec::standard_desk
+utensil_caddy(4, 65, 130)  # UtensilCaddySpec::standard_4
+vesa_mount(75, 5, 4)  # VesaMountSpec::vesa_75_m4_cb
+wrap_holder(55, 305, 3)  # WrapHolderSpec::foil_12inch
+wrench_holder(8, 19, 6)  # WrenchHolderSpec::metric_6_8to19
