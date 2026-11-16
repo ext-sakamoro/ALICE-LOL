@@ -1021,9 +1021,12 @@ pub fn pen_cup(spec: &PenCupSpec) -> SdfNode {
     let outer_r = 2.0f32.mul_add(spec.wall_thickness, spec.inner_diameter) * 0.5;
     let outer_hz = spec.height * 0.5;
     let inner_r = spec.inner_diameter * 0.5;
-    let cavity_h = spec.height - spec.floor_thickness;
+    // 空洞は床の上面 (z = -height/2 + floor) から縁の外へ CAVITY_PUNCH_MARGIN まで (縁でちょうど止めると
+    // 口の上で場が 0 になり、厚み 0 の膜が残る)
+    let margin = super::cavity::CAVITY_PUNCH_MARGIN;
+    let cavity_h = spec.height - spec.floor_thickness + margin;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = spec.floor_thickness * 0.5;
+    let cavity_offset_z = (spec.floor_thickness + margin) * 0.5;
 
     let outer = cylinder_z(outer_r, outer_hz);
     let cavity = translate(
@@ -1104,20 +1107,27 @@ pub fn phone_stand(spec: &PhoneStandSpec) -> SdfNode {
         Vec3::new(0.0, 0.0, base_hz),
     );
 
-    // Back plate at rear edge (Y=-(base_hy - back_hy))、Z=base_thickness + back_hz
+    // Back plate at rear edge (Y=-(base_hy - back_hy))、上端 Z=base_thickness + back_height
     let back_plate_y = -(base_hy - back_hy);
     let back_plate_z = spec.base_thickness + back_hz;
+    // 背板の足は base の厚みの半分まで base の中へ下ろす (base の上面に載せるだけだと面が接するだけの
+    // 継ぎ目になる、足は base の中なので外形は不変)
+    let foot = spec.base_thickness * 0.5;
     let back = translate(
-        box3d(back_hx, back_hy, back_hz),
-        Vec3::new(0.0, back_plate_y, back_plate_z),
+        box3d(back_hx, back_hy, back_hz + foot * 0.5),
+        Vec3::new(0.0, back_plate_y, back_plate_z - foot * 0.5),
     );
 
     // Slot cut: front face of back plate、Y=back_plate_y + back_hy (前面)
     // slot 幅方向 X、深さ Y、高さ Z (top 部分に配置、phone を挿入する溝)
     let slot_hx = spec.slot_width * 0.5;
     let slot_hy = back_hy + 0.5; // 貫通用余裕
-    let slot_hz = spec.back_height * 0.4; // back 高さの 40% を slot 深に
-    let slot_center_z = back_plate_z + back_hz - slot_hz;
+    // slot 深 = back 高さの 80% (底は back の上端から 0.8 × back_height)、上は back の上端の外へ
+    // CAVITY_PUNCH_MARGIN まで (上端でちょうど止めると溝の口に厚み 0 の膜が残る)
+    let margin = super::cavity::CAVITY_PUNCH_MARGIN;
+    let slot_depth = spec.back_height * 0.8;
+    let slot_hz = (slot_depth + margin) * 0.5;
+    let slot_center_z = back_plate_z + back_hz - slot_depth + slot_hz;
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
         Vec3::new(0.0, back_plate_y, slot_center_z),
