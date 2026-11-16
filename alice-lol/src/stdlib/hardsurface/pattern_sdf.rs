@@ -6122,6 +6122,9 @@ pub fn bag_clip_org(spec: &BagClipOrgSpec) -> SdfNode {
 // 62. can_rack (organizer-cable-kitchen § 6.4 Gravity Feed Can Rack)
 // ────────────────────────────────────────────────────────
 
+/// 缶ラックの缶まわりの隙間 (mm): 前の縁の上の開口と背板の投入口を缶の直径より広くする分
+pub const CAN_RACK_CLEARANCE: f32 = 5.0;
+
 /// 缶ラック spec (gravity feed 多段傾斜、cans が転がって前へ)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CanRackSpec {
@@ -6180,8 +6183,16 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
 
     let shelf_depth = cans_f * (spec.can_diameter + 2.0);
     let shelf_width = spec.can_diameter + 8.0;
-    let tier_spacing = spec.can_diameter + 15.0;
-    let total_height = rows_f * tier_spacing + spec.wall_thickness;
+    // 段の間隔: 前の縁の上から缶を出し入れできるように、缶の直径 + 縁の高さ + 棚の厚み + 隙間
+    // (前は缶の直径 + 15 で、縁 15 と棚 3 を引くと前の開口が缶より狭く、下の段は出し入れできなかった)
+    let tier_spacing =
+        spec.can_diameter + spec.front_lip_height + spec.shelf_thickness + CAN_RACK_CLEARANCE;
+    // huge degree values reduced before to_radians() (crate::angle doc)
+    let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
+    let (tilt_sin, tilt_cos) = alice_det_math::sin_cos(tilt_rad);
+    // 棚は前端から後ろへ tilt で上がる: 奥行き分の上がりを高さに足し、どの段の後端の上にも 1 段分の間隔を残す
+    let rise = shelf_depth * (tilt_sin / tilt_cos);
+    let total_height = rows_f.mul_add(tier_spacing, spec.wall_thickness) + rise;
 
     let ext_x = 2.0f32.mul_add(spec.wall_thickness, shelf_width);
     let ext_y = total_height;
@@ -6226,8 +6237,6 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     // (前は棚を中心で回したので前端が段の床より 35 mm 下がり、1 段目は底から突き出し、前の縁は棚の中ほどの
     // 高さに浮いていた) 棚は背板の厚みの半分から縁の厚みの半分まで (両方の中へ入れて面だけで接しない)、
     // 縁は棚の上面の下 (棚の厚み + 前端の傾きの分) から上へ front_lip_height 伸び、全体を外箱で切る
-    // huge degree values reduced before to_radians() (crate::angle doc)
-    let tilt_rad = crate::angle::canon_angle_deg(spec.tilt_angle_deg).to_radians();
     // X 軸周りに +tilt 回すと棚の +Z (前) は (0, -sin, cos) を向いて前へ下がる (前は -tilt で回しており、
     // 前が上がっていたが、棚を中心で回していたので目立たなかった)
     let tilt = crate::angle::quat_from_rotation_x(tilt_rad);
@@ -6270,9 +6279,24 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
         cutters.push(shelf);
         cutters.push(lip);
     }
+    // 背板の投入口: 各段の後端 (背板の内面での棚の上面) から缶の直径 + 隙間の高さ、棚の幅で背板を抜く
+    // (重力式: 後ろから入れた缶が前の縁まで転がる 前は背板が全高で塞がり、下の段に入れる口が無かった)
+    let slot_h = spec.can_diameter + CAN_RACK_CLEARANCE;
+    let back_rise = (z_front - z_back) * (tilt_sin / tilt_cos);
+    let mut slots: Vec<SdfNode> = Vec::new();
+    for i in 0..rows {
+        let y0 = (-outer_hy + spec.wall_thickness + tier_spacing * n_f32(i)) + back_rise;
+        slots.push(translate(
+            box3d(shelf_width * 0.5, slot_h * 0.5, spec.wall_thickness),
+            Vec3::new(0.0, y0 + slot_h * 0.5, -outer_hz + half_wall),
+        ));
+    }
     if let Some(all) = super::balanced_union_fold(cutters) {
         // 棚と縁は外箱で切る (傾いた棚の角が底や前後の外面から出ないように)
         result = union(result, intersect(all, box3d(outer_hx, outer_hy, outer_hz)));
+    }
+    if let Some(all) = super::balanced_union_fold(slots) {
+        result = subtract(result, all);
     }
 
     to_z_up(result)
