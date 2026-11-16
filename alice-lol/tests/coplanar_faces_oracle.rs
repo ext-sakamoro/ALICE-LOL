@@ -582,3 +582,17 @@ fn the_spice_rack_lip_stands_in_the_base() {
     assert!(d(0.0, 33.0, -5.0) < -0.3, "the old seam is inside {}", d(0.0, 33.0, -5.0));
     assert!(d(0.0, 30.0, -4.0) > 0.3, "air behind the lip above the base {}", d(0.0, 30.0, -4.0));
 }
+
+#[test]
+fn the_cable_grommet_body_reaches_into_its_flange() {
+    // cable_grommet(60, 15) after the Z-up turn: body r 30, z in [-7.5, 7.5]; flange r 34, 3 thick on
+    // top (z in [7.5, 10.5]); bore r 25. The body's top met the flange's underside (a ring seam)
+    let part = parse_lol("cable_grommet(60, 15)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, z: f32| eval(&part, Vec3::new(x, 0.0, z));
+    assert!(d(27.5, 7.5) < -0.3, "the old seam is inside {}", d(27.5, 7.5));
+    assert!(d(32.0, 7.5).abs() < 1e-4, "the flange's underside beyond the body {}", d(32.0, 7.5));
+    assert!(d(32.0, 7.0) > 0.3, "air under the flange {}", d(32.0, 7.0));
+    assert!(d(30.0, 0.0).abs() < 1e-4, "the body's side {}", d(30.0, 0.0));
+    assert!(d(10.0, 7.5) > 5.0, "the bore {}", d(10.0, 7.5));
+}
