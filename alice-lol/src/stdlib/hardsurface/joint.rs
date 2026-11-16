@@ -277,12 +277,18 @@ pub const T_SLOT_2020_INNER_DEPTH: f32 = 6.0;
 /// ```
 #[must_use]
 pub fn t_slot_2020(length: f32) -> SdfNode {
-    let opening = SdfNode::Box3d {
-        half_extents: Vec3::new(
-            T_SLOT_2020_OPENING_DEPTH * 0.5,
-            length * 0.5,
-            T_SLOT_2020_OPENING_WIDTH * 0.5,
-        ),
+    // 開口の底で空洞と面だけで接すると、切り取った後に厚み 0 の膜が残るので、開口を空洞の深さの半分だけ
+    // 空洞の中へ延ばす (開口の幅は空洞の幅より狭いので、延びた分は空洞の中、外形は不変)
+    let into_chamber = T_SLOT_2020_INNER_DEPTH * 0.5;
+    let opening = SdfNode::Translate {
+        child: Arc::new(SdfNode::Box3d {
+            half_extents: Vec3::new(
+                (T_SLOT_2020_OPENING_DEPTH + into_chamber) * 0.5,
+                length * 0.5,
+                T_SLOT_2020_OPENING_WIDTH * 0.5,
+            ),
+        }),
+        offset: Vec3::new(-into_chamber * 0.5, 0.0, 0.0),
     };
     let inner = SdfNode::Box3d {
         half_extents: Vec3::new(
