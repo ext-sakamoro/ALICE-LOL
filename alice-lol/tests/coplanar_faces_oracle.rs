@@ -611,3 +611,19 @@ fn the_curtain_rod_bracket_arm_stands_in_the_plate_and_the_cradle_is_open() {
     assert!(d(cx, 0.0, cz) > 1.0, "the rod's hole {}", d(cx, 0.0, cz));
     assert!(d(2.0, 0.0, 0.0) < -1.0, "the old arm seam is inside {}", d(2.0, 0.0, 0.0));
 }
+
+#[test]
+fn the_shower_caddy_tiers_reach_into_the_backplate() {
+    // standard 2-tier (250 x 120 x 40 trays, spacing 100, walls 3) after the Z-up turn: the backplate is
+    // y in [-1.5, 1.5]; each tray stood on its front face (y = -1.5, a seam over the tray's back)
+    let part = parse_lol("shower_caddy(2, 250, 120)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let b = compute_tight_aabb_with_config(&part, &TightAabbConfig::preset_large());
+    // the outline is unchanged: x +-128, y from the trays' fronts (-1.5 - 123) to the backplate's back
+    for (got, want, what) in [(b.min.x, -128.0, "x min"), (b.max.x, 128.0, "x max"), (b.min.y, -124.5, "front"), (b.max.y, 1.5, "back")] {
+        assert!((got - want).abs() < 0.05, "{what}: {got} vs {want}");
+    }
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(0.0, -61.5, -90.0) > 1.0, "the first tray's well {}", d(0.0, -61.5, -90.0));
+    assert!(d(0.0, -1.5, -110.0) < -0.5, "the old seam is inside {}", d(0.0, -1.5, -110.0));
+}
