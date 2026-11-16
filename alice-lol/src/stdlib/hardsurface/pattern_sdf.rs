@@ -5666,10 +5666,12 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     let roll_centre_y = spec.wall_thickness + TAPE_ROLL_CLEARANCE + outer_r;
     let hood_bottom_y = roll_centre_y + outer_r + TAPE_ROLL_CLEARANCE;
 
-    // Back wall: base 後端 (Z-)、底板の上面からフードの下面まで立ち、軸を片持ちで支える
-    let back_hy = (hood_bottom_y - spec.wall_thickness) * 0.5;
+    // Back wall: base 後端 (Z-)、底板の上面からフードの下面まで立ち、軸を片持ちで支える 上下の端は底板と
+    // フードの中へ壁の厚みの半分ずつ入れる (面だけで接する継ぎ目を作らない)
+    let into = spec.wall_thickness * 0.5;
+    let back_hy = (hood_bottom_y - spec.wall_thickness) * 0.5 + into;
     let back_hz = spec.wall_thickness * 0.5;
-    let back_offset_y = spec.wall_thickness + back_hy;
+    let back_offset_y = spec.wall_thickness + (hood_bottom_y - spec.wall_thickness) * 0.5;
     let back_offset_z = -base_hz + back_hz;
     let back = translate(
         rounded_plate(base_hx, back_hy, back_hz, 2.0, Vec3::Z),
