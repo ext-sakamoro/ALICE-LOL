@@ -329,8 +329,17 @@ fn profile_t_slot(length: f32) -> SdfNode {
         }),
         offset: Vec3::new(x_center, 0.0, 0.0),
     };
-    let neck_box = boxed(-neck * 0.5, neck * 0.5, open_half);
-    let punch = boxed(2.5, 2.5, open_half);
+    // the neck overlaps both its neighbours instead of meeting them on a face (a cutter built from boxes
+    // that only touch has a field of 0 on the shared face, which the subtraction turns into a sheet
+    // across the slot): half the punch's depth outward (same cross-section, so the cutter is unchanged)
+    // and inward half the room the cavity leaves around it, min(cavity depth, cavity_half - open_half)
+    // (the cavity's walls close in 1:1, so the neck's cross-section stays inside the cavity there)
+    let punch_depth = 5.0;
+    let into_punch = punch_depth * 0.5;
+    let into_cavity = 0.5 * crate::det_math::min(depth - neck, cavity_half - open_half);
+    let neck_len = neck + into_cavity + into_punch;
+    let neck_box = boxed((into_punch - neck - into_cavity) * 0.5, neck_len * 0.5, open_half);
+    let punch = boxed(punch_depth * 0.5, punch_depth * 0.5, open_half);
     // 空洞: 首の直下 (x = -neck) の半幅 cavity_half から 1:1 で狭まる台形
     let cavity_box = boxed(-(neck + depth) * 0.5, (depth - neck) * 0.5, cavity_half);
     // 許す範囲 |z| <= cavity_half + neck + x  ⇔  (±z - x)/√2 <= (cavity_half + neck)/√2

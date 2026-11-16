@@ -96,6 +96,12 @@ tests = ["alice-lol/tests/law_max_min_ties.rs::parser_count_of_negative_zero_is_
 
 [[site]]
 file = "alice-lol/src/stdlib/hardsurface/mount.rs"
+fn = "profile_t_slot"
+calls = 1
+reason = "both operands are differences of the slot constants (PROFILE_SLOT_DEPTH - PROFILE_SLOT_NECK_DEPTH = 4.3 and half the cavity width minus half the opening = 2.5), positive finite numbers fixed at compile time: no zero and no NaN reaches the min, so its tie rules are never used"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/mount.rs"
 fn = "skadis_peg_compat"
 calls = 3
 tests = ["alice-lol/tests/law_max_min_ties.rs::peg_round_radius_with_negative_zero_and_nan_thickness"]
