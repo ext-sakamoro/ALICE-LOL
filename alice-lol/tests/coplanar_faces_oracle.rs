@@ -571,3 +571,14 @@ fn the_sbc_case_standoffs_stand_in_the_floor() {
     assert!(d(39.0 + wall_r, 24.5, -5.9) > 0.0, "air above the standoff {}", d(39.0 + wall_r, 24.5, -5.9));
     assert!(d(39.0, 24.5, -8.5) > 0.3, "the pilot hole {}", d(39.0, 24.5, -8.5));
 }
+
+#[test]
+fn the_spice_rack_lip_stands_in_the_base() {
+    // spice_rack(6, 48, 100) after the Z-up turn: base top at z = -5, the front lip (y in [31.5, 34.5])
+    // stood on it (1 seam over the lip's footprint)
+    let part = parse_lol("spice_rack(6, 48, 100)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(0.0, 33.0, -5.0) < -0.3, "the old seam is inside {}", d(0.0, 33.0, -5.0));
+    assert!(d(0.0, 30.0, -4.0) > 0.3, "air behind the lip above the base {}", d(0.0, 30.0, -4.0));
+}
