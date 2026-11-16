@@ -8,6 +8,11 @@
 //!   moved past the part's end, a header capped at 96 px and the hint hidden.
 //! - `selected-plank-390x844.json`: the part selected, its 36 px knob centred on the end of a 75 px
 //!   plank (covers 16-24 % of it).
+//! - `scroll-sheet-390x844.json`: `js/test/fixtures/scroll-sheet.html` (a list sheet scrolling over
+//!   a stage, a control bar below the stage), the fifth card half past the sheet's bottom edge: its
+//!   whole box reaches over the bar's controls, but it is in the sheet's scroller and they are not.
+//! - `scroll-sheet-overlap-390x844.json`: the same page with that card pulled up over the card
+//!   above it (class `overlap`).
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -233,4 +238,65 @@ fn a_probe_text_box_missing_a_side_is_refused_not_read_as_no_box() {
     // the same report with every side read: checked (and failing only on what it lacks)
     assert_eq!(whole_code, 1, "{whole_out}");
     assert!(whole_out.contains("text 1"), "{whole_out}");
+}
+
+#[test]
+fn a_card_scrolled_past_its_sheet_does_not_overlap_the_bar_and_cards_overlapping_do() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("frame-cli-scroll-sheet");
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("ui-frame.json");
+    std::fs::write(&cfg, r#"{"checks":["control-overlap"]}"#).unwrap();
+    let run = |f: &PathBuf| -> (i32, serde_json::Value) {
+        let (code, out, err) = check(&[
+            "--config",
+            cfg.to_str().unwrap(),
+            "--json",
+            f.to_str().unwrap(),
+        ]);
+        (
+            code,
+            serde_json::from_str(out.trim()).unwrap_or_else(|e| panic!("{e}: {out}{err}")),
+        )
+    };
+    // the measured page: 9 controls compared, none overlapping
+    let (code, v) = run(&fixture("scroll-sheet-390x844.json"));
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["compared"]["control-overlap"], 9, "{v}");
+    // the same report without the scroller of each item (as the collector wrote it before): the
+    // card's whole box is compared with the bar's controls, the false overlap this fixture pins
+    let raw = std::fs::read_to_string(fixture("scroll-sheet-390x844.json")).unwrap();
+    let mut no_scroller: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let mut removed = 0;
+    for item in no_scroller["items"].as_array_mut().unwrap() {
+        if item.as_object_mut().unwrap().remove("scroller").is_some() {
+            removed += 1;
+        }
+    }
+    assert!(removed > 0, "the fixture carries scrollers");
+    let stripped = dir.join("no-scroller.json");
+    std::fs::write(&stripped, no_scroller.to_string()).unwrap();
+    let (code, v) = run(&stripped);
+    assert_eq!(code, 1, "{v}");
+    assert!(
+        v["violations"].as_array().unwrap().iter().any(|x| {
+            x["ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i == "#cards>button:4")
+                && x["ids"].as_array().unwrap().iter().any(|i| i == "#back")
+        }),
+        "{v}"
+    );
+    // two cards overlapping in the sheet are caught
+    let (code, v) = run(&fixture("scroll-sheet-overlap-390x844.json"));
+    assert_eq!(code, 1, "{v}");
+    let viol = v["violations"].as_array().unwrap();
+    assert_eq!(viol.len(), 1, "{v}");
+    let ids = viol[0]["ids"].as_array().unwrap();
+    assert!(
+        ids.iter().any(|i| i == "#cards>button:3") && ids.iter().any(|i| i == "#cards>button:4"),
+        "{v}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
 }

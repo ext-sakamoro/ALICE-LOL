@@ -3,7 +3,8 @@
 // Runs in a Playwright page and returns one frame report (JSON) for the current viewport:
 // - DOM items: elements tagged `data-ui="<role>"`, elements matched by the project config's
 //   `roles` (selector -> role), and visible controls (button, a[href], input, select, textarea,
-//   [role=button], [tabindex]) as `control`.
+//   [role=button], [tabindex]) as `control`. Each carries `scroller`: the id of its nearest
+//   ancestor that scrolls (overflow auto / scroll), or null.
 // - probe items: what the page's canvas drew this frame, from `window.<probe>()` (default
 //   `__uiProbe`), each `{ id, role, rect: [x, y, w, h], hit?: [x, y, w, h], interactive?, layer?,
 //   text_px?, text_min_px?, text_min_reason?, text_expected?, text_lines?,
@@ -60,6 +61,19 @@ export async function collectFrame(page, cfg = {}) {
           }
         }
         return { left: x0, top: y0, width: Math.max(0, x1 - x0), height: Math.max(0, y1 - y0), right: x1, bottom: y1 };
+      };
+      // the nearest ancestor that scrolls (overflow auto / scroll), skipped as `shown` skips it for a
+      // fixed element: two controls in the same scroller move together, so their whole boxes are
+      // compared; against anything else each is compared where it shows (a card scrolled past a
+      // sheet's edge never reaches the controls below the sheet)
+      const scrollerOf = (el) => {
+        const fixed = getComputedStyle(el).position === 'fixed';
+        for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+          const s = getComputedStyle(a);
+          if (fixed && s.transform === 'none' && s.position !== 'fixed') continue;
+          if (isScroller(s)) return a;
+        }
+        return null;
       };
       const visible = (el) => {
         const s = getComputedStyle(el);
@@ -151,6 +165,7 @@ export async function collectFrame(page, cfg = {}) {
           rect: rectOf(r),
           hit: interactive ? rectOf(shown(el, true)) : null,
           interactive,
+          scroller: (() => { const sc = scrollerOf(el); return sc ? idOf(sc) : null; })(),
           text: textual
             ? { scroll_w: el.scrollWidth, client_w: el.clientWidth, scroll_h: el.scrollHeight, client_h: el.clientHeight }
             : null,

@@ -7,13 +7,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
-# names: frame lib tests (31 with serde) and the command tests (6)
+# names: frame lib tests (33 with serde) and the command tests (7)
 cargo test --locked -p alice-lol-ui --features serde --lib frame:: 2>&1 | tee "$log"
 lib=$(grep -E '^test result: ok\. [0-9]+ passed' "$log" | sed -E 's/^test result: ok\. ([0-9]+) passed.*/\1/' | awk '{s+=$1} END{print s+0}')
 cargo test --locked -p alice-lol-ui --features serde --test frame_cli 2>&1 | tee "$log"
 cli=$(grep -E '^test result: ok\. [0-9]+ passed' "$log" | sed -E 's/^test result: ok\. ([0-9]+) passed.*/\1/' | awk '{s+=$1} END{print s+0}')
-echo "frame law tests run: lib $lib (want >= 31), command $cli (want >= 6)"
-if [ "$lib" -lt 31 ] || [ "$cli" -lt 6 ]; then
+echo "frame law tests run: lib $lib (want >= 33), command $cli (want >= 7)"
+if [ "$lib" -lt 33 ] || [ "$cli" -lt 7 ]; then
   echo "error: fewer frame law tests ran than expected" >&2
   exit 1
 fi
