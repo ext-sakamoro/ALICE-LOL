@@ -215,3 +215,9 @@ file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
 fn = "open_shell"
 calls = 1
 reason = "min(r, wall) only caps the corner radius handed to rounded_plate, which caps it again with max(min(r, min_element(half)), 0) (tested in law_max_min_ties.rs: a -0 radius ends +0); the callers pass a constant radius or the spec's wall, so a NaN reaches the min only through a NaN spec and is dropped for the other operand under the Law and the platform alike"
+
+[[site]]
+file = "alice-lol/src/stdlib/hardsurface/pattern_sdf.rs"
+fn = "tape_dispenser"
+calls = 1
+reason = "the first operand is the constant TAPE_TEAR_LAND = 1.2, so an equal pair of zeros cannot occur and the zero sign is never chosen by the tie rule; a NaN wall_thickness gives the other operand (1.2) under the Law and the platform f32::min alike"
