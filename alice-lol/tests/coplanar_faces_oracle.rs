@@ -460,3 +460,22 @@ fn the_sock_divider_partitions_reach_into_the_floor_and_the_walls() {
     assert!(d(-82.5, 0.0, 45.4) < 0.0, "the partition up to the top {}", d(-82.5, 0.0, 45.4));
     assert!(d(-80.5, 0.0, 0.0) > 0.4, "the cell beside the partition {}", d(-80.5, 0.0, 0.0));
 }
+
+#[test]
+fn the_boss_array_bosses_stand_in_the_plate_and_keep_their_bores() {
+    // boss_array at its printed size (template_sizes.txt): the bosses stood on the plate's top face (a
+    // ring seam under each); each boss now reaches into the plate, the bore still ends at the plate's
+    // top (the plate fills the barrel's lower part) and the plate's underside is untouched
+    let call = template_sizes().into_iter().find(|(n, _)| n == "boss_array@size").expect("boss_array row").1;
+    let part = parse_lol(&call).unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{call}: {:?}", coplanar_faces(&part).pairs);
+    // m3_2x2: plate 2 thick (z in [-1, 1] after the Z-up turn), bosses 8 tall above it at (+-10, +-10)
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(10.0, 10.0, 5.0) > 0.3, "the bore is open {}", d(10.0, 10.0, 5.0));
+    assert!(d(10.0, 10.0, 1.05) > 0.0, "the bore reaches the plate's top {}", d(10.0, 10.0, 1.05));
+    assert!(d(10.0, 10.0, 0.5) < -0.3, "the plate under the bore is solid {}", d(10.0, 10.0, 0.5));
+    assert!(d(0.0, 0.0, -1.0).abs() < 1e-4, "the plate's underside {}", d(0.0, 0.0, -1.0));
+    assert!(d(0.0, 0.0, 1.0).abs() < 1e-4, "the plate's top between the bosses {}", d(0.0, 0.0, 1.0));
+    let m = coplanar_faces(&part);
+    assert!(m.ops_not_analysed == 0, "{call}: {} operations not analysed", m.ops_not_analysed);
+}
