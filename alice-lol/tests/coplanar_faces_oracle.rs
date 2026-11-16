@@ -545,3 +545,15 @@ fn the_t_slot_cutter_opening_reaches_into_its_chamber() {
     assert!(d(-top - 1.0, T_SLOT_2020_INNER_WIDTH * 0.5).abs() < 1e-4, "the chamber's side");
     assert!(d(0.0, (T_SLOT_2020_OPENING_WIDTH + T_SLOT_2020_INNER_WIDTH) * 0.25) > 0.5, "beside the opening");
 }
+
+#[test]
+fn the_tape_dispenser_back_wall_reaches_into_the_base_and_the_hood() {
+    // tape_dispenser(76, 50, 3) after the Z-up turn: base z in [0, 3], back wall from the base's top to
+    // the hood's underside; it stood on the base and met the hood face to face (4 seams)
+    let part = parse_lol("tape_dispenser(76, 50, 3)").unwrap();
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let d = |x: f32, y: f32, z: f32| eval(&part, Vec3::new(x, y, z));
+    assert!(d(0.0, 0.0, 0.0).abs() < 1e-4, "the base's underside {}", d(0.0, 0.0, 0.0));
+    assert!(d(0.0, 0.0, 1.5) < -1.0, "the base {}", d(0.0, 0.0, 1.5));
+    assert!(d(40.0, 0.0, 20.0) > 1.0, "the roll's space {}", d(40.0, 0.0, 20.0));
+}
