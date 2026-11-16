@@ -47,8 +47,11 @@ mod common;
 mod seam_grid;
 use seam_grid::grid_points;
 use alice_lol::runtime_parser::parse_lol;
-use alice_lol::stdlib::hardsurface::fastener::{counterbore, counterbore_depth, MetricSize};
-use alice_lol::stdlib::hardsurface::joint::{snap_fit_cantilever, SnapFitCantileverSpec};
+use alice_lol::stdlib::hardsurface::fastener::{bolt, counterbore, counterbore_depth, MetricSize};
+use alice_lol::stdlib::hardsurface::joint::{
+    snap_fit_cantilever, t_slot_2020, SnapFitCantileverSpec, T_SLOT_2020_INNER_DEPTH, T_SLOT_2020_INNER_WIDTH,
+    T_SLOT_2020_OPENING_DEPTH, T_SLOT_2020_OPENING_WIDTH,
+};
 use alice_lol::stdlib::hardsurface::mount::profile_2020;
 use alice_lol::stdlib::hardsurface::pattern_sdf::{pen_cup, phone_stand, PenCupSpec, PhoneStandSpec};
 use alice_lol::stdlib::hardsurface::skadis_sdf::{
@@ -507,4 +510,38 @@ fn the_boss_array_bosses_stand_in_the_plate_and_keep_their_bores() {
     assert!(d(0.0, 0.0, 1.0).abs() < 1e-4, "the plate's top between the bosses {}", d(0.0, 0.0, 1.0));
     let m = coplanar_faces(&part);
     assert!(m.ops_not_analysed == 0, "{call}: {} operations not analysed", m.ops_not_analysed);
+}
+
+#[test]
+fn the_bolt_shank_reaches_into_its_head() {
+    // M4 x 20: shank y in [-10, 10] radius 2, socket head 7 across on top (y in [10, 10 + h]). The head
+    // stood on the shank's end (a seam over the shank's disc)
+    let (size, len) = (MetricSize::M4, 20.0_f32);
+    let b = bolt(size, len);
+    assert!(coplanar_faces(&b).pairs.is_empty(), "{:?}", coplanar_faces(&b).pairs);
+    let (h, hr, sr) = (size.head_height_socket(), size.head_diameter_socket() * 0.5, size.nominal_diameter() * 0.5);
+    let d = |x: f32, y: f32| eval(&b, Vec3::new(x, y, 0.0));
+    assert!(d(0.0, len * 0.5) < -0.5, "the old seam is inside {}", d(0.0, len * 0.5));
+    assert!(d(0.0, len * 0.5 + h).abs() < 1e-4, "head top {}", d(0.0, len * 0.5 + h));
+    assert!(d(0.0, -len * 0.5).abs() < 1e-4, "shank end {}", d(0.0, -len * 0.5));
+    assert!(d(sr, 0.0).abs() < 1e-4, "shank side {}", d(sr, 0.0));
+    assert!(d(hr, len * 0.5 + h * 0.5).abs() < 1e-4, "head side {}", d(hr, len * 0.5 + h * 0.5));
+    assert!(d((sr + hr) * 0.5, len * 0.5 - 0.1) > 0.05, "air under the head's rim {}", d((sr + hr) * 0.5, len * 0.5 - 0.1));
+}
+
+#[test]
+fn the_t_slot_cutter_opening_reaches_into_its_chamber() {
+    // the T-slot cutter: opening 6 wide, x in [-2.5, 2.5]; chamber 11 wide, x in [-8.5, -2.5]. They met
+    // at x = -2.5 (a seam inside the cutter, the part's air once cut)
+    let c = t_slot_2020(100.0);
+    assert!(coplanar_faces(&c).pairs.is_empty(), "{:?}", coplanar_faces(&c).pairs);
+    let top = T_SLOT_2020_OPENING_DEPTH * 0.5;
+    let floor = top - T_SLOT_2020_OPENING_DEPTH - T_SLOT_2020_INNER_DEPTH;
+    let d = |x: f32, z: f32| eval(&c, Vec3::new(x, 0.0, z));
+    assert!(d(-top, 0.0) < -0.5, "the old seam is inside {}", d(-top, 0.0));
+    assert!(d(top, 0.0).abs() < 1e-4, "the mouth's face {}", d(top, 0.0));
+    assert!(d(floor, 0.0).abs() < 1e-4, "the chamber's floor {}", d(floor, 0.0));
+    assert!(d(0.0, T_SLOT_2020_OPENING_WIDTH * 0.5).abs() < 1e-4, "the opening's side");
+    assert!(d(-top - 1.0, T_SLOT_2020_INNER_WIDTH * 0.5).abs() < 1e-4, "the chamber's side");
+    assert!(d(0.0, (T_SLOT_2020_OPENING_WIDTH + T_SLOT_2020_INNER_WIDTH) * 0.25) > 0.5, "beside the opening");
 }
