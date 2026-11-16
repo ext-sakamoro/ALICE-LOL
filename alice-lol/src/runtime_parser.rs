@@ -2692,7 +2692,7 @@ impl<'a> Parser<'a> {
                     cans_per_row: 6,
                     wall_thickness: 3.0,
                     shelf_thickness: 3.0,
-                    front_lip_height: 15.0,
+                    front_lip_height: 30.0,
                 };
                 Ok(crate::stdlib::hardsurface::pattern_sdf::can_rack(&spec))
             }

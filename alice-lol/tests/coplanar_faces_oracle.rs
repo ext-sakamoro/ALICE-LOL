@@ -1103,64 +1103,107 @@ fn material_runs(part: &SdfNode, x: f32, y: f32, z0: f32, z1: f32, dz: f32) -> V
     runs
 }
 
+/// The can rack as a gravity feed, for every printed preset: cans go in through a slot in the back wall,
+/// roll down the tilted shelf and stop against the front lip; the front opening above the lip lets a can
+/// out; nothing leaves the outer box and the bottom is flat.
+///
+/// oracle (closed form of the stated design, can diameter D, lip L = 30, shelf t = 3, wall w = 3, gap
+/// c = 5, tilt a, n tiers of 6 cans): tier pitch D + L + t + c; shelf depth 6 (D + 2); outer box
+/// (D + 8 + 2w) x (6 (D + 2) + 2w) x (n pitch + w + 6 (D + 2) tan a); back slots D + c tall
 #[test]
 fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
-    // can_rack(2, 66, 10) after the Z-up turn: outer box x +-40, y +-207 (depth), z +-82.5; two tiers of
-    // shelves 3 thick tilted 10 degrees, 81 apart, for 66 mm cans, a 15 mm lip at the low (front) end.
-    // The shelves used to stick 32.4 mm out of the bottom and through the back and front walls, and the
-    // lip sat at the shelf's middle height, 35 mm above the shelf's front end
-    let part = parse_lol("can_rack(2, 66, 10)").unwrap();
-    let b = compute_tight_aabb_with_config(&part, &TightAabbConfig::preset_large());
-    // nothing outside the outer box, and the bottom is flat at z = -82.5 (prints without support there)
-    for (got, lim, what) in [
-        (-b.min.x, 40.0, "x-"),
-        (b.max.x, 40.0, "x+"),
-        (-b.min.y, 207.0, "y-"),
-        (b.max.y, 207.0, "y+"),
-        (b.max.z, 82.5, "z+"),
-    ] {
-        assert!(got <= lim + 0.01, "{what}: {got} beyond {lim}");
+    let mut compared = 0;
+    for (n, dia, tilt) in [(2u32, 66.0f32, 10.0f32), (3, 55.0, 12.0)] {
+        let what = format!("can_rack({n}, {dia}, {tilt})");
+        let part = parse_lol(&what).unwrap();
+        let b = compute_tight_aabb_with_config(&part, &TightAabbConfig::preset_large());
+        let (lip, t, w, c) = (30.0f32, 3.0f32, 3.0f32, 5.0f32);
+        let pitch = dia + lip + t + c;
+        let depth = 6.0 * (dia + 2.0);
+        let (hx, hy) = ((dia + 8.0 + 2.0 * w) * 0.5, (depth + 2.0 * w) * 0.5);
+        let hz = (n as f32).mul_add(pitch, w) + depth * tilt.to_radians().tan();
+        let hz = hz * 0.5;
+        // nothing outside the outer box, the bottom flat at -hz (prints without support there)
+        for (got, lim, side) in [
+            (-b.min.x, hx, "x-"),
+            (b.max.x, hx, "x+"),
+            (-b.min.y, hy, "y-"),
+            (b.max.y, hy, "y+"),
+            (b.max.z, hz, "z+"),
+        ] {
+            assert!(got <= lim + 0.01, "{what} {side}: {got} beyond {lim}");
+        }
+        assert!(
+            (b.min.z + hz).abs() < 0.01,
+            "{what}: bottom at {} (want {})",
+            b.min.z,
+            -hz
+        );
+        // the material runs up a vertical line at x = 0 and depth y: run i's top is tier i's shelf top
+        let runs = |y: f32| material_runs(&part, 0.0, y, -hz - 1.0, hz + 1.0, 0.01);
+        let span = depth * 0.5 - 4.0;
+        let (ra, rb) = (runs(-span), runs(span));
+        assert!(
+            ra.len() >= n as usize && rb.len() >= n as usize,
+            "{what}: {ra:?} / {rb:?}"
+        );
+        // the low end of the shelves is the front
+        let front = if ra[0].1 < rb[0].1 { -1.0 } else { 1.0 };
+        for i in 0..n as usize {
+            let deg = ((ra[i].1 - rb[i].1).abs() / (2.0 * span))
+                .atan()
+                .to_degrees();
+            assert!((deg - tilt).abs() < 0.05, "{what} tier {i} tilt {deg}");
+            compared += 1;
+        }
+        // at the front, inside the lip: the lip rises >= L above the shelf top, and above the lip the
+        // opening to the next tier's underside (or the box top for the top tier, open) lets a can out
+        let at_lip = runs(front * (hy - w * 0.5));
+        let near = runs(front * (hy - w - 2.0));
+        for i in 0..n as usize {
+            let shelf_top = near[i].1;
+            let lip_run = at_lip
+                .iter()
+                .find(|r| r.0 <= shelf_top && r.1 > shelf_top)
+                .unwrap_or_else(|| panic!("{what} tier {i}: no lip at {shelf_top}: {at_lip:?}"));
+            assert!(
+                lip_run.1 - shelf_top >= lip - 0.5,
+                "{what} tier {i}: lip {lip_run:?} over {shelf_top}"
+            );
+            if i + 1 < n as usize {
+                let opening = near[i + 1].0 - lip_run.1;
+                assert!(
+                    opening >= dia + 4.0,
+                    "{what} tier {i}: front opening {opening} for a {dia} can"
+                );
+            }
+            compared += 1;
+        }
+        // in the back wall: above each tier's back end, an air run at least D + 4 tall (the loading slot)
+        let back = runs(-front * (hy - w * 0.5));
+        let near_back = runs(-front * (hy - w - 2.0));
+        for i in 0..n as usize {
+            let shelf_top = near_back[i].1;
+            let from = shelf_top + 0.5;
+            // the first material above the shelf top in the back wall (a missing slot puts it right there)
+            let above = back
+                .iter()
+                .find(|r| r.1 > from)
+                .map_or(hz, |r| r.0.max(from));
+            assert!(
+                above - shelf_top >= dia + 4.0,
+                "{what} tier {i}: back slot {} from {shelf_top}",
+                above - shelf_top
+            );
+            compared += 1;
+        }
+        assert!(
+            coplanar_faces(&part).pairs.is_empty(),
+            "{what}: {:?}",
+            coplanar_faces(&part).pairs
+        );
     }
-    assert!((b.min.z + 82.5).abs() < 0.01, "bottom at {}", b.min.z);
-    // the shelves' top at two depths (x = 0, away from the walls): the first two material runs above the
-    // bottom are tier 0 and tier 1 (the second run's start is tier 1's underside)
-    let tops = |y: f32| -> (f32, f32, f32) {
-        let r = material_runs(&part, 0.0, y, -83.0, 83.0, 0.01);
-        assert!(r.len() >= 2, "at y = {y}: {r:?}");
-        (r[0].1, r[1].0, r[1].1)
-    };
-    let (a0, _, a1) = tops(-100.0);
-    let (c0, c1_under, _) = tops(0.0);
-    let (b0, _, b1) = tops(100.0);
-    // the tilt is unchanged: 10 degrees on both tiers
-    for (lo, hi, tier) in [(a0, b0, 0), (a1, b1, 1)] {
-        let deg = ((lo - hi).abs() / 200.0).atan().to_degrees();
-        assert!((deg - 10.0).abs() < 0.05, "tier {tier} tilt {deg}");
-    }
-    // a 66 mm can fits between the tiers with clearance: the gap perpendicular to the shelves is at
-    // least 66 + 5
-    let gap = (c1_under - c0) * 10.0_f32.to_radians().cos();
-    assert!(gap >= 71.0, "perpendicular gap between the tiers {gap}");
-    // the low end is the front: there a lip rises 15 above the shelf's top, right at the shelf's end, so
-    // a can rolling down rests against it (no step or gap between the shelf and the lip)
-    let front = if a0 < b0 { -1.0 } else { 1.0 };
-    let shelf_top_near_lip = tops(front * 203.0).0;
-    let lip = material_runs(&part, 0.0, front * 205.5, -83.0, 83.0, 0.01);
-    assert!(
-        lip[0].1 - shelf_top_near_lip >= 14.5,
-        "lip {:?} over the shelf top {shelf_top_near_lip}",
-        lip[0]
-    );
-    assert!(
-        lip[0].0 <= shelf_top_near_lip - 2.0,
-        "the lip reaches down past the shelf's top: {:?}",
-        lip[0]
-    );
-    assert!(
-        coplanar_faces(&part).pairs.is_empty(),
-        "{:?}",
-        coplanar_faces(&part).pairs
-    );
+    assert!(compared >= 15, "only {compared} comparisons");
 }
 
 /// Below the host's top face, the part is exactly its host (`host` < 0 there): the piece attached on top
