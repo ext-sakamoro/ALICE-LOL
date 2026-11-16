@@ -18,7 +18,10 @@
 //! (template, kind, side, normal, overlap polygon), and each is checked on today's tree from the field itself.
 //! The side is read from the tree before the fix (the field just off the pair's plane, both ways): a
 //! sheet that lay inside material must now be material, one that lay in the part's air (a cut's mouth,
-//! a seam inside a cutter) must now be air. A former material sheet must now be material (the field's maximum over the polygon, sampled at least
+//! a seam inside a cutter) must now be air. The side is recorded once, from the tree before the fix; a
+//! fix that legitimately moves a pair to the other side fails here and is re-recorded by hand in the
+//! data file with its reason on a `#` line (never regenerated automatically, which would accept any
+//! change). A former material sheet must now be material (the field's maximum over the polygon, sampled at least
 //! `2δ` in from its edges, is `≤ −δ`, and the inside test at its centre answers inside, below
 //! `-SURFACE_HIT_EPS`); a former flush cut or contact must now be air (minimum `≥ +δ`). `δ` is `1e-3`
 //! of the part's extent (a quarter of the polygon's inradius for a strip thinner than that, never below
@@ -36,6 +39,7 @@
 #[path = "common/mod.rs"]
 mod common;
 use alice_lol::runtime_parser::parse_lol;
+use alice_lol::stdlib::hardsurface::fastener::{counterbore, counterbore_depth, MetricSize};
 use alice_lol::stdlib::hardsurface::mount::profile_2020;
 use alice_lol::stdlib::hardsurface::skadis_sdf::{
     skadis_peg_and_shoulder, BOARD_T, PEG_BLADE_T, SHOULDER_DEPTH, SHOULDER_H,
@@ -285,4 +289,23 @@ fn the_profile_slot_has_no_membrane_and_keeps_its_section() {
     assert!(d(7.0, 4.6) < -1e-3, "rib {}", d(7.0, 4.6));
     // and the analysis finds no pair in it
     assert!(coplanar_faces(&p).pairs.is_empty(), "{:?}", coplanar_faces(&p).pairs);
+}
+
+#[test]
+fn a_counterbore_pocket_reaches_past_the_face_and_keeps_its_seat() {
+    // M4 counterbore in a 5 mm plate (faces at y = ±2.5): the head pocket's top lay exactly on the
+    // plate's face (a flush cut: a membrane over the pocket); it now reaches CAVITY_PUNCH_MARGIN past it
+    let (size, t) = (MetricSize::M4, 5.0_f32);
+    let plate = SdfNode::box3d(30.0, t, 30.0);
+    let part = plate.subtract(counterbore(size, t));
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let head_r = size.head_diameter_socket() * 0.5;
+    let seat = t * 0.5 - counterbore_depth(size, t); // the pocket's floor, where the head bears
+    let r = 0.5 * (head_r + size.nominal_diameter() * 0.5); // between the screw hole and the head's rim
+    let d = |x: f32, y: f32| eval(&part, Vec3::new(x, y, 0.0));
+    assert!(d(r, t * 0.5) > 1e-3, "pocket mouth at the face {}", d(r, t * 0.5));
+    assert!(d(r, seat + 0.01) > 0.0, "pocket just above its floor {}", d(r, seat + 0.01));
+    assert!(d(r, seat - 0.01) < 0.0, "floor just below the seat {}", d(r, seat - 0.01));
+    assert!(d(0.0, -t * 0.5) > 1e-3, "through hole open at the bottom {}", d(0.0, -t * 0.5));
+    assert!(d(head_r + 1.0, 0.0) < -0.5, "plate beyond the head {}", d(head_r + 1.0, 0.0));
 }
