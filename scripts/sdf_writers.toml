@@ -17,6 +17,16 @@ nightly = "nightly-2026-09-26"
 # writer of alice-sdf's examples/ need no entry: the run reads them from alice-sdf, and an entry copying one fails
 
 [[outside]]
+key = "src/io/asdf.rs::save_asdf"
+kind = "not-built"
+reason = "the asdf writers are behind alice-sdf's asdf feature, which alice-lol does not enable"
+
+[[outside]]
+key = "src/io/asdf.rs::save_asdf_with_provenance"
+kind = "not-built"
+reason = "the asdf writers are behind alice-sdf's asdf feature, which alice-lol does not enable"
+
+[[outside]]
 key = "src/svo/streaming.rs::to_bytes"
 kind = "not-built"
 reason = "the svo module is behind alice-sdf's svo feature, which alice-lol does not enable"

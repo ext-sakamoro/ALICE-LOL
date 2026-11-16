@@ -8,8 +8,6 @@ disallowed-methods = [
     { path = "alice_sdf::io::AbmHeader::to_bytes", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
     { path = "alice_sdf::io::export_alembic", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
     { path = "alice_sdf::io::export_alembic_with_provenance", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
-    { path = "alice_sdf::io::save_asdf", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
-    { path = "alice_sdf::io::save_asdf_with_provenance", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
     { path = "alice_sdf::io::AsdfHeader::to_bytes", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
     { path = "alice_sdf::io::export_fbx", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },
     { path = "alice_sdf::io::export_fbx_with_provenance", reason = "an alice-sdf writer without the LOL producer identifier (ALICE-Law G8)" },

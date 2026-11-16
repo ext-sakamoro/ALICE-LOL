@@ -281,8 +281,6 @@ pub fn sdf_writers() {
     let _ = alice_sdf::io::AbmHeader::to_bytes(todo!());
     let _ = alice_sdf::io::export_alembic(todo!(), "x", todo!());
     let _ = alice_sdf::io::export_alembic_with_provenance(todo!(), "x", todo!(), todo!());
-    let _ = alice_sdf::io::save_asdf(todo!(), "x");
-    let _ = alice_sdf::io::save_asdf_with_provenance(todo!(), "x", todo!());
     let _ = alice_sdf::io::AsdfHeader::to_bytes(todo!());
     let _ = alice_sdf::io::export_fbx(todo!(), "x", todo!(), todo!());
     let _ = alice_sdf::io::export_fbx_with_provenance(todo!(), "x", todo!(), todo!(), todo!());
