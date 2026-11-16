@@ -7273,8 +7273,11 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
         1.0,
         crate::raw_minmax::Reason::NonzeroConst,
     );
-    let boss_template = boss(screw_nominal, boss_body_height);
-    let boss_y = outer_hy + boss_body_height * 0.5;
+    // boss を板の上面に載せるだけだと底の輪が面だけで接する継ぎ目になるので、板の厚みの半分だけ板の中へ
+    // 下ろす (下ろした筒とその穴は板の中にあり、板が埋めるので、ねじ穴の底は板の上面のまま)
+    let into_plate = outer_hy;
+    let boss_template = boss(screw_nominal, boss_body_height + into_plate);
+    let boss_y = outer_hy + (boss_body_height - into_plate) * 0.5;
 
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
