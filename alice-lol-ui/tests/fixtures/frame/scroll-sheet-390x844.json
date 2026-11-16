@@ -1,0 +1,331 @@
+{
+ "version": 1,
+ "viewport": {
+  "w": 390,
+  "h": 844,
+  "dpr": 1,
+  "coarse": true,
+  "scrolls_y": false,
+  "screen_w": 390
+ },
+ "probe": "absent",
+ "items": [
+  {
+   "id": "#cards>button:0",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    32,
+    65,
+    326,
+    140
+   ],
+   "hit": [
+    32,
+    65,
+    326,
+    140
+   ],
+   "interactive": true,
+   "scroller": "#select>div:0",
+   "text": {
+    "scroll_w": 322,
+    "client_w": 322,
+    "scroll_h": 136,
+    "client_h": 136
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 16,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#cards>button:1",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    32,
+    215,
+    326,
+    140
+   ],
+   "hit": [
+    32,
+    215,
+    326,
+    140
+   ],
+   "interactive": true,
+   "scroller": "#select>div:0",
+   "text": {
+    "scroll_w": 322,
+    "client_w": 322,
+    "scroll_h": 136,
+    "client_h": 136
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 16,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#cards>button:2",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    32,
+    365,
+    326,
+    140
+   ],
+   "hit": [
+    32,
+    365,
+    326,
+    140
+   ],
+   "interactive": true,
+   "scroller": "#select>div:0",
+   "text": {
+    "scroll_w": 322,
+    "client_w": 322,
+    "scroll_h": 136,
+    "client_h": 136
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 16,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#cards>button:3",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    32,
+    515,
+    326,
+    140
+   ],
+   "hit": [
+    32,
+    515,
+    326,
+    140
+   ],
+   "interactive": true,
+   "scroller": "#select>div:0",
+   "text": {
+    "scroll_w": 322,
+    "client_w": 322,
+    "scroll_h": 136,
+    "client_h": 136
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 16,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#cards>button:4",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    32,
+    665,
+    326,
+    99
+   ],
+   "hit": [
+    32,
+    665,
+    326,
+    140
+   ],
+   "interactive": true,
+   "scroller": "#select>div:0",
+   "text": {
+    "scroll_w": 322,
+    "client_w": 322,
+    "scroll_h": 136,
+    "client_h": 136
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 16,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#back",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    8,
+    788,
+    48,
+    48
+   ],
+   "hit": [
+    8,
+    788,
+    48,
+    48
+   ],
+   "interactive": true,
+   "scroller": null,
+   "text": {
+    "scroll_w": 44,
+    "client_w": 44,
+    "scroll_h": 44,
+    "client_h": 44
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 13.3333,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#play",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    64,
+    788,
+    48,
+    48
+   ],
+   "hit": [
+    64,
+    788,
+    48,
+    48
+   ],
+   "interactive": true,
+   "scroller": null,
+   "text": {
+    "scroll_w": 44,
+    "client_w": 44,
+    "scroll_h": 44,
+    "client_h": 44
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 13.3333,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#scrub",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    122,
+    800,
+    202,
+    24
+   ],
+   "hit": [
+    122,
+    800,
+    202,
+    24
+   ],
+   "interactive": true,
+   "scroller": null,
+   "text": null,
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false
+  },
+  {
+   "id": "#fwd",
+   "source": "dom",
+   "role": "control",
+   "rect": [
+    334,
+    788,
+    48,
+    48
+   ],
+   "hit": [
+    334,
+    788,
+    48,
+    48
+   ],
+   "interactive": true,
+   "scroller": null,
+   "text": {
+    "scroll_w": 44,
+    "client_w": 44,
+    "scroll_h": 44,
+    "client_h": 44
+   },
+   "layer": null,
+   "in_overlay": false,
+   "pinned": false,
+   "inline_text": false,
+   "text_px": 13.3333,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  },
+  {
+   "id": "#select>div:0>h2:0",
+   "source": "dom",
+   "role": "text",
+   "rect": [
+    32,
+    32,
+    326,
+    21
+   ],
+   "hit": null,
+   "interactive": false,
+   "text": null,
+   "layer": null,
+   "text_px": 18,
+   "text_min_px": null,
+   "text_min_reason": null,
+   "text_expected": false,
+   "text_lines": null
+  }
+ ],
+ "samples": []
+}

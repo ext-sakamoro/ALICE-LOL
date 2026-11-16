@@ -119,3 +119,24 @@ test('a probe text box missing a side is kept as not-a-number, not dropped', asy
   assert.equal(t.scroll_w, 46);
   assert.ok(Number.isNaN(t.scroll_h) && Number.isNaN(t.client_h), JSON.stringify(t));
 });
+
+test('each item names the scroller it moves with; controls outside any scroller name none', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  await page.goto(pathToFileURL(path.join(here, 'fixtures', 'scroll-sheet.html')).href);
+  const r = await collectFrame(page, {});
+  await ctx.close();
+  const cards = r.items.filter((i) => i.id.startsWith('#cards>button:'));
+  assert.ok(cards.length >= 4, `cards reported: ${cards.length}`);
+  const sheet = cards[0].scroller;
+  assert.ok(sheet, 'a card has a scroller');
+  for (const c of cards) assert.equal(c.scroller, sheet, c.id);
+  for (const id of ['#back', '#play', '#scrub', '#fwd']) {
+    const it = r.items.find((i) => i.id === id);
+    assert.ok(it, `item ${id}`);
+    assert.equal(it.scroller, null, id);
+  }
+  // the card half past the sheet's edge: shown cut at the edge, its target its whole box
+  const half = cards.find((c) => c.hit[3] > c.rect[3] + 1);
+  assert.ok(half, 'a card past the edge');
+});

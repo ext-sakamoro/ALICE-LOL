@@ -18,7 +18,10 @@
 //! - [`FrameCheck::ControlCover`]: a control or `panel` outside an overlay covers at most
 //!   [`FrameLaw::max_control_cover`] of the area of any `subject` or `trajectory` item (a sheet
 //!   is meant to cover the scene, so its buttons are not counted).
-//! - [`FrameCheck::ControlOverlap`]: no two interactive hit rects intersect.
+//! - [`FrameCheck::ControlOverlap`]: no two interactive items intersect. Two items in the same
+//!   scroller ([`FrameItem::scroller`]) move together, so their hit rects are compared (a control
+//!   half scrolled out is reached by scrolling); any other pair is compared where each shows (its
+//!   drawn rect), since a control scrolled past its panel's edge never reaches a control outside it.
 //! - [`FrameCheck::Text`]: no text item (`readout`, `hint`, `control` with text) overflows its box,
 //!   and no two text items intersect unless one contains the other. A canvas reports a drawn
 //!   label's box through its probe ([`FrameItem::text`]), read as a DOM element's.
@@ -123,6 +126,11 @@ pub struct FrameItem {
     /// by the line height of the text around it)
     #[cfg_attr(feature = "serde", serde(default))]
     pub inline_text: bool,
+    /// the nearest ancestor that scrolls (overflow auto / scroll), by its id; `None` outside any.
+    /// Two controls with the same scroller are compared by their hit rects, any other pair by the
+    /// part each shows ([`FrameCheck::ControlOverlap`])
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub scroller: Option<String>,
     /// the rendered text height (font size, em) in layout CSS px, for an item drawing its own text:
     /// a DOM element's computed font size, or what a canvas reports for its text
     #[cfg_attr(feature = "serde", serde(default))]
@@ -807,20 +815,28 @@ fn layer_order(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
     report.samples.len()
 }
 
+/// interactive items pairwise: in the same scroller (both outside any included) by their hit
+/// rects, which move together; otherwise by the part each shows, its drawn rect (a control scrolled
+/// past its panel's edge is never where its hit rect puts it relative to a control outside the
+/// panel); compared = the interactive items with a hit rect
 fn control_overlap(report: &FrameReport, out: &mut Vec<FrameViolation>) -> usize {
-    let hits: Vec<(&str, Rect)> = report
+    let hits: Vec<&FrameItem> = report
         .items
         .iter()
-        .filter(|i| i.interactive)
-        .filter_map(|i| i.hit.map(|h| (i.id.as_str(), h)))
+        .filter(|i| i.interactive && i.hit.is_some())
         .collect();
-    for (k, (a, ra)) in hits.iter().enumerate() {
-        for (b, rb) in &hits[k + 1..] {
-            let area = intersection_area(*ra, *rb);
-            if area > EDGE_EPS * EDGE_EPS && !contains(*ra, *rb) && !contains(*rb, *ra) {
+    for (k, a) in hits.iter().enumerate() {
+        for b in &hits[k + 1..] {
+            let (ra, rb) = match (a.hit, b.hit) {
+                (Some(ha), Some(hb)) if a.scroller == b.scroller => (ha, hb),
+                _ => (a.rect, b.rect),
+            };
+            let (a, b) = (a.id.as_str(), b.id.as_str());
+            let area = intersection_area(ra, rb);
+            if area > EDGE_EPS * EDGE_EPS && !contains(ra, rb) && !contains(rb, ra) {
                 out.push(FrameViolation::ControlsOverlap {
-                    a: (*a).into(),
-                    b: (*b).into(),
+                    a: a.into(),
+                    b: b.into(),
                     area,
                 });
             }
@@ -1101,6 +1117,7 @@ mod tests {
             in_overlay: false,
             pinned: false,
             inline_text: false,
+            scroller: None,
             text_px: None,
             text_min_px: None,
             text_min_reason: None,
@@ -1351,6 +1368,68 @@ mod tests {
                 b: "#b".into(),
                 area: 500.0
             }]
+        );
+    }
+
+    /// a control in a scrolling sheet: its hit rect is its whole box, its drawn rect the part the
+    /// sheet shows (the sheet ends at y 400)
+    fn in_sheet(id: &str, whole: Rect, shown: Rect) -> FrameItem {
+        FrameItem {
+            rect: shown,
+            hit: Some(whole),
+            scroller: Some("#sheet".into()),
+            ..item(id, "control", shown, true)
+        }
+    }
+
+    #[test]
+    fn a_control_scrolled_past_its_sheet_is_compared_where_it_shows() {
+        // a card half past the sheet's bottom edge (y 380-440, shown 380-400) and a timeline button
+        // below the sheet (y 410-450): the card's whole box crosses the button, but scrolled into
+        // view the card stays inside the sheet, so they never overlap
+        let card = in_sheet(
+            "#cards>button:3",
+            [20.0, 380.0, 200.0, 60.0],
+            [20.0, 380.0, 200.0, 20.0],
+        );
+        let scrub = item("#scrub", "control", [0.0, 410.0, 390.0, 40.0], true);
+        let v = only(FrameCheck::ControlOverlap)
+            .check(&report(vec![card.clone(), scrub.clone()], vec![]));
+        assert!(v.passed(), "{:?}", v.violations);
+        assert_eq!(v.compared, vec![(FrameCheck::ControlOverlap, 2)]);
+        // where the card shows over the button it is caught
+        let over = item("#over", "control", [0.0, 390.0, 390.0, 40.0], true);
+        let v = only(FrameCheck::ControlOverlap).check(&report(vec![card, over], vec![]));
+        assert!(
+            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if *area == 2000.0),
+            "{:?}",
+            v.violations
+        );
+        // a button in another scroller is compared where each shows too
+        let other = FrameItem {
+            scroller: Some("#list".into()),
+            ..scrub
+        };
+        let card = in_sheet(
+            "#cards>button:3",
+            [20.0, 380.0, 200.0, 60.0],
+            [20.0, 380.0, 200.0, 20.0],
+        );
+        let v = only(FrameCheck::ControlOverlap).check(&report(vec![card, other], vec![]));
+        assert!(v.passed(), "{:?}", v.violations);
+    }
+
+    #[test]
+    fn two_controls_in_one_scroller_are_compared_by_their_whole_boxes() {
+        // both cards past the sheet's edge, overlapping only below it: scrolled into view they
+        // overlap, so the shared scroller compares their whole boxes
+        let a = in_sheet("#a", [20.0, 390.0, 100.0, 60.0], [20.0, 390.0, 100.0, 10.0]);
+        let b = in_sheet("#b", [20.0, 420.0, 100.0, 60.0], [0.0, 0.0, 0.0, 0.0]);
+        let v = only(FrameCheck::ControlOverlap).check(&report(vec![a, b], vec![]));
+        assert!(
+            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if *area == 3000.0),
+            "{:?}",
+            v.violations
         );
     }
 
