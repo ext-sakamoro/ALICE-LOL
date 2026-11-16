@@ -1401,7 +1401,7 @@ mod tests {
         let over = item("#over", "control", [0.0, 390.0, 390.0, 40.0], true);
         let v = only(FrameCheck::ControlOverlap).check(&report(vec![card, over], vec![]));
         assert!(
-            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if *area == 2000.0),
+            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if area.to_bits() == 2000.0f32.to_bits()),
             "{:?}",
             v.violations
         );
@@ -1427,7 +1427,7 @@ mod tests {
         let b = in_sheet("#b", [20.0, 420.0, 100.0, 60.0], [0.0, 0.0, 0.0, 0.0]);
         let v = only(FrameCheck::ControlOverlap).check(&report(vec![a, b], vec![]));
         assert!(
-            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if *area == 3000.0),
+            matches!(&v.violations[..], [FrameViolation::ControlsOverlap { area, .. }] if area.to_bits() == 3000.0f32.to_bits()),
             "{:?}",
             v.violations
         );
