@@ -84,20 +84,32 @@ pub const SHOULDER_H: f32 = 8.0;
 /// - `hook_width`: hook 部の Z 方向厚 (mm、通常 `hook_l/j=8mm、hook_s=5mm`)
 #[must_use]
 pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
-    // Blade (X = -BOARD_T - SHOULDER_DEPTH / 2 .. 0): it reaches half the shoulder's depth back into the
+    skadis_peg_and_shoulder_into(hook_width, 0.0)
+}
+
+/// [`skadis_peg_and_shoulder`] whose blade also reaches `body_depth / 2` past its tip (X > 0) into the
+/// body it carries: a blade whose tip only touches the body's face gives a field of exactly 0 on that
+/// face inside the part. `body_depth` is the thickness of that body behind the tip (a wall, a back
+/// plate, a spine); the blade's cross-section (`PEG_BLADE_T` x `hook_width`) has to lie inside the
+/// body's face so the overlap adds no material. `body_depth = 0` is the plain peg (the tip at X = 0)
+#[must_use]
+pub fn skadis_peg_and_shoulder_into(hook_width: f32, body_depth: f32) -> SdfNode {
+    // Blade (X = -BOARD_T - SHOULDER_DEPTH / 2 .. body_depth / 2): it reaches half the shoulder's depth back into the
     // shoulder. Two boxes that only touch along the shoulder's face give a field of exactly 0 on that face
     // inside the part (a seam a mesher turns into faces with material on both sides); the blade's
     // cross-section (PEG_BLADE_T x hook_width) lies inside the shoulder's (SHOULDER_H x hook_width), so
     // the overlap adds no material and the field outside the part is unchanged. Half the shoulder's
     // depth, not the cut margin: a union's overlap has to stay inside the other solid (the cut margin,
     // 5 mm, would come out of the shoulder's back)
-    let blade_len = SHOULDER_DEPTH.mul_add(0.5, BOARD_T);
+    let back = SHOULDER_DEPTH.mul_add(0.5, BOARD_T);
+    let front = body_depth * 0.5;
+    let blade_len = back + front;
     let blade = SdfNode::Box3d {
         half_extents: Vec3::new(blade_len * 0.5, PEG_BLADE_T * 0.5, hook_width * 0.5),
     };
     let blade_placed = SdfNode::Translate {
         child: Arc::new(blade),
-        offset: Vec3::new(-blade_len * 0.5, 0.0, 0.0),
+        offset: Vec3::new((front - back) * 0.5, 0.0, 0.0),
     };
     // Shoulder (X = -BOARD_T-SHOULDER_DEPTH .. -BOARD_T)
     let shoulder = SdfNode::Box3d {
@@ -119,9 +131,9 @@ pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
 /// -90 度回して -Z 方向へ向ける (blade が Z = -`BOARD_T` .. 0、shoulder がその奥) 原点は
 /// 取付面 (背面の外面) の peg 中心に置く container / shelf のように取付面が Z 方向の
 /// accessory で使う (hook 3 種と cord は取付面が X 方向なので回さない)
-fn peg_facing_back(hook_width: f32) -> SdfNode {
+fn peg_facing_back(hook_width: f32, body_depth: f32) -> SdfNode {
     SdfNode::Rotate {
-        child: Arc::new(skadis_peg_and_shoulder(hook_width)),
+        child: Arc::new(skadis_peg_and_shoulder_into(hook_width, body_depth)),
         rotation: crate::angle::quat_from_rotation_y(-std::f32::consts::FRAC_PI_2),
     }
 }
@@ -1171,7 +1183,7 @@ pub fn skadis_container_sdf() -> SdfNode {
     // 背面ペグ 2 個 (Z = -outer_d/2 の壁面の裏側へ BOARD_T 突き出す、Y = 上部 35%)
     // 2 個の間隔は SKADIS の格子 (GRID_PITCH = 40) = X = ±20
     let peg_at = |x: f32| SdfNode::Translate {
-        child: Arc::new(peg_facing_back(PEG_BLADE_W)),
+        child: Arc::new(peg_facing_back(PEG_BLADE_W, CONTAINER_WALL_T)),
         offset: Vec3::new(x, total_h * 0.35, neg_outer_d * 0.5),
     };
     let pegs = SdfNode::Union {
@@ -1267,6 +1279,9 @@ pub const SHELF_LIP_H: f32 = 20.0;
 pub const SHELF_BACK_H: f32 = 25.0;
 /// shelf 底厚 (mm、曲げ計算 1.5 + マージン)
 pub const SHELF_BOTTOM_T: f32 = 2.0;
+
+/// SKADIS shelf 背板の厚み (mm、Z 方向) peg の刃はこの半分まで背板へ差し込む
+pub const SHELF_BACK_T: f32 = 1.6;
 /// shelf ペグ間隔 (mm、6 × `GRID_PITCH`)
 pub const SHELF_PEG_SPACING: f32 = 240.0;
 
@@ -1282,7 +1297,7 @@ pub fn skadis_shelf_sdf() -> SdfNode {
     };
     // 背面 (Y = back_h、Z = -SHELF_D/2 位置、厚 = wall_t)
     let back = SdfNode::Box3d {
-        half_extents: Vec3::new(SHELF_W * 0.5, SHELF_BACK_H * 0.5, 1.6 * 0.5),
+        half_extents: Vec3::new(SHELF_W * 0.5, SHELF_BACK_H * 0.5, SHELF_BACK_T * 0.5),
     };
     let back_placed = SdfNode::Translate {
         child: Arc::new(back),
@@ -1297,7 +1312,7 @@ pub fn skadis_shelf_sdf() -> SdfNode {
         offset: Vec3::new(0.0, SHELF_LIP_H * 0.5, SHELF_D.mul_add(0.5, -0.8)),
     };
     // 2 ペグ (両端、SHELF_PEG_SPACING 離間)
-    let peg = peg_facing_back(PEG_BLADE_W);
+    let peg = peg_facing_back(PEG_BLADE_W, SHELF_BACK_T);
     let peg_l = SdfNode::Translate {
         child: Arc::new(peg.clone()),
         offset: Vec3::new(-SHELF_PEG_SPACING * 0.5, SHELF_BACK_H * 0.7, -SHELF_D * 0.5),
@@ -1344,11 +1359,11 @@ pub fn skadis_elastic_cord_sdf() -> SdfNode {
     let ht = ELASTIC_CORD_BODY_T * 0.5;
     let hook_width = 8.0; // hook 幅 (Z 方向)
 
-    // 上ペグ (Y = 0)
-    let peg_top = skadis_peg_and_shoulder(hook_width);
+    // 上ペグ (Y = 0) 刃は背骨の厚み ht の半分まで背骨へ差し込む (刃先の面 X = 0 が背骨の -X 面)
+    let peg_top = skadis_peg_and_shoulder_into(hook_width, ht);
     // 下ペグ (Y = -GRID_PITCH)
     let peg_bot = SdfNode::Translate {
-        child: Arc::new(skadis_peg_and_shoulder(hook_width)),
+        child: Arc::new(skadis_peg_and_shoulder_into(hook_width, ht)),
         offset: Vec3::new(0.0, -ELASTIC_CORD_PEG_PITCH, 0.0),
     };
 
