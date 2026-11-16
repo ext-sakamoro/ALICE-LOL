@@ -337,13 +337,22 @@ pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
     // Through hole は plate 貫通 + 5mm each side margin (preview MC で確実 punch through、
     // cavity margin rule)
     let through = screw_hole(size, plate_thickness + 10.0);
+    // the head pocket: its floor (the seat) at plate_thickness / 2 - bore_depth, and its top
+    // CAVITY_PUNCH_MARGIN past the plate's face like the through hole (a cutter that stops exactly on
+    // the face leaves the field 0 across the pocket's mouth, a zero-thickness membrane)
+    let margin = super::cavity::CAVITY_PUNCH_MARGIN;
+    let bore_len = bore_depth + margin;
     let bore = SdfNode::Cylinder {
         radius: head_dia * 0.5,
-        half_height: bore_depth * 0.5,
+        half_height: bore_len * 0.5,
     };
     let bore_shifted = SdfNode::Translate {
         child: Arc::new(bore),
-        offset: Vec3::new(0.0, (plate_thickness - bore_depth) * 0.5, 0.0),
+        offset: Vec3::new(
+            0.0,
+            plate_thickness.mul_add(0.5, -bore_depth) + bore_len * 0.5,
+            0.0,
+        ),
     };
     SdfNode::Union {
         a: Arc::new(through),
