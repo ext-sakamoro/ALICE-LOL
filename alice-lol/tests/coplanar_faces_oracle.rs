@@ -19,7 +19,8 @@
 //! a former union seam must now be material (the field's maximum over the polygon, sampled at least
 //! `2δ` in from its edges, is `≤ −δ`, and the inside test at its centre answers inside, below
 //! `-SURFACE_HIT_EPS`); a former flush cut or contact must now be air (minimum `≥ +δ`). `δ` is `1e-3`
-//! of the part's extent: well above f32 rounding at the largest part and well below the overlaps the
+//! of the part's extent (a quarter of the polygon's inradius for a strip thinner than that, never below
+//! `DELTA_FLOOR_ULPS` ulp at the extent: a strip too thin for that fails as "overlap too thin to verify"): well above f32 rounding at the largest part and well below the overlaps the
 //! fixes add (each stated at its constant).
 //!
 //! **Why mesh triangle counts are not the gate** (tried and discarded): marching cubes emits no faces
@@ -42,6 +43,9 @@ use alice_sdf::tight_aabb::{compute_tight_aabb_with_config, TightAabbConfig};
 use alice_sdf::eval::eval;
 use alice_sdf::SdfNode;
 use glam::Vec3;
+
+/// Smallest δ allowed, in ulp of the part's extent: 1000 ulp is 0.015 mm at 250 mm (the largest part)
+const DELTA_FLOOR_ULPS: f32 = 1000.0;
 
 /// (template, reason) for a template allowed to keep a coplanar pair
 const ALLOWED: &[(&str, &str)] = &[];
@@ -151,8 +155,8 @@ fn recorded() -> Vec<Recorded> {
         .collect()
 }
 
-/// Points of the polygon at least `inset` from every edge, on a 21 x 21 grid over its extent
-fn interior_points(poly: &[Vec3], n: Vec3, inset: f32) -> Vec<Vec3> {
+/// Points of the polygon on a 21 x 21 grid over its extent, each with its distance to the nearest edge
+fn grid_points(poly: &[Vec3], n: Vec3) -> Vec<(Vec3, f32)> {
     let u = n.any_orthonormal_vector();
     let v = n.cross(u);
     let o = poly[0];
@@ -166,15 +170,16 @@ fn interior_points(poly: &[Vec3], n: Vec3, inset: f32) -> Vec<Vec3> {
             let p = o + u * a + v * b;
             // inside, and at least `inset` from every edge (convex polygon, either orientation)
             let mut sign = 0.0_f32;
-            let ok = (0..poly.len()).all(|k| {
+            let mut nearest = f32::MAX;
+            let inside = (0..poly.len()).all(|k| {
                 let (e0, e1) = (poly[k], poly[(k + 1) % poly.len()]);
                 let e = (e1 - e0).normalize_or_zero();
                 let side = e.cross(p - e0).dot(n);
                 if sign == 0.0 && side.abs() > 1e-9 { sign = side.signum(); }
-                let dist = (p - e0 - e * (p - e0).dot(e)).length();
-                side * sign >= 0.0 && dist >= inset
+                nearest = nearest.min((p - e0 - e * (p - e0).dot(e)).length());
+                side * sign >= 0.0
             });
-            if ok { out.push(p); }
+            if inside { out.push((p, nearest)); }
         }
     }
     out
@@ -186,6 +191,7 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
     let recs = recorded();
     assert!(recs.len() >= 20, "only {} recorded pairs", recs.len());
     let (mut seams, mut seams_inside, mut cuts) = (0usize, 0usize, 0usize);
+    let (mut thin, mut smallest_delta) = (0usize, f32::MAX);
     let mut failures = Vec::new();
     for r in &recs {
         let Some((_, src)) = corpus.iter().find(|(n, _)| *n == r.name) else {
@@ -194,10 +200,30 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
         };
         let node = parse_lol(src).unwrap();
         let b = compute_tight_aabb_with_config(&node, &TightAabbConfig::preset_large());
-        let delta = 1e-3 * (b.max - b.min).max_element();
-        let pts = interior_points(&r.poly, r.n, 2.0 * delta);
+        // δ is 1e-3 of the part's extent, or a quarter of the polygon's inradius for a strip thinner
+        // than that (across a thin strip the field cannot go below about half its width); points are
+        // taken 2δ in from the edges, where the field is not pulled to 0 by the outer surface
+        let grid = grid_points(&r.poly, r.n);
+        let inradius = grid.iter().map(|(_, d)| *d).fold(0.0_f32, f32::max);
+        let extent = (b.max - b.min).max_element();
+        let plain = 1e-3 * extent;
+        let delta = plain.min(0.25 * inradius);
+        // floor: DELTA_FLOOR_ULPS ulp at the part's extent; a strip so thin that its δ would fall below
+        // it cannot tell a fix from "0 within rounding", and fails as its own kind (fixed by a larger
+        // overlap, not passed)
+        let floor = DELTA_FLOOR_ULPS * (extent.next_up() - extent);
+        if delta < plain { thin += 1; }
+        smallest_delta = smallest_delta.min(delta);
+        if !(delta >= floor) {
+            failures.push(format!(
+                "{} {}: overlap too thin to verify (inradius {inradius:e}, δ {delta:e} < floor {floor:e})",
+                r.name, r.kind
+            ));
+            continue;
+        }
+        let pts: Vec<Vec3> = grid.iter().filter(|(_, d)| *d >= 2.0 * delta).map(|(p, _)| *p).collect();
         if pts.is_empty() {
-            failures.push(format!("{} {}: no point 2δ inside the polygon", r.name, r.kind));
+            failures.push(format!("{} {}: polygon has no point 2δ inside (inradius {inradius:e})", r.name, r.kind));
             continue;
         }
         let ds: Vec<f32> = pts.iter().map(|p| eval(&node, *p)).collect();
@@ -222,7 +248,7 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
         }
     }
     eprintln!(
-        "recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}, not sampled {}",
+        "recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}, not sampled {}, thin-strip δ {thin}, smallest δ {smallest_delta:e}",
         recs.len(),
         recs.len() - seams - cuts
     );
