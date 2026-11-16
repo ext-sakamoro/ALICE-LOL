@@ -20,9 +20,6 @@ circle_2d 1
 columns_intersection 1
 columns_subtraction 1
 columns_union 1
-cone 1
-countersink 2
-countersink@size 2
 cross_shape 1
 cut_hollow_sphere 1
 cut_sphere 1
