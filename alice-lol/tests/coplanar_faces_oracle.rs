@@ -205,7 +205,12 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
         if r.kind == "UnionSeam" {
             seams += 1;
             let c = r.poly.iter().fold(Vec3::ZERO, |a, q| a + *q) / r.poly.len() as f32;
-            if eval(&node, c) < -SURFACE_HIT_EPS { seams_inside += 1; }
+            let dc = eval(&node, c);
+            if dc < -SURFACE_HIT_EPS {
+                seams_inside += 1;
+            } else {
+                failures.push(format!("{} seam: inside test at its centre {c} reads {dc:e} (not inside)", r.name));
+            }
             if mx > -delta {
                 failures.push(format!("{} seam: field max {mx:e} over {} points > -δ = {:e}", r.name, pts.len(), -delta));
             }
@@ -216,7 +221,10 @@ fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
             }
         }
     }
-    eprintln!("recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}", recs.len());
-    assert_eq!(seams_inside, seams, "inside test at seam centres: {seams_inside} of {seams}");
+    eprintln!(
+        "recorded pairs {}: seams {seams} (inside test inside: {seams_inside}), cuts / contacts {cuts}, not sampled {}",
+        recs.len(),
+        recs.len() - seams - cuts
+    );
     assert!(failures.is_empty(), "{} recorded pairs not fixed:\n{}", failures.len(), failures.join("\n"));
 }
