@@ -1641,3 +1641,47 @@ fn joint_primitives_stay_finite_on_degenerate_dimensions() {
         "L=0 (応力が発散) で safe と判定された"
     );
 }
+
+/// `honeycomb_infill` produces what its doc states today (not a staggered honeycomb): hexagonal holes
+/// `2·cell/√3 − wall` across the flats (flats facing ±Z), centres on a rectangular grid `√3·cell` apart in
+/// X and `1.5·cell` in Z, walls `(√3 − 4/3)·cell + (2/√3)·wall` along X and `(1.5 − 2/√3)·cell + wall`
+/// along Z. oracle: those closed forms, measured on the field by marching along the axes
+#[test]
+fn honeycomb_infill_makes_what_its_doc_states() {
+    use alice_lol::stdlib::hardsurface::reinforcement::honeycomb_infill;
+    let (cell, wall) = (8.0_f32, 1.2_f32);
+    let plate = SdfNode::Box3d {
+        half_extents: Vec3::new(60.0, 5.0, 60.0),
+    };
+    let part = honeycomb_infill(plate, cell, wall, 1);
+    let s3 = 3.0_f32.sqrt();
+    // air run along a line from a point, stepping 0.001
+    let run = |from: Vec3, dir: Vec3, want_air: bool| {
+        let mut t = 0.0_f32;
+        while (eval(&part, from + dir * t) > 0.0) == want_air && t < 50.0 {
+            t += 0.001;
+        }
+        t
+    };
+    // the centre hole's half across-flats (along +Z from its centre)
+    let half_flats = run(Vec3::ZERO, Vec3::Z, true);
+    assert!(
+        (half_flats - (cell / s3 - wall * 0.5)).abs() < 2e-3,
+        "half across-flats {half_flats}"
+    );
+    // the wall between the centre hole and its X neighbour (corner to corner)
+    let corner = 2.0 * (cell / s3 - wall * 0.5) / s3;
+    let wall_x = run(Vec3::new(corner + 1e-3, 0.0, 0.0), Vec3::X, false);
+    let want_x = (s3 - 4.0 / 3.0) * cell + 2.0 / s3 * wall;
+    assert!(
+        (wall_x - want_x).abs() < 5e-3,
+        "X wall {wall_x} vs {want_x}"
+    );
+    // the wall between the centre hole and its Z neighbour (flat to flat)
+    let wall_z = run(Vec3::new(0.0, 0.0, half_flats + 1e-3), Vec3::Z, false);
+    let want_z = (1.5 - 2.0 / s3) * cell + wall;
+    assert!(
+        (wall_z - want_z).abs() < 5e-3,
+        "Z wall {wall_z} vs {want_z}"
+    );
+}
