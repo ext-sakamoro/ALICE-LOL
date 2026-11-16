@@ -1144,3 +1144,99 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
     assert!(lip[0].0 <= shelf_top_near_lip - 2.0, "the lip reaches down past the shelf's top: {:?}", lip[0]);
     assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
 }
+
+/// Below the host's top face, the part is exactly its host (`host` < 0 there): the piece attached on top
+/// of it may reach into the host but never out of it, whatever the arguments. Samples a grid over `lo`
+/// .. `hi` (world, Z up) below `top`; returns the number of samples compared
+fn below_the_top_is_only_the_host(
+    part: &SdfNode,
+    host: impl Fn(Vec3) -> bool,
+    lo: Vec3,
+    hi: Vec3,
+    top: f32,
+    what: &str,
+) -> usize {
+    let mut compared = 0;
+    for i in 0..=40 {
+        for j in 0..=40 {
+            for k in 0..=20 {
+                let t = Vec3::new(i as f32 / 40.0, j as f32 / 40.0, k as f32 / 20.0);
+                let p = lo + (hi - lo) * t;
+                if p.z >= top - 1e-3 {
+                    continue;
+                }
+                let d = eval(part, p);
+                if d.abs() < 1e-3 {
+                    continue; // on the surface: either side within rounding
+                }
+                compared += 1;
+                assert_eq!(d < 0.0, host(p), "{what}: at {p} the part is {} the host says {}", d, host(p));
+            }
+        }
+    }
+    assert!(compared > 1000, "{what}: only {compared} samples compared");
+    compared
+}
+
+#[test]
+fn an_attached_piece_never_adds_material_beside_its_host_even_when_it_overhangs() {
+    // bosses wider than the pitch overhang the plate: boss_array(2, 2, M3, 10, pitch 4, plate 2) has
+    // bosses 6.6 across at +-2 on an 8 x 8 plate (z in [-1, 1] after the Z-up turn)
+    let bosses = parse_lol("boss_array(2, 2, 3, 10, 4, 2)").unwrap();
+    below_the_top_is_only_the_host(
+        &bosses,
+        |p| p.x.abs() < 4.0 && p.y.abs() < 4.0 && p.z.abs() < 1.0,
+        Vec3::new(-7.0, -7.0, -2.0),
+        Vec3::new(7.0, 7.0, 1.0),
+        1.0,
+        "boss_array",
+    );
+    // a hook longer than its beam: beam x in [-2, 2], y in [-1, 1], z in [-2.5, 2.5]; the hook is 6 long,
+    // x in [-4, 2], half of it over nothing
+    let spec = SnapFitCantileverSpec { length: 4.0, hook_offset: 6.0, ..SnapFitCantileverSpec::PLA_STANDARD };
+    let hook = snap_fit_cantilever(spec);
+    // the builder is Y up: swap y and z for the shared helper (the beam's top is y = 1)
+    let yz = |p: Vec3| Vec3::new(p.x, p.z, p.y);
+    let swapped = |p: Vec3| eval(&hook, yz(p));
+    let mut compared = 0;
+    for i in 0..=40 {
+        for j in 0..=20 {
+            for k in 0..=20 {
+                let p = Vec3::new(-6.0 + 0.3 * i as f32, -3.0 + 0.3 * j as f32, -2.0 + 0.15 * k as f32);
+                if p.z >= 1.0 - 1e-3 { continue; }
+                let d = swapped(p);
+                if d.abs() < 1e-3 { continue; }
+                compared += 1;
+                let host = p.x.abs() < 2.0 && p.y.abs() < 2.5 && p.z.abs() < 1.0;
+                assert_eq!(d < 0.0, host, "snap fit: at {p} the part is {d}");
+            }
+        }
+    }
+    assert!(compared > 1000, "snap fit: only {compared}");
+    // a lip on a base with rounded corners: spice_rack(3, 2, 1) has a 30 x 23 base, corners rounded
+    // 2, 5 thick (z in [-2.575, 2.425]), the lip along its front edge
+    let rack = parse_lol("spice_rack(3, 2, 1)").unwrap();
+    let rounded = |x: f32, y: f32| {
+        let q = Vec3::new(x.abs() - 13.0, y.abs() - 9.5, 0.0).max(Vec3::ZERO);
+        q.length() < 2.0
+    };
+    // the base's jar recesses are cut from the top; below the top the part is the base less them, so
+    // compare only where no recess reaches: the front strip under the lip (y in [8.5, 11.5] or the
+    // mirror, after the turn) and the corners
+    below_the_top_is_only_the_host(
+        &rack,
+        |p| rounded(p.x, p.y) && p.z > -2.575 && p.z < 2.425,
+        Vec3::new(-16.0, 8.0, -3.0),
+        Vec3::new(16.0, 12.5, 2.425),
+        2.425,
+        "spice_rack front strip",
+    );
+    below_the_top_is_only_the_host(
+        &rack,
+        |p| rounded(p.x, p.y) && p.z > -2.575 && p.z < 2.425,
+        Vec3::new(-16.0, -12.5, -3.0),
+        Vec3::new(16.0, -8.0, 2.425),
+        2.425,
+        "spice_rack back strip",
+    );
+}
