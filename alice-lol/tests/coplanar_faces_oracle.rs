@@ -1112,7 +1112,13 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
     let part = parse_lol("can_rack(2, 66, 10)").unwrap();
     let b = compute_tight_aabb_with_config(&part, &TightAabbConfig::preset_large());
     // nothing outside the outer box, and the bottom is flat at z = -82.5 (prints without support there)
-    for (got, lim, what) in [(-b.min.x, 40.0, "x-"), (b.max.x, 40.0, "x+"), (-b.min.y, 207.0, "y-"), (b.max.y, 207.0, "y+"), (b.max.z, 82.5, "z+")] {
+    for (got, lim, what) in [
+        (-b.min.x, 40.0, "x-"),
+        (b.max.x, 40.0, "x+"),
+        (-b.min.y, 207.0, "y-"),
+        (b.max.y, 207.0, "y+"),
+        (b.max.z, 82.5, "z+"),
+    ] {
         assert!(got <= lim + 0.01, "{what}: {got} beyond {lim}");
     }
     assert!((b.min.z + 82.5).abs() < 0.01, "bottom at {}", b.min.z);
@@ -1140,9 +1146,21 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
     let front = if a0 < b0 { -1.0 } else { 1.0 };
     let shelf_top_near_lip = tops(front * 203.0).0;
     let lip = material_runs(&part, 0.0, front * 205.5, -83.0, 83.0, 0.01);
-    assert!(lip[0].1 - shelf_top_near_lip >= 14.5, "lip {:?} over the shelf top {shelf_top_near_lip}", lip[0]);
-    assert!(lip[0].0 <= shelf_top_near_lip - 2.0, "the lip reaches down past the shelf's top: {:?}", lip[0]);
-    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    assert!(
+        lip[0].1 - shelf_top_near_lip >= 14.5,
+        "lip {:?} over the shelf top {shelf_top_near_lip}",
+        lip[0]
+    );
+    assert!(
+        lip[0].0 <= shelf_top_near_lip - 2.0,
+        "the lip reaches down past the shelf's top: {:?}",
+        lip[0]
+    );
+    assert!(
+        coplanar_faces(&part).pairs.is_empty(),
+        "{:?}",
+        coplanar_faces(&part).pairs
+    );
 }
 
 /// Below the host's top face, the part is exactly its host (`host` < 0 there): the piece attached on top
@@ -1170,7 +1188,13 @@ fn below_the_top_is_only_the_host(
                     continue; // on the surface: either side within rounding
                 }
                 compared += 1;
-                assert_eq!(d < 0.0, host(p), "{what}: at {p} the part is {} the host says {}", d, host(p));
+                assert_eq!(
+                    d < 0.0,
+                    host(p),
+                    "{what}: at {p} the part is {} the host says {}",
+                    d,
+                    host(p)
+                );
             }
         }
     }
@@ -1193,7 +1217,11 @@ fn an_attached_piece_never_adds_material_beside_its_host_even_when_it_overhangs(
     );
     // a hook longer than its beam: beam x in [-2, 2], y in [-1, 1], z in [-2.5, 2.5]; the hook is 6 long,
     // x in [-4, 2], half of it over nothing
-    let spec = SnapFitCantileverSpec { length: 4.0, hook_offset: 6.0, ..SnapFitCantileverSpec::PLA_STANDARD };
+    let spec = SnapFitCantileverSpec {
+        length: 4.0,
+        hook_offset: 6.0,
+        ..SnapFitCantileverSpec::PLA_STANDARD
+    };
     let hook = snap_fit_cantilever(spec);
     // the builder is Y up: swap y and z for the shared helper (the beam's top is y = 1)
     let yz = |p: Vec3| Vec3::new(p.x, p.z, p.y);
@@ -1202,10 +1230,18 @@ fn an_attached_piece_never_adds_material_beside_its_host_even_when_it_overhangs(
     for i in 0..=40 {
         for j in 0..=20 {
             for k in 0..=20 {
-                let p = Vec3::new(-6.0 + 0.3 * i as f32, -3.0 + 0.3 * j as f32, -2.0 + 0.15 * k as f32);
-                if p.z >= 1.0 - 1e-3 { continue; }
+                let p = Vec3::new(
+                    -6.0 + 0.3 * i as f32,
+                    -3.0 + 0.3 * j as f32,
+                    -2.0 + 0.15 * k as f32,
+                );
+                if p.z >= 1.0 - 1e-3 {
+                    continue;
+                }
                 let d = swapped(p);
-                if d.abs() < 1e-3 { continue; }
+                if d.abs() < 1e-3 {
+                    continue;
+                }
                 compared += 1;
                 let host = p.x.abs() < 2.0 && p.y.abs() < 2.5 && p.z.abs() < 1.0;
                 assert_eq!(d < 0.0, host, "snap fit: at {p} the part is {d}");
