@@ -338,7 +338,11 @@ fn profile_t_slot(length: f32) -> SdfNode {
     let into_punch = punch_depth * 0.5;
     let into_cavity = 0.5 * crate::det_math::min(depth - neck, cavity_half - open_half);
     let neck_len = neck + into_cavity + into_punch;
-    let neck_box = boxed((into_punch - neck - into_cavity) * 0.5, neck_len * 0.5, open_half);
+    let neck_box = boxed(
+        (into_punch - neck - into_cavity) * 0.5,
+        neck_len * 0.5,
+        open_half,
+    );
     let punch = boxed(punch_depth * 0.5, punch_depth * 0.5, open_half);
     // 空洞: 首の直下 (x = -neck) の半幅 cavity_half から 1:1 で狭まる台形
     let cavity_box = boxed(-(neck + depth) * 0.5, (depth - neck) * 0.5, cavity_half);

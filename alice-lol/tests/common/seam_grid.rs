@@ -5,7 +5,15 @@
 //! The grid is square, with the step the record states. The recorder starts at a twentieth of the
 //! polygon's longer side and halves the step until every sheet class present has a point inside its
 //! region (a wall 3 mm thick along a 250 mm tray is a sheet far narrower than a twentieth of the tray).
-#![allow(dead_code)] // the oracle and the recorder each use a part
+#![allow(dead_code)]
+// the oracle and the recorder each use a part
+// grid indices are small integers (a grid of at most a few hundred thousand points)
+// u, v, n, o, p: the plane's frame and points, as in the geometry they come from
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::many_single_char_names
+)]
 
 use alice_sdf::eval::eval;
 use alice_sdf::tight_aabb::{compute_tight_aabb_with_config, TightAabbConfig};
@@ -30,9 +38,16 @@ fn frame(poly: &[Vec3], n: Vec3) -> ((Vec3, Vec3, Vec3), (f32, f32), f32, f32) {
     let u = n.any_orthonormal_vector();
     let v = n.cross(u);
     let o = poly[0];
-    let uv: Vec<(f32, f32)> = poly.iter().map(|p| ((*p - o).dot(u), (*p - o).dot(v))).collect();
-    let (u0, u1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.0), b.max(q.0)));
-    let (v0, v1) = uv.iter().fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.1), b.max(q.1)));
+    let uv: Vec<(f32, f32)> = poly
+        .iter()
+        .map(|p| ((*p - o).dot(u), (*p - o).dot(v)))
+        .collect();
+    let (u0, u1) = uv
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.0), b.max(q.0)));
+    let (v0, v1) = uv
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(a, b), q| (a.min(q.1), b.max(q.1)));
     ((o + u * u0 + v * v0, u, v), (u0, v0), u1 - u0, v1 - v0)
 }
 
@@ -58,7 +73,11 @@ pub fn grid_points(poly: &[Vec3], n: Vec3, step: f32) -> Vec<GridPoint> {
                 side * sign >= 0.0
             });
             if inside {
-                out.push(GridPoint { p, edge: nearest, ij: (i, j) });
+                out.push(GridPoint {
+                    p,
+                    edge: nearest,
+                    ij: (i, j),
+                });
             }
         }
     }
@@ -73,7 +92,10 @@ pub fn interior(grid: &[GridPoint], classes: &[char]) -> Vec<bool> {
         .zip(classes)
         .map(|(g, c)| {
             (-1..=1).all(|di| {
-                (-1..=1).all(|dj| at.get(&(g.ij.0 + di, g.ij.1 + dj)).is_none_or(|k| k == c || *k == '-'))
+                (-1..=1).all(|dj| {
+                    at.get(&(g.ij.0 + di, g.ij.1 + dj))
+                        .is_none_or(|k| k == c || *k == '-')
+                })
             })
         })
         .collect()
@@ -85,11 +107,23 @@ pub fn interior(grid: &[GridPoint], classes: &[char]) -> Vec<bool> {
 /// `x` = not on a sheet (the plane is inside or outside the part there by more than `off`; the overlap
 /// polygon is a convex hull and can cover such points)
 pub fn classify(node: &SdfNode, p: Vec3, n: Vec3, off: f32) -> char {
-    let (d0, dp, dm) = (eval(node, p), eval(node, p + n * off), eval(node, p - n * off));
+    let (d0, dp, dm) = (
+        eval(node, p),
+        eval(node, p + n * off),
+        eval(node, p - n * off),
+    );
     if dp < 0.0 && dm < 0.0 {
-        if d0.abs() <= off { 'm' } else { 'x' }
+        if d0.abs() <= off {
+            'm'
+        } else {
+            'x'
+        }
     } else if dp > 0.0 && dm > 0.0 {
-        if d0.abs() <= off { 'a' } else { 'x' }
+        if d0.abs() <= off {
+            'a'
+        } else {
+            'x'
+        }
     } else {
         's'
     }
@@ -127,7 +161,8 @@ pub fn decode(s: &str) -> Vec<char> {
 /// The connected sheet regions (8-neighbour) of a class list: for each region, its class and the
 /// indices of its points; `s` and `x` points are not sheets and form no region
 pub fn sheet_regions(grid: &[GridPoint], classes: &[char]) -> Vec<(char, Vec<usize>)> {
-    let index: HashMap<(i32, i32), usize> = grid.iter().enumerate().map(|(k, g)| (g.ij, k)).collect();
+    let index: HashMap<(i32, i32), usize> =
+        grid.iter().enumerate().map(|(k, g)| (g.ij, k)).collect();
     let mut seen = vec![false; grid.len()];
     let mut out = Vec::new();
     for start in 0..grid.len() {
@@ -177,7 +212,10 @@ pub fn margin(node: &SdfNode, poly: &[Vec3], n: Vec3) -> Margin {
     let extent = (b.max - b.min).max_element();
     let (_, _, du, dv) = frame(poly, n);
     let fine = (du.min(dv) / 20.0).max(du.max(dv) / 2000.0);
-    let inradius = grid_points(poly, n, fine).iter().map(|g| g.edge).fold(0.0_f32, f32::max);
+    let inradius = grid_points(poly, n, fine)
+        .iter()
+        .map(|g| g.edge)
+        .fold(0.0_f32, f32::max);
     let plain = 1e-3 * extent;
     Margin {
         delta: plain.min(0.25 * inradius),
@@ -190,6 +228,12 @@ pub fn margin(node: &SdfNode, poly: &[Vec3], n: Vec3) -> Margin {
 /// The recorded class of each grid point: `classify`, or `-` closer than 2δ to the polygon's edges
 pub fn classes(node: &SdfNode, grid: &[GridPoint], n: Vec3, delta: f32, off: f32) -> Vec<char> {
     grid.iter()
-        .map(|g| if g.edge < 2.0 * delta { '-' } else { classify(node, g.p, n, off) })
+        .map(|g| {
+            if g.edge < 2.0 * delta {
+                '-'
+            } else {
+                classify(node, g.p, n, off)
+            }
+        })
         .collect()
 }

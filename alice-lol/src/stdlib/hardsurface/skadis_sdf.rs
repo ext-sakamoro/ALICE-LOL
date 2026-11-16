@@ -87,9 +87,10 @@ pub fn skadis_peg_and_shoulder(hook_width: f32) -> SdfNode {
     skadis_peg_and_shoulder_into(hook_width, 0.0)
 }
 
-/// [`skadis_peg_and_shoulder`] whose blade also reaches `body_depth / 2` past its tip (X > 0) into the
-/// body it carries: a blade whose tip only touches the body's face gives a field of exactly 0 on that
-/// face inside the part. `body_depth` is the thickness of that body behind the tip (a wall, a back
+/// [`skadis_peg_and_shoulder`] whose blade also reaches `body_depth / 2` past its tip into the body.
+///
+/// The blade goes past its tip (X > 0) into the body it carries: a blade whose tip only touches the
+/// body's face gives a field of exactly 0 on that face inside the part. `body_depth` is the thickness of that body behind the tip (a wall, a back
 /// plate, a spine); the blade's cross-section (`PEG_BLADE_T` x `hook_width`) has to lie inside the
 /// body's face so the overlap adds no material. `body_depth = 0` is the plain peg (the tip at X = 0)
 #[must_use]

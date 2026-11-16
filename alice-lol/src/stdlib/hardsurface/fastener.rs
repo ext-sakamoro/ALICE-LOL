@@ -350,7 +350,7 @@ pub fn counterbore(size: MetricSize, plate_thickness: f32) -> SdfNode {
         child: Arc::new(bore),
         offset: Vec3::new(
             0.0,
-            plate_thickness.mul_add(0.5, -bore_depth) + bore_len * 0.5,
+            bore_len.mul_add(0.5, plate_thickness.mul_add(0.5, -bore_depth)),
             0.0,
         ),
     };
@@ -453,7 +453,7 @@ pub fn bolt(size: MetricSize, shank_length: f32) -> SdfNode {
     let shank = SdfNode::Translate {
         child: Arc::new(SdfNode::Cylinder {
             radius: shank_r,
-            half_height: (shank_length + into_head) * 0.5,
+            half_height: f32::midpoint(shank_length, into_head),
         }),
         offset: Vec3::new(0.0, into_head * 0.5, 0.0),
     };

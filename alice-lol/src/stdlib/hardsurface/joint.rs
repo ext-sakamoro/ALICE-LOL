@@ -121,7 +121,7 @@ pub fn snap_fit_cantilever(spec: SnapFitCantileverSpec) -> SdfNode {
     // Hook: 幅 = beam width、長さ hook_offset、突出 hook_height。梁の上面 (y = t/2) に載せるだけだと
     // 面が接するだけの継ぎ目 (部品の中で場がちょうど 0) になるので、梁の厚みの半分 (y = 0) まで
     // 梁の中へ下ろす (フックの足跡は梁の上面の内側なので、部品の外の形は変わらない)
-    let hook_span = spec.hook_height + spec.thickness * 0.5;
+    let hook_span = spec.thickness.mul_add(0.5, spec.hook_height);
     let hook = SdfNode::Box3d {
         half_extents: Vec3::new(spec.hook_offset * 0.5, hook_span * 0.5, spec.width * 0.5),
     };
@@ -283,7 +283,7 @@ pub fn t_slot_2020(length: f32) -> SdfNode {
     let opening = SdfNode::Translate {
         child: Arc::new(SdfNode::Box3d {
             half_extents: Vec3::new(
-                (T_SLOT_2020_OPENING_DEPTH + into_chamber) * 0.5,
+                f32::midpoint(T_SLOT_2020_OPENING_DEPTH, into_chamber),
                 length * 0.5,
                 T_SLOT_2020_OPENING_WIDTH * 0.5,
             ),

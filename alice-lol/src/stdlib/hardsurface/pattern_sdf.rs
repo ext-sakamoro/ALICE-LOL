@@ -1026,7 +1026,7 @@ pub fn pen_cup(spec: &PenCupSpec) -> SdfNode {
     let margin = super::cavity::CAVITY_PUNCH_MARGIN;
     let cavity_h = spec.height - spec.floor_thickness + margin;
     let inner_hz = cavity_h * 0.5;
-    let cavity_offset_z = (spec.floor_thickness + margin) * 0.5;
+    let cavity_offset_z = f32::midpoint(spec.floor_thickness, margin);
 
     let outer = cylinder_z(outer_r, outer_hz);
     let cavity = translate(
@@ -1122,11 +1122,11 @@ pub fn phone_stand(spec: &PhoneStandSpec) -> SdfNode {
     // slot 幅方向 X、深さ Y、高さ Z (top 部分に配置、phone を挿入する溝)
     let slot_hx = spec.slot_width * 0.5;
     let slot_hy = back_hy + 0.5; // 貫通用余裕
-    // slot 深 = back 高さの 80% (底は back の上端から 0.8 × back_height)、上は back の上端の外へ
-    // CAVITY_PUNCH_MARGIN まで (上端でちょうど止めると溝の口に厚み 0 の膜が残る)
+                                 // slot 深 = back 高さの 80% (底は back の上端から 0.8 × back_height)、上は back の上端の外へ
+                                 // CAVITY_PUNCH_MARGIN まで (上端でちょうど止めると溝の口に厚み 0 の膜が残る)
     let margin = super::cavity::CAVITY_PUNCH_MARGIN;
     let slot_depth = spec.back_height * 0.8;
-    let slot_hz = (slot_depth + margin) * 0.5;
+    let slot_hz = f32::midpoint(slot_depth, margin);
     let slot_center_z = back_plate_z + back_hz - slot_depth + slot_hz;
     let slot = translate(
         box3d(slot_hx, slot_hy, slot_hz),
@@ -3058,7 +3058,7 @@ pub fn spice_rack(spec: &SpiceRackSpec) -> SdfNode {
     // (上端は不変、延びた分は底板の中)
     let lip_hz = spec.lip_thickness * 0.5;
     let into_base = spec.base_thickness * 0.5;
-    let lip_hy = (lip_height + into_base) * 0.5;
+    let lip_hy = f32::midpoint(lip_height, into_base);
     let lip_offset_y = -outer_hy + spec.base_thickness - into_base + lip_hy;
     let lip_offset_z = -outer_hz + lip_hz;
     let lip = translate(
@@ -4193,8 +4193,8 @@ pub fn sock_divider(spec: &SockDividerSpec) -> SdfNode {
     // 床の上面と前後の壁の内面でちょうど止めると面が接するだけの継ぎ目になるので、床の厚みの半分と
     // 壁の厚みの半分だけ中へ延ばす (延びた分は床と壁の中なので外形は不変、上端は外の上面と同じ高さ)
     let into_floor = spec.floor_thickness * 0.5;
-    let wall_hy = (spec.height + into_floor) * 0.5;
-    let wall_hz = (spec.cell_depth + spec.wall_thickness) * 0.5;
+    let wall_hy = f32::midpoint(spec.height, into_floor);
+    let wall_hz = f32::midpoint(spec.cell_depth, spec.wall_thickness);
     let wall_offset_y = into_floor + wall_hy;
     let x_left = neg_inner_x * 0.5;
     let mut cutters: Vec<SdfNode> = Vec::new();
@@ -5677,9 +5677,9 @@ pub fn tape_dispenser(spec: &TapeDispenserSpec) -> SdfNode {
     // Back wall: base 後端 (Z-)、底板の上面からフードの下面まで立ち、軸を片持ちで支える 上下の端は底板と
     // フードの中へ壁の厚みの半分ずつ入れる (面だけで接する継ぎ目を作らない)
     let into = spec.wall_thickness * 0.5;
-    let back_hy = (hood_bottom_y - spec.wall_thickness) * 0.5 + into;
+    let back_hy = (hood_bottom_y - spec.wall_thickness).mul_add(0.5, into);
     let back_hz = spec.wall_thickness * 0.5;
-    let back_offset_y = spec.wall_thickness + (hood_bottom_y - spec.wall_thickness) * 0.5;
+    let back_offset_y = (hood_bottom_y - spec.wall_thickness).mul_add(0.5, spec.wall_thickness);
     let back_offset_z = -base_hz + back_hz;
     let back = translate(
         rounded_plate(base_hx, back_hy, back_hz, 2.0, Vec3::Z),
@@ -5852,7 +5852,11 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
         let outer = union(rounded, back_square);
         let cavity = translate(
             box3d(cavity_hx, cavity_hy, cavity_hz),
-            Vec3::new(0.0, cavity_offset_y, (into_backplate - spec.wall_thickness) * 0.5),
+            Vec3::new(
+                0.0,
+                cavity_offset_y,
+                (into_backplate - spec.wall_thickness) * 0.5,
+            ),
         );
         let mut tier = subtract(outer, cavity);
         // 水抜き穴は 1 つの和集合にして 1 回で引く (順に引くと木の深さが穴の数だけ伸び、debug build の
@@ -5862,7 +5866,11 @@ pub fn shower_caddy(spec: &ShowerCaddySpec) -> SdfNode {
                 let x = (-spec.tier_length).mul_add(0.5, drain_pitch * (n_f32(k) + 1.0));
                 translate(
                     cylinder(drain_r, drain_hy),
-                    Vec3::new(x, drain_offset_y, (into_backplate - spec.wall_thickness) * 0.5),
+                    Vec3::new(
+                        x,
+                        drain_offset_y,
+                        (into_backplate - spec.wall_thickness) * 0.5,
+                    ),
                 )
             })
             .collect();
@@ -7291,7 +7299,7 @@ pub fn boss_array(spec: &BossArraySpec) -> SdfNode {
     // 下ろす (下ろした筒とその穴は板の中にあり、板が埋めるので、ねじ穴の底は板の上面のまま)
     let into_plate = outer_hy;
     let boss_template = boss(screw_nominal, boss_body_height + into_plate);
-    let boss_y = outer_hy + (boss_body_height - into_plate) * 0.5;
+    let boss_y = (boss_body_height - into_plate).mul_add(0.5, outer_hy);
 
     let start_x = -(cols_f - 1.0) * spec.pitch * 0.5;
     let start_z = -(rows_f - 1.0) * spec.pitch * 0.5;
@@ -7670,7 +7678,7 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     // arm: 壁面 plate から +X 方向に突出、中央 Y=0
     // 腕は壁面 plate の面から始めると面だけで接する継ぎ目になるので、plate の厚みの半分 (x = 0) から始める
     // (先端 x = plate_hx + projection は不変、延びた分は plate の中)
-    let arm_hx = (spec.projection + plate_hx) * 0.5;
+    let arm_hx = f32::midpoint(spec.projection, plate_hx);
     let arm_hy = spec.arm_thickness * 0.5;
     let arm_hz = spec.arm_width * 0.5;
     let arm_raw = box3d(arm_hx, arm_hy, arm_hz);
@@ -7686,7 +7694,10 @@ pub fn curtain_rod_bracket(spec: &CurtainRodBracketSpec) -> SdfNode {
     // cylinder Y-axis → rotate X 90° で Z-axis alignment (rod と同軸)
     // 竿の穴は受けの両端より CAVITY_PUNCH_MARGIN ずつ長く (受けと同じ長さだと両端に厚み 0 の膜が残る)
     let cradle_hole = SdfNode::Rotate {
-        child: Arc::new(cylinder(cradle_r, cradle_hh + super::cavity::CAVITY_PUNCH_MARGIN)),
+        child: Arc::new(cylinder(
+            cradle_r,
+            cradle_hh + super::cavity::CAVITY_PUNCH_MARGIN,
+        )),
         rotation: crate::angle::quat_from_rotation_x(std::f32::consts::FRAC_PI_2),
     };
 
