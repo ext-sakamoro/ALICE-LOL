@@ -40,6 +40,7 @@
 mod common;
 use alice_lol::runtime_parser::parse_lol;
 use alice_lol::stdlib::hardsurface::fastener::{counterbore, counterbore_depth, MetricSize};
+use alice_lol::stdlib::hardsurface::joint::{snap_fit_cantilever, SnapFitCantileverSpec};
 use alice_lol::stdlib::hardsurface::mount::profile_2020;
 use alice_lol::stdlib::hardsurface::skadis_sdf::{
     skadis_peg_and_shoulder, BOARD_T, PEG_BLADE_T, SHOULDER_DEPTH, SHOULDER_H,
@@ -308,4 +309,43 @@ fn a_counterbore_pocket_reaches_past_the_face_and_keeps_its_seat() {
     assert!(d(r, seat - 0.01) < 0.0, "floor just below the seat {}", d(r, seat - 0.01));
     assert!(d(0.0, -t * 0.5) > 1e-3, "through hole open at the bottom {}", d(0.0, -t * 0.5));
     assert!(d(head_r + 1.0, 0.0) < -0.5, "plate beyond the head {}", d(head_r + 1.0, 0.0));
+}
+
+#[test]
+fn the_snap_fit_hook_has_no_seam_and_keeps_its_shape() {
+    // PLA_STANDARD: beam x in [-5, 5], y in [-1, 1], z in [-2.5, 2.5]; hook x in [3.5, 5] on the beam's
+    // top, up to y = 1.5. The hook stood on the beam's face (a seam over its footprint)
+    let spec = SnapFitCantileverSpec::PLA_STANDARD;
+    let part = snap_fit_cantilever(spec);
+    assert!(coplanar_faces(&part).pairs.is_empty(), "{:?}", coplanar_faces(&part).pairs);
+    let on = |x: f32, y: f32| eval(&part, Vec3::new(x, y, 0.0)).abs() < 1e-5;
+    assert!(on(4.25, 1.5), "hook top");
+    assert!(on(5.0, 1.25), "hook front");
+    assert!(on(3.5, 1.25), "hook back");
+    assert!(on(2.0, 1.0), "beam top beside the hook");
+    let old_seam = eval(&part, Vec3::new(4.25, 1.0, 0.0));
+    assert!(old_seam < -0.4, "the old seam is inside now: {old_seam}");
+    // outside the part the field is the two-box construction's (the hook grew only into the beam)
+    let beam = SdfNode::box3d(spec.length, spec.thickness, spec.width);
+    let hook = SdfNode::box3d(spec.hook_offset, spec.hook_height, spec.width).translate(
+        spec.hook_offset.mul_add(-0.5, spec.length * 0.5),
+        spec.hook_height.mul_add(0.5, spec.thickness * 0.5),
+        0.0,
+    );
+    let old = beam.union(hook);
+    let mut compared = 0;
+    for i in -14..=14 {
+        for j in -6..=6 {
+            for k in -8..=8 {
+                let p = Vec3::new(i as f32 * 0.43, j as f32 * 0.37, k as f32 * 0.41);
+                let o = eval(&old, p);
+                if o > 1e-3 {
+                    compared += 1;
+                    let n = eval(&part, p);
+                    assert!((n - o).abs() <= 1e-5, "at {p}: {n} vs {o}");
+                }
+            }
+        }
+    }
+    assert!(compared > 1000, "only {compared} outside points compared");
 }
