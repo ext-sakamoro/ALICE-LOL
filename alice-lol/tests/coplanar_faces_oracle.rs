@@ -428,3 +428,20 @@ fn the_phone_stand_slot_is_open_and_its_back_stands_in_the_base() {
     let seam = d(20.0, spec.base_thickness);
     assert!(seam < -0.4, "the old base / back seam is inside now: {seam}");
 }
+
+#[test]
+fn the_can_rack_shelves_back_and_lips_reach_into_the_side_walls() {
+    // can_rack(2, 66, 10): shelf_width 74 between side walls 3 thick (inner faces at x = +-37, outer at
+    // +-40). The back wall, the shelves and the lips stopped exactly at the walls' inner faces (14 seams)
+    let rack = parse_lol("can_rack(2, 66, 10)").unwrap();
+    assert!(coplanar_faces(&rack).pairs.is_empty(), "{:?}", coplanar_faces(&rack).pairs);
+    // the old seams: every recorded can_rack pair's centre is inside now (the recorded-pair gate checks
+    // the whole polygons; here the shape around them)
+    let d = |x: f32, y: f32, z: f32| eval(&rack, Vec3::new(x, y, z));
+    // the walls' outer faces did not move, and between the tiers the walls' inner faces are still faces
+    assert!(d(40.0, 0.0, 40.0).abs() < 1e-4, "outer wall face {}", d(40.0, 0.0, 40.0));
+    assert!(d(40.5, 0.0, 40.0) > 0.4, "air outside the wall {}", d(40.5, 0.0, 40.0));
+    let gap_z = 3.0 + 81.0 * 0.5 + 10.0; // above the first shelf, below the second
+    assert!(d(36.5, 0.0, gap_z) > 0.4, "air inside the wall between the tiers {}", d(36.5, 0.0, gap_z));
+    assert!(d(37.5, 0.0, gap_z) < -0.4, "the wall itself {}", d(37.5, 0.0, gap_z));
+}
