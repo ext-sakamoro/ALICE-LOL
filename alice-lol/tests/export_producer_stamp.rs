@@ -99,26 +99,28 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 /// the producer stamp changed
 /// Re-recorded when it moved to `9b82c3c3…` (the alice-sdf shape semantics joined the fold) and the
 /// primary identifier (alice-sdf `SDF_SEMANTICS_ID`) moved to `443238e4…`: same scene, both stamps changed
+/// Re-recorded when it moved to `66d222f0…` (template shapes: seams, membranes, can_rack): same scene, only
+/// the producer stamp changed
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "58fc0dd3405934fd332518a38e8f3762f41a448d6aafe999595b7bf625bd6720",
+        "405c271601c2cf432615616f4b147e0ee3b66b526cbff38fdfec5607c232c937",
     ),
     (
         "node_to_3mf",
-        "baa105072102c1f56ebae3e0c0af43da0a16600ba6120899f026413525d56d30",
+        "27e76f68a9f0d84e9b748307090277b27ffaf65640365bb6bd78b512a8f28be5",
     ),
     (
         "node_to_fbx",
-        "de2f01ccee679db25bae415f2fbe87e6a74cbb18ca28e4a3da40587eb047d37a",
+        "4c315fa1b4ea9ffbfeb1014e8e385d530e82c0ce94f1efce9cdbdeec11d0e489",
     ),
     (
         "node_to_stl_dual_contouring",
-        "3f36614efda702a914b979aa76ca31fee8325bfe3c8fd85bcc2684b8cc2c1eb5",
+        "bb5d52e7abbd8cc8c250c3b507ac0477e05288a7a2372873bd897269d998785c",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "92dedc0d01d2b30ccd845b87e0212e0eb741ba5faf1e4dc8c8f75025d22821a2",
+        "740461c3306460ad6b416623e0d4935ad378725bfecfe6e64c0c818a5ddd4a44",
     ),
     (
         "node_to_fbx_roblox",

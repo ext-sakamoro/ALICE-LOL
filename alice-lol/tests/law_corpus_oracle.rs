@@ -660,12 +660,16 @@ const REACHABLE_RESOLUTION_CAPPED: &[(&str, f32)] = &[
     ("fixture:sword", 0.0036),
     ("fixture:pen_cup_torus", 2.0001),
     ("fixture:gridfinity_bin_ex", 0.4880),
+    // the 30 mm front lip and the tier pitch (can + lip + shelf + 5) are fixed, so at the corpus's small
+    // can the rack is tall against its 3 mm walls
+    ("can_rack", 3.0001),
 ];
 
 /// 到達性の判定の対象にならない construct (base 解像度 4): 外接箱が無い、または判定の cell の半対角より深い
 /// 端の点が 2 つ取れない (2D の形・解像度が上限に当たり壁が cell より薄いもの・薄い殻など) 黙って数から落とさ
 /// ないよう名前で固定する (増えても減っても red、どれが動いたかを出す)
 const REACHABLE_SKIPPED_RES4: &[&str] = &[
+    "can_rack",
     "skadis_shelf",
     "drawer_organizer",
     "shelf_divider",
@@ -729,6 +733,7 @@ const REACHABLE_SKIPPED_RES4: &[&str] = &[
 
 /// [`REACHABLE_SKIPPED_RES4`] at the base resolution 8 (the endpoint depth follows the cell, so the sets differ)
 const REACHABLE_SKIPPED_RES8: &[&str] = &[
+    "can_rack",
     "skadis_shelf",
     "drawer_organizer",
     "shelf_divider",
