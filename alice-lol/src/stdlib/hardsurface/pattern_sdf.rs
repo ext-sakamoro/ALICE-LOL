@@ -7566,7 +7566,13 @@ pub fn cable_grommet(spec: &CableGrommetSpec) -> SdfNode {
     let flange_hh = spec.flange_thickness * 0.5;
     let inner_r = spec.inner_dia * 0.5;
 
-    let body = cylinder(body_r, body_hh);
+    // 胴の上端でフランジと面だけで接すると継ぎ目になるので、胴をフランジの厚みの半分だけフランジの中へ
+    // 延ばす (延びた分はフランジの中、胴の下端とフランジの位置は不変)
+    let into_flange = flange_hh;
+    let body = translate(
+        cylinder(body_r, body_hh + into_flange * 0.5),
+        Vec3::new(0.0, into_flange * 0.5, 0.0),
+    );
     // フランジは body 上端 (Y+) に配置
     let flange = translate(
         cylinder(flange_r, flange_hh),
