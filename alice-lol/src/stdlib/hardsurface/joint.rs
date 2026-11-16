@@ -497,8 +497,11 @@ mod tests {
             SdfNode::Union { a, b } => {
                 // a = 梁 Box3d
                 assert!(matches!(&**a, SdfNode::Box3d { .. }));
-                // b = translate(hook Box3d)
-                assert!(matches!(&**b, SdfNode::Translate { .. }));
+                // b = translate(hook Box3d) を梁で切った差 (梁の上面より下は梁の中だけ)
+                let SdfNode::Subtraction { a: hook, .. } = &**b else {
+                    panic!("expected the hook clipped to the beam")
+                };
+                assert!(matches!(&**hook, SdfNode::Translate { .. }));
             }
             _ => panic!("expected Union"),
         }

@@ -449,13 +449,13 @@ fn dowel_hole_adds_exactly_one_tenth_of_a_millimetre_to_the_diameter() {
 // fastener — 配置の代数恒等式 (面一 / テーパー角)
 // ════════════════════════════════════════════════════════
 
-/// 座ぐりの頭部沈み穴の上端は 板上面とちょうど面一
+/// 座ぐりの頭部沈み穴の上端は 板上面の CAVITY_PUNCH_MARGIN 外、下端 (座面) は 板上面 − 沈み深さ
 ///
-/// oracle: 配置 `offset = (T − b)/2`、半高 `b/2` ⇒ 上端 `= offset + b/2 = T/2`
-/// = **板厚に依らず板上面と一致** する代数恒等式 (`b` = 頭高 + 0.5 沈み余裕)
-/// 既存 test は Union の構造 (`Cylinder` / `Translate`) しか見ておらず配置を検査していない
+/// oracle: 配置 `offset = T/2 − b + (b + m)/2`、半高 `(b + m)/2` ⇒ 上端 `= T/2 + m`、下端 `= T/2 − b`
+/// (`b` = 頭高 + 0.5 沈み余裕、`m` = CAVITY_PUNCH_MARGIN) 上端を板上面でちょうど止めると、口の上で場が
+/// 0 になり厚み 0 の膜が残る (以前の形、この試験はその面一を固定していた)
 #[test]
-fn counterbore_bore_top_is_flush_with_the_plate_top_face() {
+fn counterbore_bore_top_reaches_past_the_plate_top_face() {
     for size in ALL_SIZES {
         for i in 0..5_u16 {
             let plate = f32::from(i).mul_add(2.0, 6.0);
@@ -472,12 +472,14 @@ fn counterbore_bore_top_is_flush_with_the_plate_top_face() {
                 eval(&node, start) < 0.0,
                 "{size:?} T={plate} 沈み穴内部の測定開始点が内部でない"
             );
+            // 上端 = 板上面 + CAVITY_PUNCH_MARGIN (板の面でちょうど止めると口の上に厚み 0 の膜が残る)
+            let top = plate * 0.5 + alice_lol::stdlib::hardsurface::cavity::CAVITY_PUNCH_MARGIN;
             let up = boundary(&node, start, Vec3::Y, 4.0 * plate);
             assert!(
-                approx(y + up, plate * 0.5, GEO_TOL),
-                "{size:?} T={plate} 沈み穴上端: 測定 {} / 板上面 {}",
+                approx(y + up, top, GEO_TOL),
+                "{size:?} T={plate} 沈み穴上端: 測定 {} / 板上面 + 余裕 {}",
                 y + up,
-                plate * 0.5
+                top
             );
             // 下端 = 板上面 − 沈み深さ
             let down = boundary(&node, start, -Vec3::Y, 4.0 * plate);

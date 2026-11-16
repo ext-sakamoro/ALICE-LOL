@@ -630,14 +630,19 @@ mod tests {
         let node = bolt(MetricSize::M4, 20.0);
         match &node {
             SdfNode::Union { a, b } => {
-                // a = 軸 cylinder、b = translate(頭 cylinder)
-                match &**a {
+                // a = translate(軸 cylinder)、軸は頭の高さの半分 (M4 は 4 / 2 = 2) だけ頭の中へ延びる
+                // (下端 -10 は不変、上端 12): 半高 (20 + 2) / 2 = 11、中心 +1
+                let SdfNode::Translate { child, offset } = &**a else {
+                    panic!("expected Translate for shank")
+                };
+                assert!(approx_eq(offset.y, 1.0), "{offset}");
+                match &**child {
                     SdfNode::Cylinder {
                         radius,
                         half_height,
                     } => {
                         assert!(approx_eq(*radius, 2.0)); // 呼び径/2
-                        assert!(approx_eq(*half_height, 10.0)); // 20/2
+                        assert!(approx_eq(*half_height, 11.0));
                     }
                     _ => panic!("expected Cylinder for shank"),
                 }

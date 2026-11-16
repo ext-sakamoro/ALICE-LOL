@@ -46,24 +46,28 @@ fn a_thin_plate_keeps_the_floor_and_the_head_stands_proud() {
     );
 }
 
-/// On a plate thick enough for the head, the tree is exactly the former one (bore = head + 0.5)
+/// On a plate thick enough for the head, the bore is head + 0.5 deep (the seat at t/2 − bore_depth) and
+/// the pocket reaches `CAVITY_PUNCH_MARGIN` past the plate's face: a pocket that stopped exactly on the
+/// face (the former tree) left the field 0 across its mouth, a zero-thickness membrane over the head
 #[test]
-fn a_thick_plate_is_unchanged_bit_for_bit() {
+fn a_thick_plate_keeps_its_seat_with_the_pocket_open_past_the_face() {
     let m = MetricSize::M4;
     let t = 8.0_f32;
     let bore_depth = m.head_height_socket() + 0.5;
     assert_eq!(counterbore_depth(m, t).to_bits(), bore_depth.to_bits());
-    let former = SdfNode::Union {
+    let margin = alice_lol::stdlib::hardsurface::cavity::CAVITY_PUNCH_MARGIN;
+    let bore_len = bore_depth + margin;
+    let expected = SdfNode::Union {
         a: Arc::new(screw_hole(m, t + 10.0)),
         b: Arc::new(SdfNode::Translate {
             child: Arc::new(SdfNode::Cylinder {
                 radius: m.head_diameter_socket() * 0.5,
-                half_height: bore_depth * 0.5,
+                half_height: bore_len * 0.5,
             }),
-            offset: Vec3::new(0.0, (t - bore_depth) * 0.5, 0.0),
+            offset: Vec3::new(0.0, bore_len.mul_add(0.5, t.mul_add(0.5, -bore_depth)), 0.0),
         }),
     };
-    assert_eq!(format!("{:?}", counterbore(m, t)), format!("{former:?}"));
+    assert_eq!(format!("{:?}", counterbore(m, t)), format!("{expected:?}"));
 }
 
 /// A plate thinner than the floor gets no counterbore (depth 0), only the through hole
