@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#6269efc2280a74301c91139117d5d01a5eca60df"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#9b6538aab2f166ae0afb5b806ae8611b89cad5dd"
 dependencies = [
  "bytemuck",
  "wide",
@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "alice-llm"
 version = "5.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-LLM?branch=main#e8b8a1dfacf2fb707e9447f81cd2d55cf6c98773"
+source = "git+https://github.com/ext-sakamoro/ALICE-LLM?branch=main#adab83280f26d3b4785f9899af9ec3b66b5e68e8"
 dependencies = [
  "alice-det-math",
  "rayon",
