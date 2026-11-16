@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#6269efc2280a74301c91139117d5d01a5eca60df"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#9b6538aab2f166ae0afb5b806ae8611b89cad5dd"
 dependencies = [
  "bytemuck",
  "wide",
@@ -164,7 +164,7 @@ dependencies = [
 [[package]]
 name = "alice-zip"
 version = "0.12.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#95ef35acd5ae33bc1dfceaf4d3b74925c50775a4"
+source = "git+https://github.com/ext-sakamoro/ALICE-Zip?branch=main#52186410b2f445090b33429270671d8c4fe47683"
 dependencies = [
  "alice-det-math",
  "libm",
