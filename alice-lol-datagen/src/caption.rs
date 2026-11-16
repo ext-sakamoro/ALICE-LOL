@@ -111,8 +111,10 @@ pub fn describe(node: &SdfNode) -> String {
             hex_radius,
             half_height,
         } => format!(
-            "a hexagonal prism of radius {} and total height {}",
-            fmt_mm(*hex_radius),
+            // `hex_radius` is the distance from the axis to the flat sides (the apothem): say the width
+            // across the flats, which a "radius" of a hexagon (usually the corner distance) does not
+            "a hexagonal prism {} across the flats and {} tall",
+            fmt_mm(hex_radius * 2.0),
             fmt_mm(half_height * 2.0)
         ),
         SdfNode::Translate { child, offset } => {
