@@ -74,12 +74,9 @@ pie 1
 pipe 1
 pmy 1
 pyramid 1
-rack_shelf 2
-rack_shelf@size 2
 rect_2d 1
 regular_polygon 1
 repeat 1
-repeat_finite 1
 revolution 1
 rhombus 1
 round 1
