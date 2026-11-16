@@ -395,7 +395,7 @@ fn stdlib_shapes_emit_bit_identical_text_across_architectures() {
         ),
         (
             "phone_dock",
-            "d7460c34666061716e6a84239645d363ddbdbdd95dcc151a894370d093e29de4",
+            "b168c640c349a4c12a01cecdf6520985662e9d7ccfc407bd22f9a6db11f9a3e7",
         ),
     ];
     let texts: &[(&str, String)] = &[

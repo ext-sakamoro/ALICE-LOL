@@ -97,34 +97,36 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 /// stdlib corrections): the scene is `sphere(1.0)`, so only the producer stamp in each file changed
 /// Re-recorded when it moved to `42fbfa56…` (the stdlib template trees joined the fold): same scene, only
 /// the producer stamp changed
+/// Re-recorded when it moved to `9b82c3c3…` (the alice-sdf shape semantics joined the fold) and the
+/// primary identifier (alice-sdf `SDF_SEMANTICS_ID`) moved to `443238e4…`: same scene, both stamps changed
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "068900e658ff2eb65cffa2e014ae707e529cab4e59ed5ba53b4c97770777f951",
+        "58fc0dd3405934fd332518a38e8f3762f41a448d6aafe999595b7bf625bd6720",
     ),
     (
         "node_to_3mf",
-        "11df191168871912e124a22795c359b5b0dea539ec4ce2f1bfab54b9351ed393",
+        "baa105072102c1f56ebae3e0c0af43da0a16600ba6120899f026413525d56d30",
     ),
     (
         "node_to_fbx",
-        "67cd52aeafe32393d4dcc538578f8f12515a75a27340e8a60c2fb558bd706621",
+        "de2f01ccee679db25bae415f2fbe87e6a74cbb18ca28e4a3da40587eb047d37a",
     ),
     (
         "node_to_stl_dual_contouring",
-        "c6aadc5a9ff9725d9c5f6c06f88ac35554a197068fb66d8b0afc024617674cf2",
+        "3f36614efda702a914b979aa76ca31fee8325bfe3c8fd85bcc2684b8cc2c1eb5",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "efb09de1692f33ed415b6fd28d139a5801416ed3e5fc0ecc2a29f6f206bf4939",
+        "92dedc0d01d2b30ccd845b87e0212e0eb741ba5faf1e4dc8c8f75025d22821a2",
     ),
     (
         "node_to_fbx_roblox",
-        "aedd88a525decd84f97ad4d39fef3bba2bceb9a3e58011fbf2a7f17154a96694",
+        "12c44e32870c79799c676692945baf52a2ab7caf02d232ff43b9e3eef023f920",
     ),
     (
         "node_to_obj_roblox",
-        "2cbb8501b65e4797175c3134e6682bb8117233585f7fae7126b607c7e5d25219",
+        "616366a44312ab03560e234266f970f6ac0206f358a36cf6949674f9a70a6be7",
     ),
 ];
 

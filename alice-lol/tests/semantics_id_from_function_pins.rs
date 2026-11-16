@@ -144,3 +144,26 @@ fn the_whole_identifier_generations_are_not_accepted() {
         PREVIOUS_LOL_SEMANTICS_IDS.is_empty() && PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS.is_empty()
     );
 }
+
+/// `42fbfa56…` (before the alice-sdf shape-semantics row and the rim / tape template changes) is not a
+/// previous identifier: under it the stdlib template trees folded to `e1d215d4…`, and they fold to
+/// something else now (`tape_dispenser`, the open-topped outers and the plates with holes build other
+/// trees), and the alice-sdf it was computed against (bed9d564, `SDF_SEMANTICS_ID` `db7ff4a4…`) is not the
+/// one resolved now (among the changes since: odd `repeat_finite` counts)
+#[test]
+fn the_identifier_before_the_alice_sdf_row_is_refused() {
+    let old = hex32("42fbfa56b13d4e2b4d1b32fe1b19af258bdfa8b974f263457caea47b6845d56e");
+    assert_ne!(old, LOL_GEOMETRY_SEMANTICS_ID);
+    assert!(!PREVIOUS_LOL_GEOMETRY_SEMANTICS_IDS.contains(&old));
+    assert_eq!(check_lol_geometry_semantics(&old), SemanticsCheck::Mismatch);
+    assert_ne!(
+        alice_lol::geometry_id::stdlib_template_probe_digest().expect("every probe parses"),
+        hex32("e1d215d4d8a580a6d7a39328dcd036647f044d4629e606405b39757b861d5701"),
+        "the template trees fold as they did under 42fbfa56; the old id could be a previous one"
+    );
+    assert_ne!(
+        alice_sdf::SDF_SEMANTICS_ID,
+        hex32("db7ff4a4b7daf3f242f353fc7af2c448832e8625c19f2522561d3b83a496f775"),
+        "the alice-sdf shape meaning is the one 42fbfa56 was computed against (alice-sdf bed9d564)"
+    );
+}

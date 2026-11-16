@@ -38,7 +38,7 @@ include!("data/parse_corpus_bbb6539.rs");
 /// Re-recorded when `shelf_divider` cut its plate holes as round Ø15 through-holes on a triangular
 /// lattice (each hole placed by itself, not a `RepeatFinite` read as anchored at a corner): the dump
 /// differs in the 5 lines of `shelf_divider` only
-const DIGEST: &str = "725e822fa3a49d097134a277b7782ad6631ffc515f2593143155d6c98e44e49f";
+const DIGEST: &str = "9fb67c2ab013b8d465d181c983125918f93e285c6b6e8e378352e59aedb6cba7";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {

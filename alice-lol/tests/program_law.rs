@@ -2,9 +2,9 @@
 //!
 //! Oracle: the expected bytes and law identifiers were written by ALICE-Zip's independent
 //! implementation (`scripts/law_ref_v2_reference.py` at 5218641, standard-library Python) for kind
-//! `lol.law.program/v1`, the geometry semantics identifier (42fbfa56, the fold that includes the stdlib
-//! template trees) and one `source` row; they are not computed by the code under test (the same script
-//! reproduces the earlier values under 41c29e6c and 8ee0c1a3).
+//! `lol.law.program/v1`, the geometry semantics identifier (9b82c3c3, the fold that includes the
+//! alice-sdf shape semantics row) and one `source` row; they are not computed by the code under test (the
+//! same script reproduces the earlier values under 42fbfa56, 41c29e6c and 8ee0c1a3).
 
 use alice_lol::geometry_id::LOL_GEOMETRY_SEMANTICS_ID;
 use alice_lol::program_law::{
@@ -21,10 +21,10 @@ fn unhex(s: &str) -> Vec<u8> {
 }
 
 const SPHERE: &str = "sphere(1.0)";
-const SPHERE_LAW_ID: &str = "cb1ce77721417b0f3389c2b23783efe48cfce50f01ceef6d1af1bf785d1a22b5";
-const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f763142fbfa56b13d4e2b4d1b32fe1b19af258bdfa8b974f263457caea47b6845d56ecb1ce77721417b0f3389c2b23783efe48cfce50f01ceef6d1af1bf785d1a22b50106736f7572636505000000000000000b73706865726528312e3029";
+const SPHERE_LAW_ID: &str = "0e3cfd01a87d889a43e45e1a1a307cd9126a3bc7f0b288b9e53cfb16044ec1b6";
+const SPHERE_BYTES: &str = "4c4f4c520002126c6f6c2e6c61772e70726f6772616d2f76319b82c3c330accd463b34ae863c109e9adc5bbd65fc0893e78570687bd072d3fe0e3cfd01a87d889a43e45e1a1a307cd9126a3bc7f0b288b9e53cfb16044ec1b60106736f7572636505000000000000000b73706865726528312e3029";
 const BOX: &str = "box3d(1.0, 1.0, 1.0)";
-const BOX_LAW_ID: &str = "0842ad917c98a5942a2ae07d271a69fe156845e8a2b07a1828d1b71d6a1081a0";
+const BOX_LAW_ID: &str = "bea14f7f24ddd6cc568747d9a9fc4fcf465803f40b070431d23175ab4b311327";
 
 #[test]
 fn the_kind_and_the_semantics_are_the_program_law_s() {
