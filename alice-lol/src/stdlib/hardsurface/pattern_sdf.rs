@@ -6151,7 +6151,7 @@ pub struct CanRackSpec {
     pub wall_thickness: f32,
     /// shelf 厚 (mm、default 3)
     pub shelf_thickness: f32,
-    /// 前端 lip 高さ (mm、can 抜け防止、default 15)
+    /// 前端 lip 高さ (mm、can 抜け防止、default 30: 設計資料の前止め 30-40 mm の下限)
     pub front_lip_height: f32,
 }
 
@@ -6166,7 +6166,7 @@ impl CanRackSpec {
             cans_per_row: 6,
             wall_thickness: 3.0,
             shelf_thickness: 3.0,
-            front_lip_height: 15.0,
+            front_lip_height: 30.0,
         }
     }
 }
