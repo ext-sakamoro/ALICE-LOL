@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "alice-det-math"
 version = "0.6.1"
-source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#9b6538aab2f166ae0afb5b806ae8611b89cad5dd"
+source = "git+https://github.com/ext-sakamoro/ALICE-DetMath?branch=main#313049a2a379d076c5e15d184e04fd865d2f90b9"
 dependencies = [
  "bytemuck",
  "wide",
@@ -54,7 +54,7 @@ dependencies = [
 [[package]]
 name = "alice-sdf"
 version = "7.0.0"
-source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#b54cd6c688875123c2ed98563135b3924dcf4b4b"
+source = "git+https://github.com/ext-sakamoro/ALICE-SDF?branch=main#adbbb13aa7678a33059e7ce502a338aaaa7c6e73"
 dependencies = [
  "alice-det-math",
  "alice-zip",
