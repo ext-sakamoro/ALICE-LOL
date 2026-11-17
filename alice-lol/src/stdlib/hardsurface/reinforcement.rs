@@ -181,12 +181,12 @@ pub fn chamfer(a: SdfNode, b: SdfNode, size: f32) -> SdfNode {
 ///
 /// 今の形 (引数との関係、`HexPrism` の `hex_radius` は軸から平らな辺までの距離):
 /// - 穴: Y 方向に抜けた 6 角柱、平らな辺は ±Z を向き、角は ±X を向く 対辺の幅は
-///   `max(2·cell_size/√3 − wall_thickness, 0)` (≈ 1.155·cell_size − wall_thickness)、`cell_size` そのもの
+///   `max(2·cell_size/√3 − wall_thickness, 0)` (≈ `1.155·cell_size − wall_thickness`)、`cell_size` そのもの
 ///   ではない
 /// - 穴の中心: X に `√3·cell_size`、Z に `1.5·cell_size` の間隔の四角い格子、各軸 `2·count + 1` 個
 /// - 穴と穴の間の壁: X 方向 (角と角) は `(√3 − 4/3)·cell_size + (2/√3)·wall_thickness`
-///   (≈ 0.399·cell_size + 1.155·wall_thickness)、Z 方向 (辺と辺) は `(1.5 − 2/√3)·cell_size + wall_thickness`
-///   (≈ 0.345·cell_size + wall_thickness) で、どちらも `wall_thickness` ではない
+///   (≈ `0.399·cell_size + 1.155·wall_thickness`)、Z 方向 (辺と辺) は `(1.5 − 2/√3)·cell_size + wall_thickness`
+///   (≈ `0.345·cell_size + wall_thickness`) で、どちらも `wall_thickness` ではない
 ///
 /// 引数の名前 (対辺の幅・壁の厚み) どおりの千鳥のハニカムに作り直すのは別の変更 (形が変わる) 今は
 /// 呼び出し元が無い

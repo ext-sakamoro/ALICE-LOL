@@ -6302,7 +6302,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
         let y0 = tier_spacing.mul_add(n_f32(i), -outer_hy + spec.wall_thickness) + back_rise;
         slots.push(translate(
             box3d(shelf_width * 0.5, slot_h * 0.5, spec.wall_thickness),
-            Vec3::new(0.0, y0 + slot_h * 0.5, -outer_hz + half_wall),
+            Vec3::new(0.0, slot_h.mul_add(0.5, y0), -outer_hz + half_wall),
         ));
     }
     if let Some(all) = super::balanced_union_fold(cutters) {

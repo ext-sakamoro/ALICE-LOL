@@ -99,7 +99,7 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 /// the producer stamp changed
 /// Re-recorded when it moved to `9b82c3c3…` (the alice-sdf shape semantics joined the fold) and the
 /// primary identifier (alice-sdf `SDF_SEMANTICS_ID`) moved to `443238e4…`: same scene, both stamps changed
-/// Re-recorded when it moved to `66d222f0…` (template shapes: seams, membranes, can_rack): same scene, only
+/// Re-recorded when it moved to `66d222f0…` (template shapes: seams, membranes, `can_rack`): same scene, only
 /// the producer stamp changed
 const GOLDEN: &[(&str, &str)] = &[
     (

@@ -305,6 +305,7 @@ fn recorded() -> Vec<Recorded> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // one walk over the recorded corpus: reading, classifying and reporting share its state
 fn every_recorded_seam_is_material_and_every_recorded_cut_is_air() {
     let mut corpus = corpus();
     corpus.extend(template_sizes());
@@ -1084,8 +1085,12 @@ fn templates_with_nodes_the_analysis_cannot_follow_are_listed_and_ratcheted() {
 fn material_runs(part: &SdfNode, x: f32, y: f32, z0: f32, z1: f32, dz: f32) -> Vec<(f32, f32)> {
     let mut runs = Vec::new();
     let mut start = None;
-    let mut z = z0;
-    while z <= z1 {
+    // an integer step count, so the walk does not depend on accumulating z
+    // a few hundred thousand steps at most over a part, with z1 > z0 and dz > 0 in every caller
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let steps = ((z1 - z0) / dz).floor() as usize;
+    for k in 0..=steps {
+        let z = (k as f32).mul_add(dz, z0);
         let inside = eval(part, Vec3::new(x, y, z)) < 0.0;
         match (inside, start) {
             (true, None) => start = Some(z),
@@ -1095,7 +1100,6 @@ fn material_runs(part: &SdfNode, x: f32, y: f32, z0: f32, z1: f32, dz: f32) -> V
             }
             _ => {}
         }
-        z += dz;
     }
     if let Some(a) = start {
         runs.push((a, z1));
@@ -1121,7 +1125,7 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
         let pitch = dia + lip + t + c;
         let depth = 6.0 * (dia + 2.0);
         let (hx, hy) = ((dia + 8.0 + 2.0 * w) * 0.5, (depth + 2.0 * w) * 0.5);
-        let hz = (n as f32).mul_add(pitch, w) + depth * tilt.to_radians().tan();
+        let hz = (n as f32).mul_add(pitch, w) + depth * alice_det_math::tan(tilt.to_radians());
         let hz = hz * 0.5;
         // nothing outside the outer box, the bottom flat at -hz (prints without support there)
         for (got, lim, side) in [
@@ -1150,9 +1154,7 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
         // the low end of the shelves is the front
         let front = if ra[0].1 < rb[0].1 { -1.0 } else { 1.0 };
         for i in 0..n as usize {
-            let deg = ((ra[i].1 - rb[i].1).abs() / (2.0 * span))
-                .atan()
-                .to_degrees();
+            let deg = alice_det_math::atan((ra[i].1 - rb[i].1).abs() / (2.0 * span)).to_degrees();
             assert!((deg - tilt).abs() < 0.05, "{what} tier {i} tilt {deg}");
             compared += 1;
         }
@@ -1182,8 +1184,8 @@ fn the_can_rack_holds_its_cans_and_stays_inside_its_box() {
         // in the back wall: above each tier's back end, an air run at least D + 4 tall (the loading slot)
         let back = runs(-front * (hy - w * 0.5));
         let near_back = runs(-front * (hy - w - 2.0));
-        for i in 0..n as usize {
-            let shelf_top = near_back[i].1;
+        for (i, run) in near_back.iter().enumerate().take(n as usize) {
+            let shelf_top = run.1;
             let from = shelf_top + 0.5;
             // the first material above the shelf top in the back wall (a missing slot puts it right there)
             let above = back

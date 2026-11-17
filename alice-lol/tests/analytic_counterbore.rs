@@ -46,7 +46,7 @@ fn a_thin_plate_keeps_the_floor_and_the_head_stands_proud() {
     );
 }
 
-/// On a plate thick enough for the head, the bore is head + 0.5 deep (the seat at t/2 − bore_depth) and
+/// On a plate thick enough for the head, the bore is head + 0.5 deep (the seat at `t/2 − bore_depth`) and
 /// the pocket reaches `CAVITY_PUNCH_MARGIN` past the plate's face: a pocket that stopped exactly on the
 /// face (the former tree) left the field 0 across its mouth, a zero-thickness membrane over the head
 #[test]
