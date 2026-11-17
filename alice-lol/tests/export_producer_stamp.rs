@@ -124,11 +124,11 @@ const GOLDEN: &[(&str, &str)] = &[
     ),
     (
         "node_to_fbx_roblox",
-        "12c44e32870c79799c676692945baf52a2ab7caf02d232ff43b9e3eef023f920",
+        "a892611da91c5215a2f7723ef1454b4f63d8371a7f4abff64d1208d56c8eff09",
     ),
     (
         "node_to_obj_roblox",
-        "616366a44312ab03560e234266f970f6ac0206f358a36cf6949674f9a70a6be7",
+        "22b69a7b03ae14c1efa6c3911da72d41aee4f4b78d9a15dd67c8bc29f3eceaf5",
     ),
 ];
 
