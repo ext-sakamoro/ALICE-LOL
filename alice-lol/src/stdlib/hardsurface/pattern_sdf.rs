@@ -6262,13 +6262,15 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let s_back = (z_back - half_wall - z_front) / along.z;
     let s_front = half_wall / along.z;
     let shelf_hz = (s_front - s_back) * 0.5;
-    let s_mid = (s_front + s_back) * 0.5;
+    let s_mid = f32::midpoint(s_front, s_back);
     let lip_hz = half_wall;
     // 縁の下端: 前端で棚の下面より下 (棚の上面から、棚の厚みを傾きで割った分と、縁の厚みの分の傾き)
-    let lip_below = spec.shelf_thickness / up.y + spec.wall_thickness * (along.y.abs() / along.z);
+    let lip_below = spec
+        .wall_thickness
+        .mul_add(along.y.abs() / along.z, spec.shelf_thickness / up.y);
     let mut cutters: Vec<SdfNode> = Vec::new();
     for i in 0..rows {
-        let y_front = -outer_hy + spec.wall_thickness + tier_spacing * (n_f32(i));
+        let y_front = tier_spacing.mul_add(n_f32(i), -outer_hy + spec.wall_thickness);
         let top_front = Vec3::new(0.0, y_front, z_front);
         let centre = top_front + along * s_mid - up * shelf_hy;
         let shelf = translate(
@@ -6284,7 +6286,7 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
         let lip_y1 = y_front + spec.front_lip_height;
         let lip = translate(
             box3d(shelf_hx, (lip_y1 - lip_y0) * 0.5, lip_hz),
-            Vec3::new(0.0, (lip_y0 + lip_y1) * 0.5, outer_hz - lip_hz),
+            Vec3::new(0.0, f32::midpoint(lip_y0, lip_y1), outer_hz - lip_hz),
         );
 
         cutters.push(shelf);
@@ -6296,7 +6298,8 @@ pub fn can_rack(spec: &CanRackSpec) -> SdfNode {
     let back_rise = (z_front - z_back) * (tilt_sin / tilt_cos);
     let mut slots: Vec<SdfNode> = Vec::new();
     for i in 0..rows {
-        let y0 = (-outer_hy + spec.wall_thickness + tier_spacing * n_f32(i)) + back_rise;
+        // the tier floor, computed as for the shelves (y_front) so the slot starts where the shelf does
+        let y0 = tier_spacing.mul_add(n_f32(i), -outer_hy + spec.wall_thickness) + back_rise;
         slots.push(translate(
             box3d(shelf_width * 0.5, slot_h * 0.5, spec.wall_thickness),
             Vec3::new(0.0, y0 + slot_h * 0.5, -outer_hz + half_wall),
