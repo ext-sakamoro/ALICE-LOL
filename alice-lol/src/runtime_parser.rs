@@ -56,6 +56,14 @@ pub const MAX_STDLIB_SMOOTH_FOLD_COUNT: f32 = 24.0;
 /// rows × cols の格子に置ける要素数の上限
 pub const MAX_STDLIB_GRID_CELLS: f32 = 4096.0;
 
+/// 呼び出しの入れ子の深さの上限 (これを超える text は `ParseError` で拒否する)
+///
+/// 実用の木は深くても数千段 (stdlib の product が書く subtract の 2,400 段の連鎖) で、上限はそれより
+/// 十分上に置く 悪意のある入れ子 (`translate(translate(…))` を際限なく重ねた text) で parse・emit・
+/// shader の変換が際限なく時間と記憶を使わないための止め 深さは呼び出しの入れ子で数え、n 個の
+/// 引数を並べた 1 つの呼び出し (`union(a, b, c, …)`) は深さ 1 つ
+pub const MAX_PARSE_DEPTH: usize = 8_192;
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // エラー型
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -256,6 +264,8 @@ impl<'a> Lexer<'a> {
 struct Parser<'a> {
     lexer: Lexer<'a>,
     peeked: Option<Token>,
+    /// 今読んでいる呼び出しの入れ子の深さ
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -263,6 +273,7 @@ impl<'a> Parser<'a> {
         Self {
             lexer: Lexer::new(input),
             peeked: None,
+            depth: 0,
         }
     }
 
@@ -676,6 +687,20 @@ impl<'a> Parser<'a> {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     fn parse_expr(&mut self) -> Result<SdfNode, ParseError> {
+        if self.depth >= MAX_PARSE_DEPTH {
+            return Err(ParseError {
+                kind: ParseErrorKind::Syntax,
+                message: format!("呼び出しの入れ子が上限 {MAX_PARSE_DEPTH} を超える"),
+                position: self.lexer.position(),
+            });
+        }
+        self.depth += 1;
+        let node = self.parse_expr_depth();
+        self.depth -= 1;
+        node
+    }
+
+    fn parse_expr_depth(&mut self) -> Result<SdfNode, ParseError> {
         // 本体 (`parse_expr_inner`) は 250+ arm の match で frame が大きく、深い
         // tree (stdlib product の subtract 2,400 連鎖 = 正当な LOL) で再帰が
         // 8 MB stack を使い切る 残りが red zone (4 MB、debug build の
