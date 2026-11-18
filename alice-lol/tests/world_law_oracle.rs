@@ -646,7 +646,7 @@ fn the_bits_are_the_recorded_ones() {
     let law = WorldLaw::from_file(MOCHI).unwrap();
     assert_eq!(
         hex(&law.law_id()),
-        "9446884f2d8eee535eca7ef5f35fd89b47df68cba9ef34e4cd52fd0d0cce9976"
+        "5a3d40c6d7aad1715474cdee0536cccf97fd82a51c880a4af48670a3521b09ed"
     );
     let w = law.bind(&[("strength", Number(7.5))]).unwrap();
     // 7.5/3600 as its exact f64 bits
@@ -1086,4 +1086,117 @@ fn a_contact_angle_is_stated_with_its_basis_and_range() {
     );
     // the mochi law reads
     assert!(WorldLaw::from_file(MOCHI).is_ok());
+}
+
+fn angles(
+    receding: &str,
+    rest: &str,
+    advancing: &str,
+) -> Result<alice_lol::world_law::BoundWorld, String> {
+    let mut text = ONE.to_owned();
+    for (field, v) in [
+        ("contact_angle_receding", receding),
+        ("contact_angle", rest),
+        ("contact_angle_advancing", advancing),
+    ] {
+        if !v.is_empty() {
+            text.push_str(&format!("material a {field} = {v}\n"));
+        }
+    }
+    WorldLaw::from_file(&text)
+        .map_err(|e| e.to_string())?
+        .bind(&[])
+        .map_err(|e| e.to_string())
+}
+
+/// A material may state the advancing and receding contact angles (degrees) with their bases; their
+/// range is the static angle's, and a drop's edge recedes at no more than it rests at and rests at no
+/// more than it advances at: a law stating a pair in the other order is refused, equal angles are not
+#[test]
+fn the_advancing_and_receding_angles_are_stated_in_order() {
+    let w = WorldLaw::from_file(&format!(
+        "{ONE}material a contact_angle_advancing = 70\nmaterial a contact_angle_advancing basis assumed\n\
+         material a contact_angle_receding = 50\nmaterial a contact_angle_receding basis measured\n"
+    ))
+    .unwrap()
+    .bind(&[])
+    .unwrap();
+    let m = w.material("a").unwrap();
+    assert_eq!(m.contact_angle_advancing, Some(70.0));
+    assert_eq!(m.contact_angle_advancing_basis, Some(Basis::Assumed));
+    assert_eq!(m.contact_angle_receding, Some(50.0));
+    assert_eq!(m.contact_angle_receding_basis, Some(Basis::Measured));
+    // in order, and the equal edges
+    for (r, s, a) in [
+        ("50", "60", "70"),
+        ("60", "60", "70"),
+        ("50", "70", "70"),
+        ("60", "60", "60"),
+        ("50", "", "70"),
+        ("70", "", "70"),
+        ("", "60", "70"),
+        ("50", "60", ""),
+    ] {
+        assert!(angles(r, s, a).is_ok(), "{r} {s} {a}");
+    }
+    // receding above the static angle, the static angle above advancing, receding above advancing
+    for (r, s, a) in [
+        ("61", "60", "70"),
+        ("50", "71", "70"),
+        ("71", "", "70"),
+        ("61", "60", ""),
+        ("", "71", "70"),
+    ] {
+        let e = angles(r, s, a).expect_err(&format!("{r} {s} {a} is out of order"));
+        assert!(e.contains("in order"), "{e}");
+    }
+    // out of range, as the static angle
+    for out in ["0", "180.5"] {
+        assert!(
+            angles(out, "", "").is_err() && angles("", "", out).is_err(),
+            "{out}"
+        );
+    }
+    // stating them is part of the identifier
+    let one = WorldLaw::from_file(ONE).unwrap();
+    let stated =
+        WorldLaw::from_file(&format!("{ONE}material a contact_angle_advancing = 70\n")).unwrap();
+    assert_ne!(one.law_id(), stated.law_id());
+}
+
+/// The hysteresis is the Furmidge factor cos θr − cos θa: for 50 and 70 degrees it is
+/// cos 50° − cos 70° = 0.642787609686539326 − 0.342020143325668733 (the cosines to 18 places from
+/// tables, not from the code), and `None` unless both angles are stated
+#[test]
+fn the_hysteresis_is_the_difference_of_the_cosines() {
+    let w = angles("50", "60", "70").unwrap();
+    let m = w.material("a").unwrap();
+    let h = m.contact_angle_hysteresis().unwrap();
+    let expected = 0.642_787_609_686_539_3_f64 - 0.342_020_143_325_668_7_f64;
+    assert!(
+        (h - expected).abs() <= 4.0 * f64::EPSILON,
+        "{h} against {expected}"
+    );
+    // equal angles hold nothing
+    let none = angles("60", "60", "60").unwrap();
+    assert_eq!(
+        none.material("a").unwrap().contact_angle_hysteresis(),
+        Some(0.0)
+    );
+    assert_eq!(
+        angles("50", "60", "")
+            .unwrap()
+            .material("a")
+            .unwrap()
+            .contact_angle_hysteresis(),
+        None
+    );
+    // the mochi law states 70 / 50
+    let mochi = WorldLaw::from_file(MOCHI).unwrap().bind(&[]).unwrap();
+    let m = mochi.material("mochi").unwrap();
+    assert_eq!(
+        (m.contact_angle_receding, m.contact_angle_advancing),
+        (Some(50.0), Some(70.0))
+    );
+    assert!((m.contact_angle_hysteresis().unwrap() - expected).abs() <= 4.0 * f64::EPSILON);
 }

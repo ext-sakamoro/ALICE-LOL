@@ -187,6 +187,23 @@ fn print_grips(bound: &alice_lol::world_law::BoundWorld) {
             };
             println!("contact_angle {}: degrees={a} basis={basis}", m.name);
         }
+        if let (Some(r), Some(a), Some(h)) = (
+            m.contact_angle_receding,
+            m.contact_angle_advancing,
+            m.contact_angle_hysteresis(),
+        ) {
+            let word = |b: Option<alice_lol::world_law::Basis>| match b {
+                Some(alice_lol::world_law::Basis::Measured) => "measured",
+                Some(alice_lol::world_law::Basis::Assumed) => "assumed",
+                None => "none",
+            };
+            println!(
+                "hysteresis {}: receding={r} advancing={a} cos_receding_minus_cos_advancing={h} basis={}/{}",
+                m.name,
+                word(m.contact_angle_receding_basis),
+                word(m.contact_angle_advancing_basis)
+            );
+        }
         if let Some(g) = bound.grip(&m.name) {
             let adhesion = g
                 .adhesion
