@@ -34,7 +34,7 @@
 //! - `let <name> = <expr>`: a value for the later lines
 //! - `material <name> <field> = <expr>`: one of [`FIELDS`], at most once per material
 //! - `material <name> <field> basis measured|assumed`: how `shear_modulus`, `poisson_ratio`,
-//!   `adhesion`, `contact_area` or `contact_angle` was obtained, after its value; the law's `source` lines say where
+//!   `adhesion`, `contact_area` or a contact angle was obtained, after its value; the law's `source` lines say where
 //!   a measured value comes from. Young's modulus is never stated:
 //!   [`BoundMaterial::youngs_modulus`] derives it as 2 G (1 + ν)
 //! - `material <name> dynamic shear|youngs at <f> storage <expr> loss <expr>`: one row of a
@@ -87,7 +87,7 @@ use crate::research_law::{CompiledExpr, LawExpr};
 pub const WORLD_LAW_KIND: &[u8] = b"lol.law.world/v1";
 
 /// The fields a material may state, in the order [`BoundMaterial`] holds them
-pub const FIELDS: [&str; 16] = [
+pub const FIELDS: [&str; 18] = [
     "density",
     "friction",
     "static_friction",
@@ -104,6 +104,8 @@ pub const FIELDS: [&str; 16] = [
     "adhesion",
     "contact_area",
     "contact_angle",
+    "contact_angle_advancing",
+    "contact_angle_receding",
 ];
 
 const DENSITY: usize = 0;
@@ -122,6 +124,8 @@ const POISSON_RATIO: usize = 12;
 const ADHESION: usize = 13;
 const CONTACT_AREA: usize = 14;
 const CONTACT_ANGLE: usize = 15;
+const CONTACT_ANGLE_ADVANCING: usize = 16;
+const CONTACT_ANGLE_RECEDING: usize = 17;
 
 /// The largest value of an unbounded field (2^53, every integer up to it is an exact `f64`, and
 /// well inside the range of `Fix128`)
@@ -453,6 +457,16 @@ pub struct BoundMaterial {
     pub contact_angle: Option<f64>,
     /// how `contact_angle` was obtained, when the law says
     pub contact_angle_basis: Option<Basis>,
+    /// the angle in degrees a drop makes where its edge advances over the dry surface, in `(0, 180]`;
+    /// with the receding angle it decides the force with which the surface holds a drop on a slope
+    pub contact_angle_advancing: Option<f64>,
+    /// how `contact_angle_advancing` was obtained, when the law says
+    pub contact_angle_advancing_basis: Option<Basis>,
+    /// the angle in degrees a drop makes where its edge recedes from the wetted surface, in `(0, 180]`;
+    /// a law refuses receding > static > advancing (each pair the material states)
+    pub contact_angle_receding: Option<f64>,
+    /// how `contact_angle_receding` was obtained, when the law says
+    pub contact_angle_receding_basis: Option<Basis>,
     /// the dynamic-modulus table, when the law states one
     pub dynamic: Option<DynamicModulus>,
 }
@@ -463,6 +477,17 @@ impl BoundMaterial {
     #[must_use]
     pub fn youngs_modulus(&self) -> Option<f64> {
         Some(2.0 * self.shear_modulus? * (1.0 + self.poisson_ratio?))
+    }
+
+    /// The contact-angle hysteresis as `cos θr − cos θa` (receding, advancing), at least 0: the factor
+    /// of the Furmidge retention force `γ w (cos θr − cos θa)` with which the surface holds a drop of
+    /// width `w`; `None` unless both angles are stated
+    #[must_use]
+    pub fn contact_angle_hysteresis(&self) -> Option<f64> {
+        let radians = |deg: f64| deg * (core::f64::consts::PI / 180.0);
+        let receding = alice_det_math::cos64(radians(self.contact_angle_receding?));
+        let advancing = alice_det_math::cos64(radians(self.contact_angle_advancing?));
+        Some(receding - advancing)
     }
 }
 
@@ -552,7 +577,9 @@ const fn field_range(slot: usize) -> &'static str {
         POISSON_RATIO => {
             "in -1..0.5 (0.5 itself is an incompressible solid, not a ratio a solid has)"
         }
-        CONTACT_ANGLE => "above 0 and at most 180 (degrees)",
+        CONTACT_ANGLE | CONTACT_ANGLE_ADVANCING | CONTACT_ANGLE_RECEDING => {
+            "above 0 and at most 180 (degrees)"
+        }
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => "in 0..=1",
         _ => "in 0..=2^53",
     }
@@ -562,7 +589,7 @@ fn field_in_range(slot: usize, v: f64) -> bool {
     match slot {
         DENSITY | SHEAR_MODULUS | CONTACT_AREA => v > 0.0 && v <= MAX_VALUE,
         POISSON_RATIO => (-1.0..0.5).contains(&v),
-        CONTACT_ANGLE => v > 0.0 && v <= 180.0,
+        CONTACT_ANGLE | CONTACT_ANGLE_ADVANCING | CONTACT_ANGLE_RECEDING => v > 0.0 && v <= 180.0,
         BOUNCE | SHAPE_STIFFNESS | DAMPING | SDF_FRICTION => (0.0..=1.0).contains(&v),
         _ => (0.0..=MAX_VALUE).contains(&v),
     }
@@ -987,11 +1014,13 @@ impl WorldLaw {
             "adhesion" => ADHESION,
             "contact_area" => CONTACT_AREA,
             "contact_angle" => CONTACT_ANGLE,
+            "contact_angle_advancing" => CONTACT_ANGLE_ADVANCING,
+            "contact_angle_receding" => CONTACT_ANGLE_RECEDING,
             _ => {
                 return Err(err(
                     line,
                     format!(
-                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion, contact_area and contact_angle)"
+                        "`{field}` takes no basis (only shear_modulus, poisson_ratio, adhesion, contact_area and the contact angles)"
                     ),
                 ))
             }
@@ -1221,6 +1250,27 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         // -0 and +0 are the same value here
         v[*slot] = Some(x + 0.0);
     }
+    // a drop's edge recedes at no more than the angle it rests at, and rests at no more than the
+    // angle it advances at: refuse a pair the material states in the other order
+    let order = [
+        CONTACT_ANGLE_RECEDING,
+        CONTACT_ANGLE,
+        CONTACT_ANGLE_ADVANCING,
+    ];
+    for (i, lo) in order.iter().enumerate() {
+        for hi in &order[i + 1..] {
+            if let (Some(a), Some(b)) = (v[*lo], v[*hi]) {
+                if a > b {
+                    let l = m.fields.iter().find(|(s, _)| s == lo).map(|(_, l)| l);
+                    return Err(BindError::OutOfRange {
+                        line: l.map_or(0, |l| l.at),
+                        name: l.map_or_else(|| FIELDS[*lo].to_owned(), |l| l.name.clone()),
+                        range: "in order: receding <= contact_angle <= advancing",
+                    });
+                }
+            }
+        }
+    }
     // read refuses a material without these
     let required = |slot: usize| v[slot].unwrap_or(0.0);
     Ok(BoundMaterial {
@@ -1246,6 +1296,10 @@ fn bind_material(m: &Material, slots: &[f64]) -> Result<BoundMaterial, BindError
         contact_area_basis: basis_of(m, CONTACT_AREA),
         contact_angle: v[CONTACT_ANGLE],
         contact_angle_basis: basis_of(m, CONTACT_ANGLE),
+        contact_angle_advancing: v[CONTACT_ANGLE_ADVANCING],
+        contact_angle_advancing_basis: basis_of(m, CONTACT_ANGLE_ADVANCING),
+        contact_angle_receding: v[CONTACT_ANGLE_RECEDING],
+        contact_angle_receding_basis: basis_of(m, CONTACT_ANGLE_RECEDING),
         dynamic: match &m.dynamic {
             None => None,
             Some(d) => Some(bind_dynamic(d, slots)?),

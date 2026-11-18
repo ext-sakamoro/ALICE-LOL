@@ -58,6 +58,12 @@ material mochi poisson_ratio basis assumed
 source contact angle: no measurement of water on mochi (a hydrated pounded rice cake) was found; proxies: films of dried gelatinized starch give about 50-80 degrees (Bialopiotrowicz, Food Hydrocolloids 2003; starch-coated surfaces 50-80 against 95-100 uncoated), whole rice kernels 89.8-120.6 (low-pressure plasma study, Microscopy and Microanalysis Research 2017); a wet starch gel is more wettable than a dried film, so 60 is assumed, within 40 to 90
 material mochi contact_angle = 60
 material mochi contact_angle basis assumed
+source contact angle hysteresis: no advancing or receding angle of water on mochi was found; the analogue is a dried rice starch film (Wiacek and Furmaniuk, Int. J. Mol. Sci. 25:4590 (2024)): advancing near 90 degrees and a hysteresis (advancing - receding) of about 20 degrees at 25 C
+source only the width is taken from the analogue, and centring it on the assumed static 60 (advancing 70, receding 50) is an assumption too; a wet gel may hold a drop differently from a dried film, its hysteresis can be wider and its angles lower, so the pinning these give is uncertain in both directions
+material mochi contact_angle_advancing = 70
+material mochi contact_angle_advancing basis assumed
+material mochi contact_angle_receding = 50
+material mochi contact_angle_receding basis assumed
 material mochi dynamic youngs at 3 storage level * 10 ^ 7.035 loss level * 10 ^ 5.555
 material mochi dynamic youngs at 10 storage level * 10 ^ 7.075 loss level * 10 ^ 5.615
 material mochi dynamic youngs at 30 storage level * 10 ^ 7.06 loss level * 10 ^ 5.77
