@@ -101,34 +101,37 @@ fn writers() -> Vec<(&'static str, &'static str, Writer)> {
 /// primary identifier (alice-sdf `SDF_SEMANTICS_ID`) moved to `443238e4…`: same scene, both stamps changed
 /// Re-recorded when it moved to `66d222f0…` (template shapes: seams, membranes, `can_rack`): same scene, only
 /// the producer stamp changed
+/// Re-recorded when it moved to `d00e70bd…` (the spool holder's peg moved onto its base): same scene, only
+/// the producer stamp changed (each new file with the old identifier put back is byte-identical to the file
+/// written under `66d222f0…`, the zip entries of the 3MF files compared uncompressed)
 const GOLDEN: &[(&str, &str)] = &[
     (
         "node_to_stl",
-        "405c271601c2cf432615616f4b147e0ee3b66b526cbff38fdfec5607c232c937",
+        "86b708c26fad5790d8d7e9e1dde4ff94c9ae14736263b526e685d7ece93e6814",
     ),
     (
         "node_to_3mf",
-        "27e76f68a9f0d84e9b748307090277b27ffaf65640365bb6bd78b512a8f28be5",
+        "030a9d7cf8da4560d5a794241d702f8adf63962f964d9ba0ff30e3679dbf0ca3",
     ),
     (
         "node_to_fbx",
-        "4c315fa1b4ea9ffbfeb1014e8e385d530e82c0ce94f1efce9cdbdeec11d0e489",
+        "17c0761f7197fe3df4a2593ecc736b82a065d694a5ad881e9e124c07def40834",
     ),
     (
         "node_to_stl_dual_contouring",
-        "bb5d52e7abbd8cc8c250c3b507ac0477e05288a7a2372873bd897269d998785c",
+        "51404a1aaed9b90bb38d9da2bf54e2b2e28feff20e29bab9698bf25ef6bc32f4",
     ),
     (
         "node_to_3mf_dual_contouring",
-        "740461c3306460ad6b416623e0d4935ad378725bfecfe6e64c0c818a5ddd4a44",
+        "716e4721c9088439a2c19b307b52203dc0859d38ffbd72eca37518345bf33fc4",
     ),
     (
         "node_to_fbx_roblox",
-        "a892611da91c5215a2f7723ef1454b4f63d8371a7f4abff64d1208d56c8eff09",
+        "c0917baccdeabf8dc8e9d328ce00a53b8b0c824b5bb2d604f8c58b5e8b371dc5",
     ),
     (
         "node_to_obj_roblox",
-        "22b69a7b03ae14c1efa6c3911da72d41aee4f4b78d9a15dd67c8bc29f3eceaf5",
+        "2e615d9424b1f1a659f32286ff92245e8cea527b00657e5d819b4384ee86a8fc",
     ),
 ];
 

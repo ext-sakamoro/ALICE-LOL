@@ -3333,11 +3333,15 @@ impl FilamentSpoolHolderSpec {
     }
 }
 
+/// peg を base の中へ下ろす量 (mm): 上面に載せるだけだと面が接するだけの継ぎ目になる
+pub const SPOOL_PEG_OVERLAP: f32 = 0.5;
+
 /// フィラメントスプールホルダー (Z-up direct、base plate + 垂直 peg)
 ///
 /// 構造 (printer § 9.1 準拠、Z-up 直接設計):
 /// - Base: `RoundedBox` (`(spool_od + base_margin)^2 × base_thickness`)
-/// - Peg: Z-axis `Cylinder` (r=`bore/2 - clearance`, h=`spool_width + extra_height`)
+/// - Peg: Z-axis `Cylinder` (r=`bore/2 - clearance`, h=`spool_width + extra_height`)、底は base の上面
+///   (z = `base_thickness/2`、base は原点中心) から [`SPOOL_PEG_OVERLAP`] だけ base の中
 ///
 /// spool は peg に bore over で挿入 (donut on pole style)
 ///
@@ -3357,7 +3361,9 @@ pub fn filament_spool_holder(spec: &FilamentSpoolHolderSpec) -> SdfNode {
     let peg_r = spec.bore_diameter.mul_add(0.5, -spec.peg_clearance);
     let peg_h = spec.spool_width + spec.peg_extra_height;
     let peg_half_h = peg_h * 0.5;
-    let peg_offset_z = spec.base_thickness + peg_half_h - 0.5; // 0.5mm overlap with base
+    // base は原点中心 (z ∈ [-base_hz, base_hz]) なので、peg の底は base の上面 (base_hz) から
+    // SPOOL_PEG_OVERLAP だけ base の中に下ろす (base_thickness から測ると base の上に浮く)
+    let peg_offset_z = base_hz + peg_half_h - SPOOL_PEG_OVERLAP;
 
     let base = rounded_box(base_hx, base_hy, base_hz, 3.0);
     let peg = translate(
@@ -9157,9 +9163,125 @@ mod tests {
     #[test]
     fn filament_spool_holder_peg_is_solid() {
         let f = filament_spool_holder(&FilamentSpoolHolderSpec::standard_1kg());
-        // peg_r = 52/2-1 = 25、peg_h = 68+20 = 88、peg 中心 Z = 5+44-0.5 = 48.5
-        // Z=48 で peg 中心近く、r=0 で peg 内 = material
+        // peg_r = 52/2-1 = 25、peg_h = 68+20 = 88、peg 中心 Z = 2.5+44-0.5 = 46
+        // Z=48 は peg 内、r=0 で peg 内 = material
         assert!(eval(&f, Vec3::new(0.0, 0.0, 48.0)) < 0.0);
+    }
+
+    /// text-to-print の 2 つの template (1kg = 200/68/52、250g = 125/45/30)
+    fn spool_specs() -> [FilamentSpoolHolderSpec; 2] {
+        let one_kg = FilamentSpoolHolderSpec::standard_1kg();
+        let quarter = FilamentSpoolHolderSpec {
+            spool_outer_diameter: 125.0,
+            spool_width: 45.0,
+            bore_diameter: 30.0,
+            ..one_kg
+        };
+        [one_kg, quarter]
+    }
+
+    /// Oracle (閉形式、spec の寸法から): base は z ∈ [-t/2, t/2]、peg は z ∈ [t/2 - 0.5, t/2 - 0.5 + h]
+    /// (h = `spool_width + peg_extra_height`) なので、peg の軸の上は base の底から peg の上端まで
+    /// 途切れずに material (peg の底が base の上面より上なら、その間の軸の上が air になる) 重なりの
+    /// 帯そのものは和の場では base と見分けられないので、軸の連続と両端と base の上面で確かめる
+    #[test]
+    fn filament_spool_holder_peg_overlaps_the_base_by_half_a_millimetre() {
+        for spec in spool_specs() {
+            let shape = filament_spool_holder(&spec);
+            let thickness = spec.base_thickness;
+            let height = spec.spool_width + spec.peg_extra_height;
+            let bottom = -(thickness / 2.0);
+            let top = thickness / 2.0 - SPOOL_PEG_OVERLAP + height;
+            // 軸の上を 0.1 mm おきに: 両端の 0.05 mm 内側まで全部 material
+            let mut z = bottom + 0.05;
+            let mut checked = 0;
+            loop {
+                if z > top - 0.05 {
+                    break;
+                }
+                assert!(
+                    eval(&shape, Vec3::new(0.0, 0.0, z)) < 0.0,
+                    "{spec:?}: air on the peg axis at z = {z}"
+                );
+                checked += 1;
+                z += 0.1;
+            }
+            assert!(checked > 100, "{spec:?}: only {checked} axis points");
+            // 両端の外は air
+            assert!(eval(&shape, Vec3::new(0.0, 0.0, top + 0.05)) > 0.0);
+            assert!(eval(&shape, Vec3::new(0.0, 0.0, bottom - 0.05)) > 0.0);
+            // base の上面の 0.25 mm 上、peg の外周の 0.75 mm 外は air (base は上面 t/2 で止まる)
+            let beyond = spec.bore_diameter / 2.0 - spec.peg_clearance + 0.75;
+            assert!(eval(&shape, Vec3::new(beyond, 0.0, thickness / 2.0 + 0.25)) > 0.0);
+        }
+    }
+
+    /// Oracle: 部品は 1 つの塊 (peg の軸を通る断面 y = 0 を 0.5 mm の格子で塗り、隣り合う material の
+    /// 点をつないだ塊の数が 1) peg が base から浮いていれば、断面に peg と base の 2 つの塊が出る
+    #[test]
+    fn filament_spool_holder_is_one_connected_piece() {
+        for spec in spool_specs() {
+            let shape = filament_spool_holder(&spec);
+            let half_width = f32::midpoint(spec.spool_outer_diameter, spec.base_margin) + 1.0;
+            let top = spec.base_thickness + spec.spool_width + spec.peg_extra_height + 1.0;
+            let step = 0.5f32;
+            let axis = |from: f32, to: f32| {
+                let mut values = Vec::new();
+                let mut value = from;
+                loop {
+                    if value > to {
+                        break;
+                    }
+                    values.push(value);
+                    value += step;
+                }
+                values
+            };
+            let xs = axis(-half_width, half_width);
+            let zs = axis(-spec.base_thickness, top);
+            let width = xs.len();
+            let inside: Vec<bool> = zs
+                .iter()
+                .flat_map(|&z| xs.iter().map(move |&x| (x, z)))
+                .map(|(x, z)| eval(&shape, Vec3::new(x, 0.0, z)) < 0.0)
+                .collect();
+            let mut seen = vec![false; inside.len()];
+            let mut pieces = 0;
+            let mut solid = 0;
+            for start in 0..inside.len() {
+                if !inside[start] || seen[start] {
+                    continue;
+                }
+                pieces += 1;
+                let mut stack = vec![start];
+                seen[start] = true;
+                while let Some(cell) = stack.pop() {
+                    solid += 1;
+                    let column = cell % width;
+                    let mut next = Vec::with_capacity(4);
+                    if column > 0 {
+                        next.push(cell - 1);
+                    }
+                    if column + 1 < width {
+                        next.push(cell + 1);
+                    }
+                    if cell >= width {
+                        next.push(cell - width);
+                    }
+                    if cell + width < inside.len() {
+                        next.push(cell + width);
+                    }
+                    for neighbour in next {
+                        if inside[neighbour] && !seen[neighbour] {
+                            seen[neighbour] = true;
+                            stack.push(neighbour);
+                        }
+                    }
+                }
+            }
+            assert!(solid > 0, "{spec:?}: the section held no material");
+            assert_eq!(pieces, 1, "{spec:?}: {pieces} pieces in the section");
+        }
     }
 
     #[test]

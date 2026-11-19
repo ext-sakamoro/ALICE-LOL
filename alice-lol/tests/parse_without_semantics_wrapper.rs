@@ -41,7 +41,10 @@ include!("data/parse_corpus_bbb6539.rs");
 /// arguments is now a parse error (a USB opening wider than its wall face is refused)
 /// Re-recorded when `shelf_divider` cut its plate holes as round Ø15 through-holes on a triangular
 /// lattice (each hole placed by itself): the dump differs in the 5 lines of `shelf_divider` only
-const DIGEST: &str = "df906bf599899c202a39d00075dd390797c6b73954a2aedcb1f7bc8b469a858e";
+/// Re-recorded when `filament_spool_holder` placed its peg from the base's top face (the base is centred on
+/// the origin, so the peg had floated a base half-thickness above it): the dump differs in the 5 lines of
+/// `filament_spool_holder` only (its translate along Z)
+const DIGEST: &str = "1625feda0fd20f8355c34887e7654acd7db6669d544d8f73d3932f8139d09c41";
 
 fn err(e: &ParseError) -> String {
     format!("Err({:?} @ {})", e.message, e.position)

@@ -38,7 +38,10 @@ include!("data/parse_corpus_bbb6539.rs");
 /// Re-recorded when `shelf_divider` cut its plate holes as round Ø15 through-holes on a triangular
 /// lattice (each hole placed by itself, not a `RepeatFinite` read as anchored at a corner): the dump
 /// differs in the 5 lines of `shelf_divider` only
-const DIGEST: &str = "44ad96349e87d7eb8f051d66a685d7e4fb7eaac16691a77ff32568111495874c";
+/// Re-recorded when `filament_spool_holder` placed its peg from the base's top face (the base is centred on
+/// the origin, so the peg had floated a base half-thickness above it): the dump differs in the 5 lines of
+/// `filament_spool_holder` only (its translate along Z)
+const DIGEST: &str = "51b277d96cbf0c38eb625fac4021e0e5b6aef1c53beac321e61336523961c10a";
 
 #[test]
 fn the_canonical_form_is_the_output_of_before() {
