@@ -44,6 +44,9 @@ EXEMPT = {
     ("scripts/test_shared_files.py",
      'data = subprocess.run(["git", "-C", str(law), "show", "pinned:conformance/shared-files.toml"], check=True,'):
         "law is a repository the test creates and fills by fetching ALICE-Law at the pinned revision; it reads that commit, not this repository's history",
+    ("scripts/test_shared_files.py",
+     'shown = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{rel}"], check=True, capture_output=True)'):
+        "reads HEAD, the checked-out commit, which a one-commit shallow clone has; no other revision",
 }
 
 
