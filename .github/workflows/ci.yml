@@ -376,10 +376,15 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # the preflight mirror of law-readme-block.yml (the check itself runs there, here its tests)
+      # law-readme-block.yml regenerates each block at the revision the block itself names, so it
+      # does not see a block left behind when the pin moves; law_readme_block_check.py compares each
+      # block with .github/shared-files-pin
       - name: README ALICE-Law block preflight check (tests)
         working-directory: ALICE-LOL
         run: python3 scripts/test_law_readme_block_check.py
+      - name: README ALICE-Law block names the pinned revision
+        working-directory: ALICE-LOL
+        run: python3 scripts/law_readme_block_check.py
       - name: package-integrity oracle (検査器自身の試験)
         working-directory: ALICE-LOL
         run: python3 scripts/test_package_integrity.py
